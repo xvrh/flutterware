@@ -1,0 +1,225 @@
+# Scene runtime — drive, notify, and the slot: sketches 8–10
+
+**Date:** 2026-08-31
+**Status:** round two of the parameter sketches, opened by three owner
+questions: *can the edit API of a scene drive the animation? can property
+writes auto-notify (with optimization) so the widget updates itself? and
+what does a direct widget — or another scene — as a parameter look like?*
+Three probes ran for real (quoted verbatim); the sketches around them are
+unexecuted Dart written carefully. Nothing is decided.
+**Leans on:** `2026-08-31-scene-parameter-sketches.md` (sketches 1–7 and
+the widget-vs-model fork), `2026-08-28-motion-v2-design.md` (the law, the
+composition rule), `2026-08-31-remote-canvas-spike-findings.md` (the
+415-node flat frame).
+
+**The probes, first:**
+
+```
+burst: 1000 writes -> 1 notification(s), 50 node(s) were dirty
+drive: 60 frames x 3 writes -> 60 notification(s)
+no-op writes -> 0 notification(s)
+
+construct+touch 11-node scene: 0.11 us/instance
+
+this.hero = HeroCard()  ->  Error: Constant expression expected.
+```
+
+The third is load-bearing for sketch 10: **a scene can never be a default
+value**, because default values must be const and a class with `late final`
+fields cannot have a const constructor — the same rule that makes the
+hot-reload trap unwritable now forces the mock off the parameter. The
+second says a full 415-node tree constructs in ~10µs against a 16,667µs
+frame budget: *construction is never the cost, anywhere in this design.*
+
+---
+
+## Sketch 8 — the edit API and the animation: one pipeline, two planes
+
+The question has three readings, and they get different answers.
+
+**(a) Can the app animate by mutating? Yes — it is the escape hatch, and
+auto-notify makes it real.**
+
+```dart
+controller.addListener(() {
+  scene.glow.opacity = 0.6 + 0.4 * pulse.value;   // auto-notifies, coalesced
+});
+```
+
+Measured above: sixty frames of writes produce sixty notifications, one
+per frame, and writes that change nothing cost nothing. The law is
+untouched — *a Motion is a pure function of `t`* governs the Motion
+system, not what user code may do with a mutable model. Simple imperative
+animation needs no motion file at all.
+
+**(b) Can the Motion system apply its output through the same writes? No —
+refused by the Save test.** Every write the edit API accepts is a write
+Save persists. If `evaluate(t)` wrote its output into authored properties:
+
+- a Save mid-play would capture frame state into the file — a
+  shredder-class bug, the mid-breath opacity of an ink ripple committed as
+  the authored value;
+- composition would eat its own operand: the rule is
+  `value = base op contribution`, and a writer that stores its result in
+  `base` has destroyed what the *other* writer composes over. Two writers
+  on one property — the design's most ordinary case — becomes impossible.
+
+So the model has **two planes**: the **authored** plane (persistent, the
+editor's and the app's retunes, what Save reads) and the **evaluated**
+plane (per-frame, composed over the authored value by the operator table,
+never saved). The provenance pattern again, this time on the value itself.
+
+**(c) Can the two planes share one mechanism? Yes — that is the actual
+unification on offer.**
+
+```dart
+// The same handle, a different plane:
+scene.glow.opacity = 0.8;        // authored: persists, Save sees it
+scene.glow.fx.opacity = 0.3;     // evaluated: composed over 0.8 this
+                                 // frame, invisible to Save
+```
+
+The `fx` overlay rides the identical dirty set, flush, and wire (the guest
+apply payload carries `{scene, fx}`); the renderer computes
+`base op fx` per the derived operator table; motion's applicator writes
+only `fx`. And the overlay is not motion-private: the *app* writing `fx`
+gets cosmetic, non-persistent effects (a hover glow, a drag highlight)
+through the same door — a fourth consumer.
+
+A simpler alternative was considered and kept as fallback: a per-frame
+**presentation clone** (construct authored, apply evaluated onto the
+clone, render the clone) — affordable at 10µs, and the guest already keys
+widget state by *name* rather than object identity, so clones render
+stably. The overlay is preferred for producing no garbage and keeping
+object identity for the editor; the clone is the shape to retreat to if
+overlay plumbing grows arms.
+
+## Sketch 9 — auto-notify, and where the optimization actually is
+
+The shape, probed above:
+
+```dart
+sealed class SceneNode {
+  SceneDocument? _doc;              // set when placed
+  double _opacity = 1;
+  double get opacity => _opacity;
+  set opacity(double v) {
+    if (v == _opacity) return;      // no-op writes are free
+    _opacity = v;
+    _doc?.markDirty(this);          // adds to the dirty set,
+  }                                 // schedules ONE flush
+}
+```
+
+**Findings:**
+
+- **The optimization that matters is coalescing, and it is the mechanism
+  itself** — a thousand writes in a burst are one notification, because
+  `markDirty` schedules a single flush. There is no naive version to
+  optimize later; the batched version *is* the simple version.
+- **Per-node invalidation is deferred, on evidence.** The remote spike
+  measured the guest frame **flat from 11 to 415 nodes** — the full
+  re-apply/rebuild path does not scale with node count at poster scale —
+  and construction is 10µs. The dirty *set* is plumbed from day one (it is
+  how `markDirty` works), so targeted rebuild/`markNeedsPaint` per node is
+  a consumer of existing data whenever profiling ever asks for it; nothing
+  is rebuilt to add it.
+- **The flush must be frame-aligned, not microtask-aligned, in Flutter** —
+  a microtask can fire mid-build, and notifying listeners during build is
+  the `setState during build` error. The probe's microtask proves the
+  coalescing shape; the real flush schedules for the next frame.
+- **The uniform bag pays a third time**: the setters live once, on
+  `SceneNode`, for every geometry and styling property of every node kind.
+  A typed-content property (a Text's string) writes the same `markDirty`.
+- **This closes the fork harder.** Sketch 4's fork (scene as Widget vs
+  scene as model behind `SceneView`) now has a second structural argument
+  for the model: auto-notify needs an owner pointer and mutable state on
+  the nodes — a Widget can be neither the owner nor mutable. And the
+  explicit `notify()` from sketch 5 disappears; the app just writes.
+
+## Sketch 10 — a widget or a scene as a parameter: the slot, forced into
+## the better shape
+
+The probe's refusal decides the spelling. The mock cannot be the
+parameter's default value (not const-able), so the parameter is a nullable
+hole and **the mock lives on the node field**:
+
+```dart
+class OnboardingPage1 {
+  OnboardingPage1({this.title = 'Welcome back', this.hero});
+
+  final String title;
+  final Widget? hero;                 // or `Scene? hero` — see below
+
+  late final heroSlot = Slot(hero, mock: Use(HeroCard(title: title)));
+  late final caption = Text(title, fontSize: 34);
+  late final root = Frame(children: [heroSlot, caption]);
+}
+
+// The app fills the hole; the poster and the editor never do.
+OnboardingPage1(title: t.welcome, hero: Image.asset('assets/hero.png'))
+```
+
+**Findings:**
+
+- **Dart's const rule forced the design that was wanted anyway.** As a
+  default value the mock would be an opaque constant. As a node it is
+  *editable on the canvas, rendered by the export matrix, addressable by a
+  motion* — the crux sentence ("typed holes, with the mockup as the
+  default value") made literal, with the mock in the one place all three
+  consumers can reach it.
+- **`Slot` returns, meaning less than it used to.** Motion v2's `Slot`
+  carried the whole attachment story and dissolved into scene nodes. This
+  one means exactly "a hole with a mock": a node kind whose content is
+  *either* its mock (nothing injected — editor, matrix) *or* the caller's
+  filler (runtime). Child provenance, previously a table row, now has a
+  spelling.
+- **`Widget?` and `Scene?` fillers differ in exactly one way.** A widget
+  filler is opaque: rendered natively, imposed-only for motion — an Ext
+  the caller supplied. A *scene* filler keeps its declared surface: typed
+  parameters, intrinsic access for motion, internals still sealed. A
+  scene-typed slot with a scene mock is **instance swap** — the last
+  component-property kind from the UX research (text, boolean, variant,
+  *instance-swap*) arriving through the same door as everything else.
+- **The grammar widening is one item**: `Slot(<paramName>, mock: <node>)`,
+  where the mock is any node expression including `Use(…)`. The parameter
+  type vocabulary in formals grows by `Widget?`/`Scene?` (and the class
+  names of known scenes).
+- Motion: imposed properties work on the slot node regardless of filler;
+  intrinsic tracks address the *mock or scene filler* only — the runtime
+  surprise ("animated against the draft, dead on the real widget") is
+  exactly motion v2's known footgun, and the slot is where its
+  *not-seen-read* reporting will point.
+
+---
+
+## Round-2 scoreboard
+
+- **The edit API can drive animation** as the app's escape hatch (measured
+  working shape), **cannot** be Motion's semantic write target (the Save
+  test + the composition operand), and **should** share its whole
+  mechanism with motion through the `fx` overlay — one pipeline, two
+  planes, four consumers (editor, program, app, evaluator).
+- **Auto-notify is the design**, not an optimization pass: setter →
+  dirty-set → one frame-aligned flush, no-ops free, coalescing measured.
+  Per-node invalidation stays a documented consumer of the dirty set,
+  unbuilt until profiling asks.
+- **Widget/scene parameters are slots**, with the mock forced onto the
+  node field by the const rule — and better there. Instance swap falls
+  out.
+- **The fork tilts further to (ii)** — scene as live model behind
+  `SceneView` — now needed by auto-notify's owner pointer, not just
+  preferred for cascades.
+
+**Newly open:**
+
+1. The `fx` overlay's exact shape — sparse per-node map vs a parallel
+   bag — and whether `node.fx.opacity` or `motion-internal only` is the
+   app-facing spelling.
+2. Flush timing details: writes arriving *during* a build (legal? deferred
+   to next frame? asserted against?).
+3. `Scene` as a grammar type name — the formals vocabulary now names scene
+   classes; the same `show`-combinator reasoning should cover it.
+4. Whether a slot's filler can itself be observed by the editor when the
+   app runs under drive (the run cockpit showing the filled state while
+   the canvas shows the mock).
