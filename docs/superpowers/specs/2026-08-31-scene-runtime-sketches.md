@@ -1,4 +1,4 @@
-# Scene runtime — drive, notify, and the slot: sketches 8–11
+# Scene runtime — drive, notify, and the slot: sketches 8–12
 
 **Date:** 2026-08-31
 **Status:** round two of the parameter sketches, opened by three owner
@@ -266,6 +266,67 @@ runtime-control requirement lands** the moment a nested sealed instance
 needs live control or a binding must survive without an instance swap. The
 box is additive: (A)'s files are valid (C) files with every box holding a
 literal.
+
+## Sketch 12 — all-in mutability: where the cons actually live
+
+The owner's follow-up: assume full auto-notify and make *everything*
+mutable — properties, nodes, collections — so an instantiated scene is a
+fully live document and every change shows on screen. What are the cons?
+
+The split that organizes the answer: **the property plane is already won**
+(sketches 9 and 11 — mutable, coalesced, coherent, cheap), and none of the
+serious cons live there. They all live in **structural** mutability —
+`children.add/remove`, reparenting, runtime-born nodes. Five, by severity:
+
+1. **The door moves from parse to every mutation site.** The parse door
+   enforces unique names, one parent, no cycles, root-not-a-child — once,
+   collecting, refusing whole documents. Naked `children.add(n)` must
+   enforce all of it per call, with doc-wide context, at runtime — and a
+   runtime violation has no collecting-refusal analogue: it either throws
+   (an app crash from a listener) or silently auto-fixes (reparent-on-add
+   — magic). The format's whole integrity story currently lives at one
+   door; full structural mutability distributes it everywhere.
+2. **Runtime-born nodes break name-as-identity.** A node added at runtime
+   has no field, so no name — and the wire, the rects, the hit targets and
+   motion targeting all key on names. A second identity scheme for
+   dynamic nodes is exactly the dual-identity mess the field decision just
+   cleaned up.
+3. **The silently dead lane returns.** A motion holds typed references
+   into the scene; `remove(headline)` leaves `headline`'s tracks animating
+   a node no longer in any tree — no compile error, no refusal, nothing.
+   Structural mutation reintroduces at runtime the failure mode typed
+   fields were chosen to kill.
+4. **The scene stops being a value.** Today an instance's state is
+   derivable from `(class, args)` — two instances differ exactly by their
+   arguments, which is what makes diffing, comparison, "what changed", and
+   undo-as-transactions tractable. Arbitrarily mutated instances are
+   arbitrary documents; every tool that reasons about scenes weakens.
+5. **Reach-inside returns through the runtime door.** Nested scenes are
+   objects with public fields; a fully mutable graph lets the app do
+   `page.heroSlot.mock.headline.color = …` — Figma's override-anything,
+   reborn at runtime. Nothing persists, so it is less fatal than Figma's
+   version, but the sealed-internals law becomes a convention the object
+   model itself contradicts, and motion/editor tooling that validates
+   against declared surfaces starts lying.
+
+Plus three mechanical costs, real but payable: observable collections
+(plain `List` cannot notify, so custom list/map types appear in every
+signature and every list method needs forwarding); a re-entrancy rule
+(writes from flush listeners are feedback loops — refuse or
+converge-detect); and an expectation gradient — a fully live object model
+invites derived relationships ("this width is half of that"), which is a
+constraint system knocking on a design that deliberately has no
+expressions.
+
+**The mitigation is the design's own oldest line.** Retune freely;
+restructure through a door. All properties and parameter boxes mutable
+with auto-notify — that is the all-in worth going. Structure changes go
+through *document operations* (`doc.add(parent, node, name: …)`,
+`doc.remove`, `doc.move`) rather than naked collections: an operation can
+validate the invariants, mint the name, notify, dangle-check motion
+targets, and record itself for undo — everything a bare `List.add` cannot.
+The five cons above are not costs of liveness; they are costs of
+*structure without a door*.
 
 ## Round-2 scoreboard
 
