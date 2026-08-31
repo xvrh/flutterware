@@ -47,6 +47,7 @@ class PreviewsSide implements ComparisonSide {
     required this.root,
     required this.previewAnnotations,
     required this.canvases,
+    this.projectClock,
   });
 
   final String flutterSdkRoot;
@@ -71,6 +72,17 @@ class PreviewsSide implements ComparisonSide {
   /// [root]: a branch that moved a canvas must not see every entry under it
   /// re-photographed on both sides against different stages.
   final List<PreviewCanvas> canvases;
+
+  /// What `clock.now()` reads inside every entry of both renders, or null for
+  /// flutterware's own `pinnedClockOrigin`.
+  ///
+  /// Carried for the reason the scenario half carries it: an entry that reads
+  /// the clock is a picture of *when it was taken* unless both sides are told
+  /// one instant, and a comparison whose base was cached yesterday then reports
+  /// the date as the branch's doing. From the **head** checkout, like [root],
+  /// so a branch that changed `fw.clock(...)` is asking one question of both
+  /// sides rather than comparing two dates.
+  final DateTime? projectClock;
 
   /// An entry id is `<path>#<symbol>` where the path is relative to the
   /// *package*; a checkout can hold several packages, so the package's own
@@ -137,6 +149,7 @@ class PreviewsSide implements ComparisonSide {
       await runner.capture(
         entryIds: [for (var entry in wanted) entry.id],
         outDir: outDir.path,
+        clock: projectClock,
         onRow: (row) async {
           if (row.compileError case var error?) {
             failed[row.id] = error;

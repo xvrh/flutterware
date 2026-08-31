@@ -276,6 +276,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
         root: core.rootFor(package),
         previewAnnotations: core.previewAnnotationsFor(package),
         canvases: core.canvasesFor(package),
+        projectClock: core.host.projectClock,
       ),
     );
   }

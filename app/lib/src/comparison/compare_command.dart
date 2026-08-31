@@ -188,6 +188,7 @@ Future<CompareOutcome> runComparison({
       root: core.rootFor(packageInWorktree),
       previewAnnotations: core.previewAnnotationsFor(packageInWorktree),
       canvases: core.canvasesFor(packageInWorktree),
+      projectClock: core.host.projectClock,
     ),
   );
 

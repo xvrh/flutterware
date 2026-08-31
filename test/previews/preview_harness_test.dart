@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
 // The half of the harness `flutter_test.dart` does not re-export.
+import 'package:flutterware/src/clock.dart';
 import 'package:flutterware/src/previews/harness.dart';
 import 'package:flutterware/ui_catalog.dart';
 
@@ -14,10 +16,12 @@ void main() {
   var knob = <String, String>{};
   var loaded = false;
   var decoded = false;
+  var clockAt = <String, DateTime>{};
 
   Widget probe(String id) => Builder(
     builder: (context) {
       size[id] = MediaQuery.of(context).size;
+      clockAt[id] = clock.now();
       // A preview reading a knob with nothing hosting it answers the default
       // rather than throwing — but under `CatalogGuest` there *is* something
       // hosting it, and that is the path worth proving.
@@ -92,6 +96,22 @@ void main() {
     // tree rather than merely both rendering something.
     expect(knob, hasLength(3));
     expect(knob['phone'], 'unanswered');
+  });
+
+  test('an entry reads the pinned clock rather than the wall clock', () {
+    // The bug this closes: `runPreviewHarness` mounted the entries and pinned
+    // nothing, so `clock.now()` fell through to `DateTime.now()`. Every
+    // picture of an entry showing a date was then a picture of the minute it
+    // was taken — the audit and the comparison both read this lane, so a
+    // branch that touched no widget still reported those entries as changed.
+    //
+    // Asserted per entry rather than once: the pin is mounted inside the body
+    // `_declare` writes, so an entry left outside it would be the one that
+    // still drifts.
+    expect(clockAt, hasLength(3));
+    for (var MapEntry(key: id, value: at) in clockAt.entries) {
+      expect(at, pinnedClockOrigin, reason: '$id rendered off the wall clock');
+    }
   });
 
   test('an entry that waits on a timer is given the clock to finish', () {
