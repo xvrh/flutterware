@@ -142,6 +142,10 @@ The scenario code sits in two places and only one of them is API:
 
 Design: `docs/superpowers/specs/2026-07-30-scenarios-design.md`.
 
+The same discipline covers `lib/src/render/` — the vector capture pipeline
+(`captureSvg`/`capturePdf`), re-exported through `lib/render.dart`. Design:
+`docs/superpowers/specs/2026-08-31-widget-export-design.md`.
+
 ## Common commands
 
 All commands run from the repo root unless noted. Always via `fvm` — see the toolchain section above.

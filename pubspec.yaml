@@ -10,6 +10,7 @@ environment:
 workspace:
   - app
   - examples/example
+  - render
 
 platforms:
   android:
@@ -31,14 +32,17 @@ dependencies:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
+  flutterware_render: ^0.5.2
   http: ^1.0.0
   logging: ^1.0.0
   meta: ^1.7.0
   package_config: ^2.0.0
   path: ^1.8.0
+  pdf: ^3.11.0
   pool: ^1.5.0
   stream_channel: ^2.1.0
   test_api: '>=0.6.0 <0.8.0'
+  vector_math: ^2.1.0
   web: ^1.1.0
   web_socket_channel: ^3.0.0
 

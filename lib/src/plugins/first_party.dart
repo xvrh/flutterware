@@ -41,6 +41,33 @@ class DependenciesPackage extends PluginPackage {
   ];
 }
 
+/// The app's render points — widgets and documents bound in a
+/// `@RenderRegistry()` registrar, rendered as SVG, PNG or PDF in the studio
+/// and from a server through `fw render bundle`.
+///
+/// Design: docs/superpowers/specs/2026-08-31-widget-export-design.md.
+class Renders extends Plugin {
+  Renders({this.packages = const [], String? label})
+    : super('flutterware.render', label: label ?? 'Render');
+
+  final List<RendersPackage> packages;
+
+  @override
+  Map<String, Object?> get config => {
+    'packages': [for (var p in packages) p.toJson()],
+  };
+}
+
+class RendersPackage extends PluginPackage {
+  const RendersPackage(super.pkg, {this.target = 'lib/renders.dart'});
+
+  /// The file declaring the registrar, relative to the package root.
+  final String target;
+
+  @override
+  Map<String, Object?> toJson() => {...super.toJson(), 'target': target};
+}
+
 /// Everything a package's bundle resolves to — declared assets, the density
 /// variants beside them, the fonts, and whatever its dependencies contribute.
 class Assets extends Plugin {

@@ -1,0 +1,11 @@
+name: flutterware_render
+description: 'The typed contract for flutterware render points: declare a widget or document render once, invoke it fully typed from a pure Dart server.'
+version: 0.5.2 # Keep it sync with flutterware
+homepage: https://github.com/xvrh/flutterware
+resolution: workspace
+
+environment:
+  sdk: ^3.13.0-0
+
+dependencies:
+  path: ^1.8.0

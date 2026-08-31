@@ -23,6 +23,7 @@ import '../plugins/native/lints_core.dart';
 import '../plugins/native/run_core.dart';
 import '../plugins/native/server_core.dart';
 import '../plugins/native/motion_core.dart';
+import '../plugins/native/renders_core.dart';
 import '../plugins/native/scenarios_core.dart';
 import '../plugins/native/icon_core.dart';
 import '../plugins/native/splash_core.dart';
@@ -598,6 +599,7 @@ PluginCoreRegistry defaultCoreRegistry() => PluginCoreRegistry({
   serverPluginId: serverCoreFactory,
   motionPluginId: motionCoreFactory,
   scenariosPluginId: scenariosCoreFactory,
+  rendersPluginId: rendersCoreFactory,
   launcherIconPluginId: launcherIconCoreFactory,
   splashPluginId: splashCoreFactory,
   storePluginId: storeCoreFactory,

@@ -66,6 +66,10 @@ void main() => Flutterware.configure((fw) {
     Dependencies(packages: DependenciesPackage.each([root, app, example])),
   );
   fw.use(Assets(packages: AssetsPackage.each([root, app, example])));
+  // The example app's render points — `lib/renders.dart` binds a chart
+  // widget and a report document; the panel renders them on the same guest
+  // a server would get from `fw render bundle`.
+  fw.use(Renders(packages: const [RendersPackage(example)]));
   fw.use(
     Previews(
       packages: [

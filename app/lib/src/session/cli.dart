@@ -3,10 +3,14 @@ import 'dart:io';
 
 import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware/plugins.dart';
+import 'package:flutterware_render/client.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../changes/changes_config_cache.dart';
+import '../embedder/flutter_cache.dart';
+import '../render_bundle/bundle_builder.dart';
+import '../render_bundle/one_shot.dart';
 import '../changes/changes_probe.dart';
 import '../changes/changes_text.dart';
 import '../changes/review_agent.dart';
@@ -338,6 +342,37 @@ const fwCommands = [
         'architecture.',
   ),
   FwCommand(
+    'render',
+    usage:
+        'render <point> [--as=svg|png|pdf] [--args=<json>|@file] '
+        '[--size=<w>x<h>] [-o <file>] [--text=<policy>] '
+        '[--unsupported=<policy>] '
+        '| render bundle [--target=lib/renders.dart] '
+        '[--out=build/render-bundle] [--platform=<linux-x64|…>] [--json]',
+    summary:
+        "one of the app's render points as a file, or all of them "
+        'bundled for a server',
+    details:
+        'A render point is a widget or pw.Document the app binds in a '
+        'function\nmarked `@RenderRegistry()` (default `lib/renders.dart`, '
+        'or `--target=`).\nBoth forms compile the registrar and run it on '
+        'flutter_tester — no\ndevice, no GPU.\n\n'
+        '`fw render charts/monthly --as=svg --size=400x200 '
+        "--args='{...}'`\nrenders one point to a file and prints the path. "
+        'A widget point takes\n`--as=svg|png|pdf` and needs `--size`; a '
+        'document point is always pdf.\n`--text` picks vectorize, embedFont '
+        'or systemFont; `--unsupported`\npicks rasterize, flatten or skip. '
+        'Warnings — raster patches, dropped\neffects — go to stderr, and '
+        'ride the reply under `--json`.\n\n'
+        '`fw render bundle` builds the one directory a Dart server copies '
+        'into\nits image: flutter_tester, the compiled registrar, the asset '
+        'bundle\nwith its fonts, and a manifest binding the versions '
+        'together. Drive it\nwith `RenderPool` from '
+        'package:flutterware_render. `--platform`\ncrosses, fetching engine '
+        "artifacts from Flutter's own storage.\n\n"
+        'Design: docs/superpowers/specs/2026-08-31-widget-export-design.md.',
+  ),
+  FwCommand(
     'version',
     usage: 'version [--json]',
     summary: 'which flutterware this is, and where it came from',
@@ -545,6 +580,7 @@ class FwCli {
         'mcp' => await _mcp(),
         'capture' => await _capture(rest, json: json, verbose: verbose),
         'compare' => await _compare(rest, json: json),
+        'render' => await _render(rest, json: json),
         'help' || '--help' || '-h' => _help(rest.firstOrNull),
         _ => fail('unknown command "$command". Try `fw help`.'),
       };
@@ -1780,6 +1816,205 @@ class FwCli {
 
   void _printJson(Object? value) =>
       out.writeln(const JsonEncoder.withIndent('  ').convert(value));
+
+  /// `fw render bundle …` packages; `fw render <point> …` renders one.
+  Future<int> _render(List<String> arguments, {required bool json}) async {
+    // The subject is the first positional that is not the value of a
+    // separated `-o <file>` — otherwise `fw render -o out.svg charts/monthly`
+    // reads the output file as the point.
+    String? subject;
+    var rest = arguments.toList();
+    for (var i = 0; i < rest.length; i++) {
+      var argument = rest[i];
+      if (argument == '-o' || argument == '--output') {
+        i++;
+        continue;
+      }
+      if (!argument.startsWith('-')) {
+        subject = argument;
+        rest.removeAt(i);
+        break;
+      }
+    }
+    return switch (subject) {
+      'bundle' => await _renderBundle(rest, json: json),
+      String point => await _renderPoint(point, rest, json: json),
+      null => fail(
+        'render takes a point (`fw render charts/monthly --as=svg '
+        '--size=400x200`)\nor `fw render bundle`. Try `fw help render`.',
+      ),
+    };
+  }
+
+  Future<int> _renderPoint(
+    String point,
+    List<String> arguments, {
+    required bool json,
+  }) async {
+    var target = 'lib/renders.dart';
+    var format = 'svg';
+    var argsJson = <String, Object?>{};
+    RenderSize? size;
+    String? output;
+    var text = TextPolicy.embedFont;
+    var unsupported = UnsupportedPolicy.rasterize;
+    var pixelRatio = 3.0;
+    for (var i = 0; i < arguments.length; i++) {
+      var argument = arguments[i];
+      if (argument.startsWith('--target=')) {
+        target = argument.substring('--target='.length);
+      } else if (argument.startsWith('--as=')) {
+        format = argument.substring('--as='.length);
+        if (!const {'svg', 'png', 'pdf'}.contains(format)) {
+          return fail('--as takes svg, png or pdf.');
+        }
+      } else if (argument.startsWith('--args=')) {
+        try {
+          argsJson = parseRenderArgs(argument.substring('--args='.length));
+        } catch (e) {
+          return fail('$e');
+        }
+      } else if (argument.startsWith('--size=')) {
+        var value = argument.substring('--size='.length).split('x');
+        var width = value.length == 2 ? double.tryParse(value.first) : null;
+        var height = value.length == 2 ? double.tryParse(value.last) : null;
+        if (width == null || height == null) {
+          return fail('--size takes <width>x<height>, as `--size=400x200`.');
+        }
+        size = RenderSize(width, height);
+      } else if (argument == '-o' || argument == '--output') {
+        if (++i >= arguments.length) return fail('$argument needs a file.');
+        output = arguments[i];
+      } else if (argument.startsWith('--output=')) {
+        output = argument.substring('--output='.length);
+      } else if (argument.startsWith('--text=')) {
+        var value = argument.substring('--text='.length);
+        var policy = TextPolicy.values
+            .where((p) => p.name == value)
+            .firstOrNull;
+        if (policy == null) {
+          return fail('--text takes vectorize, embedFont or systemFont.');
+        }
+        text = policy;
+      } else if (argument.startsWith('--unsupported=')) {
+        var value = argument.substring('--unsupported='.length);
+        var policy = UnsupportedPolicy.values
+            .where((p) => p.name == value)
+            .firstOrNull;
+        if (policy == null) {
+          return fail('--unsupported takes rasterize, flatten or skip.');
+        }
+        unsupported = policy;
+      } else if (argument.startsWith('--pixel-ratio=')) {
+        var value = double.tryParse(
+          argument.substring('--pixel-ratio='.length),
+        );
+        if (value == null || value <= 0) {
+          return fail('--pixel-ratio takes a positive number, as `2`.');
+        }
+        pixelRatio = value;
+      } else if (argument.startsWith('-')) {
+        return fail('unknown option "$argument". Try `fw help render`.');
+      } else {
+        return fail('render takes one point, and got a second: "$argument".');
+      }
+    }
+    var sdk = await FlutterSdkPath.findSdk();
+    if (sdk == null) {
+      return fail(
+        'no Flutter SDK above this process.\n'
+        'Run flutterware with the `dart` from a Flutter SDK, not a '
+        'standalone one.',
+      );
+    }
+    try {
+      var result = await renderOneShot(
+        packageRoot: Directory.current.path,
+        target: target,
+        point: point,
+        format: format,
+        args: argsJson,
+        size: size,
+        options: RenderOptions(text: text, unsupported: unsupported),
+        pixelRatio: pixelRatio,
+        output: output,
+        cache: FlutterCache(p.join(sdk.root, 'bin', 'cache')),
+        log: (line) => err.writeln('[render] $line'),
+      );
+      for (var warning in result.warnings) {
+        err.writeln('[render] warning: $warning');
+      }
+      if (json) {
+        out.writeln(
+          jsonEncode({
+            'output': result.outputPath,
+            'warnings': [for (var w in result.warnings) w.toJson()],
+          }),
+        );
+      } else {
+        out.writeln(result.outputPath);
+      }
+      return 0;
+    } on StateError catch (e) {
+      return fail(e.message);
+    } on RenderException catch (e) {
+      err.writeln('fw: render failed: ${e.message}');
+      if (e.remoteStack != null) err.writeln(e.remoteStack);
+      return 1;
+    }
+  }
+
+  Future<int> _renderBundle(
+    List<String> arguments, {
+    required bool json,
+  }) async {
+    var target = 'lib/renders.dart';
+    var output = 'build/render-bundle';
+    String? platform;
+    for (var argument in arguments) {
+      if (argument.startsWith('--target=')) {
+        target = argument.substring('--target='.length);
+      } else if (argument.startsWith('--out=')) {
+        output = argument.substring('--out='.length);
+      } else if (argument.startsWith('--platform=')) {
+        platform = argument.substring('--platform='.length);
+      } else if (argument.startsWith('-')) {
+        return fail('unknown option "$argument". Try `fw help render`.');
+      } else {
+        return fail('render bundle takes no positional, got "$argument".');
+      }
+    }
+    var sdk = await FlutterSdkPath.findSdk();
+    if (sdk == null) {
+      return fail(
+        'no Flutter SDK above this process.\n'
+        'Run flutterware with the `dart` from a Flutter SDK, not a '
+        'standalone one.',
+      );
+    }
+    try {
+      var manifest = await buildRenderBundle(
+        packageRoot: Directory.current.path,
+        target: target,
+        output: output,
+        cache: FlutterCache(p.join(sdk.root, 'bin', 'cache')),
+        platform: platform,
+        log: (line) => err.writeln('[render] $line'),
+      );
+      if (json) {
+        out.writeln(jsonEncode(manifest.toJson()));
+      } else {
+        out.writeln(
+          'render bundle written to $output '
+          '(${manifest.platform}, engine ${manifest.engineVersion}, '
+          '${manifest.fonts.length} font file(s))',
+        );
+      }
+      return 0;
+    } on StateError catch (e) {
+      return fail(e.message);
+    }
+  }
 
   int fail(String message) {
     err.writeln('fw: $message');
