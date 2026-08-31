@@ -86,7 +86,7 @@ class ChannelLines extends StatelessWidget {
     // A repeated shape says so rather than repeating itself, and says it after
     // the values, so the eye reaches what moved before it reaches how often.
     var times = row.repeated ? '  × ${row.count}' : '';
-    return '$subject  ${delta.property}  '
+    return '$subject  ${shortProperty(delta.property ?? '')}  '
         '${delta.base} → ${delta.head}$times';
   }
 
@@ -105,6 +105,19 @@ class ChannelLines extends StatelessWidget {
       _ => '$tail  ${delta.property}  ${delta.base} → ${delta.head}',
     };
   }
+}
+
+/// A field path trimmed to its last two segments.
+///
+/// The same rule the verdict strip uses, in one place rather than two: the
+/// strip was saying `autofill.uniqueIdentifier` while the line under it said
+/// `data.arguments[1].autofill.uniqueIdentifier`, which is one fact wearing
+/// two names on one screen. The first half of that path is wire plumbing.
+String shortProperty(String property) {
+  var parts = property.split('.');
+  return parts.length <= 2
+      ? property
+      : parts.sublist(parts.length - 2).join('.');
 }
 
 class _Line extends StatelessWidget {

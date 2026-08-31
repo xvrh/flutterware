@@ -439,4 +439,75 @@ void main() {
     expect(deltas.first.kind, TreeDeltaKind.added);
     expect(deltas.last.property, 'size');
   });
+
+  // Both halves of the same complaint from a consumer: a `key:` added to a
+  // `Text` is invisible to any screenshot, so the tree channel is the only
+  // one that can report it — and it was reporting it unreadably.
+  group('a key is part of a node’s name', () {
+    InspectNode text({String? key}) => InspectNode(
+      id: '',
+      type: 'Text',
+      description: 'Text("This code is not valid.")',
+      widgetKey: key,
+      createdByLocalProject: true,
+      children: const [],
+    );
+    InspectNode column(InspectNode child) => InspectNode(
+      id: '',
+      type: 'Column',
+      createdByLocalProject: true,
+      children: [child],
+    );
+
+    // The report as filed: `+ Column › Text("…")` over `- Column › Text("…")`,
+    // byte-identical, with the one fact that explains them left out.
+    test('a keyed child is told apart from an unkeyed one', () {
+      var diff = TreeDiff.of(
+        column(text()),
+        column(text(key: "[<'codeErrorText'>]")),
+      );
+
+      var added = diff.deltas.firstWhere(
+        (delta) => delta.kind == TreeDeltaKind.added,
+      );
+      var removed = diff.deltas.firstWhere(
+        (delta) => delta.kind == TreeDeltaKind.removed,
+      );
+      expect(added.path, isNot(removed.path));
+      expect(added.path, contains('codeErrorText'));
+      expect(removed.path, isNot(contains('codeErrorText')));
+    });
+
+    // A key with no value of its own is the same string on every node once
+    // its identity hash is gone, so it must not enter a path.
+    test('a key that names nothing stays out of the name', () {
+      var diff = TreeDiff.of(column(text()), column(text(key: '[#]')));
+
+      for (var delta in diff.deltas) {
+        expect(delta.path, isNot(contains('#')));
+      }
+    });
+
+    // `_signature` and `_fuse` keep two differently-keyed *children* apart, so
+    // neither ever runs on the root — which is handed to the walk as a pair
+    // whatever its key says.
+    test('a key on the root node is a change, not silence', () {
+      var diff = TreeDiff.of(text(), text(key: "[<'codeErrorText'>]"));
+
+      expect(diff.deltas, hasLength(1));
+      expect(diff.deltas.single.property, 'key');
+      expect(diff.deltas.single.base, isNull);
+      expect(diff.deltas.single.head, contains('codeErrorText'));
+      expect(TreeChannel(diff).changed, isTrue);
+    });
+
+    test('two roots that agree about their key say nothing', () {
+      var diff = TreeDiff.of(
+        text(key: "[<'codeErrorText'>]"),
+        text(key: "[<'codeErrorText'>]"),
+      );
+
+      expect(diff.deltas, isEmpty);
+    });
+  });
 }

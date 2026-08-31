@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../rules.dart';
+import 'channel_lines.dart';
 
 /// What *kind* of change this branch made, above both panes.
 ///
@@ -271,7 +272,7 @@ class _Shape extends StatelessWidget {
           TextSpan(text: '$how are the same change'),
           TextSpan(
             text:
-                ' — ${_tail(delta.property ?? '')}'
+                ' — ${shortProperty(delta.property ?? '')}'
                 '${delta.base == null ? '' : '  ${_short(delta.base!)} → '
                           '${_short(delta.head ?? '')}'}',
             style: TextStyle(color: colors.mut3),
@@ -281,16 +282,6 @@ class _Shape extends StatelessWidget {
       style: context.type.caption.copyWith(color: colors.mut),
       overflow: TextOverflow.ellipsis,
     );
-  }
-
-  /// The field, trimmed to its last two segments the way `ChannelLines`
-  /// already trims a tree path to its last two names: `data.arguments[1]` is
-  /// a wire path and `autofill.uniqueIdentifier` is the half anybody can name.
-  static String _tail(String property) {
-    var parts = property.split('.');
-    return parts.length <= 2
-        ? property
-        : parts.sublist(parts.length - 2).join('.');
   }
 
   /// One value, short enough to sit on a summary line. What is being judged

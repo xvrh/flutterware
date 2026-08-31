@@ -112,7 +112,7 @@ pixels are identical. 1, 6 and 7 are fine and should be left alone.
 
 ### Two bugs the drawing found, neither of them layout
 
-**A key change reads as two identical rows.** State 2 renders
+**✅ Fixed. A key change read as two identical rows.** State 2 rendered
 
 ```
 TREE
@@ -121,19 +121,21 @@ TREE
 ```
 
 which is, verbatim, the consumer report that started this whole thread. The
-cause was diagnosed on day one and never fixed: `TreeDiff._label` spells a
-widget's key back **only when the node has no description**, and a `Text`
-always has one — while its own docstring three lines above says the key is
-spelled back full stop. One line, still outstanding.
+cause was diagnosed on day one and then left: `TreeDiff._label` spelled a
+widget's key back **only when the node had no description**, and a `Text`
+always has one — while its own docstring three lines above said the key is
+spelled back full stop. It is spelled back *beside* the description now, and
+the two rows read `Text("…")-[<'codeErrorText'>]` against `Text("…")`.
 
-**A key change on the root node produces no delta at all.** Measured
-separately: `TreeDiff.of` over two `Text`s differing only in a key gives
-**0 deltas** at the root and 2 on a child. `_walk` compares `description`,
-`layout` and children, and never `widgetKey` — the key only ever influences
-`_signature`, which is about *aligning children*. A single-node entry whose
-key changed therefore reports `same`. Narrow, but wrong.
+**✅ Fixed. A key change on the root node produced no delta at all.** Measured
+separately: `TreeDiff.of` over two `Text`s differing only in a key gave
+**0 deltas** at the root and 2 on a child. `_walk` compared `description`,
+`layout` and children and never `widgetKey` — the key only ever influenced
+`_signature`, which is about *aligning children*, so neither it nor `_fuse`
+ever ran on the root. `_walk` compares the key now, and it fires exactly where
+those two do not.
 
-## The shape being proposed
+## ✅ The shape, as built
 
 **The page has a hero and a rest.** The hero is whatever changed; everything
 else collapses to one line that can be opened.
@@ -147,15 +149,27 @@ else collapses to one line that can be opened.
 step look like* is a fair question even when the answer is *the same as
 before*, and a reader who has just arrived from a list needs to know where they
 are. One frame answers that; two answer nothing that the word `identical` does
-not.
+not. It reads `both frames are identical` with `compare anyway` on the right,
+and expands **in place** — so neither tab has to carry a flag for it.
+
+State 4 measured again after the change: the frames take ~110px where they took
+415, and the `POST /session  detail  200 → 500` is the first thing under the
+title rather than the last thing on the page.
+
+**One-sided states keep the stage.** 6 and 7 were already right, and the guard
+is `shots.base == null || shots.head == null` rather than a state check, so a
+frame that is genuinely missing is never collapsed into a claim that the two
+are identical.
 
 Three smaller things fall out and should ride along:
 
 - **The verdict moves down**, onto the list view rather than the tab, so a
   pushed page does not inherit it.
-- **`ChannelLines` trims a property the way the verdict does.** It still draws
-  `data.arguments[1].autofill.uniqueIdentifier` where the strip above it says
-  `autofill.uniqueIdentifier`. One rule, one place.
+- ✅ **`ChannelLines` trims a property the way the verdict does** —
+  `shortProperty` now lives in one place and both call it. The strip was saying
+  `autofill.uniqueIdentifier` while the line under it said
+  `data.arguments[1].autofill.uniqueIdentifier`: one fact wearing two names on
+  one screen.
 - **The flow node sizes to its frame's aspect** instead of to a constant, and
   the cell padding is measured against the result rather than added blind.
 
