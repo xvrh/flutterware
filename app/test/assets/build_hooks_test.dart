@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:code_assets/code_assets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/assets/build_hooks.dart';
@@ -164,6 +165,78 @@ void main() {
     expect(result.packages, isEmpty);
     expect(result.failure, contains('does not name a package'));
   });
+
+  test(
+    'a failure is held, and retried in the background after the hold',
+    () async {
+      var temp = Directory.systemTemp.createTempSync('fw_hooks_hold');
+      addTearDown(() => temp.deleteSync(recursive: true));
+      File(p.join(temp.path, '.dart_tool', 'package_config.json'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync(
+          jsonEncode({
+            'configVersion': 2,
+            'packages': [
+              {
+                'name': 'root',
+                'rootUri': '../',
+                'packageUri': 'lib/',
+                'languageVersion': '3.0',
+              },
+            ],
+          }),
+        );
+      var hooks = BuildHooks(
+        dartExecutable: sdk.dart,
+        packageConfigPath: p.join(
+          temp.path,
+          '.dart_tool',
+          'package_config.json',
+        ),
+        rootPackageRoot: temp.path,
+      );
+
+      // A resolution with no `package_graph.json`: the graph cannot be read.
+      var first = await hooks.run();
+      expect(first.failure, isNotNull);
+
+      // Fix the world, then ask inside the hold. Still the failure — which is
+      // the proof nothing re-ran, because a re-run would now succeed. This is
+      // what keeps a reload loop from re-paying a failing native build per
+      // tick.
+      File(p.join(temp.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: root\nenvironment:\n  sdk: ^3.0.0\n');
+      File(
+        p.join(temp.path, '.dart_tool', 'package_graph.json'),
+      ).writeAsStringSync(
+        jsonEncode({
+          'roots': ['root'],
+          'packages': [
+            {'name': 'root', 'version': '1.0.0', 'dependencies': <String>[]},
+          ],
+          'configVersion': 1,
+        }),
+      );
+      var held = await hooks.run();
+      expect(held.failure, first.failure);
+
+      // Past the hold, the ask kicks the retry and is *still* answered from
+      // the hold: the cost of retrying lands on no bundle build.
+      var later = Clock.fixed(clock.now().add(BuildHooks.retryHold * 2));
+      var kicked = await withClock(later, hooks.run);
+      expect(kicked.failure, first.failure);
+
+      // The retry lands in the background; recovery is one ask behind.
+      var deadline = DateTime.now().add(const Duration(seconds: 30));
+      BuildHooksResult recovered;
+      do {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        recovered = await hooks.run();
+      } while (recovered.failure != null && DateTime.now().isBefore(deadline));
+      expect(recovered.failure, isNull);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   test('a second ask is the same run, not a second one', () async {
     var hooks = BuildHooks(

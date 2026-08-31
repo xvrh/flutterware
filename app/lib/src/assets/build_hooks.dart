@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:clock/clock.dart';
 import 'package:code_assets/code_assets.dart';
 import 'package:crypto/crypto.dart';
 import 'package:file/local.dart';
@@ -78,12 +79,15 @@ typedef BuildHooksResult = ({
 /// assets) still waits on the feature reaching beta.
 ///
 /// Measured on a project that loads a `.glb`: **49.9s the first time on a
-/// machine, 110–125ms after that**, and neither number is ours to improve —
-/// `package:hooks_runner` caches the run, and the hook caches its own output
-/// again inside it. Asking whether there is anything to run at all costs 30ms,
-/// which is what a project with no hooks pays and all it pays. A hook that
-/// compiles native code now genuinely compiles, and the same cache holds: it
-/// is paid once per machine per resolution, not per bundle.
+/// checkout, 110–125ms after that**, and neither number is ours to improve —
+/// `package:hooks_runner` caches the run under the checkout's own
+/// `.dart_tool`, and the hook caches its own output again inside it. Asking
+/// whether there is anything to run at all costs 30ms, which is what a
+/// project with no hooks pays and all it pays. A hook that compiles native
+/// code now genuinely compiles, and the same cache holds: it is paid once per
+/// checkout per resolution, not per bundle. A hook that *fails* is held
+/// instead — see [retryHold] — because `hooks_runner` caches no failures and
+/// a reload loop must not re-pay a failing native build per tick.
 class BuildHooks {
   BuildHooks({
     required this.dartExecutable,
@@ -127,36 +131,87 @@ class BuildHooks {
     return '$rootPackageRoot\n${sha1.convert(file.readAsBytesSync())}';
   }
 
-  /// Runs whatever hooks this project has, once.
+  /// Failures being held, keyed like [_runs]: the result every ask in the
+  /// hold is served, and when a retry may begin.
+  ///
+  /// "A failure must not be remembered" was this class's original rule, and
+  /// it was written when a run cost ~40ms: forgetting a failure only meant a
+  /// cheap re-ask. Code assets changed the price — a failing run is now a
+  /// real native build attempt, `hooks_runner` caches only successes, and
+  /// every previews reload rebuilds the bundle — so a machine where the hooks
+  /// persistently fail (no network for a download hook, no C toolchain) would
+  /// re-pay the whole failing build on every reload, serially, announcing it
+  /// each time. So a failure *is* remembered now, but never forever: see
+  /// [run] for the retry that clears it.
+  static final _heldFailures =
+      <String, ({BuildHooksResult result, DateTime retryAt})>{};
+
+  /// How long a failure is held before an ask may kick a retry.
+  ///
+  /// The number bounds waste and noise, not latency — no caller ever waits on
+  /// a retry — so it only has to be long enough that a reload loop ticking
+  /// every few seconds is not paying a failing native build each tick, and
+  /// short enough that a fixed toolchain is noticed while the fixer is still
+  /// looking.
+  static const retryHold = Duration(minutes: 1);
+
+  /// Runs whatever hooks this project has, once — and once more per
+  /// [retryHold] while they fail.
   ///
   /// A project that has not been resolved yet has no hooks to speak of and no
   /// package config to find them through; it reports nothing rather than
   /// failing, because the caller is about to fail on the resolution itself and
   /// will say so better.
+  ///
+  /// A held failure is served without waiting: the ask that finds the hold
+  /// expired *kicks* a retry and is still answered from the hold, so the cost
+  /// of retrying lands on no bundle build — a reload during an outage stays a
+  /// reload. Recovery is one build behind by construction: the retry that
+  /// succeeds updates the memo, and the next bundle build ships the assets.
   Future<BuildHooksResult> run() {
     var key = _key();
     if (key == null) return Future.value(_nothing);
 
+    if (_heldFailures[key] case var held?) {
+      // `_runs` holding the key here *is* the retry in flight — a success
+      // would have cleared the hold — so its absence is what makes this ask
+      // the one that pays nothing but the kick.
+      if (!_runs.containsKey(key) && !clock.now().isBefore(held.retryAt)) {
+        _runs[key] = _guarded(key);
+      }
+      return Future.value(held.result);
+    }
     if (_runs[key] case var running?) return running;
-    // Deliberately not `putIfAbsent`: a failure must not be remembered, so the
-    // entry has to be removable, and the two halves read better apart.
     var started = _guarded(key);
     _runs[key] = started;
     return started;
   }
 
-  /// [_run], with the memo torn down again on anything that did not work.
+  /// [_run], with the memo settled either way: a success stays in [_runs], a
+  /// failure moves to [_heldFailures] with its retry time.
+  ///
+  /// Nothing may escape as a throw. A retry runs with no caller awaiting it —
+  /// that is the whole point — so an exception here would surface as an
+  /// unhandled async error instead of a sentence; and the class's own
+  /// contract is that a hook problem degrades and the bundle is built either
+  /// way, which a throw was already breaking for the resolution-reading edge
+  /// cases.
   Future<BuildHooksResult> _guarded(String key) async {
     BuildHooksResult result;
     try {
       result = await _run();
-    } on Object {
-      unawaited(_runs.remove(key));
-      rethrow;
+    } on Object catch (e) {
+      result = _failed('Build hooks failed: $e');
     }
     if (result.failure case var failure?) {
       unawaited(_runs.remove(key));
+      _heldFailures[key] = (
+        result: result,
+        retryAt: clock.now().add(retryHold),
+      );
       _announce(failure);
+    } else {
+      _heldFailures.remove(key);
     }
     return result;
   }
