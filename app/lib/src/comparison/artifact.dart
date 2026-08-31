@@ -111,13 +111,25 @@ class ScenarioResults {
 /// than merged: they are compared by different machinery and a row from one is
 /// not interchangeable with a row from the other.
 class ComparisonArtifact {
-  const ComparisonArtifact({required this.previews, this.scenarios});
+  const ComparisonArtifact({
+    required this.previews,
+    this.scenarios,
+    this.narrowed = false,
+  });
 
   final ComparisonResult previews;
 
   /// Absent when the project declares no scenarios at all. A run that tried
   /// and could not is present, with a [ScenarioResults.note].
   final ScenarioResults? scenarios;
+
+  /// Whether the run was narrowed to named entries (`--entry`).
+  ///
+  /// In the artifact rather than only in the command's hand, because the
+  /// all-failed gap rule reads it — see [verdictGapOf] — and a consumer's
+  /// script reading `index.json` has to apply that rule the way the writer
+  /// did.
+  final bool narrowed;
 
   /// Every row either half produced, counted by state.
   ///
@@ -160,6 +172,7 @@ class ComparisonArtifact {
     // paths under `~/.flutterware`; the export rewrites both and overwrites
     // this. See [ComparisonFrames].
     'frames': ComparisonFrames.local.name,
+    if (narrowed) 'narrowed': true,
     'previews': previews.toJson(),
     'scenarios': ?scenarios?.toJson(),
   };

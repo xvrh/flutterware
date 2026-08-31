@@ -1853,6 +1853,12 @@ final resultShapes = <String, ResultShape>{
         'optional': true,
         'doc': 'Why the scenario half has nothing to say, when it has nothing to say — a base harness that would not build reads differently from a project with no scenarios.',
       },
+      <String, Object?>{
+        'name': 'verdictGap',
+        'type': 'String',
+        'optional': true,
+        'doc': 'Why the verdict is incomplete, when it is — the sentence `fw compare` exits 1 on, and the published reader\'s own `verdictGap`, so an agent and a script over `index.json` read the same answer.',
+      },
     ],
   }),
   'ComparisonDelta': ResultShape.fromJson(<String, Object?>{

@@ -654,8 +654,7 @@ class FwCli {
       // export and the `--json` document are all written and printed above —
       // the record is whole — and only the exit code is left to say the
       // verdict is not. See [verdictGap].
-      if (verdictGap(outcome.artifact, narrowed: only.isNotEmpty)
-          case var gap?) {
+      if (verdictGap(outcome.artifact) case var gap?) {
         err.writeln('fw: $gap');
         return 1;
       }

@@ -191,6 +191,7 @@ Map<String, dynamic> _$ComparisonCompareResultToJson(
   'export': ?instance.export,
   'report': ?instance.report,
   'scenariosNote': ?instance.scenariosNote,
+  'verdictGap': ?instance.verdictGap,
 };
 
 Map<String, dynamic> _$ComparisonFindingToJson(ComparisonFinding instance) =>

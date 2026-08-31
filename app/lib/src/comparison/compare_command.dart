@@ -214,7 +214,11 @@ Future<CompareOutcome> runComparison({
   // Written once both halves are in. The artifact is the whole verdict, so a
   // file holding only the previews would be a file that answers "did this
   // branch break anything" wrongly.
-  var artifact = ComparisonArtifact(previews: result, scenarios: scenarios);
+  var artifact = ComparisonArtifact(
+    previews: result,
+    scenarios: scenarios,
+    narrowed: options.entries.isNotEmpty,
+  );
   var index = artifact.writeTo(
     p.join(comparisonDirFor(flutterwareDir(), session.worktree), 'index.json'),
   );
@@ -262,59 +266,21 @@ Future<CompareOutcome> runComparison({
 
 String abbreviatedSha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 
-/// Why [artifact]'s verdict is incomplete, or null when it is whole.
+/// Why [artifact]'s verdict is incomplete, or null when it is whole — the
+/// exit-code question, asked of the writer's shape.
 ///
-/// The exit-code question. A harness that will not build lands as a `note` on
-/// an empty half rather than as a refusal — deliberately, so the artifact
-/// records what happened — but an exit code that stays 0 turns that record
-/// into a pass on any CI job gating on `fw compare`. A consumer's workflow
-/// grew fifteen lines of guards around exactly this: a pin-skewed branch
-/// whose comparison could not run recorded itself as clean.
-///
-/// Keyed on the note rather than on any particular cause, so whatever next
-/// prevents a half from running is covered the day it appears.
-///
-/// A half whose rows **all** came out [ComparedState.failed] is the same kind
-/// of gap wearing a different record: `failed` means neither side rendered, so
-/// a half made of nothing else answered no question about the branch — and it
-/// is near-always environmental, not fifty-one simultaneous regressions. A
-/// consumer met exactly this as a green check over a `51 failed` comment, when
-/// their whole suite hit one missing native library on both sides. *All*, not
-/// *any*: a half with one pre-broken flow and fifty compared ones did its job,
-/// and the failed row is already a finding every reader of the artifact sees.
-///
-/// [narrowed] switches the all-failed rule off — the note rule stands. "All of
-/// it failed" is evidence of environment only over the whole suite; a run
-/// narrowed with `--entry` compares the rows somebody picked, and picking the
-/// one pre-broken flow would otherwise turn its ordinary finding into a
-/// permanent exit 1 that no change on the branch can lift.
-String? verdictGap(ComparisonArtifact artifact, {bool narrowed = false}) {
-  if (artifact.scenarios?.note case var note?) {
-    return 'the scenario half produced no verdict — ${note.split('\n').first}';
-  }
-  if (narrowed) return null;
-  return _allFailedGap(
-        'scenario',
-        'scenarios',
-        artifact.scenarios?.items.map((item) => item.state),
-      ) ??
-      _allFailedGap(
-        'previews',
-        'entries',
-        artifact.previews.items.map((item) => item.state),
-      );
-}
-
-/// The gap sentence for a half of nothing but [ComparedState.failed], or null
-/// for one that compared anything at all — one copy of both the predicate and
-/// the wording, so the two halves cannot drift apart.
-String? _allFailedGap(String half, String unit, Iterable<ComparedState>? s) {
-  var states = s?.toList();
-  if (states == null || states.isEmpty) return null;
-  if (!states.every((state) => state == ComparedState.failed)) return null;
-  return 'the $half half produced no verdict — all '
-      '${states.length} $unit failed on both sides';
-}
+/// The rule itself is the published [verdictGapOf], deliberately: `fw
+/// compare`'s exit code, the compare reply an agent reads and a consumer's
+/// script over `index.json` may not answer this question differently, which
+/// is the same argument `rankComparedFindings` already makes below. What is
+/// local here is only pulling the note and the states out of the artifact.
+String? verdictGap(ComparisonArtifact artifact) => verdictGapOf(
+  scenariosNote: artifact.scenarios?.note,
+  scenarioStates:
+      artifact.scenarios?.items.map((item) => item.state) ?? const [],
+  previewStates: artifact.previews.items.map((item) => item.state),
+  narrowed: artifact.narrowed,
+);
 
 /// The `compare` action, as the previews core invokes it.
 ///
@@ -397,6 +363,7 @@ Future<ComparisonCompareResult> runCompareAction({
     export: outcome.exported?.output,
     report: report == null ? null : p.dirname(report.commentPath),
     scenariosNote: artifact.scenarios?.note,
+    verdictGap: verdictGap(artifact),
   );
 }
 

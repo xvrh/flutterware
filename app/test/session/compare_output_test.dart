@@ -244,24 +244,37 @@ void main() {
     // "All of it failed" is evidence of environment only over the whole
     // suite. A run narrowed with --entry compares the rows somebody picked,
     // and picking the one pre-broken flow must stay an ordinary finding —
-    // not a permanent exit 1 no change on the branch can lift.
+    // not a permanent exit 1 no change on the branch can lift. The artifact
+    // carries the narrowing, so a reader of `index.json` applies the same
+    // rule the exit code did.
     test('narrowing switches the all-failed rule off, and not the note', () {
-      var allFailed = ComparisonArtifact(
-        previews: previews(),
-        scenarios: ScenarioResults.of(
-          items: [
-            ScenarioComparison.notRun(
-              scenario: 'test/scenarios/a_test.dart#pre-broken',
-              state: ComparedState.failed,
-            ),
-          ],
-          ran: 1,
-          skipped: 0,
-          elapsed: Duration.zero,
-        ),
+      ScenarioResults oneFailed() => ScenarioResults.of(
+        items: [
+          ScenarioComparison.notRun(
+            scenario: 'test/scenarios/a_test.dart#pre-broken',
+            state: ComparedState.failed,
+          ),
+        ],
+        ran: 1,
+        skipped: 0,
+        elapsed: Duration.zero,
       );
-      expect(verdictGap(allFailed), isNotNull);
-      expect(verdictGap(allFailed, narrowed: true), isNull);
+      expect(
+        verdictGap(
+          ComparisonArtifact(previews: previews(), scenarios: oneFailed()),
+        ),
+        isNotNull,
+      );
+      expect(
+        verdictGap(
+          ComparisonArtifact(
+            previews: previews(),
+            scenarios: oneFailed(),
+            narrowed: true,
+          ),
+        ),
+        isNull,
+      );
 
       // A harness that would not build produced no verdict however the run
       // was narrowed; that rule stands.
@@ -274,8 +287,9 @@ void main() {
           elapsed: Duration.zero,
           note: 'The scenarios harness does not compile:',
         ),
+        narrowed: true,
       );
-      expect(verdictGap(broken, narrowed: true), isNotNull);
+      expect(verdictGap(broken), isNotNull);
     });
 
     test('the previews half is held to the same rule', () {

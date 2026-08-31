@@ -2616,6 +2616,7 @@ index: String   # The whole verdict as a file — every row, every channel, the 
 export: String?   # The browsable page, when `export` asked for one.
 report: String?   # The PR report directory, when `report` asked for one: `comment.md`, `mosaic.png`, the page under `web/`.
 scenariosNote: String?   # Why the scenario half has nothing to say, when it has nothing to say — a base harness that would not build reads differently from a project with no scenarios.
+verdictGap: String?   # Why the verdict is incomplete, when it is — the sentence `fw compare` exits 1 on, and the published reader's own `verdictGap`, so an agent and a script over `index.json` read the same answer.
 ```
 
 | parameter | kind | required | default | |
