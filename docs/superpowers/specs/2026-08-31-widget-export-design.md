@@ -1,4 +1,4 @@
-# Widget export — render a widget as SVG, PNG or PDF, server-side
+# Render — a widget as SVG, PNG or PDF, server-side
 
 **Date:** 2026-08-31
 **Status:** Drafted from a green spike. The capture pipeline — recording
@@ -20,6 +20,17 @@ everyday Material screens) is folded into the fidelity section below. The
 guest program and census live in `test/vector_export/export_guest_main.dart`
 and `census_test.dart`.
 
+**Naming settled (2026-08-31): the feature is *render*, not *export*.** The
+name appears most on the pure-Dart side — the server, the CLI, the
+Dockerfile, the pool — exactly where "render" is unambiguous and
+"server-side rendering" is the established register. Inside the studio,
+"export" already means "take this plugin's data out" on four other panels,
+and it says nothing about how; render says what happens. The Flutter side
+barely speaks the name (the app binds implementations; the descriptors live
+in the contract package), so the `Render*` prefix never sits beside
+`RenderObject` code. Vocabulary: a **render point** is the declared entry;
+**a render** is one result.
+
 **Lineage:** the spike's findings (this file cites its measurements),
 `2026-07-30-scenarios-design.md` (the guest harness and direct-spawn
 flutter_tester lane this rides), the previews plugin (the entry/discovery
@@ -36,8 +47,8 @@ primitives, or rasterizes a headless screenshot and ships blurry text.
 
 The one-sentence story this design must keep true:
 
-> Declare an export point, `fw bundle`, copy one directory into your Docker
-> image, and call it from your server **fully typed**.
+> Declare a render point, `fw render bundle`, copy one directory into your
+> Docker image, and call it from your server **fully typed**.
 
 Flutterware is unusually close. The hard tenth of the problem — compiling a
 kernel, spawning and driving `flutter_tester`, discovering entries, loading
@@ -54,7 +65,7 @@ protocol and one panel.
   `PaintingContext` captures the full paint pass on stock `flutter_tester`.
 - **Text is a join.** The string and styles come from `RenderParagraph`; the
   *same* laid-out `ui.Paragraph` answers for line breaks, per-run boxes and
-  baselines. Wrap points in the export match the app exactly.
+  baselines. Wrap points in the rendered output match the app exactly.
 - **Glyphs are extractable.** A TrueType `glyf` reader and a CFF Type2
   charstring interpreter turn any font Flutter renders (CID-keyed CFF
   excepted) into path outlines, placed at the paragraph's own per-character
@@ -76,11 +87,11 @@ protocol and one panel.
 
 ## The shape: two entry kinds, one decision
 
-**A widget export** builds a widget; the *caller* chooses the output —
-SVG, PNG, or a single-page PDF — and the export options. One entry, three
+**A widget render** builds a widget; the *caller* chooses the output —
+SVG, PNG, or a single-page PDF — and the render options. One entry, three
 formats.
 
-**A document export** composes a `pw.Document` itself — multi-page, flowing
+**A document render** composes a `pw.Document` itself — multi-page, flowing
 text, captured widget blocks dropped in as SVG — and returns PDF bytes.
 
 The decision this split encodes, stated once so it never gets rebuilt:
@@ -92,12 +103,12 @@ proof shows the seam is one `pw.SvgImage` call.
 ## Fully typed, across two processes
 
 The server is pure Dart; the entry runs inside a Flutter guest. Types cross
-that boundary through a **shared contract**: the export *point* is a value —
+that boundary through a **shared contract**: the render *point* is a value —
 name plus codecs plus phantom types — declared in a pure-Dart package both
 sides import. No code generation is required; the descriptor is the
 contract.
 
-A new workspace member carries the API: **`flutterware_export`**, pure Dart
+A new workspace member carries the API: **`flutterware_render`**, pure Dart
 (the `flutterware` package depends on the Flutter SDK, which a `dart`
 server cannot resolve — so the contract and client cannot live there).
 It ships three things: the descriptor types, the wire-safe options, and the
@@ -106,8 +117,8 @@ It ships three things: the descriptor types, the wire-safe options, and the
 ### 1. The app team's contract package (pure Dart, shared)
 
 ```dart
-// package:acme_contract/exports.dart
-import 'package:flutterware_export/contract.dart';
+// package:acme_contract/renders.dart
+import 'package:flutterware_render/contract.dart';
 
 class ChartRequest {
   ChartRequest({required this.title, required this.series});
@@ -118,15 +129,15 @@ class ChartRequest {
   static ChartRequest fromJson(Map<String, Object?> json) => ChartRequest(...);
 }
 
-/// The export point IS the contract: a name the guest registers under,
+/// The render point IS the contract: a name the guest registers under,
 /// codecs for the args, and the args type pinned in the type argument.
-final monthlyChart = WidgetExport<ChartRequest>(
+final monthlyChart = WidgetRender<ChartRequest>(
   'charts/monthly',
   encodeArgs: (args) => args.toJson(),
   decodeArgs: ChartRequest.fromJson,
 );
 
-final invoicePdf = DocumentExport<InvoiceRequest>(
+final invoicePdf = DocumentRender<InvoiceRequest>(
   'invoices/invoice',
   encodeArgs: (args) => args.toJson(),
   decodeArgs: InvoiceRequest.fromJson,
@@ -136,12 +147,12 @@ final invoicePdf = DocumentExport<InvoiceRequest>(
 ### 2. The app binds implementations (Flutter package)
 
 ```dart
-// lib/exports.dart in the Flutter app
-import 'package:acme_contract/exports.dart';
-import 'package:flutterware/export.dart';
+// lib/renders.dart in the Flutter app
+import 'package:acme_contract/renders.dart';
+import 'package:flutterware/render.dart';
 
-@ExportRegistry()
-void registerExports(ExportHost host) {
+@RenderRegistry()
+void registerRenders(RenderHost host) {
   host.widget(monthlyChart, (context, args) {
     return MonthlyChart(title: args.title, series: args.series);
   });
@@ -159,15 +170,15 @@ void registerExports(ExportHost host) {
 ```
 
 Discovery reuses the previews mechanism: the registrar is annotated, the
-scanner finds it, `fw bundle -t lib/exports.dart` compiles it as the guest
-program. Fonts and assets are declared where the app already declares them
-(pubspec fonts + assets ride the bundle the way they ride the tester lane
-today).
+scanner finds it, `fw render bundle -t lib/renders.dart` compiles it as the
+guest program. Fonts and assets are declared where the app already declares
+them (pubspec fonts + assets ride the bundle the way they ride the tester
+lane today).
 
 ### 3. Packaging
 
 ```sh
-fw bundle --target lib/exports.dart --platform linux-x64 --out build/render-bundle
+fw render bundle --target lib/renders.dart --platform linux-x64 --out build/render-bundle
 ```
 
 One directory: `flutter_tester`, `icudtl.dat`, the app dill, the asset
@@ -186,8 +197,8 @@ is impossible, not documented.
 ### 4. The server (pure Dart — the code the question asked for)
 
 ```dart
-import 'package:acme_contract/exports.dart';
-import 'package:flutterware_export/client.dart';
+import 'package:acme_contract/renders.dart';
+import 'package:flutterware_render/client.dart';
 import 'package:shelf/shelf.dart';
 
 late final RenderPool renders;
@@ -201,17 +212,17 @@ Future<void> main() async {
 }
 
 Future<Response> chartHandler(Request request) async {
-  // Fully typed: `monthlyChart` is WidgetExport<ChartRequest>, so `args`
+  // Fully typed: `monthlyChart` is WidgetRender<ChartRequest>, so `args`
   // must be a ChartRequest and the compiler holds the line. The result is
   // an SvgResult because .svg() was asked for.
   var svg = await renders.svg(
     monthlyChart,
     ChartRequest(title: 'Monthly active devices', series: fetchSeries()),
-    size: const ExportSize(412, 230),
-    options: const ExportOptions(
-      text: TextExport.vectorize,
-      textByFamily: {'MaterialIcons': TextExport.vectorize},
-      unsupported: UnsupportedExport.rasterize,
+    size: const RenderSize(412, 230),
+    options: const RenderOptions(
+      text: TextPolicy.vectorize,
+      textByFamily: {'MaterialIcons': TextPolicy.vectorize},
+      unsupported: UnsupportedPolicy.rasterize,
     ),
   );
 
@@ -234,24 +245,24 @@ Future<Response> invoiceHandler(Request request) async {
 ```
 
 Typing rules, precisely: `svg`/`png`/`pdfPage` accept a
-`WidgetExport<A>` and an `A`; `pdf` accepts a `DocumentExport<A>` and an
+`WidgetRender<A>` and an `A`; `pdf` accepts a `DocumentRender<A>` and an
 `A`. Results are distinct types (`SvgResult.text`, `PngResult.bytes`,
 `PdfResult.bytes`), each carrying `warnings` and `timings`. Handing the
 wrong args type, or asking `.pdf()` of a widget entry, is a compile error
 on the server — the process boundary costs no type safety.
 
-### Wire-safe export options
+### Wire-safe render options
 
 The spike's `VgExportOptions.textMode` is a per-run *callback* — expressive
 in-process, unserializable on a wire. The wire options are **data**:
 
 ```dart
-class ExportOptions {
-  const ExportOptions({
-    this.text = TextExport.embedFont,     // vectorize | embedFont | systemFont
+class RenderOptions {
+  const RenderOptions({
+    this.text = TextPolicy.embedFont,      // vectorize | embedFont | systemFont
     this.textByFamily = const {},          // per-family override — the real
                                            // per-run need was icons vs body
-    this.unsupported = UnsupportedExport.rasterize, // | flatten | skip
+    this.unsupported = UnsupportedPolicy.rasterize, // | flatten | skip
     this.rasterScale = 3,
   });
 }
@@ -267,13 +278,13 @@ in-process, may use the full callback API directly.
 | Capture pipeline (canvas, text join, TTF+CFF outlines, policies, raster lane) | **Spike, green** — promote `test/vector_export/` to a library in the guest half |
 | Kernel compile, seed-kernel warm start, build isolation | **Exists** (`TesterHost`, scenarios/previews lanes) |
 | Spawn/drive `flutter_tester`, guest harness, real fonts | **Exists** (embedder + previews harness) |
-| Entry discovery, typed parameters | **Exists as precedent** (previews discovery, run knobs) — needs the export flavor |
-| `ExportPoint` contract + `flutterware_export` package | **Missing** — the one new API surface |
-| `fw bundle` | **Missing** — packaging of parts that all exist |
+| Entry discovery, typed parameters | **Exists as precedent** (previews discovery, run knobs) — needs the render flavor |
+| `WidgetRender`/`DocumentRender` contract + `flutterware_render` package | **Missing** — the one new API surface |
+| `fw render bundle` | **Missing** — packaging of parts that all exist |
 | `RenderPool` + driver protocol | **Missing** — request loop over the existing host |
 | Studio panel: render entries live, knobs for args, document viewer | **Missing** — previews panel is the template |
-| `fw render` one-shot CLI | **Missing** — thin |
-| Regression diffs of rendered documents | **Exists as organ** (comparison plugin) — point it at export entries |
+| `fw render <entry>` one-shot CLI | **Missing** — thin |
+| Regression diffs of rendered documents | **Exists as organ** (comparison plugin) — point it at render entries |
 | Reproducibility: pinned clock, locale, seeded random | **Exists as precedent** (scenario clock slot) |
 | Structured errors with stacks over the wire | **Exists as precedent** (scenario step events) |
 
@@ -290,26 +301,26 @@ This panel is what makes the feature flutterware-shaped. Without it, the
 bundle and pool are a good Docker recipe; with it, the whole document
 pipeline lives where the app lives.
 
-## Export is not screenshot
+## Render is not screenshot
 
-A `@Preview` entry is a degenerate export point — named, discoverable,
-argumentless — so `fw export <entry> --as=svg|pdf|png` accepts preview
-entries as targets alongside export points: everything previewable is
-exportable. But the verbs never merge, because they make different
+A `@Preview` entry is a degenerate render point — named, discoverable,
+argumentless — so `fw render <entry> --as=svg|pdf|png` accepts preview
+entries as targets alongside render points: everything previewable is
+renderable. But the verbs never merge, because they make different
 promises:
 
 - **`previews screenshot` is a camera.** It returns what the engine
   actually rasterized — evidence. The agent loop and the human trust it to
   answer "does this border survive its corner", so it must never need a
   warnings channel.
-- **`fw export` is an illustrator.** It returns a document reconstructed
+- **`fw render` is an illustrator.** It returns a document reconstructed
   under stated policies — a deliverable — and its contract *includes*
   warnings: dropped runs, raster patches, effects it could not express.
 
-`fw export --as=png` is fine (the camera at a deliverable's doorstep). The
+`fw render --as=png` is fine (the camera at a deliverable's doorstep). The
 reverse — screenshot growing vector formats — stays off the table
 permanently. The rule to teach: *screenshot tells you the truth about
-pixels; export gives you a document and tells you the truth about what it
+pixels; render gives you a document and tells you the truth about what it
 couldn't express.*
 
 ## Constraints and the fidelity backlog
