@@ -59,6 +59,7 @@ PrReport writePrReport({
   required ShotCache cache,
   required String against,
   required String directory,
+  String? head,
 }) {
   Directory(directory).createSync(recursive: true);
 
@@ -79,6 +80,7 @@ PrReport writePrReport({
     _comment(
       artifact,
       against: against,
+      head: head,
       findings: findings,
       hasMosaic: mosaicPath != null,
     ),
@@ -86,9 +88,20 @@ PrReport writePrReport({
   return PrReport(commentPath: commentPath, mosaicPath: mosaicPath);
 }
 
+/// The comment's first line, and how a workflow finds its own comment again:
+/// a run that updates in place greps for this and PATCHes, instead of
+/// stacking a new comment per push.
+const commentMarker = '<!-- fw-compare -->';
+
 /// The mosaic stops here and the comment says "and N more" — a comment is a
 /// teaser, and forty cells of phone frames is a page pretending to be one.
 const mosaicRowCap = 20;
+
+/// The table stops here, folded or not: GitHub refuses a comment past 65536
+/// characters, and a table that grows a row per finding walks a big
+/// comparison straight into that wall — a report that fails to *post* on
+/// exactly the runs with the most to say. The page has every row.
+const commentRowCap = 100;
 
 /// Both frames scale to this height, so a phone step and a wide desktop
 /// preview read as cells of one table rather than a ransom note.
@@ -384,6 +397,7 @@ int mosaicTextWidth(String text) {
 String _comment(
   ComparisonArtifact artifact, {
   required String against,
+  required String? head,
   required List<_Finding> findings,
   required bool hasMosaic,
 }) {
@@ -401,7 +415,7 @@ String _comment(
     if (elapsed > Duration.zero) 'in ${_took(elapsed)}',
   ].join(' · ');
 
-  var buffer = StringBuffer();
+  var buffer = StringBuffer()..writeln(commentMarker);
   if (findings.isEmpty) {
     buffer
       ..writeln('### Comparison against `$against`\n')
@@ -417,7 +431,11 @@ String _comment(
         '[**Open the full comparison →**]($viewerUrlPlaceholder) · $receipt\n',
       );
     if (hasMosaic) {
-      buffer.writeln('![comparison]($mosaicUrlPlaceholder)\n');
+      // The image is the biggest thing in the comment, so it is also a door:
+      // clicking it opens the page rather than the raw PNG.
+      buffer.writeln(
+        '[![comparison]($mosaicUrlPlaceholder)]($viewerUrlPlaceholder)\n',
+      );
     }
     // The summary line says the mosaic is a cap when it is one, which is the
     // whole job the old "…and N more" footnote was doing.
@@ -429,7 +447,7 @@ String _comment(
       ..writeln('<details><summary>$shown</summary>\n')
       ..writeln('| entry | state | Δ |')
       ..writeln('|---|---|---|');
-    for (var finding in findings) {
+    for (var finding in findings.take(commentRowCap)) {
       // Every row is a door into the page: the entry opens its finding, and a
       // scenario's Δ opens the very step that moved. The fragment grammar is
       // the viewer's own — `<tab>/<selection>`, escapes spelled out so an
@@ -447,10 +465,21 @@ String _comment(
       }
       buffer.writeln('| $entry | ${finding.state.name} | $delta |');
     }
+    if (findings.length > commentRowCap) {
+      buffer.writeln(
+        '\n*…and ${findings.length - commentRowCap} more — the page has '
+        'them all.*',
+      );
+    }
     buffer.writeln('\n</details>\n');
   }
+  // The head sha, because this comment gets overwritten in place: it is what
+  // tells a reader whether the report still describes the latest push.
+  var at = head == null
+      ? ''
+      : ' @${head.length > 7 ? head.substring(0, 7) : head}';
   buffer.writeln(
-    '<sub>`fw compare` — both sides computed from git, with no stored '
+    '<sub>`fw compare`$at — both sides computed from git, with no stored '
     'baseline.</sub>',
   );
   return buffer.toString();
