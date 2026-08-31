@@ -89,10 +89,15 @@ void main() {
       ),
       cache: cache,
       against: 'master',
+      head: 'abc123def4567890',
       directory: p.join(temp.path, 'report'),
     );
 
     var comment = File(report.commentPath).readAsStringSync();
+    // The marker is how a workflow finds its own comment to update, and the
+    // head sha is how a reader tells an updated comment from a stale one.
+    expect(comment, startsWith('$commentMarker\n'));
+    expect(comment, contains('`fw compare` @abc123d —'));
     expect(comment, contains('against `master` — **1 changed**'));
     // The entry cell is a door into the page, aimed by the viewer's own
     // fragment grammar — the id's `/` and `#` spelled as escapes so they
@@ -115,6 +120,11 @@ void main() {
     expect(
       comment.indexOf(viewerUrlPlaceholder),
       lessThan(comment.indexOf(mosaicUrlPlaceholder)),
+    );
+    // The image itself is a door to the page, not to the raw PNG.
+    expect(
+      comment,
+      contains('[![comparison]($mosaicUrlPlaceholder)]($viewerUrlPlaceholder)'),
     );
     expect(comment, contains('<details><summary>1 finding</summary>'));
     expect(
@@ -158,6 +168,30 @@ void main() {
     );
     // Folded, but complete: every finding is a table row.
     expect('| changed |'.allMatches(comment).length, mosaicRowCap + 4);
+  });
+
+  test('the table stops at commentRowCap, so the comment always posts', () {
+    var report = writePrReport(
+      artifact: ComparisonArtifact(
+        previews: previews([
+          for (var index = 0; index < commentRowCap + 4; index++)
+            ComparedItem(
+              id: 'demo/entry$index.dart#entry',
+              state: ComparedState.changed,
+            ),
+        ]),
+      ),
+      cache: cache,
+      against: 'master',
+      directory: p.join(temp.path, 'report'),
+    );
+
+    // No shots anywhere, so there is no mosaic to draw — the cap is about
+    // the table alone.
+    expect(report.mosaicPath, isNull);
+    var comment = File(report.commentPath).readAsStringSync();
+    expect('| changed |'.allMatches(comment).length, commentRowCap);
+    expect(comment, contains('…and 4 more — the page has them all.'));
   });
 
   test("a scenario's face in the mosaic is its worst step with frames", () {

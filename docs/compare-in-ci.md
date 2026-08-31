@@ -29,10 +29,16 @@ trailing slash — give it `--base-href=/comparisons/42/`.
 
 ## A workflow that hosts on an orphan branch
 
-One self-contained way to do it — raw.githubusercontent serves the mosaic,
-and the viewer page goes wherever your static hosting is (the mosaic works
-without it; leave `__VIEWER_URL__` pointing at the artifact if you have
-none).
+One self-contained way to do it, on stock GitHub and nothing else. An orphan
+branch holds the files; raw.githubusercontent serves the **mosaic** and
+GitHub Pages serves the **viewer** from that same branch. Two hosts on
+purpose: the viewer is a Flutter web app and raw serves scripts as
+`text/plain` with nosniff, which browsers refuse — while Pages takes a
+minute to build after a push, which the click on "Open the full comparison"
+can afford and the inline image cannot.
+
+One-time setup: Settings → Pages → deploy from a branch →
+`comparison-artifacts`, `/ (root)`.
 
 ```yaml
 comparison:
@@ -48,25 +54,46 @@ comparison:
         key: fw-shots-${{ runner.os }}
     - name: Compare
       run: dart run flutterware compare --report=comparison-report
-    - name: Host the images
+    - name: Host the report
+      env: { PR: ${{ github.event.number }} }
       run: |
-        git checkout --orphan comparison-artifacts || git checkout comparison-artifacts
-        mkdir -p pr-${{ github.event.number }}
-        cp comparison-report/mosaic.png pr-${{ github.event.number }}/ 2>/dev/null || true
-        git add pr-* && git commit -m "comparison for #${{ github.event.number }}" && git push -f origin comparison-artifacts
-        git checkout -
+        git fetch origin comparison-artifacts:comparison-artifacts 2>/dev/null \
+          && git worktree add site comparison-artifacts \
+          || git worktree add --orphan -b comparison-artifacts site
+        rm -rf "site/pr-$PR" && mkdir -p "site/pr-$PR"
+        cp comparison-report/mosaic.png "site/pr-$PR/" 2>/dev/null || true
+        cp -R comparison-report/web "site/pr-$PR/web"
+        git -C site add -A
+        git -C site -c user.name=fw-compare -c user.email=fw-compare@invalid \
+          commit -q -m "comparison for #$PR" || true
+        git -C site push origin comparison-artifacts
     - name: Comment
-      env: { GH_TOKEN: ${{ github.token }} }
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR: ${{ github.event.number }}
       run: |
-        RAW=https://raw.githubusercontent.com/${{ github.repository }}/comparison-artifacts/pr-${{ github.event.number }}
-        sed -e "s|__MOSAIC_URL__|$RAW/mosaic.png|" \
-            -e "s|__VIEWER_URL__|${{ steps.pages.outputs.url || 'about:blank' }}|" \
+        RAW=https://raw.githubusercontent.com/${{ github.repository }}/comparison-artifacts/pr-$PR
+        PAGES=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        # `g` matters: a scenario row carries two viewer links on one line.
+        sed -e "s|__MOSAIC_URL__|$RAW/mosaic.png|g" \
+            -e "s|__VIEWER_URL__|$PAGES/pr-$PR/web/|g" \
             comparison-report/comment.md > comment.md
-        gh pr comment ${{ github.event.number }} --body-file comment.md
+        # One comment per PR, updated in place — found again by its marker.
+        id=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" \
+          --jq '[.[] | select(.body | startswith("<!-- fw-compare -->"))][0].id // empty')
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$id" -F body=@comment.md
+        else
+          gh pr comment "$PR" --body-file comment.md
+        fi
 ```
 
-Adapt freely — the contract is only: substitute the two placeholders, then
-post `comment.md`.
+Adapt freely — the contract is only: substitute the two placeholders
+everywhere they appear (`sed …g` — `__VIEWER_URL__` is once per table row),
+then post `comment.md`. The comment's first line is `<!-- fw-compare -->`
+precisely so a workflow can find its own comment and update it rather than
+stack a new one per push; the footer's `@<sha>` says which push the report
+still describes.
 
 ## What to know before turning it on
 
@@ -77,10 +104,9 @@ post `comment.md`.
   second run is back to skip-rule speed.
 - **`fetch-depth: 0`.** The base is the merge base with the default branch; a
   shallow clone has no common commit and the compare refuses, naming the ref.
-- **The viewer page needs real static hosting** (Pages, a bucket). It is a
-  Flutter web app: raw.githubusercontent serves the wrong MIME types and a
-  downloaded artifact opens on `file://`, and neither can run it. A prefix
-  per pull request needs nothing said about it — see `--base-href` above.
-- **Updating instead of stacking comments** is `gh pr comment --edit-last`
-  (or find-and-update by a marker); the emitted comment is stable enough to
-  overwrite.
+- **The very first comment of a repository may briefly 404 its page link**:
+  Pages builds after the push, in about a minute. Every later run updates a
+  site that already exists. A downloaded artifact opens on `file://`, which
+  cannot run the page — it has to be served, and the branch is the serving.
+- **Old directories are just directories.** A closed pull request's `pr-N/`
+  on the branch is linked by nothing; delete whenever the branch feels heavy.

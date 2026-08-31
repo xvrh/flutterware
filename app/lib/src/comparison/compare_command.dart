@@ -246,6 +246,7 @@ Future<CompareOutcome> runComparison({
       artifact: artifact,
       cache: shotCache,
       against: base.against,
+      head: await BaseRef.headOf(top),
       directory: options.reportDir!,
     );
   }
