@@ -10,6 +10,7 @@ import 'lints_plugin.dart';
 import 'motion_plugin.dart';
 import 'run_plugin.dart';
 import 'server_plugin.dart';
+import 'renders_plugin.dart';
 import 'scenarios_plugin.dart';
 import 'splash_plugin.dart';
 import 'store_plugin.dart';
@@ -33,6 +34,7 @@ PluginRegistry buildNativeRegistry() => PluginRegistry({
   serverPluginId: panelFor<ServerCore>(ServerPlugin.new),
   motionPluginId: panelFor<MotionCore>(MotionPlugin.new),
   scenariosPluginId: panelFor<ScenariosCore>(ScenariosPlugin.new),
+  rendersPluginId: panelFor<RendersCore>(RendersPlugin.new),
   launcherIconPluginId: panelFor<LauncherIconCore>(LauncherIconPlugin.new),
   splashPluginId: panelFor<SplashCore>(SplashPlugin.new),
   storePluginId: panelFor<StoreCore>(StorePlugin.new),

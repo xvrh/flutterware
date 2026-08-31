@@ -1806,6 +1806,39 @@ restarted: List<String>   # The package paths whose harness was dropped.
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 
 
+### `flutterware.render`
+
+The app's render points — widgets and pw.Documents bound in a @RenderRegistry() registrar — rendered as SVG, PNG or PDF: live in the studio, one-shot from the CLI, resident from a server through `fw render bundle`.
+
+#### `render` — Render
+
+Render one point to a file. A widget point takes svg, png or pdf and needs a size; a document point is always pdf. Spawns the render guest for the request.
+
+```sh
+fw run render render --point=<string> [--as=…] [--args=…] [--size=…] [--text=…] [--unsupported=…] [--output=…]
+```
+
+Returns `Artifact`:
+
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `point` | string | yes | — | The point name, as the registrar binds it — `charts/monthly`. The panel and the report list them once the guest has run. |
+| `as` | choice | no | svg | svg, png, or pdf |
+| `args` | string | no | — | A JSON object for the point's own decoder |
+| `size` | string | no | — | <width>x<height> in logical pixels — required for a widget point |
+| `text` | choice | no | embedFont | What text becomes: glyph outlines, embedded fonts, or the viewer's own |
+| `unsupported` | choice | no | rasterize | What an inexpressible op becomes: a raster patch, a flat stand-in, or nothing |
+| `output` | string | no | — | Where to write, relative to the worktree; defaults under build/flutterware/ |
+
+
 ### `flutterware.launcher_icon`
 
 Every launcher icon each declared package has, and what each operating system actually shows of them.
