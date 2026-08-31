@@ -84,7 +84,7 @@ ThemeData buildAppTheme(FwTokens tokens) {
     shape: WidgetStatePropertyAll(
       RoundedRectangleBorder(borderRadius: BorderRadius.circular(radii.radius)),
     ),
-    minimumSize: const WidgetStatePropertyAll(Size(10, 33)),
+    minimumSize: const WidgetStatePropertyAll(Size(10, FwControlSize.height)),
     padding: const WidgetStatePropertyAll(
       EdgeInsets.symmetric(horizontal: FwSpacing.lg),
     ),

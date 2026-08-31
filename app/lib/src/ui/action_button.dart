@@ -137,10 +137,12 @@ class _FwActionButtonState extends State<FwActionButton> {
       borderRadius: BorderRadius.circular(context.radii.radius),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.lg,
-          vertical: FwSpacing.xs,
-        ),
+        // [FwControlSize.height], not content-sized: at its natural ~26px this
+        // was the one control in a form row that sat below the field, the
+        // picker and the themed Material buttons.
+        height: FwControlSize.height,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: FwSpacing.lg),
         decoration: BoxDecoration(
           color: switch (_phase) {
             _Phase.done => colors.accentSoft,

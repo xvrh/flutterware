@@ -20,6 +20,18 @@
 /// not small icons. And nothing in the launcher-icon and splash renderers is
 /// migrated at all: those draw *another platform's* chrome, so their sizes are
 /// content, in the same way their hardcoded colours are.
+/// The one height for the controls that share a row.
+///
+/// Measured off the picker's trigger — bodyStrong line, `sm` padding, a 1px
+/// border — which the dense text field already matched. The labeled Material
+/// button themes pin their minimum to it, and [FwActionButton] draws itself at
+/// exactly it, so a form row of field, picker and buttons sits on one
+/// baseline. Static const for the same reason [FwIconSize] is: structural,
+/// not expressive.
+abstract final class FwControlSize {
+  static const height = 33.0;
+}
+
 abstract final class FwIconSize {
   /// Inline with dense text — chips, hints, list-row secondaries.
   static const xs = 12.0;
