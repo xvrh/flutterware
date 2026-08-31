@@ -2,32 +2,20 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
+import 'package:flutterware_render/contract.dart';
 
-/// What to do with a text run.
-enum TextPolicy {
-  /// Draw each glyph as a path read from the font file.
-  vectorize,
-
-  /// Emit real text and embed the font bytes.
-  embedFont,
-
-  /// Emit real text naming the family and let the viewer resolve it.
-  systemFont,
-}
-
-/// What to do with an op the writer cannot express (shadows, unresolvable
-/// shaders, layer effects, paragraphs whose text could not be recovered).
-enum UnsupportedPolicy {
-  /// Replay the op onto a real canvas at capture time and place the raster.
-  rasterize,
-
-  /// Cheapest visible stand-in: a solid color, a plain box, the effect's
-  /// child without the effect.
-  flatten,
-
-  /// Leave it out.
-  skip,
-}
+// The policy vocabulary and the result/warning types are the wire contract,
+// shared with the pure-Dart side through flutterware_render; the capture
+// re-exports them so in-process users need one import.
+export 'package:flutterware_render/contract.dart'
+    show
+        PdfResult,
+        PngResult,
+        RenderWarning,
+        RenderWarningKind,
+        SvgResult,
+        TextPolicy,
+        UnsupportedPolicy;
 
 class CaptureOptions {
   CaptureOptions({
@@ -58,56 +46,6 @@ class RenderFont {
   final Uint8List bytes;
   final bool bold;
   final bool italic;
-}
-
-enum RenderWarningKind {
-  /// A canvas op the capture does not record; its output is missing.
-  unhandledOp,
-
-  /// A leaf layer (texture, platform view) nothing can replay.
-  unreplayableLayer,
-
-  /// A paint carried a [ui.Shader] the capture could not see through.
-  unresolvedShader,
-
-  /// A paragraph whose text could not be recovered from the render tree.
-  unrecoveredText,
-
-  /// A text run no available font could write (PDF only).
-  droppedText,
-
-  /// A layer effect replayed into a raster patch.
-  effectRasterized,
-
-  /// A layer effect that could not be expressed; its child is drawn
-  /// without it, or left out under [UnsupportedPolicy.skip].
-  effectDropped,
-}
-
-/// One honest statement about something the vector output does not carry
-/// exactly as the engine would have drawn it.
-class RenderWarning {
-  RenderWarning(this.kind, this.message);
-
-  final RenderWarningKind kind;
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
-class SvgResult {
-  SvgResult(this.text, this.warnings);
-
-  final String text;
-  final List<RenderWarning> warnings;
-}
-
-class PdfResult {
-  PdfResult(this.bytes, this.warnings);
-
-  final Uint8List bytes;
-  final List<RenderWarning> warnings;
 }
 
 /// The captured draw-command stream: what crossed the [ui.Canvas] boundary,

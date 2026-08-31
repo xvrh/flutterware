@@ -279,7 +279,7 @@ in-process, may use the full callback API directly.
 | Kernel compile, seed-kernel warm start, build isolation | **Exists** (`TesterHost`, scenarios/previews lanes) |
 | Spawn/drive `flutter_tester`, guest harness, real fonts | **Exists** (embedder + previews harness) |
 | Entry discovery, typed parameters | **Exists as precedent** (previews discovery, run knobs) — needs the render flavor |
-| `WidgetRender`/`DocumentRender` contract + `flutterware_render` package | **Missing** — the one new API surface |
+| `WidgetRender`/`DocumentRender` contract + `flutterware_render` package | **Built** — workspace member `render/`; registrar (`@RenderRegistry` on a function receiving `RenderHost`) settled over per-entry annotations; `RenderContext.captureSvg` mounts widgets offscreen, so both entry kinds execute in-process |
 | `fw render bundle` | **Missing** — packaging of parts that all exist |
 | `RenderPool` + driver protocol | **Missing** — request loop over the existing host |
 | Studio panel: render entries live, knobs for args, document viewer | **Missing** — previews panel is the template |
@@ -365,9 +365,10 @@ couldn't express.*
   supervised by the pool) vs an in-guest HTTP listener. Leaning JSON-RPC:
   the pool owns lifecycle either way, and stdio is what the tester lane
   already speaks.
-- **Discovery spelling** — one annotated registrar (shown above) vs
-  per-entry annotations like `@Preview`. The registrar keeps the contract
-  package free of magic; per-entry matches the previews muscle memory.
+- ~~**Discovery spelling**~~ — settled (2026-08-31): one annotated
+  registrar, as shown above. It keeps the contract package free of magic,
+  and the point names being runtime values means listing them was always
+  going to run the registrar anyway.
 - **Result streaming** — large PDFs over the wire; likely file-path handoff
   inside the container rather than bytes through the protocol.
 - **Where the capture library lands** — the guest half is published API
