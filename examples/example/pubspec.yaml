@@ -95,13 +95,6 @@ flutter:
   # in tool/flutterware.dart (`flavorByPlatform`), so cockpit launches still
   # need no argument; a bare `flutter run` on Android must say --flavor.
 
-  # `default-flavor` above is one word for every platform, and the Swift
-  # Package Manager integration reads it on macOS too — then demands a scheme
-  # named after a flavor only Android declares. Opting this fixture out of SPM
-  # keeps desktop launches working; none of its plugins need SPM.
-  config:
-    enable-swift-package-manager: false
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
