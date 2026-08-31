@@ -328,6 +328,36 @@ targets, and record itself for undo — everything a bare `List.add` cannot.
 The five cons above are not costs of liveness; they are costs of
 *structure without a door*.
 
+### Corrected by the owner: the question was runtime-only
+
+The list above conflates two planes, and the owner's clarification —
+*mutability is for the runtime, not for edition* — collapses it. Names,
+the wire, rects and Save are the **editor's** data plane; a shipped app
+has none of them, and runtime identity is the object reference. So for a
+runtime instance, cons 1 (the naming half) and 2 are **withdrawn**, con 4
+shrinks to "cloning a mutated instance needs a real `copy()` — construct
+no longer reproduces it," and con 5 shrinks to convention. What stands:
+
+- **two invariants Flutter enforces violently** — a cycle is infinite
+  recursion at build, a node under two parents is a duplicate-GlobalKey
+  exception mid-frame — so `add`/`remove` must check them to fail with a
+  named error instead of a framework crash;
+- **silent dangling on structural removal** (con 3, unchanged): a motion's
+  typed reference keeps animating an unmounted node; judging-by-running is
+  the planned mitigation, not a mutability restriction;
+- the mechanical three (observable collections, the re-entrancy rule, the
+  expectation gradient).
+
+A runtime-restructured scene being beyond what the file can express is
+**not** a con — the file authors the starting point, the app owns the
+instance, exactly as with any widget tree built in code. And the shape has
+strong precedent: a fully mutable object graph with `markNeeds*` batching
+is Flutter's own render tree. The clean resolution, since the editor's
+document and the runtime instance are one class: **the class is maximally
+mutable; the editor brings its own door** — the operation layer it needs
+anyway for undo, name-minting and round-tripping — while the app uses the
+raw graph and pays only the two runtime costs above.
+
 ## Round-2 scoreboard
 
 - **The edit API can drive animation** as the app's escape hatch (measured
