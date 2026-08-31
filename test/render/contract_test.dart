@@ -137,6 +137,67 @@ void main() {
     expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
     expect(bytes.length, greaterThan(500));
   });
+
+  testWidgets('unmounting an offscreen widget disposes its states', (
+    tester,
+  ) async {
+    var disposed = false;
+    var mounted = OffscreenWidget.mount(
+      _DisposeProbe(onDispose: () => disposed = true),
+      size: const Size(50, 50),
+    );
+    expect(disposed, isFalse);
+    mounted.dispose();
+    expect(
+      disposed,
+      isTrue,
+      reason:
+          'a resident guest mounts once per request; a State that never '
+          'disposes is a leak per render',
+    );
+  });
+
+  testWidgets('a widget that throws while building warns instead of '
+      'passing as a clean success', (tester) async {
+    var result = await captureWidgetSvg(
+      const _Throws(),
+      size: const Size(50, 50),
+      // skip: the error box is a paragraph the capture cannot recover, and
+      // rasterizing it would need the engine mid-fake-async.
+      options: CaptureOptions(unsupported: UnsupportedPolicy.skip),
+    );
+    expect(
+      result.warnings.map((w) => w.kind),
+      contains(RenderWarningKind.buildError),
+    );
+  });
+}
+
+class _DisposeProbe extends StatefulWidget {
+  const _DisposeProbe({required this.onDispose});
+
+  final VoidCallback onDispose;
+
+  @override
+  State<_DisposeProbe> createState() => _DisposeProbeState();
+}
+
+class _DisposeProbeState extends State<_DisposeProbe> {
+  @override
+  void dispose() {
+    widget.onDispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+}
+
+class _Throws extends StatelessWidget {
+  const _Throws();
+
+  @override
+  Widget build(BuildContext context) => throw StateError('deliberately broken');
 }
 
 /// Raster-free on purpose: text and plain boxes, so the capture path stays

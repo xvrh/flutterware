@@ -73,12 +73,16 @@ Future<SvgResult> captureWidgetSvg(
 }) async {
   var mounted = OffscreenWidget.mount(widget, size: size);
   try {
-    return await captureSvg(
+    var result = await captureSvg(
       mounted.boundary,
       size: size,
       fonts: fonts,
       options: options,
     );
+    return SvgResult(result.text, [
+      ..._buildWarnings(mounted),
+      ...result.warnings,
+    ]);
   } finally {
     mounted.dispose();
   }
@@ -94,19 +98,24 @@ Future<PdfResult> captureWidgetPdf(
 }) async {
   var mounted = OffscreenWidget.mount(widget, size: size);
   try {
-    return await capturePdf(
+    var result = await capturePdf(
       mounted.boundary,
       size: size,
       fonts: fonts,
       options: options,
     );
+    return PdfResult(result.bytes, [
+      ..._buildWarnings(mounted),
+      ...result.warnings,
+    ]);
   } finally {
     mounted.dispose();
   }
 }
 
 /// Renders [widget] offscreen at [size] and rasterizes it — the camera
-/// lane, so its warnings are always empty.
+/// lane, so its only possible warning is the widget throwing on the way to
+/// the picture.
 Future<PngResult> captureWidgetPng(
   Widget widget, {
   required Size size,
@@ -116,8 +125,19 @@ Future<PngResult> captureWidgetPng(
   try {
     var image = await mounted.boundary.toImage(pixelRatio: pixelRatio);
     var png = await image.toByteData(format: ui.ImageByteFormat.png);
-    return PngResult(png!.buffer.asUint8List(), const []);
+    return PngResult(png!.buffer.asUint8List(), _buildWarnings(mounted));
   } finally {
     mounted.dispose();
   }
 }
+
+/// The framework caught an exception during the offscreen pass: the output
+/// carries an error box where the widget should be, and pretending
+/// otherwise would be the one lie this pipeline promised not to tell.
+List<RenderWarning> _buildWarnings(OffscreenWidget mounted) => [
+  for (var details in mounted.flutterErrors)
+    RenderWarning(
+      RenderWarningKind.buildError,
+      'the widget threw while rendering: ${details.exception}',
+    ),
+];

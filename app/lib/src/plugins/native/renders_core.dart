@@ -395,12 +395,16 @@ class RendersCore extends PluginCore {
       size = RenderSize(width, height);
     }
     var options = RenderOptions(
-      text: TextPolicy.values.byName(
-        arguments['text'] as String? ?? 'embedFont',
-      ),
-      unsupported: UnsupportedPolicy.values.byName(
-        arguments['unsupported'] as String? ?? 'rasterize',
-      ),
+      text:
+          _enumArgument(TextPolicy.values, arguments['text'], 'text') ??
+          TextPolicy.embedFont,
+      unsupported:
+          _enumArgument(
+            UnsupportedPolicy.values,
+            arguments['unsupported'],
+            'unsupported',
+          ) ??
+          UnsupportedPolicy.rasterize,
     );
 
     var result = await renderPoint(
@@ -469,6 +473,7 @@ class RenderLane {
   Future<RenderPool>? _starting;
   RenderPool? pool;
   String? error;
+  var _disposed = false;
 
   /// What is happening right now — the bundle build narrates through here.
   String? phase;
@@ -496,8 +501,15 @@ class RenderLane {
         ),
         log: _say,
       );
+      if (_disposed) throw StateError('the render lane was closed');
       _say('starting the render guest');
       var started = await RenderPool.start(bundle: bundle);
+      if (_disposed) {
+        // The worktree closed while the guest was coming up: without this,
+        // dispose() ran against a null pool and the guest idled forever.
+        unawaited(started.close());
+        throw StateError('the render lane was closed');
+      }
       pool = started;
       phase = null;
       core.notifyChanged();
@@ -512,8 +524,10 @@ class RenderLane {
   }
 
   /// Rebuilds the bundle and respawns the guest — the reload after an edit
-  /// to the registrar or anything it renders.
+  /// to the registrar or anything it renders. Rescans first: the edit may
+  /// have renamed the registrar itself.
   Future<RenderPool> restart() async {
+    core.scan();
     unawaited(pool?.close());
     pool = null;
     _starting = null;
@@ -527,6 +541,7 @@ class RenderLane {
   }
 
   void dispose() {
+    _disposed = true;
     unawaited(pool?.close());
     pool = null;
   }
@@ -540,6 +555,19 @@ DocumentRender<Map<String, Object?>> _document(String name) => DocumentRender(
   encodeArgs: (args) => args,
   decodeArgs: (json) => json,
 );
+
+/// The declared-vocabulary refusal for an enum-valued action argument.
+T? _enumArgument<T extends Enum>(List<T> values, Object? value, String name) {
+  if (value == null) return null;
+  for (var candidate in values) {
+    if (candidate.name == value) return candidate;
+  }
+  throw ArgumentError.value(
+    value,
+    name,
+    'not a $name policy. Accepted: ${values.map((v) => v.name).join(', ')}',
+  );
+}
 
 /// Parses an args value: a JSON object as text.
 Map<String, Object?> parseRenderArgs(String value) {

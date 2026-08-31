@@ -157,6 +157,10 @@ enum RenderWarningKind {
   /// A text run no available font could write (PDF only).
   droppedText,
 
+  /// The widget threw while building, laying out or painting; the framework
+  /// substituted its error box and the output shows that, not the widget.
+  buildError,
+
   /// A layer effect replayed into a raster patch.
   effectRasterized,
 

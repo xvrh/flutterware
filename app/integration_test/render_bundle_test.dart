@@ -38,26 +38,36 @@ void main() {
 
   late String exampleRoot;
   late Directory outDir;
-  late RenderPool pool;
+  RenderPool? poolOrNull;
   final logs = <String>[];
 
   setUpAll(() async {
     exampleRoot = p.normalize(p.absolute(p.join('..', 'examples', 'example')));
     expect(Directory(exampleRoot).existsSync(), isTrue, reason: exampleRoot);
     outDir = Directory.systemTemp.createTempSync('fw_render_bundle_test');
-    var manifest = await buildRenderBundle(
-      packageRoot: exampleRoot,
-      target: 'lib/renders.dart',
-      output: outDir.path,
-      cache: FlutterCache.fromRunningSdk(),
-      log: logs.add,
-    );
-    expect(manifest.fonts, isNotEmpty, reason: 'Roboto is declared');
-    pool = await RenderPool.start(bundle: outDir.path, onGuestLog: logs.add);
+    try {
+      var manifest = await buildRenderBundle(
+        packageRoot: exampleRoot,
+        target: 'lib/renders.dart',
+        output: outDir.path,
+        cache: FlutterCache.fromRunningSdk(),
+        log: logs.add,
+      );
+      expect(manifest.fonts, isNotEmpty, reason: 'Roboto is declared');
+      poolOrNull = await RenderPool.start(
+        bundle: outDir.path,
+        onGuestLog: logs.add,
+      );
+    } catch (_) {
+      // The collected narration is the debugging route; without this a
+      // setup failure buried it.
+      logs.forEach(print);
+      rethrow;
+    }
   });
 
   tearDownAll(() async {
-    await pool.close();
+    await poolOrNull?.close();
     try {
       outDir.deleteSync(recursive: true);
     } catch (_) {
@@ -73,18 +83,20 @@ void main() {
   });
 
   test('the guest announces its points', () {
-    expect(pool.points.map((point) => point.name), {
+    expect(poolOrNull!.points.map((point) => point.name), {
       'charts/monthly',
       'reports/chart',
     });
     expect(
-      pool.points.singleWhere((point) => point.name == 'reports/chart').kind,
+      poolOrNull!.points
+          .singleWhere((point) => point.name == 'reports/chart')
+          .kind,
       RenderPointKind.document,
     );
   });
 
   test('a widget render comes back as SVG with real text', () async {
-    var svg = await pool.svg(
+    var svg = await poolOrNull!.svg(
       monthlyChart,
       chartArgs,
       size: const RenderSize(400, 200),
@@ -94,7 +106,7 @@ void main() {
   });
 
   test('the same widget entry renders as PNG and as a PDF page', () async {
-    var png = await pool.png(
+    var png = await poolOrNull!.png(
       monthlyChart,
       chartArgs,
       size: const RenderSize(400, 200),
@@ -102,7 +114,7 @@ void main() {
     );
     expect(png.bytes.take(4), [0x89, 0x50, 0x4E, 0x47]);
 
-    var page = await pool.pdfPage(
+    var page = await poolOrNull!.pdfPage(
       monthlyChart,
       chartArgs,
       size: const RenderSize(400, 200),
@@ -111,7 +123,7 @@ void main() {
   });
 
   test('a document render composes its own PDF', () async {
-    var report = await pool.pdf(chartReport, chartArgs);
+    var report = await poolOrNull!.pdf(chartReport, chartArgs);
     expect(String.fromCharCodes(report.bytes.take(5)), '%PDF-');
     expect(report.bytes.length, greaterThan(1000));
   });
@@ -141,7 +153,7 @@ void main() {
       decodeArgs: (json) => json,
     );
     await expectLater(
-      pool.svg(
+      poolOrNull!.svg(
         missing,
         const <String, Object?>{},
         size: const RenderSize(10, 10),

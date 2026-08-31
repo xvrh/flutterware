@@ -1804,17 +1804,26 @@ class FwCli {
 
   /// `fw render bundle …` packages; `fw render <point> …` renders one.
   Future<int> _render(List<String> arguments, {required bool json}) async {
-    var words = arguments.where((a) => !a.startsWith('-')).toList();
-    return switch (words.firstOrNull) {
-      'bundle' => await _renderBundle(
-        arguments.where((a) => a != 'bundle').toList(),
-        json: json,
-      ),
-      String point => await _renderPoint(
-        point,
-        arguments.where((a) => a != point).toList(),
-        json: json,
-      ),
+    // The subject is the first positional that is not the value of a
+    // separated `-o <file>` — otherwise `fw render -o out.svg charts/monthly`
+    // reads the output file as the point.
+    String? subject;
+    var rest = arguments.toList();
+    for (var i = 0; i < rest.length; i++) {
+      var argument = rest[i];
+      if (argument == '-o' || argument == '--output') {
+        i++;
+        continue;
+      }
+      if (!argument.startsWith('-')) {
+        subject = argument;
+        rest.removeAt(i);
+        break;
+      }
+    }
+    return switch (subject) {
+      'bundle' => await _renderBundle(rest, json: json),
+      String point => await _renderPoint(point, rest, json: json),
       null => fail(
         'render takes a point (`fw render charts/monthly --as=svg '
         '--size=400x200`)\nor `fw render bundle`. Try `fw help render`.',

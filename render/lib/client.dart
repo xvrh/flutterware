@@ -56,7 +56,14 @@ class RenderPool {
       );
     }
     var pool = RenderPool._(bundleDir, manifest, warm, onGuestLog);
-    await Future.wait([for (var i = 0; i < warm; i++) pool._spawn()]);
+    try {
+      await Future.wait([for (var i = 0; i < warm; i++) pool._spawn()]);
+    } catch (_) {
+      // One spawn failing must not orphan the ones that succeeded: they are
+      // --run-forever processes nobody else can reach.
+      await pool.close();
+      rethrow;
+    }
     return pool;
   }
 
@@ -185,7 +192,7 @@ class RenderPool {
       if (!guest.dead) return guest;
       _guests.remove(guest);
     }
-    if (_guests.length < _warm) {
+    if (_guests.length + _spawning < _warm) {
       await _spawn();
       return _acquire();
     }
@@ -197,6 +204,9 @@ class RenderPool {
   void _release(_Guest guest) {
     if (guest.dead) {
       _guests.remove(guest);
+      // The dead guest's slot may be the one a queued request is waiting
+      // for; without a respawn here that request would hang forever.
+      _respawnForWaiters();
       return;
     }
     if (_waiters.isNotEmpty) {
@@ -206,10 +216,37 @@ class RenderPool {
     }
   }
 
+  void _respawnForWaiters() {
+    if (_closed || _waiters.isEmpty) return;
+    if (_guests.length + _spawning >= _warm) return;
+    unawaited(
+      _spawn()
+          .then((_) {
+            if (_waiters.isNotEmpty && _idle.isNotEmpty) {
+              _waiters.removeFirst().complete(_idle.removeLast());
+            }
+          })
+          .catchError((Object error, StackTrace stack) {
+            // The replacement could not come up: the queued requests would
+            // otherwise wait on a pool that has nothing left to give them.
+            while (_waiters.isNotEmpty) {
+              _waiters.removeFirst().completeError(error, stack);
+            }
+          }),
+    );
+  }
+
+  var _spawning = 0;
+
   Future<void> _spawn() async {
-    var guest = await _Guest.spawn(_bundleDir, manifest, _onGuestLog);
-    _guests.add(guest);
-    _idle.add(guest);
+    _spawning++;
+    try {
+      var guest = await _Guest.spawn(_bundleDir, manifest, _onGuestLog);
+      _guests.add(guest);
+      _idle.add(guest);
+    } finally {
+      _spawning--;
+    }
   }
 }
 
@@ -249,14 +286,16 @@ class _Guest {
       environment: {'FW_RENDER_BUNDLE': bundleDir},
     );
     var guest = _Guest._(process, onLog);
+    // allowMalformed + onError: a stray binary byte on the guest's stdout is
+    // a log problem, never a reason to crash the process hosting the pool.
     process.stdout
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
-        .listen(guest._onStdout, onDone: guest._onExit);
+        .listen(guest._onStdout, onDone: guest._onExit, onError: (Object _) {});
     process.stderr
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
-        .listen(guest._log);
+        .listen(guest._log, onError: (Object _) {});
     unawaited(process.exitCode.then((_) => guest._onExit()));
     await guest._ready.future.timeout(
       const Duration(seconds: 60),
@@ -289,6 +328,7 @@ class _Guest {
   }
 
   void _onStdout(String line) {
+    if (line.isEmpty) return;
     if (!line.startsWith(renderProtocolMarker)) {
       _log(line);
       return;
@@ -318,11 +358,13 @@ class _Guest {
     }
   }
 
-  void _onExit() {
+  void _onExit() => _fail('render guest exited mid-request');
+
+  void _fail(String message) {
     if (dead) return;
     dead = true;
     for (var pending in _pending.values) {
-      pending.completeError(RenderException('render guest exited mid-request'));
+      pending.completeError(RenderException(message));
     }
     _pending.clear();
     if (!_ready.isCompleted) {
@@ -333,7 +375,9 @@ class _Guest {
   void _log(String line) => _onLog?.call(line);
 
   void dispose() {
-    dead = true;
+    // In-flight requests fail now rather than waiting on a killed process
+    // whose exit handler the dead flag would have silenced.
+    _fail('render pool closed');
     _process.kill();
   }
 }

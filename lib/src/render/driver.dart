@@ -27,7 +27,11 @@ Future<void> runRenderDriver(void Function(RenderHost host) registrar) async {
   registrar(bindings);
 
   void reply(Map<String, Object?> message) {
-    stdout.writeln('$renderProtocolMarker${jsonEncode(message)}');
+    // The leading newline is insurance: app code that wrote to stdout
+    // without a trailing newline would otherwise glue this reply onto its
+    // line, and a marker that is not at line start is just a log to the
+    // pool. The empty line it usually produces is dropped on the other end.
+    stdout.write('\n$renderProtocolMarker${jsonEncode(message)}\n');
   }
 
   List<Map<String, Object?>> points() => [

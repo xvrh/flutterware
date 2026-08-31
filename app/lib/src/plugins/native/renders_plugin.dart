@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
@@ -62,7 +62,9 @@ class _RendersPanelState extends State<_RendersPanel> {
     _changes = _core.changes.stream.listen((_) {
       if (mounted) setState(() {});
     });
-    if (!_core.scanned) _core.scan();
+    // Every open rescans: it reads one small file, and a registrar written
+    // since the last look must not leave the panel saying "no registrar".
+    _core.scan();
   }
 
   @override
@@ -111,7 +113,10 @@ class _RendersPanelState extends State<_RendersPanel> {
       if (!isDocument) {
         image = await decodeImageFromList(result.bytes);
       }
-      if (!mounted) return;
+      if (!mounted) {
+        image?.dispose();
+        return;
+      }
       setState(() {
         _preview?.dispose();
         _preview = image;
@@ -159,8 +164,10 @@ class _RendersPanelState extends State<_RendersPanel> {
     // Backing out of the picker is backing out of the export.
     if (location == null) return;
     if (effective == 'svg') {
+      // utf8, never codeUnits: UTF-16 units truncated to bytes corrupt any
+      // non-ASCII text in the document.
       await XFile.fromData(
-        Uint8List.fromList(result.text.codeUnits),
+        utf8.encode(result.text),
         mimeType: 'image/svg+xml',
       ).saveTo(location.path);
     } else {
@@ -216,6 +223,10 @@ class _RendersPanelState extends State<_RendersPanel> {
                       '@RenderRegistry()\n'
                       'void registerRenders(RenderHost host) { … }',
                   selectableMessage: true,
+                  action: FwActionButton(
+                    label: 'Rescan',
+                    onPressed: () async => _core.scan(),
+                  ),
                 )
               : lane.pool == null
               ? EmptyState(

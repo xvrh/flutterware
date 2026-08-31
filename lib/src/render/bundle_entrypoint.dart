@@ -7,12 +7,24 @@ import 'package:path/path.dart' as p;
 ///
 /// A textual scan, not an analyzer pass: the registrar is one annotated
 /// top-level `void` function, and the bundle command refuses loudly when the
-/// pattern is absent rather than guessing.
+/// pattern is absent rather than guessing. Line-anchored so the annotation in
+/// a doc comment or a string never binds (`/// @RenderRegistry()` does not
+/// start a line with the annotation), and the function must follow the
+/// annotation directly — whitespace only — so an annotation on something
+/// else cannot adopt a later, unannotated function.
 String? findRenderRegistrarName(String source) {
-  var match = RegExp(r'@RenderRegistry\(\)[\s\S]{0,200}?void\s+(\w+)\s*\(')
-      .firstMatch(source);
+  var match = RegExp(
+    r'^[ \t]*@RenderRegistry\(\)\s*void\s+(\w+)\s*\(',
+    multiLine: true,
+  ).firstMatch(source);
   return match?.group(1);
 }
+
+/// Whether [source] carries the annotation at all — for the refusal message
+/// when [findRenderRegistrarName] finds no *usable* registrar: an annotated
+/// `Future<void>` function, say, is a different mistake from a missing one.
+bool mentionsRenderRegistrar(String source) =>
+    RegExp(r'^[ \t]*@RenderRegistry\(\)', multiLine: true).hasMatch(source);
 
 /// The generated main compiled into a render bundle: imports the app's
 /// registrar and hands it to the driver.

@@ -32,13 +32,20 @@ Future<RenderBundleManifest> buildRenderBundle({
   if (!targetFile.existsSync()) {
     throw StateError('no registrar file at $target (from $packageRoot)');
   }
-  var registrar = findRenderRegistrarName(targetFile.readAsStringSync());
+  var source = targetFile.readAsStringSync();
+  var registrar = findRenderRegistrarName(source);
   if (registrar == null) {
     throw StateError(
-      '$target declares no @RenderRegistry() function — mark the '
-      'function that binds your render points:\n\n'
-      '  @RenderRegistry()\n'
-      '  void registerRenders(RenderHost host) { ... }',
+      mentionsRenderRegistrar(source)
+          ? '$target has @RenderRegistry(), but the registrar must be a '
+                'plain top-level `void` function directly under the '
+                'annotation:\n\n'
+                '  @RenderRegistry()\n'
+                '  void registerRenders(RenderHost host) { ... }'
+          : '$target declares no @RenderRegistry() function — mark the '
+                'function that binds your render points:\n\n'
+                '  @RenderRegistry()\n'
+                '  void registerRenders(RenderHost host) { ... }',
     );
   }
 
@@ -171,7 +178,15 @@ Future<String> ensureTesterArtifacts(
 }
 
 Future<void> _run(String executable, List<String> arguments) async {
-  var result = await Process.run(executable, arguments);
+  ProcessResult result;
+  try {
+    result = await Process.run(executable, arguments);
+  } on ProcessException catch (e) {
+    throw StateError(
+      '`$executable` could not be run ($e) — fetching cross-platform '
+      'engine artifacts needs curl and unzip on this machine',
+    );
+  }
   if (result.exitCode != 0) {
     throw StateError(
       '$executable ${arguments.join(' ')} failed '
@@ -181,6 +196,12 @@ Future<void> _run(String executable, List<String> arguments) async {
 }
 
 void _copyExecutable(String from, String to) {
+  // A fresh inode on purpose: macOS caches code signatures per vnode, and a
+  // signed binary overwritten in place is SIGKILLed at its next exec — the
+  // second `fw render bundle` into the same directory produced a tester the
+  // kernel refused to run.
+  var target = File(to);
+  if (target.existsSync()) target.deleteSync();
   File(from).copySync(to);
   if (!Platform.isWindows) {
     Process.runSync('chmod', ['+x', to]);
