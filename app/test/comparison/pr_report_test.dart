@@ -94,7 +94,17 @@ void main() {
 
     var comment = File(report.commentPath).readAsStringSync();
     expect(comment, contains('against `master` — **1 changed**'));
-    expect(comment, contains('| `demo/card.dart#card` | changed |'));
+    // The entry cell is a door into the page, aimed by the viewer's own
+    // fragment grammar — the id's `/` and `#` spelled as escapes so they
+    // survive both the URL and the markdown.
+    expect(
+      comment,
+      contains(
+        '| [`demo/card.dart#card`]'
+        '($viewerUrlPlaceholder#previews/demo%2Fcard.dart%23card) '
+        '| changed |',
+      ),
+    );
     expect(comment, contains('100.00% · 1 region'));
     expect(comment, contains(mosaicUrlPlaceholder));
     expect(comment, contains(viewerUrlPlaceholder));
@@ -185,8 +195,23 @@ void main() {
     );
 
     var comment = File(report.commentPath).readAsStringSync();
-    expect(comment, contains('| `test/shop.dart#Checkout` | changed |'));
-    expect(comment, contains('step `guest › Pay`'));
+    expect(
+      comment,
+      contains(
+        '| [`test/shop.dart#Checkout`]'
+        '($viewerUrlPlaceholder#scenarios/test%2Fshop.dart%23Checkout) '
+        '| changed |',
+      ),
+    );
+    // And the Δ cell opens the very step that moved.
+    expect(
+      comment,
+      contains(
+        '[step `guest › Pay`]'
+        '($viewerUrlPlaceholder#scenarios/test%2Fshop.dart%23Checkout/'
+        'guest%20%E2%80%BA%20Pay)',
+      ),
+    );
     expect(report.mosaicPath, isNotNull);
   });
 

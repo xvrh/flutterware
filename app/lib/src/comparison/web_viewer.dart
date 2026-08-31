@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../capture/settle.dart';
 import '../ui/empty_state.dart';
 import '../ui/theme.dart';
+import '../utils/url_fragment.dart';
 import 'comparison_controller.dart';
 import 'shot_store_http.dart';
 import 'ui/previews_tab.dart';
@@ -42,6 +43,30 @@ class ComparisonWebViewer extends StatefulWidget {
   State<ComparisonWebViewer> createState() => _ComparisonWebViewerState();
 }
 
+/// `previews/demo%2Fcard.dart%23card` → the tab and the decoded selection, or
+/// null when [fragment] does not start with a tab this page has.
+///
+/// [fragment] arrives **raw** — `Uri.fragment` does not unspell escapes — and
+/// the escapes are undone here, *after* the split: only the first `/`
+/// structures anything, so a `%2F` in the selection never creates structure
+/// and a raw `/` written by the viewer itself still reads back. That one rule
+/// is what lets the PR comment escape every segment fully while the address
+/// bar keeps its slashes readable, and both spellings land on the same place.
+@visibleForTesting
+(String tab, String? selected)? parseViewerFragment(String fragment) {
+  var slash = fragment.indexOf('/');
+  var tab = slash < 0 ? fragment : fragment.substring(0, slash);
+  if (tab != 'previews' && tab != 'scenarios') return null;
+  if (slash < 0) return (tab, null);
+  var rest = fragment.substring(slash + 1);
+  try {
+    return (tab, Uri.decodeComponent(rest));
+  } on ArgumentError {
+    // A hand-typed `%` that spells no escape: take the text as it stands.
+    return (tab, rest);
+  }
+}
+
 class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
   late final _store = HttpShotStore(widget.base);
 
@@ -62,15 +87,40 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
   /// What the tabs' address would name — the selected row, scenario or step.
   String? _selected;
 
+  /// True when the tab came from the fragment — a linked-to tab must not be
+  /// second-guessed by [_apply]'s empty-previews default.
+  var _addressed = false;
+
+  StreamSubscription<String>? _fragment;
+
   @override
   void initState() {
     super.initState();
+    // The place the link named. From [ComparisonWebViewer.base] rather than a
+    // live read, which is also what lets a test hand a fragment in.
+    _goTo(widget.base.fragment);
+    _fragment = urlFragmentChanges.listen(
+      (fragment) => setState(() => _goTo(fragment)),
+    );
     if (widget.raw case var raw?) {
       _apply(raw);
     } else {
       unawaited(_load());
     }
   }
+
+  void _goTo(String fragment) {
+    if (parseViewerFragment(fragment) case (var tab, var selected)?) {
+      _tab = tab;
+      _selected = selected;
+      _addressed = true;
+    }
+  }
+
+  /// Writes where the page is into its own URL, so the address bar is always
+  /// a link to what is on screen. Decoded — the shim spells the escapes.
+  void _writeAddress() =>
+      writeUrlFragment(_selected == null ? _tab : '$_tab/${_selected!}');
 
   Future<void> _load() async {
     String? raw;
@@ -109,7 +159,9 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
         ComparisonHalfKind.scenarios,
         stage: HalfStage.done,
       )..scenarios.addAll(index.scenarios);
-      if (index.previewItems.isEmpty && index.scenarios.isNotEmpty) {
+      if (!_addressed &&
+          index.previewItems.isEmpty &&
+          index.scenarios.isNotEmpty) {
         _tab = 'scenarios';
       }
     } catch (error) {
@@ -120,6 +172,12 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
   void _select(String tab) => setState(() {
     if (_tab != tab) _selected = null;
     _tab = tab;
+    _writeAddress();
+  });
+
+  void _selectRow(String id) => setState(() {
+    _selected = id;
+    _writeAddress();
   });
 
   @override
@@ -186,7 +244,7 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
             store: _store,
             settle: _settle,
             selected: _selected,
-            onSelect: (id) => setState(() => _selected = id),
+            onSelect: _selectRow,
             header: ComparisonVerdict.ofHalf(_previews!),
           )
         : ScenariosTab(
@@ -194,13 +252,14 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
             store: _store,
             settle: _settle,
             selected: _selected,
-            onSelect: (id) => setState(() => _selected = id),
+            onSelect: _selectRow,
             header: ComparisonVerdict.ofHalf(_scenarios!),
           );
   }
 
   @override
   void dispose() {
+    unawaited(_fragment?.cancel());
     _previews?.dispose();
     _scenarios?.dispose();
     super.dispose();
