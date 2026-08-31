@@ -1,4 +1,4 @@
-# Scene runtime — drive, notify, and the slot: sketches 8–15
+# Scene runtime — drive, notify, and the slot: sketches 8–16
 
 **Date:** 2026-08-31
 **Status:** round two of the parameter sketches, opened by three owner
@@ -559,6 +559,163 @@ The question's real gift is a modularity fact worth recording: **the
 mutable tree makes the animation framework optional.** Third-party
 animation libraries need nothing from Motion to animate a scene — which
 is the correct relationship between a model and the systems above it.
+
+## Sketch 16 — the resulting animation system, both halves
+
+The owner's ask: sketch the code this all lands on — what a motion file
+contains, and how a user drives it by hand. Every name is a first guess;
+the shapes are the deliverable.
+
+### Half 1 — the motion file (tool-owned, in the grammar)
+
+```dart
+//@flutterware:motion=2.0
+// Owned by the flutterware Motion editor, which reads and writes this whole
+// file. Hand edits are welcome inside the grammar; anything outside it is
+// refused with a line number. Validate with `fw scene check`.
+
+import 'package:flutterware/motion.dart';
+import 'banner.scene.dart';
+
+class BannerIntro extends SceneMotion<BannerScene> {
+  BannerIntro(super.scene, {this.slideFrom = 24.0});
+
+  // A motion parameter: a value keys may reference. (A *tempo* is not a
+  // parameter — rate belongs to the driver/clock, so retiming never edits
+  // the file.)
+  final double slideFrom;
+
+  late final duration = 700.ms;
+
+  // A bare lane: no target, just a number the app can read.
+  late final reveal = Track<double>([
+    Key(at: 0.ms, value: 0),
+    Key(at: 700.ms, value: 1),
+  ]);
+
+  // Targets are the scene's own fields — typed, compile-checked, renamed
+  // atomically with the scene. Animate.text() takes a TextNode, so
+  // imposed (opacity, translateY, …) AND intrinsic (color, fontSize)
+  // vocabularies are flat and checked by Dart itself: passing scene.glow
+  // (a Shape) here is a compile error.
+  late final headlineIn = Animate.text(
+    scene.headline,
+    opacity: Track<double>([
+      Key(at: 0.ms, value: 0),
+      Key(at: 260.ms, value: 1, curve: Curves.easeOut),
+    ]),
+    translateY: Track<double>([
+      Key(at: 0.ms, value: slideFrom),
+      Key(at: 260.ms, value: 0, curve: Curves.easeOut),
+    ]),
+  );
+
+  // An external node: intrinsic surface is its wire-able args.
+  late final badgePop = Animate.ext(
+    scene.badge,
+    scale: Track<double>([
+      Key(at: 400.ms, value: 0.6),
+      Key(at: 640.ms, value: 1, curve: Curves.easeOutBack),
+    ]),
+    args: {
+      'progress': Track<double>([
+        Key(at: 400.ms, value: 0),
+        Key(at: 700.ms, value: 1),
+      ]),
+    },
+  );
+
+  // A node-scope machine: idle breathe, composed OVER headlineIn's tracks
+  // by the derived operator table (translateY adds, opacity multiplies).
+  late final glowMood = Animate.shape(
+    scene.glow,
+    machine: StateMachine<GlowState, ShapeTracks>(
+      initial: GlowState.calm,
+      states: {
+        GlowState.calm: StateDef.tracks(
+          loop: true,
+          opacity: Track<double>([
+            Key(at: 0.ms, value: 1),
+            Key(at: 900.ms, value: 0.85),
+            Key(at: 1800.ms, value: 1),
+          ]),
+        ),
+        GlowState.excited: StateDef.tracks(
+          loop: true,
+          scale: Track<double>([
+            Key(at: 0.ms, value: 1),
+            Key(at: 300.ms, value: 1.06),
+            Key(at: 600.ms, value: 1),
+          ]),
+        ),
+      },
+      transits: {
+        (GlowState.calm, GlowState.excited): Transit(duration: 250.ms),
+      },
+    ),
+  );
+}
+
+// The machine's states — an enum, declared in this file (the settled rule).
+enum GlowState { calm, excited }
+```
+
+What is *not* in the file, and why: no slots (the scene declared every
+target), no draft/stage (the scene's defaults are the stage), no host
+binding (the app mounts the pair), no rates (drivers own time's speed).
+The `Animate.text/.shape/.ext` named-constructor spelling is the fully
+Dart-checked variant; the alternative (one `Animate` + typed
+`content: TextTracks(…)` bundle) trades compile checks for one
+constructor — parser cost identical, undecided.
+
+### Half 2 — using it by hand
+
+```dart
+// ── Mount and autoplay ────────────────────────────────────────────────
+final scene = BannerScene(title: t.banner.title);
+// …
+SceneView(scene, motion: BannerIntro(scene))            // plays on mount
+
+// ── Drive it from anything (the drivers table, spelled) ──────────────
+SceneView(scene, motion: intro, drive: Drive.animation(pageAnim))
+SceneView(scene, motion: intro, drive: Drive.progress(scrollFraction))
+
+// ── Full manual control ───────────────────────────────────────────────
+final player = MotionPlayer(intro);      // owns the ticker
+SceneView(scene, motion: player);
+player.play();
+player.pause();
+player.seek(300.ms);                     // pure evaluate(t): always legal
+player.rate = 0.5;                       // tempo lives HERE, not in the file
+
+// ── Fire machine states from app code ─────────────────────────────────
+intro.glowMood.machine.go(GlowState.excited);
+
+// ── Mutate the scene WHILE it animates — composes, no race ────────────
+scene.headline.text = t.banner.promoTitle;   // authored plane
+scene.badge.args['count'] = cart.items;      // motion's fx rides on top
+
+// ── Read what is actually on screen ───────────────────────────────────
+final visible = scene.headline.rendered.opacity;   // base op fx
+
+// ── No motion file at all: the escape hatch ───────────────────────────
+hoverCtrl.addListener(() {
+  scene.cta.fx.scale = 1 + 0.04 * hoverCtrl.value;   // cosmetic, never saved
+});
+
+// ── Clone-and-tweak the pair ──────────────────────────────────────────
+final dark = BannerScene(title: t.banner.title)
+  ..root.fill = const Color(0xFF14100C)
+  ..headline.color = Colors.white70;
+SceneView(dark, motion: BannerIntro(dark, slideFrom: 40));
+```
+
+The division of labor, in one line each: the **file** owns what and how
+much (tracks, keys, machines, over typed scene fields); the **player/driver**
+owns when and how fast; the **scene** stays live underneath and every
+authored mutation composes with the running motion; the **fx plane** is
+where evaluated values live — motion's always, the app's when an effect
+should never persist.
 
 ## Round-2 scoreboard
 
