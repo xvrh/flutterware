@@ -708,10 +708,6 @@ class _HalfView extends StatelessWidget {
               environment: controller.environment,
               onCompare: _compare,
             ),
-            if (_hasRows) ...[
-              _verdict(),
-              Divider(height: 1, color: context.colors.line),
-            ],
             Expanded(
               child: _hasRows
                   ? _rows(context)
@@ -722,7 +718,11 @@ class _HalfView extends StatelessWidget {
     }
   }
 
-  /// What this half concluded, above both panes.
+  /// What this half concluded, handed to the half to place.
+  ///
+  /// Drawn here it sat above *everything the tab renders*, which includes a
+  /// pushed step page — so a header about eleven steps stayed on screen over a
+  /// page about one of them. Only the half knows when it is showing a list.
   ///
   /// The scenario half's findings are its **steps**, not its flows: a flow's
   /// verdict is a roll-up of the steps inside it, and the channels live on the
@@ -777,6 +777,7 @@ class _HalfView extends StatelessWidget {
       settle: settle,
       selected: selected,
       onSelect: onSelect,
+      header: _verdict(),
     ),
     ComparisonHalfKind.scenarios => ScenariosTab(
       half: half,
@@ -784,6 +785,7 @@ class _HalfView extends StatelessWidget {
       settle: settle,
       selected: selected,
       onSelect: onSelect,
+      header: _verdict(),
     ),
   };
 }

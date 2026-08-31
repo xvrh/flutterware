@@ -32,6 +32,7 @@ class PreviewsTab extends StatefulWidget {
     required this.settle,
     required this.selected,
     required this.onSelect,
+    this.header,
   });
 
   final ComparisonHalf half;
@@ -43,6 +44,10 @@ class PreviewsTab extends StatefulWidget {
   /// The entry id the address names, or null.
   final String? selected;
   final ValueChanged<String> onSelect;
+
+  /// The half's verdict, drawn above the list — and **not** above a pushed
+  /// page, which is about one step rather than about the half.
+  final Widget? header;
 
   @override
   State<PreviewsTab> createState() => _PreviewsTabState();
@@ -112,7 +117,7 @@ class _PreviewsTabState extends State<PreviewsTab> {
     var colors = context.colors;
     var current = _current;
 
-    return Row(
+    var body = Row(
       key: previewsTabKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -139,6 +144,19 @@ class _PreviewsTabState extends State<PreviewsTab> {
                   onMode: (mode) => setState(() => _mode = mode),
                 ),
         ),
+      ],
+    );
+
+    // Above the list, not above the tab: a pushed step page replaces this
+    // whole subtree, and a header describing the half has no business over a
+    // page describing one step.
+    if (widget.header == null) return body;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        widget.header!,
+        Divider(height: 1, color: colors.line),
+        Expanded(child: body),
       ],
     );
   }

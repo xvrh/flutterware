@@ -50,18 +50,25 @@ channel that has something to say.
 
 ## Three defects with one shape
 
-1. **The verdict header stays visible on the pushed step page.** A scope bug:
-   the verdict is about the half, the pushed page is about one step, and it
-   was mounted above the whole tab body rather than above the list.
+1. ✅ **The verdict header stayed visible on the pushed step page.** A scope
+   bug: it was mounted above everything the tab renders, which includes a
+   pushed page — so a header reading `11 steps` sat over a page about one of
+   them. It is **handed to the half** now rather than drawn above it, because
+   only the half knows when it is showing a list.
 2. **The stage is the hero even when the two frames are identical**, and
    nothing on the page says they are — so a reader stares at two pictures
    hunting for a difference the tool already knows is not there.
-3. **The flow canvas wastes most of its width.** Cause measured, not guessed:
+3. ✅ **The flow canvas wasted most of its width.** Cause measured, not
+   guessed:
    `_nodeWidth` is a constant 132px sized for a desktop-shaped frame, and a
    portrait phone capture fitted to `_thumbHeight` is about **88px** wide. That
    leaves ~44px dead inside each node, and `cellSize` adds 40 and `cellPadding`
-   another 40 on top — so two 88px pictures sit about **128px apart**. The gap
-   is wider than the subject.
+   another 40 on top — so two 88px pictures sat about **128px apart**. The gap
+   was wider than the subject, and the arrow drawn in it looked marooned
+   because it was. The node width comes from the frames now, read off the
+   pixel channel's `width`/`height` — which every step already carries, so
+   nothing has to be decoded to lay the graph out. Clamped to 96–260, since a
+   desktop capture would otherwise make one node wider than most windows.
 
 What they share: the layout assumes the picture is the subject. Where it is
 not, the page has no other plan.
@@ -170,8 +177,8 @@ Three smaller things fall out and should ride along:
   `autofill.uniqueIdentifier` while the line under it said
   `data.arguments[1].autofill.uniqueIdentifier`: one fact wearing two names on
   one screen.
-- **The flow node sizes to its frame's aspect** instead of to a constant, and
-  the cell padding is measured against the result rather than added blind.
+- ✅ **The flow node sizes to its frame's aspect** instead of to a constant,
+  and the gap is one named constant rather than two unrelated numbers.
 
 ## What this note does not decide
 

@@ -43,6 +43,7 @@ class ScenariosTab extends StatefulWidget {
     required this.settle,
     required this.selected,
     required this.onSelect,
+    this.header,
   });
 
   final ComparisonHalf half;
@@ -52,6 +53,10 @@ class ScenariosTab extends StatefulWidget {
   /// `<file>#<scenario>/<step path>` as the address names it, or null.
   final String? selected;
   final ValueChanged<String> onSelect;
+
+  /// The half's verdict, drawn above the list — and **not** above a pushed
+  /// page, which is about one step rather than about the half.
+  final Widget? header;
 
   @override
   State<ScenariosTab> createState() => _ScenariosTabState();
@@ -204,7 +209,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
       );
     }
 
-    return Row(
+    var body = Row(
       key: scenariosTabKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -249,6 +254,19 @@ class _ScenariosTabState extends State<ScenariosTab> {
               ],
             ),
           ),
+      ],
+    );
+
+    // Above the list, not above the tab: a pushed step page replaces this
+    // whole subtree, and a header describing the half has no business over a
+    // page describing one step.
+    if (widget.header == null) return body;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        widget.header!,
+        Divider(height: 1, color: colors.line),
+        Expanded(child: body),
       ],
     );
   }
