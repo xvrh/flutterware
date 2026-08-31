@@ -3,19 +3,60 @@ import 'package:flutter/material.dart';
 
 import '../../ui/theme.dart';
 
-/// The tree, the texts and the events, as prose.
+/// What moved, on every channel that had something to say.
 ///
-/// What the percentage cannot say. A pixel fraction tells you something
-/// moved and roughly how much of the screen; it never tells you that a padding
-/// went from 12 to 20, and that line is usually the whole finding.
+/// **What the percentage cannot say.** A pixel fraction says something moved
+/// and roughly how much of the screen; it never says that a padding went from
+/// 12 to 20, and that line is usually the whole finding.
+///
+/// This was a footnote — a flat list of pre-formatted strings under the two
+/// frames — and on four of the seven shapes of finding it is now the subject
+/// of the page. Read as one it does not hold up: every delta was one opaque
+/// string, so `200 → 500` sat in the same grey as the address that merely
+/// located it, nothing aligned, and a double space had to work as a column
+/// separator. A delta has three parts and is drawn as three now: **what
+/// moved**, **from and to**, and **where** — in that order, because the first
+/// two are the news and the third is the address.
 class ChannelLines extends StatelessWidget {
   const ChannelLines(this.item, {super.key});
 
   final ComparedItem item;
 
+  /// How many rows one channel draws before it stops and says how many it cut.
+  ///
+  /// One number for all three, where the tree took 20 and the events channel
+  /// inherited the model's 50 — two cap regimes on one screen, expressed two
+  /// ways.
+  static const _max = 24;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
+    var tree = [
+      for (var delta in item.tree?.diff.deltas ?? const <TreeDelta>[])
+        if (delta.kind != TreeDeltaKind.shifted) delta,
+    ];
+    // Folded like the events channel, and sorted so like sits with like: a
+    // step whose network, database and log all moved was interleaving them in
+    // capture order, which is the order nobody reads in.
+    var events =
+        foldChannelDeltas([
+          [
+            for (var delta in item.deltas)
+              if (delta.channel == 'events' &&
+                  delta.property != 'added' &&
+                  delta.property != 'removed')
+                delta,
+          ],
+        ])..sort((a, b) {
+          var by = (a.delta.subchannel ?? '').compareTo(
+            b.delta.subchannel ?? '',
+          );
+          return by != 0
+              ? by
+              : (a.delta.subject ?? '').compareTo(b.delta.subject ?? '');
+        });
+
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: colors.line)),
@@ -23,88 +64,167 @@ class ChannelLines extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(FwSpacing.xl),
         children: [
-          if (item.tree?.changed ?? false) ...[
-            Text('TREE', style: context.type.micro.copyWith(color: colors.mut)),
-            const Gap(FwSpacing.xs),
-            for (var delta in item.tree!.diff.deltas.take(20))
-              _Line(_describe(delta)),
-            if (item.tree!.diff.deltas.length > 20)
-              _Line('… ${item.tree!.diff.deltas.length - 20} more'),
+          if (tree.isNotEmpty) ...[
+            _Header('TREE', dropped: tree.length - _max),
+            for (var delta in tree.take(_max))
+              switch (delta.kind) {
+                TreeDeltaKind.added => _Gone(
+                  '+ ${_where(delta.path)}',
+                  added: true,
+                ),
+                TreeDeltaKind.removed => _Gone('- ${_where(delta.path)}'),
+                _ => _Moved(
+                  what: delta.property ?? '',
+                  base: delta.base,
+                  head: delta.head,
+                  where: _where(delta.path),
+                ),
+              },
             const Gap(FwSpacing.lg),
           ],
           if (item.texts case var texts?) ...[
-            Text('TEXT', style: context.type.micro.copyWith(color: colors.mut)),
-            const Gap(FwSpacing.xs),
-            for (var text in texts.removed) _Line('- $text', color: colors.red),
-            for (var text in texts.added) _Line('+ $text', color: colors.grn),
+            _Header('TEXT', dropped: 0),
+            for (var text in texts.removed) _Gone('- $text'),
+            for (var text in texts.added) _Gone('+ $text', added: true),
             const Gap(FwSpacing.lg),
           ],
-          if (item.events case var events?) ...[
-            Text(
+          if (item.events case var found?) ...[
+            _Header(
               'ON THE WAY HERE',
-              style: context.type.micro.copyWith(color: colors.mut),
+              dropped: found.deltasDropped + (events.length - _max),
             ),
-            const Gap(FwSpacing.xs),
-            for (var event in events.removed)
-              _Line('- $event', color: colors.red),
-            for (var event in events.added)
-              _Line('+ $event', color: colors.grn),
-            // Folded, because the same field moving on four text fields of
-            // one screen is one fact and four lines. See
-            // `2026-08-30-comparison-ui-pass-design.md` §4a.
-            for (var row in foldChannelDeltas([
-              [
-                for (var delta in item.deltas)
-                  if (delta.channel == 'events' &&
-                      delta.property != 'added' &&
-                      delta.property != 'removed')
-                    delta,
-              ],
-            ]))
-              _Line(_describeEvent(row)),
-            if (events.deltasDropped > 0)
-              _Line('… ${events.deltasDropped} more'),
+            for (var event in found.removed) _Gone('- $event'),
+            for (var event in found.added) _Gone('+ $event', added: true),
+            for (var row in events.take(_max))
+              _Moved(
+                // When the title is what moved it is already the `base`
+                // column, and naming the event by it as well printed one long
+                // statement twice on one line.
+                what: row.delta.property == 'title'
+                    ? 'title'
+                    : shortProperty(row.delta.property ?? ''),
+                base: row.delta.base,
+                head: row.delta.head,
+                where: row.delta.property == 'title'
+                    ? row.delta.subchannel ?? ''
+                    : '${row.delta.subchannel} ${row.delta.subject}',
+                times: row.repeated ? row.count : null,
+              ),
           ],
         ],
       ),
     );
   }
 
-  /// One event field that moved, in the same three columns the tree uses.
-  ///
-  /// `network POST /login  detail  200 → 500`. The channel leads, because it
-  /// is the first thing a reader filters on and the thing that says whether
-  /// this line is about the network, the database or a log.
-  static String _describeEvent(FoldedDelta row) {
-    var delta = row.delta;
-    // When the title is what moved, it is already the `base` column — naming
-    // the event by it as well prints one long statement twice on one line,
-    // which is exactly the doubling this channel was rebuilt to stop.
-    var subject = delta.property == 'title'
-        ? '${delta.subchannel}'
-        : '${delta.subchannel} ${delta.subject}';
-    // A repeated shape says so rather than repeating itself, and says it after
-    // the values, so the eye reaches what moved before it reaches how often.
-    var times = row.repeated ? '  × ${row.count}' : '';
-    return '$subject  ${shortProperty(delta.property ?? '')}  '
-        '${delta.base} → ${delta.head}$times';
-  }
-
-  /// A delta in the words a reader would use.
-  ///
-  /// The path is trimmed to its last two names: the whole thing is every widget
-  /// from the entry's root down, which is a line of chrome per finding before
+  /// A tree path trimmed to its last two names: the whole thing is every
+  /// widget from the root down, which is a line of chrome per finding before
   /// anything that changed. The full path stays in `index.json`.
-  static String _describe(TreeDelta delta) {
-    var parts = delta.path.split(' › ');
-    var tail = (parts.length <= 2 ? parts : parts.sublist(parts.length - 2))
-        .join(' › ');
-    return switch (delta.kind) {
-      TreeDeltaKind.added => '+ $tail',
-      TreeDeltaKind.removed => '- $tail',
-      _ => '$tail  ${delta.property}  ${delta.base} → ${delta.head}',
-    };
+  static String _where(String path) {
+    var parts = path.split(' › ');
+    return (parts.length <= 2 ? parts : parts.sublist(parts.length - 2)).join(
+      ' › ',
+    );
   }
+}
+
+class _Header extends StatelessWidget {
+  const _Header(this.label, {required this.dropped});
+
+  final String label;
+  final int dropped;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+    child: Row(
+      children: [
+        Text(
+          label,
+          style: context.type.micro.copyWith(color: context.colors.mut),
+        ),
+        if (dropped > 0) ...[
+          const Gap(FwSpacing.sm),
+          Text(
+            '$dropped more not shown',
+            style: context.type.micro.copyWith(color: context.colors.mut3),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+/// One field that moved: what, from and to, and then where.
+///
+/// The values carry the page's ink and the address recedes, because
+/// `200 → 500` is the finding and `network POST /login` is only where to go
+/// and look for it. Everything used to be one grey.
+class _Moved extends StatelessWidget {
+  const _Moved({
+    required this.what,
+    required this.base,
+    required this.head,
+    required this.where,
+    this.times,
+  });
+
+  final String what;
+  final String? base;
+  final String? head;
+  final String where;
+  final int? times;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: SelectableText.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: what,
+              style: TextStyle(color: colors.mut, fontWeight: FontWeight.w600),
+            ),
+            const TextSpan(text: '   '),
+            TextSpan(
+              text: '$base → $head',
+              style: TextStyle(color: colors.ink),
+            ),
+            if (times case var count?)
+              TextSpan(
+                text: '  × $count',
+                style: TextStyle(color: colors.mut3),
+              ),
+            TextSpan(
+              text: '   ·   $where',
+              style: TextStyle(color: colors.mut3),
+            ),
+          ],
+        ),
+        style: context.type.caption,
+      ),
+    );
+  }
+}
+
+/// Something that came or went, which has no *from and to* to show.
+class _Gone extends StatelessWidget {
+  const _Gone(this.text, {this.added = false});
+
+  final String text;
+  final bool added;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 3),
+    child: SelectableText(
+      text,
+      style: context.type.caption.copyWith(
+        color: added ? context.colors.grn : context.colors.red,
+      ),
+    ),
+  );
 }
 
 /// A field path trimmed to its last two segments.
@@ -118,20 +238,4 @@ String shortProperty(String property) {
   return parts.length <= 2
       ? property
       : parts.sublist(parts.length - 2).join('.');
-}
-
-class _Line extends StatelessWidget {
-  const _Line(this.text, {this.color});
-
-  final String text;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 2),
-    child: SelectableText(
-      text,
-      style: context.type.caption.copyWith(color: color),
-    ),
-  );
 }

@@ -180,10 +180,44 @@ Three smaller things fall out and should ride along:
 - ✅ **The flow node sizes to its frame's aspect** instead of to a constant,
   and the gap is one named constant rather than two unrelated numbers.
 
-## What this note does not decide
+## ✅ Where the deltas go once they are the hero
 
-Where the deltas go once they are the hero. `ChannelLines` was written as a
-footnote — a flat list of one-line strings under a header — and a footnote
-promoted to a headline is usually the wrong widget rather than the right widget
-in the wrong place. That is step 2's question, and it wants the states drawn
-before it is answered.
+Looked at as the subject rather than as a footnote, `ChannelLines` turned out
+to be the **right kind of widget rendering its rows wrongly**. It is a list of
+deltas, and a list of deltas is what this is; what did not survive the
+promotion was that every delta was one opaque string.
+
+Four things that reading it at hero size made obvious:
+
+- **Nothing aligned.** Eight event lines with different-length prefixes put
+  `200 → 500` at x≈200, `member → admin` at x≈190 and `EditableText-… → …` at
+  x≈430. Nothing could be scanned down a column; every line had to be read.
+- **The news came last and unemphasised.** `network POST /login  detail
+  200 → 500` — the finding is `200 → 500`, drawn in the same grey as the
+  address that merely locates it.
+- **A double space was doing a separator's job.** `db  title  select * from…`
+  reads as four words, not three fields.
+- **Colour marked arrival, not importance.** A new request was green; a `500`
+  was grey.
+
+So a delta is drawn as its three parts, in the order the reader wants them:
+**what moved**, **from and to**, then **where**. The values carry the ink and
+the address recedes — `200 → 500` is the finding, `network POST /login` is only
+where to go and look. Green and red stay for things that came or went, which is
+a real distinction and one this does have; severity is not, and nothing here
+invents it.
+
+Two smaller things fell out:
+
+- **The tree folds too, and sorts.** Events folded and the tree did not, and a
+  step whose network, database and log all moved interleaved them in capture
+  order — the order nobody reads in. Sorted by subchannel, like sits with like.
+- **One cap, in the header.** The tree took 20 and the events channel inherited
+  the model's 50, expressed two different ways, both *after* the list. One
+  number for all three now, and `N more not shown` beside the section name —
+  where a reader meets it before reading rather than after.
+
+Still not decided, and correctly so: **an affordance.** As the hero this wants
+a gesture — exclude this shape, or jump to that node — and that is the v2
+authoring ladder from `2026-08-30`'s §3a, which should arrive as one design
+rather than as a button bolted on here.
