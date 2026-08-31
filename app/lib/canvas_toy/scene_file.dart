@@ -177,8 +177,9 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
     if (n.width case var w?) add('width', w, () => _num(w));
     if (n.height case var h?) add('height', h, () => _num(h));
     if (n.fill case var f?) add('fill', f, () => _color(f));
-    if (n.cornerRadius != 0)
+    if (n.cornerRadius != 0) {
       add('corner', n.cornerRadius, () => _num(n.cornerRadius));
+    }
     if (n.opacity != 1) add('opacity', n.opacity, () => _num(n.opacity));
   }
 
@@ -536,7 +537,7 @@ class _Parser {
           p.offset,
           'parameter',
           'a scene parameter is a named `this.` formal with a default — '
-              '`this.title = \'…\'`',
+              "`this.title = '…'`",
         );
         continue;
       }

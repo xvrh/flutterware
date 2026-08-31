@@ -152,29 +152,29 @@ class SceneDocument extends ChangeNotifier {
           var v = args[entry.value];
           switch (entry.key) {
             case 'x':
-              node.x = (v as num).toDouble();
+              node.x = (v! as num).toDouble();
             case 'y':
-              node.y = (v as num).toDouble();
+              node.y = (v! as num).toDouble();
             case 'width':
               node.width = (v as num?)?.toDouble();
             case 'height':
               node.height = (v as num?)?.toDouble();
             case 'corner':
-              node.cornerRadius = (v as num).toDouble();
+              node.cornerRadius = (v! as num).toDouble();
             case 'opacity':
-              node.opacity = (v as num).toDouble();
+              node.opacity = (v! as num).toDouble();
             case 'fill':
               node.fill = v as Color?;
             case 'text':
-              (node as TextNode).text = v as String;
+              (node as TextNode).text = v! as String;
             case 'fontSize':
-              (node as TextNode).fontSize = (v as num).toDouble();
+              (node as TextNode).fontSize = (v! as num).toDouble();
             case 'color':
-              (node as TextNode).color = v as Color;
+              (node as TextNode).color = v! as Color;
             case 'gap':
-              (node as FrameNode).gap = (v as num).toDouble();
+              (node as FrameNode).gap = (v! as num).toDouble();
             case 'padding':
-              (node as FrameNode).padding = (v as num).toDouble();
+              (node as FrameNode).padding = (v! as num).toDouble();
           }
         }
       }
