@@ -162,6 +162,51 @@ diff/patch remains the obvious lever if scenes grow past thousands.
   the run ledger), a guest per theme/locale for side-by-side variants, and
   the tester-lane guest as the headless twin for export.
 
+## Round three — the composited canvas (same day)
+
+The owner's remaining fear, named directly: once the guest composites *into*
+the editor window through the embedder texture, does drag stay instant or is
+there unfixable lag? Built as the owner chose — inside the studio's machinery
+rather than the toy's — and measured.
+
+**What was built:** a dev entry point (`app/lib/main_scene_canvas_dev.dart`,
+the *Scene canvas (spike)* run entry) mounting the toy's editor panels around
+a canvas whose artboard picture is an embedder guest's texture. The guest is
+the example package's new `Scene canvas host` preview entry —
+`SceneHostApp(bare: true)`, artboard at the window origin so editor and guest
+share one coordinate space — booted by a `CatalogSession` exactly as the
+motion and previews panels boot theirs, and pushed to via
+`session.callGuestExtension('ext.fw.scene.apply', …)`. The guest's measured
+rects become the editor's geometry: hit targets, selection overlay and
+handles all read what the guest laid out. Roughly 250 new lines, every organ
+pre-existing.
+
+**The numbers, live window:**
+
+| | rtt | guest frame |
+|---|---|---|
+| cold first apply | 94.4ms | 88.4ms |
+| selection change | 40.3ms | 14.0ms |
+| **under drag** | **22.2ms** | **20.7ms** |
+
+> **Under drag, the round trip is one guest frame.** Pipe overhead —
+> serialize, VM-service hop, rects back — is ~1.5ms. The composited canvas
+> costs what any Flutter app's own input-to-present latency costs; there is
+> no architectural lag to fix, because there is almost no architecture in the
+> path.
+
+The full loop verified through the texture: click-ladder selection from
+guest rects, absolute drag (the badge, live in the texture), inspector edits.
+The guest runs Impeller/Metal; the daemon snapshot cost 2.3s cold and the
+whole boot-to-first-frame sat under 15s on a warm build cache.
+
+Two gaps met and noted: the studio's window-capture pipeline does not
+composite *this* guest into screenshots (the live window is fine — agent
+screenshots of the spike show a hole where the texture is), and the
+`FittedBox`-less bare guest plus `engine.resize` to artboard size is what
+makes coordinates line up — zoom still scales the texture in the editor, with
+the known blur-at->1× to solve later via resolution-tracking resizes.
+
 ## What remains before this is the editor (not tested here)
 
 Compositing the guest **into** the editor window instead of beside it — the

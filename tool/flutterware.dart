@@ -269,6 +269,27 @@ void main() => Flutterware.configure((fw) {
               ],
             ),
             Entrypoint(
+              'lib/main_scene_canvas_dev.dart',
+              name: 'Scene canvas (spike)',
+              description:
+                  "Composited-canvas spike — the toy's editor over an "
+                  'embedder guest texture, latency measured in the toolbar',
+              platforms: [RunPlatform.desktop],
+              knobs: [
+                Knob(
+                  'flutterSdkRoot',
+                  label: 'Flutter SDK',
+                  from: ValueSource.flutterSdk,
+                  required: true,
+                ),
+                Knob(
+                  'appRoot',
+                  label: 'App root',
+                  description: 'The flutterware_app package root',
+                ),
+              ],
+            ),
+            Entrypoint(
               'lib/canvas_toy/main.dart',
               name: 'Canvas toy',
               description:

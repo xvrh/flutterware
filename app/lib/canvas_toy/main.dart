@@ -228,10 +228,16 @@ class _AddButton extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class CanvasArea extends StatefulWidget {
-  const CanvasArea(this.doc, {super.key, this.status});
+  const CanvasArea(this.doc, {super.key, this.status, this.canvasContent});
 
   final SceneDocument doc;
   final ValueListenable<String>? status;
+
+  /// Replaces the local mirror ([NodeView] of the root) as the artboard's
+  /// picture — the composited spike mounts the guest's texture here. The hit
+  /// layer, selection overlay and resize handle stay on top either way; with
+  /// no local scene mounted, measured rects come from the guest.
+  final Widget? canvasContent;
 
   @override
   State<CanvasArea> createState() => _CanvasAreaState();
@@ -344,7 +350,7 @@ class _CanvasAreaState extends State<CanvasArea> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          NodeView(doc.root),
+          widget.canvasContent ?? NodeView(doc.root),
           ValueListenableBuilder(
             valueListenable: doc.geometryEpoch,
             builder: (context, _, _) => _HitLayer(doc),

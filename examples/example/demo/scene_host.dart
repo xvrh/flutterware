@@ -39,7 +39,13 @@ final _registry = <String, Widget Function(Map<String, Object?> args)>{
 };
 
 class SceneHostApp extends StatefulWidget {
-  const SceneHostApp({super.key});
+  const SceneHostApp({super.key, this.bare = false});
+
+  /// Bare: the artboard alone at the window's origin, 1:1 — for a host whose
+  /// window IS the canvas (the studio's embedder texture), where the editor
+  /// maps its coordinates straight onto the guest's. No announcement either:
+  /// the mounting panel owns the pipe.
+  final bool bare;
 
   @override
   State<SceneHostApp> createState() => _SceneHostAppState();
@@ -53,11 +59,33 @@ class _SceneHostAppState extends State<SceneHostApp> {
 
   GlobalKey _key(String name) => _keys.putIfAbsent(name, GlobalKey.new);
 
+  /// Once per isolate: a re-mounted widget must not re-register.
+  static var _registered = false;
+
   @override
   void initState() {
     super.initState();
-    dev.registerExtension('ext.fw.scene.apply', _apply);
-    unawaited(_announce());
+    if (!_registered) {
+      _registered = true;
+      dev.registerExtension('ext.fw.scene.apply', _applyStatic);
+    }
+    _instance = this;
+    if (!widget.bare) unawaited(_announce());
+  }
+
+  static _SceneHostAppState? _instance;
+
+  static Future<dev.ServiceExtensionResponse> _applyStatic(
+    String method,
+    Map<String, String> params,
+  ) async {
+    var instance = _instance;
+    if (instance == null) {
+      return dev.ServiceExtensionResponse.result(
+        jsonEncode({'error': 'no scene host mounted'}),
+      );
+    }
+    return instance._apply(method, params);
   }
 
   /// Writes this app's VM-service websocket URI where the editor polls for
@@ -139,6 +167,27 @@ class _SceneHostAppState extends State<SceneHostApp> {
 
   @override
   Widget build(BuildContext context) {
+    var artboard = _scene == null
+        ? null
+        : SizedBox(
+            key: _artboardKey,
+            width: (_scene!['w'] as num?)?.toDouble() ?? 1024,
+            height: (_scene!['h'] as num?)?.toDouble() ?? 500,
+            child: _node(_scene!, root: true),
+          );
+    if (widget.bare) {
+      return MaterialApp(
+        title: 'Scene host',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
+        home: ColoredBox(
+          color: const Color(0xFF26282C),
+          child: artboard == null
+              ? const SizedBox()
+              : Align(alignment: Alignment.topLeft, child: artboard),
+        ),
+      );
+    }
     return MaterialApp(
       title: 'Scene host',
       debugShowCheckedModeBanner: false,
@@ -155,15 +204,7 @@ class _SceneHostAppState extends State<SceneHostApp> {
               // Scale-to-fit so a small guest (a phone) shows the whole
               // artboard. Rects stay in artboard coordinates: the sweep
               // measures against the artboard box, inside the scaling.
-              : FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: SizedBox(
-                    key: _artboardKey,
-                    width: (_scene!['w'] as num?)?.toDouble() ?? 1024,
-                    height: (_scene!['h'] as num?)?.toDouble() ?? 500,
-                    child: _node(_scene!, root: true),
-                  ),
-                ),
+              : FittedBox(fit: BoxFit.scaleDown, child: artboard),
         ),
       ),
     );
