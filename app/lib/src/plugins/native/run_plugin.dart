@@ -36,11 +36,10 @@ import '../../inspect/transcript.dart';
 import '../../ui/capture_button.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
+import '../../ui/picker.dart';
 import '../../ui/split_button.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/loading_state.dart';
-import '../../ui/popover.dart';
-import '../../ui/popover_menu.dart';
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
 import '../../utils/daemon/device.dart';
@@ -1656,7 +1655,7 @@ class _StepDetailState extends State<_StepDetail> {
                   children: [
                     for (var text in _texts!)
                       if (text.isNotEmpty)
-                        SelectableText(text, style: _mono(context)),
+                        SelectableText(text, style: context.type.mono),
                   ],
                 ),
         ),
@@ -2138,10 +2137,10 @@ class _DevicePicker extends StatelessWidget {
   final bool restricted;
 
   @override
-  Widget build(BuildContext context) => _Picker<String>(
+  Widget build(BuildContext context) => FwPicker<String>(
     choices: [
       for (var device in devices)
-        _Choice(
+        FwChoice(
           value: device.id,
           label: device.displayName,
           detail: _detail(device),
@@ -2188,10 +2187,10 @@ class _EntrypointPicker extends StatelessWidget {
   final ValueChanged<({String package, EntrypointRef entry})> onChanged;
 
   @override
-  Widget build(BuildContext context) => _Picker<String>(
+  Widget build(BuildContext context) => FwPicker<String>(
     choices: [
       for (var choice in entries)
-        _Choice(
+        FwChoice(
           value: _idOf(choice),
           label: choice.entry.name,
           // The description when the config wrote one, the path when it did
@@ -2541,19 +2540,18 @@ class _FlavorField extends StatelessWidget {
       var options = vocabulary;
       return Row(
         children: [
-          // Capped and unstyled, so this is the same control as a knob's: no
-          // `style:` override (which made it 27 tall beside a 32 field on the
-          // same form) and the same width as a knob value, since a flavor is
-          // one word and 500px of box for `dev` reads as a mistake.
+          // Capped to a knob value's width, so this is the same control as a
+          // knob's — a flavor is one word, and 500px of box for `dev` reads
+          // as a mistake.
           Flexible(
             child: ConstrainedBox(
               constraints: const BoxConstraints(
                 maxWidth: KnobField.controlWidth,
               ),
               // The declared list where there is one — same control as an
-              // enum knob's, and only values the list actually holds, for the
-              // same reason: a dropdown asked to show a value it has no item
-              // for asserts rather than degrading.
+              // enum knob's, and only values the list actually holds: a picker
+              // shows `Choose…` for a value the list does not hold rather than
+              // pretending the script's computed flavor is one of them.
               child: options == null
                   ? TextField(
                       controller: controller,
@@ -2562,18 +2560,15 @@ class _FlavorField extends StatelessWidget {
                         hintText: 'dev, staging…',
                       ),
                     )
-                  : DropdownButtonFormField<String>(
-                      initialValue: options.contains(controller.text)
+                  : FwPicker<String>(
+                      choices: [
+                        for (var option in options)
+                          FwChoice(value: option, label: option),
+                      ],
+                      selected: options.contains(controller.text)
                           ? controller.text
                           : null,
-                      isDense: true,
-                      items: [
-                        for (var option in options)
-                          DropdownMenuItem(value: option, child: Text(option)),
-                      ],
-                      onChanged: (choice) {
-                        if (choice != null) onPicked(choice);
-                      },
+                      onChanged: onPicked,
                     ),
             ),
           ),
@@ -2731,7 +2726,7 @@ class _FailedRunPage extends StatelessWidget {
             padding: const EdgeInsets.all(FwSpacing.md),
             child: SelectableText(
               failure.message,
-              style: _mono(context, color: colors.mut),
+              style: context.type.mono.copyWith(color: colors.mut),
             ),
           ),
         ),
@@ -2859,221 +2854,6 @@ class _Tag extends StatelessWidget {
         borderRadius: BorderRadius.circular(context.radii.radiusSmall),
       ),
       child: Text(label, style: context.type.micro.copyWith(color: colors.mut)),
-    );
-  }
-}
-
-/// The panel's one mono style, matching the server panel's: machine data —
-/// log lines, paths — wears it, prose stays in the UI face.
-TextStyle _mono(BuildContext context, {Color? color}) =>
-    Theme.of(context).textTheme.bodySmall!.copyWith(
-      fontFamily: 'monospace',
-      fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-      letterSpacing: 0,
-      fontFeatures: const [FontFeature.tabularFigures()],
-      color: color,
-    );
-
-/// One choice, as the New run page offers it: a bold name, a muted line under
-/// it, and an optional dot.
-class _Choice<T> {
-  const _Choice({
-    required this.value,
-    required this.label,
-    this.detail,
-    this.dotColor,
-    this.enabled = true,
-  });
-
-  final T value;
-  final String label;
-
-  /// What the name does not say — `ios · iOS 26.5 · wireless`, or an entry
-  /// point's description. The whole reason a picker beats a list of file names.
-  final String? detail;
-
-  final Color? dotColor;
-  final bool enabled;
-}
-
-/// The New run page's picker: a trigger that reads like a field, and a popover
-/// of rows with room for a description.
-///
-/// Not `DropdownButtonFormField`. Both pickers were one, which put a device
-/// and an entry point through a control with one line of text and Material 3's
-/// own paddings. The design draws a bordered box — name, detail, caret —
-/// opening onto two-line rows, and `Kiosk` and `Onboarding` are unguessable
-/// from their file names, which is the entire reason this is a picker.
-///
-/// Built on [Popover] and [PopoverMenuSurface], which this app already has:
-/// both were ported from `cms/packages/admin_ui`, which is where the shape
-/// comes from, and the scenarios panel already uses them.
-class _Picker<T> extends StatelessWidget {
-  const _Picker({
-    required this.choices,
-    required this.selected,
-    required this.onChanged,
-    required this.empty,
-  });
-
-  final List<_Choice<T>> choices;
-  final T? selected;
-  final ValueChanged<T> onChanged;
-
-  /// Said instead of an empty box — a device list still being read is a
-  /// different thing from a project with no entry points.
-  final String empty;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    if (choices.isEmpty) return Text(empty, style: context.type.bodyMuted);
-    var current = choices
-        .where((choice) => choice.value == selected)
-        .firstOrNull;
-
-    return Popover(
-      anchor: (context, controller) => Tappable.builder(
-        onTap: controller.toggle,
-        builder: (context, hovered) => Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: FwSpacing.md,
-            vertical: FwSpacing.sm,
-          ),
-          decoration: BoxDecoration(
-            color: colors.bg,
-            borderRadius: BorderRadius.circular(context.radii.radius),
-            border: Border.all(
-              color: controller.isOpen
-                  ? colors.accent
-                  : hovered
-                  ? colors.mut3
-                  : colors.line,
-            ),
-          ),
-          child: Row(
-            children: [
-              if (current?.dotColor case var color?) ...[
-                Icon(Icons.circle, size: 8, color: color),
-                const Gap(FwSpacing.sm),
-              ],
-              Flexible(
-                flex: 0,
-                child: Text(
-                  current?.label ?? 'Choose…',
-                  style: context.type.bodyStrong,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (current?.detail case var detail?) ...[
-                const Gap(FwSpacing.sm),
-                Flexible(
-                  child: Text(
-                    detail,
-                    style: context.type.caption.copyWith(color: colors.mut),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              const Spacer(),
-              const Gap(FwSpacing.sm),
-              Icon(Icons.expand_more, size: FwIconSize.md, color: colors.mut2),
-            ],
-          ),
-        ),
-      ),
-      content: (context, controller) => PopoverMenuSurface(
-        // The trigger's width, so the open list lines up under the field
-        // rather than floating at whatever its longest row wants.
-        width: controller.anchorWidth,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(FwSpacing.xs),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var choice in choices)
-                _PickerRow<T>(
-                  choice: choice,
-                  selected: choice.value == selected,
-                  onTap: () {
-                    controller.close();
-                    onChanged(choice.value);
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PickerRow<T> extends StatelessWidget {
-  const _PickerRow({
-    required this.choice,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _Choice<T> choice;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Tappable(
-      onTap: choice.enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.sm,
-          vertical: 6,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? colors.accentSoft : null,
-          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-        ),
-        child: Row(
-          children: [
-            if (choice.dotColor case var color?) ...[
-              Icon(
-                Icons.circle,
-                size: 8,
-                color: choice.enabled ? color : colors.mut3,
-              ),
-              const Gap(FwSpacing.sm),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    choice.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.type.bodySmall.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: selected
-                          ? colors.accent
-                          : choice.enabled
-                          ? colors.ink
-                          : colors.mut2,
-                    ),
-                  ),
-                  if (choice.detail case var detail?)
-                    Text(
-                      detail,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.type.micro.copyWith(color: colors.mut),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

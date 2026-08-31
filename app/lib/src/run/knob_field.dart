@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../plugins/native/run_results.dart';
 import '../ui/design/spacing.dart';
 import '../ui/design/tokens.dart';
+import '../ui/picker.dart';
 import '../ui/tappable.dart';
 
 /// One knob: what it is on the left, what it is set to on the right.
@@ -252,20 +253,19 @@ class _KnobFieldState extends State<KnobField> {
         ],
       ),
     ),
-    'picker' => DropdownButtonFormField<String>(
-      // Only a value the list actually holds. A script source can compute one
-      // for an enum knob that is not among its constants, and a dropdown asked
-      // to show a value it has no item for asserts rather than degrading.
-      initialValue: _knob.options.contains(widget.value ?? _knob.defaultValue)
+    // Only what the enum declares — there is no "other" to type, because
+    // there is no other constant to name — and only a value the list actually
+    // holds: a script source can compute one for an enum knob that is not
+    // among its constants, and the picker shows `Choose…` for it rather than
+    // pretending it is.
+    'picker' => FwPicker<String>(
+      choices: [
+        for (var option in _knob.options)
+          FwChoice(value: option, label: option),
+      ],
+      selected: _knob.options.contains(widget.value ?? _knob.defaultValue)
           ? widget.value ?? _knob.defaultValue
           : null,
-      isDense: true,
-      // Only what the enum declares. There is no "other" to type, because
-      // there is no other constant to name.
-      items: [
-        for (var option in _knob.options)
-          DropdownMenuItem(value: option, child: Text(option)),
-      ],
       onChanged: widget.onChanged,
     ),
     // No kind means there is no parameter to set: a config naming one that is

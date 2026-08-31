@@ -1229,7 +1229,6 @@ class _IndexPane extends StatelessWidget {
                 color: colors.mut3,
               ),
               prefixIconConstraints: const BoxConstraints(minWidth: 26),
-              border: const OutlineInputBorder(),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: FwSpacing.sm,
                 vertical: FwSpacing.sm,

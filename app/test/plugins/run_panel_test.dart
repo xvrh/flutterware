@@ -27,6 +27,7 @@ import 'package:flutterware_app/src/run/launch.dart';
 import 'package:flutterware_app/src/run/logs_tab.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
+import 'package:flutterware_app/src/ui/picker.dart';
 import 'package:flutterware_app/src/ui/split_button.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 import 'package:flutterware_app/src/utils/daemon/device.dart';
@@ -705,11 +706,17 @@ void main() {
 
     // Overriding offers the declared vocabulary instead of an empty box —
     // the launch would refuse an unlisted word, and a picker says so first.
+    // The device and entry point are pickers too, so the flavor's is the one
+    // whose trigger wears the resolved flavor.
     await tester.tap(find.text('Override'));
     await tester.pump();
     expect(find.byType(TextField), findsNothing);
-    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
-    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    var flavorPicker = find.ancestor(
+      of: find.text('patientLocal'),
+      matching: find.byType(FwPicker<String>),
+    );
+    expect(flavorPicker, findsOneWidget);
+    await tester.tap(flavorPicker);
     await tester.pumpAndSettle();
     expect(find.text('local'), findsWidgets);
   });

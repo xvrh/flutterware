@@ -62,9 +62,35 @@ ThemeData buildAppTheme(FwTokens tokens) {
     if (states.contains(WidgetState.focused)) return palette.focusRing;
     return null;
   });
+  // Laid over a primary fill, where the neutral ink of [overlay] disappears.
+  var overlayOnFill = WidgetStateProperty.resolveWith<Color?>((states) {
+    if (states.contains(WidgetState.pressed)) {
+      return palette.pressedOverlayOnFill;
+    }
+    if (states.contains(WidgetState.hovered)) return palette.hoverOverlayOnFill;
+    return null;
+  });
   var buttonStyle = ButtonStyle(
     overlayColor: overlay,
     splashFactory: NoSplash.splashFactory,
+  );
+  // The labeled buttons, sized and shaped as the form family. Measured before
+  // this block existed: a Material button stood on a 40px stadium beside a
+  // 33px picker and a 33px field — another design system's control in the
+  // middle of a form row. One height for all four, pinned by a standard
+  // density and a shrink-wrapped tap target so the harness and a desktop
+  // render agree about it.
+  var labeledButton = buttonStyle.copyWith(
+    shape: WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.circular(radii.radius)),
+    ),
+    minimumSize: const WidgetStatePropertyAll(Size(10, FwControlSize.height)),
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(horizontal: FwSpacing.lg),
+    ),
+    textStyle: WidgetStatePropertyAll(type.button),
+    visualDensity: VisualDensity.standard,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
   );
 
   return base.copyWith(
@@ -77,9 +103,16 @@ ThemeData buildAppTheme(FwTokens tokens) {
     highlightColor: palette.pressedOverlay,
     focusColor: palette.focusRing,
     iconButtonTheme: IconButtonThemeData(style: buttonStyle),
-    textButtonTheme: TextButtonThemeData(style: buttonStyle),
-    outlinedButtonTheme: OutlinedButtonThemeData(style: buttonStyle),
-    filledButtonTheme: FilledButtonThemeData(style: buttonStyle),
+    textButtonTheme: TextButtonThemeData(style: labeledButton),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: labeledButton.copyWith(
+        side: WidgetStatePropertyAll(BorderSide(color: palette.line)),
+        foregroundColor: WidgetStatePropertyAll(palette.ink),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: labeledButton.copyWith(overlayColor: overlayOnFill),
+    ),
     textTheme: textTheme.copyWith(
       displayLarge: textTheme.displayLarge!.copyWith(
         fontSize: type.sizeDisplayLarge,
@@ -102,6 +135,18 @@ ThemeData buildAppTheme(FwTokens tokens) {
         fontWeight: type.spec.heading,
       ),
       titleLarge: textTheme.titleLarge!.copyWith(fontSize: type.sizeTitleLarge),
+      // The slots Material controls default to, set onto the ramp. An
+      // unstyled `TextField` reads bodyLarge, a `DropdownButton` titleMedium,
+      // a `TextButton` labelLarge, a bare `Text` bodyMedium — at Material 3's
+      // 16/16/14/14 those sat three sizes off the 13px everything styled
+      // beside them wears (the Render workbench mixed 11.5 to 16 in one form
+      // column). Taught here, a stray Material control degrades to the house
+      // sizes instead of to another design system's.
+      titleMedium: _onRamp(textTheme.titleMedium!, type.bodyStrong),
+      bodyLarge: _onRamp(textTheme.bodyLarge!, type.body),
+      bodyMedium: _onRamp(textTheme.bodyMedium!, type.body),
+      bodySmall: _onRamp(textTheme.bodySmall!, type.bodySmall),
+      labelLarge: _onRamp(textTheme.labelLarge!, type.button),
     ),
     scaffoldBackgroundColor: palette.scaffoldBackground,
     appBarTheme: base.appBarTheme.copyWith(
@@ -150,27 +195,12 @@ ThemeData buildAppTheme(FwTokens tokens) {
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
-      style:
-          ElevatedButton.styleFrom(
-            foregroundColor: palette.onPrimary,
-            backgroundColor: palette.primary,
-            elevation: 0,
-            minimumSize: const Size(10, 42),
-            textStyle: type.button,
-            splashFactory: NoSplash.splashFactory,
-            // Laid over the primary fill, so the neutral ink of [overlay] would
-            // disappear into it.
-          ).copyWith(
-            overlayColor: WidgetStateProperty.resolveWith<Color?>((states) {
-              if (states.contains(WidgetState.pressed)) {
-                return palette.pressedOverlayOnFill;
-              }
-              if (states.contains(WidgetState.hovered)) {
-                return palette.hoverOverlayOnFill;
-              }
-              return null;
-            }),
-          ),
+      style: labeledButton.copyWith(
+        foregroundColor: WidgetStatePropertyAll(palette.onPrimary),
+        backgroundColor: WidgetStatePropertyAll(palette.primary),
+        elevation: const WidgetStatePropertyAll(0),
+        overlayColor: overlayOnFill,
+      ),
     ),
     cardColor: palette.bg,
     cardTheme: base.cardTheme.copyWith(
@@ -191,6 +221,23 @@ ThemeData buildAppTheme(FwTokens tokens) {
       headingRowColor: WidgetStateProperty.all(palette.tableHeader),
       headingTextStyle: type.micro.copyWith(color: palette.mut),
     ),
+    // The two raw `Checkbox`es (scenario params, the teardown dialog) rendered
+    // Material 3's own control — its shape, its hover halo — beside rows drawn
+    // from the tokens. Same move as the buttons above: taught once here rather
+    // than styled per call site.
+    checkboxTheme: base.checkboxTheme.copyWith(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radii.radiusSmall),
+      ),
+      side: BorderSide(color: palette.mut3, width: 1.5),
+      fillColor: WidgetStateProperty.resolveWith(
+        (states) =>
+            states.contains(WidgetState.selected) ? palette.primary : null,
+      ),
+      checkColor: WidgetStatePropertyAll(palette.onPrimary),
+      overlayColor: overlay,
+      splashRadius: 0,
+    ),
     dividerTheme: base.dividerTheme.copyWith(color: palette.line, thickness: 1),
     tooltipTheme: TooltipThemeData(
       waitDuration: const Duration(milliseconds: 400),
@@ -203,6 +250,15 @@ ThemeData buildAppTheme(FwTokens tokens) {
     ),
   );
 }
+
+/// A Material text slot, resized to a house token. Size, weight and tracking
+/// come from the token; family, colour and metrics stay the slot's own, so the
+/// result still composes the way Material expects.
+TextStyle _onRamp(TextStyle slot, TextStyle token) => slot.copyWith(
+  fontSize: token.fontSize,
+  fontWeight: token.fontWeight,
+  letterSpacing: token.letterSpacing,
+);
 
 /// Maps a plugin [Tone] to a palette colour. The single place tones become
 /// pixels — everywhere else they stay data.

@@ -10,6 +10,7 @@ import '../../ui/action_button.dart';
 import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/panel_header.dart';
+import '../../ui/picker.dart';
 import '../native_plugin.dart';
 import 'no_packages.dart';
 import 'renders_core.dart';
@@ -341,7 +342,6 @@ class _RendersPanelState extends State<_RendersPanel> {
             style: context.type.mono,
             decoration: const InputDecoration(
               isDense: true,
-              border: OutlineInputBorder(),
               hintText: '{"title": "…"}',
             ),
           ),
@@ -451,10 +451,8 @@ class _RendersPanelState extends State<_RendersPanel> {
   Widget _numberField(TextEditingController controller) => TextField(
     controller: controller,
     keyboardType: TextInputType.number,
-    decoration: const InputDecoration(
-      isDense: true,
-      border: OutlineInputBorder(),
-    ),
+    style: context.type.body,
+    decoration: const InputDecoration(isDense: true),
   );
 
   Widget _dropdown<T extends Enum>({
@@ -464,25 +462,17 @@ class _RendersPanelState extends State<_RendersPanel> {
   }) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: DropdownButton<T>(
-        value: value,
-        isDense: true,
-        underline: const SizedBox.shrink(),
-        items: [
-          for (var option in values)
-            DropdownMenuItem(value: option, child: Text(option.name)),
-        ],
-        onChanged: (selected) {
-          if (selected != null) onChanged(selected);
-        },
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 240),
+        child: FwPicker<T>(
+          choices: [
+            for (var option in values)
+              FwChoice(value: option, label: option.name),
+          ],
+          selected: value,
+          onChanged: onChanged,
+        ),
       ),
     );
-  }
-}
-
-extension<T> on Iterable<T> {
-  T? get firstOrNull {
-    var it = iterator;
-    return it.moveNext() ? it.current : null;
   }
 }

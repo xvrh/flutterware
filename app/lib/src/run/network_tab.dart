@@ -110,7 +110,6 @@ class _NetworkTabState extends State<NetworkTab> {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     var tracker = _tracker;
     if (_loading) return const LoadingState(title: 'Reading the network log…');
     if (_error != null || tracker == null) {
@@ -167,9 +166,7 @@ class _NetworkTabState extends State<NetworkTab> {
               Text(
                 '${requests.length} '
                 'request${requests.length == 1 ? '' : 's'}',
-                style: theme.textTheme.bodySmall!.copyWith(
-                  color: theme.hintColor,
-                ),
+                style: context.type.caption,
               ),
               const Spacer(),
               TextButton(
@@ -404,7 +401,6 @@ class _RequestDetailState extends State<_RequestDetail> {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     var request = widget.request;
     var status = networkStatusOf(request);
     var error = networkErrorOf(request);
@@ -421,12 +417,12 @@ class _RequestDetailState extends State<_RequestDetail> {
                   '${status == null ? '' : ' → $status'}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: _mono(context, fontSize: 15),
+                  style: context.type.mono.copyWith(fontSize: 14),
                 ),
               ),
               Text(
                 _ms(networkDurationOf(request)),
-                style: _mono(context, fontSize: 15),
+                style: context.type.mono.copyWith(fontSize: 14),
               ),
               const SizedBox(width: 8),
               _CopyAsCurlButton(detail: _detail),
@@ -443,9 +439,7 @@ class _RequestDetailState extends State<_RequestDetail> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Text(
               error,
-              style: theme.textTheme.bodyMedium!.copyWith(
-                color: theme.colorScheme.error,
-              ),
+              style: context.type.body.copyWith(color: context.colors.red),
             ),
           ),
         Padding(
@@ -457,9 +451,7 @@ class _RequestDetailState extends State<_RequestDetail> {
                 TextButton(
                   style: name == _tab
                       ? TextButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary.withValues(
-                            alpha: 0.1,
-                          ),
+                          backgroundColor: context.colors.accentSoft,
                         )
                       : null,
                   onPressed: () => setState(() => _tab = name),
@@ -509,8 +501,7 @@ class _HttpMessageTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
-    var mono = _mono(context);
+    var mono = context.type.mono;
     var headers = _headersOf(detail, response: response);
     var body = response ? detail.responseBody : detail.requestBody;
     if (headers == null && (body == null || body.isEmpty)) {
@@ -519,7 +510,7 @@ class _HttpMessageTab extends StatelessWidget {
           response && detail.response == null
               ? 'No response yet.'
               : 'Not captured.',
-          style: theme.textTheme.bodyMedium,
+          style: context.type.bodyMuted,
         ),
       );
     }
@@ -535,7 +526,7 @@ class _HttpMessageTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Headers', style: theme.textTheme.titleSmall),
+        Text('Headers', style: context.type.sectionLabel),
         const SizedBox(height: 4),
         for (var entry in (headers ?? const {}).entries)
           for (var value
@@ -545,12 +536,12 @@ class _HttpMessageTab extends StatelessWidget {
               child: SelectableText('${entry.key}: $value', style: mono),
             ),
         const SizedBox(height: 16),
-        Text('Body', style: theme.textTheme.titleSmall),
+        Text('Body', style: context.type.sectionLabel),
         const SizedBox(height: 4),
         if (bodyText == null)
           Text(
             binary ? '${body!.length} bytes of binary data.' : 'Empty.',
-            style: theme.textTheme.bodySmall,
+            style: context.type.caption,
           )
         // A JSON body folds; anything else stays plain text. Sniffing the
         // first character beats trusting content-type, which lies.
@@ -561,9 +552,7 @@ class _HttpMessageTab extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.5,
-              ),
+              color: context.colors.panel2,
               borderRadius: BorderRadius.circular(context.radii.radiusSmall),
             ),
             child: SelectableText(bodyText, style: mono),
@@ -583,7 +572,6 @@ class _TimingTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var theme = Theme.of(context);
     var events = detail.events;
     if (events.isEmpty) {
       return const EmptyState(icon: Icons.timeline, title: 'No timing events');
@@ -602,10 +590,10 @@ class _TimingTab extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               children: [
-                Expanded(child: Text(label, style: _mono(context))),
+                Expanded(child: Text(label, style: context.type.mono)),
                 Text(
                   '+${_ms(gap.inMicroseconds / 1000)}',
-                  style: _mono(context, color: theme.hintColor),
+                  style: context.type.mono.copyWith(color: context.colors.mut2),
                 ),
               ],
             ),
@@ -688,18 +676,6 @@ String _pathOf(Uri uri) {
 
 String _ms(Object? value) =>
     value is num ? '${value.toStringAsFixed(1)}ms' : '';
-
-/// The server panel's mono style, copied on purpose — the two request lists
-/// should read as siblings.
-TextStyle _mono(BuildContext context, {Color? color, double? fontSize}) =>
-    Theme.of(context).textTheme.bodySmall!.copyWith(
-      fontFamily: 'monospace',
-      fontFamilyFallback: const ['Menlo', 'Consolas', 'Courier New'],
-      letterSpacing: 0,
-      fontFeatures: const [FontFeature.tabularFigures()],
-      color: color,
-      fontSize: fontSize,
-    );
 
 /// `hh:mm:ss`, for a row with no width for the milliseconds.
 String _clock(DateTime time) =>

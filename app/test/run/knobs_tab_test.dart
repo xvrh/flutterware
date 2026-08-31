@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/plugins/native/run_results.dart';
 import 'package:flutterware_app/src/run/handle.dart';
 import 'package:flutterware_app/src/run/knobs_tab.dart';
+import 'package:flutterware_app/src/ui/picker.dart';
 
 /// The editor that makes the 262ms reachable: the launch form lives on the New
 /// run page, and the only other way back to it is Stop — which is a rebuild.
@@ -69,7 +70,7 @@ void main() {
     expect(find.byType(TextFormField), findsOneWidget);
     // An enum is a dropdown of its own constants rather than a field somebody
     // can misspell into.
-    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    expect(find.byType(FwPicker<String>), findsOneWidget);
   });
 
   testWidgets('will not restart until something has actually changed', (
@@ -207,7 +208,7 @@ void main() {
     expect(find.textContaining('main requires this'), findsOneWidget);
     expect(find.byType(TextFormField), findsNothing);
     expect(find.byType(Switch), findsNothing);
-    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+    expect(find.byType(FwPicker<String>), findsNothing);
   });
 
   testWidgets('a required knob says so, loudest while nothing answers it', (
@@ -284,8 +285,9 @@ void main() {
     tester,
   ) async {
     // A script source can compute a value for an enum knob that is not one of
-    // its constants. A dropdown asked to show a value it has no item for
-    // asserts rather than degrading, which would take the whole tab down.
+    // its constants. A Material dropdown asked to show a value it has no item
+    // for asserts, which would take the whole tab down; the house picker
+    // degrades to an unfilled trigger.
     await pump(
       tester,
       offered: [
@@ -298,7 +300,8 @@ void main() {
       ],
     );
 
-    expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
+    expect(find.byType(FwPicker<String>), findsOneWidget);
+    expect(find.text('Choose…'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

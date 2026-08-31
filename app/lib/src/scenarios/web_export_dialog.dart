@@ -330,11 +330,7 @@ class _Field extends StatelessWidget {
           controller: controller,
           enabled: enabled,
           style: context.type.bodySmall.copyWith(fontFamily: 'monospace'),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: hint,
-            border: const OutlineInputBorder(),
-          ),
+          decoration: InputDecoration(isDense: true, hintText: hint),
         ),
       ),
     ],
