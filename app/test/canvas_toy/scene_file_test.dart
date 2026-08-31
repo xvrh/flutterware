@@ -84,6 +84,146 @@ class S {
     }
   });
 
+  group('parameters — typed holes with the mockup as the default', () {
+    const banner =
+        '''
+$sceneFileMarker
+class BannerScene {
+  BannerScene({
+    this.title = 'Fresh coffee, faster',
+    this.accent = const Color(0xFFE8632B),
+    this.slide = 24,
+  });
+  final String title;
+  final Color accent;
+  final double slide;
+
+  late final headline = Text(title, fontSize: 54);
+  late final cta = Frame(x: slide, fill: accent, children: [label]);
+  late final label = Text('Get the app');
+  late final root = Frame(width: 1024, height: 500, children: [headline, cta]);
+}
+''';
+
+    test('a parameterized scene round-trips', () {
+      var parsed = parseSceneFile(banner);
+      expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
+      var doc = parsed.doc!;
+      expect(doc.params.map((p) => p.name), ['title', 'accent', 'slide']);
+      // The default is the mockup: properties hold resolved values.
+      var headline = doc.root.children[0] as TextNode;
+      expect(headline.text, 'Fresh coffee, faster');
+      expect(headline.paramRefs['text'], 'title');
+      var cta = doc.root.children[1] as FrameNode;
+      expect(cta.x, 24);
+      expect(cta.fill, const Color(0xFFE8632B));
+
+      var emitted = emitSceneFile(doc, className: 'BannerScene');
+      expect(emitted, contains("this.title = 'Fresh coffee, faster'"));
+      expect(emitted, contains('final String title;'));
+      expect(emitted, contains('const Color(0xFFE8632B)'));
+      var again = emitSceneFile(
+        parseSceneFile(emitted).doc!,
+        className: 'BannerScene',
+      );
+      expect(again, emitted);
+      // The references survived the round trip as identifiers.
+      expect(emitted, contains('Text(title'));
+      expect(emitted, contains('x: slide'));
+      expect(emitted, contains('fill: accent'));
+    });
+
+    test('two argument sets from one file', () {
+      var german = parseSceneFile(banner).doc!
+        ..applyArgs({'title': 'Frischer Kaffee, schneller', 'slide': 40});
+      var french = parseSceneFile(banner).doc!
+        ..applyArgs({'title': 'Du café frais, plus vite'});
+      expect(
+        (german.root.children[0] as TextNode).text,
+        'Frischer Kaffee, schneller',
+      );
+      expect((german.root.children[1] as FrameNode).x, 40);
+      expect(
+        (french.root.children[0] as TextNode).text,
+        'Du café frais, plus vite',
+      );
+      expect((french.root.children[1] as FrameNode).x, 24);
+    });
+
+    test(
+      'an edited value bakes in; the stale reference is dropped, not the edit',
+      () {
+        var doc = parseSceneFile(banner).doc!;
+        (doc.root.children[0] as TextNode).text = 'Hand-tuned headline';
+        var emitted = emitSceneFile(doc, className: 'BannerScene');
+        expect(emitted, contains("Text('Hand-tuned headline'"));
+        expect(emitted, isNot(contains('Text(title')));
+        // And the untouched references survive.
+        expect(emitted, contains('x: slide'));
+      },
+    );
+
+    void refusesParam(String description, String source, String construct) {
+      test(description, () {
+        var parsed = parseSceneFile('$sceneFileMarker\n$source');
+        expect(parsed.ok, isFalse, reason: 'accepted');
+        expect(
+          parsed.refusals.map((r) => r.construct),
+          contains(construct),
+          reason: parsed.refusals.join('\n'),
+        );
+      });
+    }
+
+    refusesParam('a String parameter where a color is expected', '''
+class S {
+  S({this.title = 'x'});
+  final String title;
+  late final root = Frame(fill: title);
+}''', 'parameter type');
+    refusesParam('a parameter field with the wrong type', '''
+class S {
+  S({this.title = 'x'});
+  final double title;
+  late final root = Frame();
+}''', 'parameter type');
+    refusesParam('a parameter without its field', '''
+class S {
+  S({this.title = 'x'});
+  late final root = Frame();
+}''', 'missing field');
+    refusesParam('a non-literal default', '''
+class S {
+  S({this.title = compute()});
+  final String title;
+  late final root = Frame();
+}''', 'parameter default');
+    refusesParam('a parameter without a default', '''
+class S {
+  S({required this.title});
+  final String title;
+  late final root = Frame();
+}''', 'no default');
+    refusesParam('a parameter name colliding with a node name', '''
+class S {
+  S({this.glow = 1});
+  final double glow;
+  late final glow = Shape();
+  late final root = Frame(children: [glow]);
+}''', 'duplicate name');
+    refusesParam('a plain (non-this) constructor parameter', '''
+class S {
+  S({String title = 'x'});
+  late final root = Frame();
+}''', 'parameter');
+    refusesParam('a parameter placed as a child', '''
+class S {
+  S({this.title = 'x'});
+  final String title;
+  late final root = Frame(children: [title]);
+}''', 'parameter as child');
+  });
+
   group('hostile hand edits are refused with a name and a line', () {
     void refuses(
       String description,
@@ -359,5 +499,44 @@ SceneDocument _randomDoc(Random r) {
   for (var i = 0; i < 1 + r.nextInt(6); i++) {
     root.children.add(_randomNode(r, 0));
   }
-  return SceneDocument(root);
+  var doc = SceneDocument(root);
+  // Parameters: typed holes bound onto some of the nodes just built. A
+  // bound property holds the default (a live reference only survives while
+  // value == default — the divergence rule is itself under test).
+  var nodes = [for (var (n, _) in doc.walk()) n];
+  for (var i = r.nextInt(4); i > 0; i--) {
+    var name = 'p${_counter++}';
+    switch (r.nextInt(3)) {
+      case 0:
+        var decl = SceneParamDecl(
+          name,
+          SceneParamKind.string,
+          _randomString(r),
+        );
+        doc.params.add(decl);
+        var texts = nodes.whereType<TextNode>().toList();
+        if (texts.isNotEmpty) {
+          var t = texts[r.nextInt(texts.length)];
+          t.text = decl.defaultValue as String;
+          t.paramRefs['text'] = name;
+        }
+      case 1:
+        var decl = SceneParamDecl(
+          name,
+          SceneParamKind.number,
+          _randomDouble(r),
+        );
+        doc.params.add(decl);
+        var n = nodes[r.nextInt(nodes.length)];
+        n.x = decl.defaultValue as double;
+        n.paramRefs['x'] = name;
+      default:
+        var decl = SceneParamDecl(name, SceneParamKind.color, _randomColor(r));
+        doc.params.add(decl);
+        var n = nodes[r.nextInt(nodes.length)];
+        n.fill = decl.defaultValue as Color;
+        n.paramRefs['fill'] = name;
+    }
+  }
+  return doc;
 }

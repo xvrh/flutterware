@@ -21,6 +21,29 @@ const _reserved = {
 bool isValidNodeName(String name) =>
     _identifier.hasMatch(name) && !_reserved.contains(name);
 
+/// The typed hole: a constructor parameter whose default is the mockup.
+/// Declared in the file as `this.<name> = <literal>` plus its
+/// `final <Type> <name>;` field; referenced by node properties by bare
+/// identifier. Parameters share the class namespace with node fields.
+enum SceneParamKind { string, number, color }
+
+class SceneParamDecl {
+  SceneParamDecl(this.name, this.kind, this.defaultValue);
+
+  final String name;
+  final SceneParamKind kind;
+
+  /// String, double or Color — the mockup, read by every consumer that
+  /// passes no argument (the editor, the export matrix at the base point).
+  final Object defaultValue;
+
+  String get typeName => switch (kind) {
+    SceneParamKind.string => 'String',
+    SceneParamKind.number => 'double',
+    SceneParamKind.color => 'Color',
+  };
+}
+
 sealed class SceneNode {
   SceneNode(this.name);
 
@@ -44,6 +67,12 @@ sealed class SceneNode {
 
   /// Laid-out rect in artboard coordinates, swept after each frame.
   Rect? measured;
+
+  /// Which properties read a parameter: property key → parameter name.
+  /// The property still holds the resolved value (the default, until
+  /// [SceneDocument.applyArgs]); the ref is provenance, and it survives a
+  /// save only while the value still equals the parameter's default.
+  final paramRefs = <String, String>{};
 
   String get typeName;
 
@@ -105,7 +134,52 @@ class SceneDocument extends ChangeNotifier {
   SceneDocument(this.root);
 
   final FrameNode root;
+
+  /// The scene's declared parameters, in declaration order.
+  final params = <SceneParamDecl>[];
+
   SceneNode? selected;
+
+  /// Instantiate: set every parameter-bound property whose parameter is
+  /// named in [args]. This is what the export matrix does per language and
+  /// what a caller's arguments do at mount — the model-level half of
+  /// `BannerScene(title: …)`.
+  void applyArgs(Map<String, Object?> args) {
+    edit(() {
+      for (var (node, _) in walk()) {
+        for (var entry in node.paramRefs.entries) {
+          if (!args.containsKey(entry.value)) continue;
+          var v = args[entry.value];
+          switch (entry.key) {
+            case 'x':
+              node.x = (v as num).toDouble();
+            case 'y':
+              node.y = (v as num).toDouble();
+            case 'width':
+              node.width = (v as num?)?.toDouble();
+            case 'height':
+              node.height = (v as num?)?.toDouble();
+            case 'corner':
+              node.cornerRadius = (v as num).toDouble();
+            case 'opacity':
+              node.opacity = (v as num).toDouble();
+            case 'fill':
+              node.fill = v as Color?;
+            case 'text':
+              (node as TextNode).text = v as String;
+            case 'fontSize':
+              (node as TextNode).fontSize = (v as num).toDouble();
+            case 'color':
+              (node as TextNode).color = v as Color;
+            case 'gap':
+              (node as FrameNode).gap = (v as num).toDouble();
+            case 'padding':
+              (node as FrameNode).padding = (v as num).toDouble();
+          }
+        }
+      }
+    });
+  }
 
   /// Bumped when a post-frame sweep finds moved geometry, so overlays repaint
   /// without rebuilding the scene.

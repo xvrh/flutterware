@@ -741,7 +741,9 @@ should never persist.
   check; `fw scene check` closes it. The choice is now three-way — named
   constructors (flat, N×M declaration tax on the framework), plain bundle
   (no compile check), generic bundle (compile-checked, nested spelling) —
-  identical to the parser, decided by ergonomics.
+  identical to the parser, decided by ergonomics. **Decided by the owner,
+  2026-08-31: the generic bundle**, with named constructors as the
+  fallback if inference proves finicky in real files.
 
 ## Round-2 scoreboard
 

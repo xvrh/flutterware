@@ -293,6 +293,8 @@ live runtime control both come free, the app's control API is literally the
 editor's data plane, and the one-line wrapper is where motion state and
 reassemble live anyway. What (i) offers — wrapper-free mounting — is one
 line of ceremony saved at the cost of an entire draft subsystem.
+**Decided by the owner, 2026-08-31: (ii).** The scene class is a live
+model; `SceneView(scene)` is the widget.
 
 **Held throughout:** mockup-as-default; no magic strings (parameters are
 identifiers, entries are identifiers, nested scenes are constructor calls);

@@ -5,10 +5,15 @@
 // THE GRAMMAR, on a page. A scene file is:
 //   - a `//@flutterware:scene=…` marker in its first line
 //   - file-level comments and imports (before the class body; not parsed)
-//   - exactly one class declaration, whose members are all node fields:
-//     `late final <name> = <Node>(…);` — THE FIELD NAME IS THE NODE'S
-//     IDENTITY (unique by Dart's own rules, typed at every reference), and
-//     one field must be `root`, a Frame
+//   - exactly one class declaration, whose members are:
+//     - optionally ONE unnamed constructor whose parameters are all named
+//       `this.` formals with literal defaults — THE PARAMETERS, typed holes
+//       whose default is the mockup: `this.title = 'Fresh coffee'`,
+//       `this.accent = const Color(0xFFE8632B)` — each paired with its
+//       plain `final <Type> <name>;` field (String, double or Color)
+//     - node fields: `late final <name> = <Node>(…);` — THE FIELD NAME IS
+//       THE NODE'S IDENTITY (unique by Dart's own rules, shared namespace
+//       with the parameters), and one field must be `root`, a Frame
 //   - a node is a constructor invocation: Frame, Text, Shape or Ext, with
 //     named arguments from that node's fixed vocabulary; Text takes its
 //     content as one positional string, Ext takes its registration entry as
@@ -18,7 +23,9 @@
 //     `late` is what makes sibling references legal Dart)
 //   - values are: int/double literals (optionally negated), single string
 //     literals with no interpolation, bool literals, `Color(0x…)`,
-//     allowlisted enum references, and `args: {'k': literal}` maps
+//     allowlisted enum references, `args: {'k': literal}` maps, and — where
+//     the types agree — A PARAMETER'S NAME, which binds the property to the
+//     typed hole
 //   - nothing else: no comments inside the class body, no loops, no
 //     conditionals, no method calls, no arithmetic, no identifiers off the
 //     allowlist, no inline nodes in children, no orphan fields (an
@@ -29,8 +36,8 @@
 //   - parse(emit(model)) succeeds and re-emits identically (model identity)
 //   - emit ∘ parse is the identity on canonical files
 //   - accepted non-canonical spellings (`final` for `late final`, forward
-//     references, `1024.0`, lowercase hex, a quoted Ext entry) converge to
-//     canonical in one emit
+//     references, `1024.0`, lowercase hex, a quoted Ext entry, a
+//     const-less default) converge to canonical in one emit
 //   - every hostile construct is refused with an offset and a name, and
 //     nothing ever throws.
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -41,7 +48,7 @@ import 'package:flutter/material.dart';
 
 import 'model.dart';
 
-const sceneFileMarker = '//@flutterware:scene=0.2';
+const sceneFileMarker = '//@flutterware:scene=0.3';
 
 /// One refused construct: where it is and what to do instead.
 class SceneRefusal {
@@ -94,12 +101,28 @@ $sceneFileMarker
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
-// once in a children list. Anything outside the grammar is refused with a
-// line number rather than silently dropped.
+// once in a children list; a parameter is a `this.` formal whose default is
+// the mockup. Anything outside the grammar is refused with a line number
+// rather than silently dropped.
 
 class $className {
 ''');
   var seen = <String>{};
+  var params = <String, SceneParamDecl>{};
+  if (doc.params.isNotEmpty) {
+    out.write('  $className({');
+    for (var p in doc.params) {
+      if (!isValidNodeName(p.name) || !seen.add(p.name)) {
+        throw ArgumentError('"${p.name}" is not a usable parameter name');
+      }
+      params[p.name] = p;
+      out.write('this.${p.name} = ${_paramDefault(p)}, ');
+    }
+    out.writeln('});');
+    for (var p in doc.params) {
+      out.writeln('  final ${p.typeName} ${p.name};');
+    }
+  }
   void field(SceneNode n) {
     for (var c in n.children) {
       field(c);
@@ -111,7 +134,7 @@ class $className {
       );
     }
     out.write('  late final ${n.name} = ');
-    _emitNode(out, n);
+    _emitNode(out, n, params);
     out.writeln(';');
   }
 
@@ -120,16 +143,43 @@ class $className {
   return _formatter.format(out.toString());
 }
 
-void _emitNode(StringBuffer out, SceneNode n) {
+String _paramDefault(SceneParamDecl p) => switch (p.kind) {
+  SceneParamKind.string => _str(p.defaultValue as String),
+  SceneParamKind.number => _num(p.defaultValue as double),
+  SceneParamKind.color => 'const ${_color(p.defaultValue as Color)}',
+};
+
+void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
   var props = <String>[];
+
+  /// A parameter reference survives a save only while the property still
+  /// holds the parameter's default — an edited value bakes in and the
+  /// stale reference is dropped, never the edit.
+  String? ref(String key, Object? current) {
+    var name = n.paramRefs[key];
+    if (name == null) return null;
+    var p = ps[name];
+    if (p == null || p.defaultValue != current) return null;
+    return name;
+  }
+
+  void add(String key, Object? current, String Function() spell) {
+    props.add('$key: ${ref(key, current) ?? spell()}');
+  }
+
   void common() {
-    if (n.x != 0) props.add('x: ${_num(n.x)}');
-    if (n.y != 0) props.add('y: ${_num(n.y)}');
-    if (n.width case var w?) props.add('width: ${_num(w)}');
-    if (n.height case var h?) props.add('height: ${_num(h)}');
-    if (n.fill case var f?) props.add('fill: ${_color(f)}');
-    if (n.cornerRadius != 0) props.add('corner: ${_num(n.cornerRadius)}');
-    if (n.opacity != 1) props.add('opacity: ${_num(n.opacity)}');
+    if (n.x != 0 || n.paramRefs.containsKey('x')) {
+      add('x', n.x, () => _num(n.x));
+    }
+    if (n.y != 0 || n.paramRefs.containsKey('y')) {
+      add('y', n.y, () => _num(n.y));
+    }
+    if (n.width case var w?) add('width', w, () => _num(w));
+    if (n.height case var h?) add('height', h, () => _num(h));
+    if (n.fill case var f?) add('fill', f, () => _color(f));
+    if (n.cornerRadius != 0)
+      add('corner', n.cornerRadius, () => _num(n.cornerRadius));
+    if (n.opacity != 1) add('opacity', n.opacity, () => _num(n.opacity));
   }
 
   switch (n) {
@@ -138,8 +188,8 @@ void _emitNode(StringBuffer out, SceneNode n) {
       if (f.layout != NodeLayout.absolute) {
         props.add('layout: NodeLayout.${f.layout.name}');
       }
-      if (f.gap != 8) props.add('gap: ${_num(f.gap)}');
-      if (f.padding != 0) props.add('padding: ${_num(f.padding)}');
+      if (f.gap != 8) add('gap', f.gap, () => _num(f.gap));
+      if (f.padding != 0) add('padding', f.padding, () => _num(f.padding));
       if (f.mainAlign != MainAxisAlignment.start) {
         props.add('mainAlign: MainAxisAlignment.${f.mainAlign.name}');
       }
@@ -151,14 +201,14 @@ void _emitNode(StringBuffer out, SceneNode n) {
       }
       out.write('Frame(${props.join(', ')})');
     case TextNode t:
-      props.add(_str(t.text));
+      props.add(ref('text', t.text) ?? _str(t.text));
       common();
-      if (t.fontSize != 16) props.add('fontSize: ${_num(t.fontSize)}');
+      if (t.fontSize != 16) add('fontSize', t.fontSize, () => _num(t.fontSize));
       if (t.weight != FontWeight.w400) {
         props.add('weight: FontWeight.w${t.weight.value}');
       }
       if (t.color != const Color(0xFF1A1A1A)) {
-        props.add('color: ${_color(t.color)}');
+        add('color', t.color, () => _color(t.color));
       }
       out.write('Text(${props.join(', ')})');
     case ShapeNode s:
@@ -238,6 +288,9 @@ class _Parser {
   String? className;
   late final _lines = source.split('\n');
 
+  /// Declared parameters, filled before any field is parsed.
+  final _params = <String, SceneParamDecl>{};
+
   void refuse(int offset, String construct, String message) {
     var line = 1;
     var seen = 0;
@@ -290,14 +343,34 @@ class _Parser {
     className = found.namePart.typeName.lexeme;
     _refuseComments(found);
 
-    // Phase 1: every member is a node field. The field name is the node's
-    // identity; children lists are collected as references and linked after
-    // every declaration is known, which is what makes forward references
-    // (ordinary under `late final`) free.
-    var nodes = <String, SceneNode>{};
+    // Phase 0: the constructor, if any, declares the parameters — before
+    // any field is read, so a field initializer may reference them
+    // regardless of member order.
     var declared = <String, int>{};
-    var childRefs = <String, List<(String, int)>>{};
+    ConstructorDeclaration? ctor;
     for (var member in found.body.members) {
+      if (member is ConstructorDeclaration) {
+        if (ctor != null) {
+          refuse(
+            member.offset,
+            'second constructor',
+            'a scene class has at most one constructor',
+          );
+          continue;
+        }
+        ctor = member;
+        _readParams(member, declared);
+      }
+    }
+
+    // Phase 1: every other member is a node field or a parameter's field.
+    // The field name is the node's identity; children lists are collected
+    // as references and linked after every declaration is known.
+    var nodes = <String, SceneNode>{};
+    var childRefs = <String, List<(String, int)>>{};
+    var paramFields = <String>{};
+    for (var member in found.body.members) {
+      if (member is ConstructorDeclaration) continue;
       if (member is! FieldDeclaration || member.fields.variables.length != 1) {
         refuse(
           member.offset,
@@ -311,25 +384,57 @@ class _Parser {
       var name = variable.name.lexeme;
       var initializer = variable.initializer;
       if (initializer == null) {
-        refuse(
-          member.offset,
-          'no initializer',
-          '`$name` must be initialized with a node',
-        );
+        // A parameter's `final <Type> <name>;` field.
+        var decl = _params[name];
+        if (decl == null) {
+          refuse(
+            member.offset,
+            'no initializer',
+            '`$name` must be initialized with a node, or declared as a '
+                'constructor parameter',
+          );
+          continue;
+        }
+        if (!paramFields.add(name)) {
+          refuse(
+            variable.offset,
+            'duplicate name',
+            '"$name" is declared twice',
+          );
+          continue;
+        }
+        var type = member.fields.type;
+        if (type == null || '$type' != decl.typeName) {
+          refuse(
+            member.offset,
+            'parameter type',
+            'the parameter field is spelled `final ${decl.typeName} $name;`',
+          );
+        }
         continue;
       }
       if (declared.containsKey(name)) {
         refuse(
           variable.offset,
           'duplicate name',
-          '"$name" is already declared — a field name is the node\'s '
-              'identity and must be unique',
+          '"$name" is already declared — parameters and nodes share one '
+              'namespace, and a name is an identity',
         );
         continue;
       }
       declared[name] = variable.offset;
       var node = _node(name, initializer, childRefs);
       if (node != null) nodes[name] = node;
+    }
+    for (var entry in _params.entries) {
+      if (!paramFields.contains(entry.key)) {
+        refuse(
+          declared[entry.key] ?? 0,
+          'missing field',
+          'parameter "${entry.key}" needs its '
+              '`final ${entry.value.typeName} ${entry.key};` field',
+        );
+      }
     }
 
     var root = nodes['root'];
@@ -409,7 +514,83 @@ class _Parser {
         );
       }
     }
-    return SceneDocument(root);
+    var doc = SceneDocument(root);
+    doc.params.addAll(_params.values);
+    return doc;
+  }
+
+  /// The constructor's formals become the parameter table: each is a named
+  /// `this.` formal with a literal default — the default IS the mockup.
+  void _readParams(ConstructorDeclaration ctor, Map<String, int> declared) {
+    if (ctor.name != null) {
+      refuse(
+        ctor.offset,
+        'named constructor',
+        'the scene constructor is unnamed',
+      );
+    }
+    for (var p in ctor.parameters.parameters) {
+      var name = p.name?.lexeme;
+      if (p is! FieldFormalParameter || !p.isNamed || name == null) {
+        refuse(
+          p.offset,
+          'parameter',
+          'a scene parameter is a named `this.` formal with a default — '
+              '`this.title = \'…\'`',
+        );
+        continue;
+      }
+      var dflt = p.defaultClause?.value;
+      if (dflt == null) {
+        refuse(
+          p.offset,
+          'no default',
+          'a parameter carries its mockup as the default value',
+        );
+        continue;
+      }
+      if (_params.containsKey(name)) {
+        refuse(p.offset, 'duplicate name', '"$name" is declared twice');
+        continue;
+      }
+      var parsed = _paramDefaultOf(dflt);
+      if (parsed == null) {
+        refuse(
+          dflt.offset,
+          'parameter default',
+          'a default is a string, number or Color(0x…) literal',
+        );
+        continue;
+      }
+      _params[name] = SceneParamDecl(name, parsed.$1, parsed.$2);
+      declared[name] = p.offset;
+    }
+  }
+
+  (SceneParamKind, Object)? _paramDefaultOf(Expression e) {
+    var inner = e;
+    var negate = false;
+    if (inner is PrefixExpression && inner.operator.lexeme == '-') {
+      negate = true;
+      inner = inner.operand;
+    }
+    switch (inner) {
+      case SimpleStringLiteral(:var value):
+        return (SceneParamKind.string, value);
+      case IntegerLiteral(:var value?):
+        return (SceneParamKind.number, (negate ? -value : value).toDouble());
+      case DoubleLiteral(:var value):
+        return (SceneParamKind.number, negate ? -value : value);
+      default:
+        if (_invocation(inner) case ('Color', var args)
+            when args.arguments.length == 1) {
+          var v = args.arguments.single.argumentExpression;
+          if (v is IntegerLiteral && v.value != null) {
+            return (SceneParamKind.color, Color(v.value!));
+          }
+        }
+        return null;
+    }
   }
 
   /// No comment survives an emit, so none may enter: a comment inside the
@@ -475,8 +656,16 @@ class _Parser {
             node.layout = NodeLayout.values.byName(v);
           }
         });
-        _take(named, 'gap', (e) => node.gap = _double(e) ?? node.gap);
-        _take(named, 'padding', (e) => node.padding = _double(e) ?? 0);
+        _take(
+          named,
+          'gap',
+          (e) => node.gap = _doubleV(e, node, 'gap') ?? node.gap,
+        );
+        _take(
+          named,
+          'padding',
+          (e) => node.padding = _doubleV(e, node, 'padding') ?? 0,
+        );
         _take(named, 'mainAlign', (e) {
           var v = _enum(
             e,
@@ -501,6 +690,12 @@ class _Parser {
           var refs = childRefs.putIfAbsent(name, () => []);
           for (var element in e.elements) {
             switch (element) {
+              case SimpleIdentifier id when _params.containsKey(id.name):
+                refuse(
+                  id.offset,
+                  'parameter as child',
+                  '"${id.name}" is a parameter — children list nodes',
+                );
               case SimpleIdentifier id:
                 refs.add((id.name, id.offset));
               case Expression x when _invocation(x) != null:
@@ -531,12 +726,13 @@ class _Parser {
         _checkPositionals(positional, 0);
         return node;
       case 'Text':
-        var node = TextNode(name, _positionalString(positional, 0, args) ?? '');
+        var node = TextNode(name, '');
+        node.text = _contentOf(positional, args, node) ?? '';
         _applyCommon(node, named);
         _take(
           named,
           'fontSize',
-          (e) => node.fontSize = _double(e) ?? node.fontSize,
+          (e) => node.fontSize = _doubleV(e, node, 'fontSize') ?? node.fontSize,
         );
         _take(named, 'weight', (e) {
           var v = _enum(e, 'FontWeight', [
@@ -547,7 +743,11 @@ class _Parser {
                 FontWeight.values[int.parse(v.substring(1)) ~/ 100 - 1];
           }
         });
-        _take(named, 'color', (e) => node.color = _colorOf(e) ?? node.color);
+        _take(
+          named,
+          'color',
+          (e) => node.color = _colorV(e, node, 'color') ?? node.color,
+        );
         _refuseRest('Text', named);
         _checkPositionals(positional, 1);
         return node;
@@ -604,13 +804,17 @@ class _Parser {
   }
 
   void _applyCommon(SceneNode n, Map<String, Expression> named) {
-    _take(named, 'x', (e) => n.x = _double(e) ?? 0);
-    _take(named, 'y', (e) => n.y = _double(e) ?? 0);
-    _take(named, 'width', (e) => n.width = _double(e));
-    _take(named, 'height', (e) => n.height = _double(e));
-    _take(named, 'fill', (e) => n.fill = _colorOf(e));
-    _take(named, 'corner', (e) => n.cornerRadius = _double(e) ?? 0);
-    _take(named, 'opacity', (e) => n.opacity = _double(e) ?? 1);
+    _take(named, 'x', (e) => n.x = _doubleV(e, n, 'x') ?? 0);
+    _take(named, 'y', (e) => n.y = _doubleV(e, n, 'y') ?? 0);
+    _take(named, 'width', (e) => n.width = _doubleV(e, n, 'width'));
+    _take(named, 'height', (e) => n.height = _doubleV(e, n, 'height'));
+    _take(named, 'fill', (e) => n.fill = _colorV(e, n, 'fill'));
+    _take(
+      named,
+      'corner',
+      (e) => n.cornerRadius = _doubleV(e, n, 'corner') ?? 0,
+    );
+    _take(named, 'opacity', (e) => n.opacity = _doubleV(e, n, 'opacity') ?? 1);
   }
 
   void _take(
@@ -632,12 +836,12 @@ class _Parser {
     }
   }
 
-  String? _positionalString(
+  String? _contentOf(
     List<Expression> positional,
-    int i,
     ArgumentList args,
+    TextNode node,
   ) {
-    if (i >= positional.length) {
+    if (positional.isEmpty) {
       refuse(
         args.offset,
         'missing argument',
@@ -645,7 +849,7 @@ class _Parser {
       );
       return null;
     }
-    return _string(positional[i]);
+    return _stringV(positional[0], node, 'text');
   }
 
   /// An Ext's entry is spelled as an identifier — `Ext(DrinkBadge)` — the
@@ -661,7 +865,7 @@ class _Parser {
       return null;
     }
     var e = positional[0];
-    if (e is SimpleIdentifier) return e.name;
+    if (e is SimpleIdentifier && !_params.containsKey(e.name)) return e.name;
     if (e is SimpleStringLiteral && isValidNodeName(e.value)) return e.value;
     refuse(
       e.offset,
@@ -671,7 +875,62 @@ class _Parser {
     return null;
   }
 
-  // -- value parsers, each refusing with the construct it actually found --
+  // -- value parsers, each refusing with the construct it actually found.
+  // -- The V variants additionally accept a declared parameter's name,
+  // -- binding the property to the typed hole and yielding its default.
+
+  /// A parameter reference at a value position, or null when [e] is not
+  /// one (the plain parser then runs). A declared parameter of the wrong
+  /// kind is refused here, with both types named.
+  Object? _paramRef(
+    Expression e,
+    SceneParamKind kind,
+    SceneNode n,
+    String prop,
+  ) {
+    if (e is! SimpleIdentifier) return null;
+    var decl = _params[e.name];
+    if (decl == null) return null;
+    if (decl.kind != kind) {
+      var wanted = switch (kind) {
+        SceneParamKind.string => 'String',
+        SceneParamKind.number => 'double',
+        SceneParamKind.color => 'Color',
+      };
+      refuse(
+        e.offset,
+        'parameter type',
+        '"${e.name}" is a ${decl.typeName} parameter — this property takes '
+            'a $wanted',
+      );
+      return _refused;
+    }
+    n.paramRefs[prop] = e.name;
+    return decl.defaultValue;
+  }
+
+  static final _refused = Object();
+
+  double? _doubleV(Expression e, SceneNode n, String prop) {
+    var v = _paramRef(e, SceneParamKind.number, n, prop);
+    if (identical(v, _refused)) return null;
+    if (v != null) return v as double;
+    return _double(e);
+  }
+
+  String? _stringV(Expression e, SceneNode n, String prop) {
+    var v = _paramRef(e, SceneParamKind.string, n, prop);
+    if (identical(v, _refused)) return null;
+    if (v != null) return v as String;
+    return _string(e);
+  }
+
+  Color? _colorV(Expression e, SceneNode n, String prop) {
+    var v = _paramRef(e, SceneParamKind.color, n, prop);
+    if (identical(v, _refused)) return null;
+    if (v != null) return v as Color;
+    return _colorOf(e);
+  }
 
   (String, ArgumentList)? _invocation(Expression e) => switch (e) {
     MethodInvocation(:var methodName, :var target, :var argumentList)
@@ -722,7 +981,7 @@ class _Parser {
   Color? _colorOf(Expression e) {
     if (_invocation(e) case ('Color', var args)
         when args.arguments.length == 1) {
-      var v = args.arguments.single;
+      var v = args.arguments.single.argumentExpression;
       if (v is IntegerLiteral && v.value != null) return Color(v.value!);
     }
     refuse(e.offset, _kind(e), 'expected a color, spelled Color(0xAARRGGBB)');
