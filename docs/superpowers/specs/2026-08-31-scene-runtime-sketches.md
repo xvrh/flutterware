@@ -1,4 +1,4 @@
-# Scene runtime — drive, notify, and the slot: sketches 8–10
+# Scene runtime — drive, notify, and the slot: sketches 8–11
 
 **Date:** 2026-08-31
 **Status:** round two of the parameter sketches, opened by three owner
@@ -192,6 +192,80 @@ OnboardingPage1(title: t.welcome, hero: Image.asset('assets/hero.png'))
   *not-seen-read* reporting will point.
 
 ---
+
+## Sketch 11 — should parameters be non-final? The three coherent designs
+
+The owner's closing question: is there an advantage to scene *parameters*
+(not node properties) being non-final, auto-notifying on change? Probed
+first, because there is a bite:
+
+```
+// String title;  late final headline = Text(title);
+s.title = 'Hello';
+param: Hello / node: Welcome        // ← stale: late final captured a value
+```
+
+**A plain mutable parameter is a lie.** The `late final` node initializer
+snapshots the value on first access; mutating the field afterwards updates
+nothing, and worse, the scene becomes *incoherent* — the parameter reports
+one value while the node it feeds shows another. So "just drop `final`" is
+not one of the options. The real options are three:
+
+**(A) Parameters stay final — configuration, not state.** Runtime control
+goes through node mutation (`scene.headline.text = …`), which sketch 9
+already made live.
+*Pro:* zero machinery; parameters keep the semantics every constructor in
+Flutter has.
+*Con:* incoherence by another road — after `headline.text = 'Hi'`,
+`scene.title` still answers the old value, so the declared surface and the
+rendered truth diverge. And for a **nested** scene it fails structurally:
+an instance's internals are sealed (the round's own law), so its
+parameters are the *only* legal write surface — final parameters make a
+sealed instance uncontrollable at runtime except by instance swap, which
+is exactly the motion-rebind hazard sketch 5 documented.
+
+**(B) Parameters mutable, with re-derivation.** A setter that rewrites the
+nodes that consumed the parameter. The dependency map is statically known
+(the parser sees every parameter identifier), but at *runtime* it must
+exist in compiled Dart — meaning tool-emitted derived setters in the scene
+file. *Con:* that is generated boilerplate inside the model file, a second
+statement of truth the grammar must police, and the one direction this
+design has refused at every previous door. Dead unless both other options
+fail.
+
+**(C) The field stays final; the value inside is live.** A parameter is a
+box:
+
+```
+final Param<String> title;          // final field, mutable value
+late final headline = Text(title);  // the node stores the box
+s.title.value = 'Hello';
+param: Hello / node: Hello / notified: 1
+```
+
+Staleness is impossible by construction — the node holds the box, not a
+snapshot — and the box is where auto-notify hooks, riding the same dirty
+pipeline. *Pros:* coherence (one door, parameter and node can never
+disagree); the nested-scene control story works (a sealed instance's
+public boxes *are* its runtime surface — Rive's view-model binding,
+arriving as plain Dart); binding without instance swap (a long-lived scene
+under a long-lived motion, values flowing through — the rebind hazard
+never fires); and the caller can hand over a *shared* box
+(`title: cart.headline`) for app-state binding with no framework. *Cons:*
+every param-feedable node property becomes value-or-box typed (content
+provenance turning from a display fact into a runtime type — real model
+weight); two-level spellings in cascades (`.title.value =`); and the
+constructor needs an initializer list (`: title = Param(title)`) so bare
+values stay ergonomic at call sites — one more grammar item.
+
+**The recommendation:** never (B). Ship **(A)** first — the export matrix
+and the onboarding mount construct-and-forget, so v1's deliverables never
+mutate a parameter post-construction — but design the node property slots
+as value-or-box from the start, because **(C) is where the owner's
+runtime-control requirement lands** the moment a nested sealed instance
+needs live control or a binding must survive without an instance swap. The
+box is additive: (A)'s files are valid (C) files with every box holding a
+literal.
 
 ## Round-2 scoreboard
 
