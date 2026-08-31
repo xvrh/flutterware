@@ -2,6 +2,7 @@ import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/material.dart';
 
 import '../../ui/tappable.dart';
+import '../rules.dart';
 import '../../ui/theme.dart';
 import 'channel_lines.dart';
 import 'shot_image.dart';
@@ -30,12 +31,16 @@ class FindingBody extends StatelessWidget {
     required this.mode,
     required this.onMode,
     this.whenNotRendered,
+    this.onRule,
   });
 
   final ComparedItem item;
   final ShotPair shots;
   final StageMode mode;
   final ValueChanged<StageMode> onMode;
+
+  /// See [ChannelLines.onRule] — hides what a delta row shows, from the row.
+  final ValueChanged<ComparisonRule>? onRule;
 
   /// What to draw instead of frames for an entry nothing rendered — a skipped
   /// preview has no pictures and never will, and that is not a failed decode.
@@ -82,7 +87,8 @@ class FindingBody extends StatelessWidget {
                 diff: item.pixels?.diff,
               ),
             ),
-            if (hasChannels) Expanded(flex: 2, child: ChannelLines(item)),
+            if (hasChannels)
+              Expanded(flex: 2, child: ChannelLines(item, onRule: onRule)),
           ],
         ),
       );
@@ -96,10 +102,10 @@ class FindingBody extends StatelessWidget {
           Divider(height: 1, color: colors.line),
           Expanded(
             child: hasChannels
-                ? ChannelLines(item)
+                ? ChannelLines(item, onRule: onRule)
                 : Center(
                     child: Text(
-                      'Nothing changed on any channel.',
+                      'No changes on any channel',
                       style: context.type.body.copyWith(color: colors.mut),
                     ),
                   ),
@@ -169,7 +175,7 @@ class _IdenticalFramesState extends State<_IdenticalFrames> {
                 child: Tappable(
                   onTap: () => setState(() => _open = false),
                   child: Text(
-                    'hide the frames',
+                    'Hide frames',
                     style: context.type.caption.copyWith(
                       color: colors.accentDark,
                     ),
@@ -209,14 +215,14 @@ class _IdenticalFramesState extends State<_IdenticalFrames> {
           const Gap(FwSpacing.lg),
           Expanded(
             child: Text(
-              'both frames are identical',
+              'Frames identical',
               style: context.type.caption.copyWith(color: colors.mut),
             ),
           ),
           Tappable(
             onTap: () => setState(() => _open = true),
             child: Text(
-              'compare anyway',
+              'Show frames',
               style: context.type.caption.copyWith(color: colors.accentDark),
             ),
           ),

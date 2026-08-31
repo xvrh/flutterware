@@ -11,15 +11,17 @@ import 'package:flutterware_app/src/comparison/ui/verdict.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 void main() {
-  /// A `TextInput.setClient` as the framework really reports it — the autofill
-  /// id is four levels down, which is what makes the untrimmed property path
-  /// unreadable.
+  /// An analytics payload with the interesting field four levels down, which
+  /// is what makes the untrimmed property path unreadable. Not `system`: a
+  /// step whose only deltas are system chatter is `same` now, so it can never
+  /// be in a findings list, and a fixture that could not arrive here would be
+  /// testing an input the widget will never see.
   ComparedItem eventStep(String id, {String hash = '1'}) => ComparedItem.of(
     id: id,
     baseEvents: [
       {
-        'channel': 'system',
-        'title': 'flutter/textinput TextInput.setClient',
+        'channel': 'analytics',
+        'title': 'form_autofill',
         'data': {
           'arguments': [
             1,
@@ -32,8 +34,8 @@ void main() {
     ],
     headEvents: [
       {
-        'channel': 'system',
-        'title': 'flutter/textinput TextInput.setClient',
+        'channel': 'analytics',
+        'title': 'form_autofill',
         'data': {
           'arguments': [
             1,
@@ -61,7 +63,7 @@ void main() {
       ComparisonVerdict(findings: [eventStep('a')], unit: 'step'),
     );
 
-    expect(find.text('nothing moved on pixels, tree or texts'), findsOne);
+    expect(find.text('no changes on pixels, tree or texts'), findsOne);
     expect(find.text('events · 1 step'), findsOne);
   });
 
@@ -99,10 +101,10 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('all 3 are the same change'), findsOne);
+    expect(find.textContaining('same change in all 3'), findsOne);
     // The values are what let a reader see it is a hash and decide it is
     // noise; the field alone cannot be judged.
-    expect(find.textContaining('EditableText-11 → EditableText-'), findsOne);
+    expect(find.textContaining('EditableText-11'), findsOne);
     // Trimmed to the half anybody could name: the plumbing in front of it is
     // a wire path, not a field.
     expect(find.textContaining('data.arguments'), findsNothing);
@@ -128,7 +130,7 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('2 of 3 are the same change'), findsOne);
+    expect(find.textContaining('same change in 2 of 3'), findsOne);
   });
 
   // The line answers *is this one thing or many*. A shape covering two
@@ -154,7 +156,7 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('are the same change'), findsNothing);
+    expect(find.textContaining('same change in'), findsNothing);
     // The counts still say how much there is; only the summary stands down.
     expect(find.text('events · 2 steps'), findsOne);
     expect(find.text('texts · 3 steps'), findsOne);
@@ -179,7 +181,7 @@ void main() {
       ComparisonVerdict(findings: [eventStep('a')], unit: 'step', newCount: 1),
     );
 
-    expect(find.text('1 new since the last comparison'), findsOne);
+    expect(find.text('1 new'), findsOne);
   });
 
   testWidgets('a half where no channel spoke draws nothing at all', (
@@ -246,11 +248,11 @@ void main() {
         );
 
     test('a one-constraint rule is what a chip builds', () {
-      var rule = ComparisonRule.on('subchannel', 'system');
+      var rule = ComparisonRule.on('subchannel', 'analytics');
 
       expect(rule.isSingle, isTrue);
-      expect(rule.label, 'system');
-      expect(rule.matches(delta('events', sub: 'system')), isTrue);
+      expect(rule.label, 'analytics');
+      expect(rule.matches(delta('events', sub: 'analytics')), isTrue);
       expect(rule.matches(delta('events', sub: 'db')), isFalse);
     });
 
@@ -274,16 +276,16 @@ void main() {
     });
 
     test('a finding is hidden only when every delta of it is', () {
-      var set = RuleSet([ComparisonRule.on('subchannel', 'system')]);
+      var set = RuleSet([ComparisonRule.on('subchannel', 'analytics')]);
       var noisy = eventStep('a');
       var mixed = ComparedItem.of(
         id: 'b',
         baseEvents: [
-          {'channel': 'system', 'title': 't', 'detail': '1'},
+          {'channel': 'analytics', 'title': 't', 'detail': '1'},
           {'channel': 'network', 'title': 'POST /x', 'detail': '200'},
         ],
         headEvents: [
-          {'channel': 'system', 'title': 't', 'detail': '2'},
+          {'channel': 'analytics', 'title': 't', 'detail': '2'},
           {'channel': 'network', 'title': 'POST /x', 'detail': '500'},
         ],
       );
@@ -291,6 +293,27 @@ void main() {
       expect(set.hidesAll(noisy), isTrue);
       expect(set.hidesAll(mixed), isFalse);
       expect(set.visible(mixed), hasLength(1));
+    });
+
+    // `system` never decides a state (see `EventChannel.significant`), so it
+    // does not keep a row alive either: hide the one delta that made this a
+    // finding and the row folds, chatter and all.
+    test('system chatter does not keep a hidden finding visible', () {
+      var set = RuleSet([ComparisonRule.on('subchannel', 'network')]);
+      var item = ComparedItem.of(
+        id: 'a',
+        baseEvents: [
+          {'channel': 'system', 'title': 'flutter/navigation', 'detail': '1'},
+          {'channel': 'network', 'title': 'POST /x', 'detail': '200'},
+        ],
+        headEvents: [
+          {'channel': 'system', 'title': 'flutter/navigation', 'detail': '2'},
+          {'channel': 'network', 'title': 'POST /x', 'detail': '500'},
+        ],
+      );
+
+      expect(item.state, ComparedState.changed);
+      expect(set.hidesAll(item), isTrue);
     });
 
     // `added`, `removed` and `broke` say something no channel does, and a rule
@@ -305,7 +328,7 @@ void main() {
       );
     });
 
-    testWidgets('an excluded chip keeps the count it is hiding', (
+    testWidgets('an excluded facet keeps the count it is hiding', (
       tester,
     ) async {
       await pump(
@@ -313,14 +336,67 @@ void main() {
         ComparisonVerdict(
           findings: [eventStep('a'), eventStep('b')],
           unit: 'step',
-          rules: [ComparisonRule.on('subchannel', 'system')],
+          rules: [ComparisonRule.on('subchannel', 'analytics')],
           onToggle: (_) {},
         ),
       );
 
-      // Not `0 steps`: a chip reading zero is one nobody would turn back on.
-      expect(find.text('system · 2 steps'), findsOne);
       expect(find.text('2 steps hidden by 1 rule'), findsOne);
+
+      // The subchannel tree lives in the Filter popover now, and an excluded
+      // row keeps its count: a row reading zero is one nobody would turn
+      // back on. `events` and `analytics` both cover the same two steps.
+      await tester.tap(find.text('Filter · 1'));
+      await tester.pump();
+      // Twice: once in the HIDING ledger, once as the tree row.
+      expect(find.text('analytics'), findsNWidgets(2));
+      expect(find.text('2 steps'), findsNWidgets(2));
+    });
+
+    // A router's `pageKey` rides every step. Counting it made the chip claim
+    // more steps than the list showed, and hiding the one real delta left
+    // the strip insisting nothing was hidden.
+    testWidgets('system rides along without inflating the events chip', (
+      tester,
+    ) async {
+      var withRider = ComparedItem.of(
+        id: 'a',
+        baseEvents: [
+          {'channel': 'system', 'title': 'flutter/navigation', 'detail': '1'},
+          {'channel': 'network', 'title': 'POST /x', 'detail': '200'},
+        ],
+        headEvents: [
+          {'channel': 'system', 'title': 'flutter/navigation', 'detail': '2'},
+          {'channel': 'network', 'title': 'POST /x', 'detail': '500'},
+        ],
+      );
+      await pump(
+        tester,
+        ComparisonVerdict(
+          findings: [withRider],
+          unit: 'step',
+          onToggle: (_) {},
+        ),
+      );
+
+      expect(find.text('events · 1 step'), findsOne);
+      // The door: the subchannel row in the popover keeps the chatter's
+      // count, so a reader chasing a focus bug still finds it.
+      await tester.tap(find.text('Filter'));
+      await tester.pump();
+      expect(find.text('system'), findsOne);
+
+      // Hiding the signal hides the step — the chatter cannot hold it open.
+      await pump(
+        tester,
+        ComparisonVerdict(
+          findings: [withRider],
+          unit: 'step',
+          rules: [ComparisonRule.on('subchannel', 'network')],
+          onToggle: (_) {},
+        ),
+      );
+      expect(find.text('1 step hidden by 1 rule'), findsOne);
     });
 
     testWidgets('tapping a chip asks for the rule it stands for', (
@@ -335,10 +411,12 @@ void main() {
           onToggle: (rule) => asked = rule,
         ),
       );
-      await tester.tap(find.text('system · 1 step'));
+      await tester.tap(find.text('Filter'));
+      await tester.pump();
+      await tester.tap(find.text('analytics'));
 
       expect(asked?.constraints.single.facet, 'subchannel');
-      expect(asked?.constraints.single.value, 'system');
+      expect(asked?.constraints.single.value, 'analytics');
     });
   });
 }

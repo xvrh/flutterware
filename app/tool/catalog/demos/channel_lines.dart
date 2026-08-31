@@ -9,8 +9,9 @@ import 'app_theme.dart';
 /// field moved.
 ///
 /// The three prose channels in one column, so the event lines can be read
-/// against the tree lines they are meant to sit beside: the same three
-/// columns, the same idiom, `network POST /login  detail  200 → 500`.
+/// against the tree lines they are meant to sit beside: the same idiom on
+/// every row — subject, field, then the old value on the removed tint and
+/// the new one on the added tint, `network  POST /login  detail  200 → 500`.
 @Preview(name: 'Channel lines', group: 'Comparison', wrapper: wrapInAppTheme)
 Widget channelLines() => ChannelLines(_item);
 

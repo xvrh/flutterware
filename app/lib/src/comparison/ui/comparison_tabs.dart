@@ -664,7 +664,7 @@ class _HalfView extends StatelessWidget {
         return const SizedBox.shrink();
       case HalfStage.refused:
         return _Refusal(
-          half.refusal ?? 'It cannot be compared.',
+          half.refusal ?? 'Comparison refused',
           onRetry: _compare,
         );
       case HalfStage.preparing:
@@ -711,7 +711,7 @@ class _HalfView extends StatelessWidget {
             Expanded(
               child: _hasRows
                   ? _rows(context)
-                  : const _Working('Nothing on either side to compare.'),
+                  : const _Working('Nothing to compare on either side'),
             ),
           ],
         );
@@ -810,7 +810,7 @@ class _ArmedView extends StatelessWidget {
     var sha = environment.baseSha;
     var sha7 = sha.length > 7 ? sha.substring(0, 7) : sha;
     var cost = environment.baseCheckoutReady
-        ? 'base checkout ready · only what changed is rendered'
+        ? 'base checkout ready · unchanged entries are skipped'
         : 'the first run checks out $sha7 and resolves its dependencies, '
               'which can take a minute';
 
@@ -836,7 +836,7 @@ class _ArmedView extends StatelessWidget {
           ),
           const Gap(FwSpacing.lg),
           Text(
-            'never compared on this worktree',
+            'No comparison yet on this worktree',
             style: context.type.micro.copyWith(color: colors.mut2),
           ),
         ],
@@ -899,7 +899,7 @@ class _RunStripState extends State<_RunStrip> {
         children: [
           Expanded(
             child: Text(
-              half.progress ?? 'comparing…',
+              half.progress ?? 'Comparing…',
               style: context.type.caption.copyWith(color: colors.mut),
               overflow: TextOverflow.ellipsis,
             ),
@@ -1001,7 +1001,7 @@ class _ReceiptStrip extends StatelessWidget {
             ),
           if (counts.isEmpty)
             Text(
-              'nothing changed',
+              'No changes',
               style: context.type.caption.copyWith(color: colors.mut),
             )
           else if (quiet > 0)
@@ -1018,7 +1018,7 @@ class _ReceiptStrip extends StatelessWidget {
                   'The worktree or its base has moved since this run — the '
                   'rows may no longer describe the code on disk.',
               child: Text(
-                '· moved since',
+                '· stale',
                 style: context.type.micro.copyWith(color: colors.amber),
               ),
             ),

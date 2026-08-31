@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../ui/tappable.dart';
 import '../../ui/theme.dart';
+import '../rules.dart';
 import 'finding_body.dart';
 import 'shot_image.dart';
 import 'stage.dart';
@@ -26,6 +27,7 @@ class StepPage extends StatelessWidget {
     required this.mode,
     required this.onMode,
     required this.onBack,
+    this.onRule,
   });
 
   final ComparedItem item;
@@ -33,6 +35,9 @@ class StepPage extends StatelessWidget {
   final StageMode mode;
   final ValueChanged<StageMode> onMode;
   final VoidCallback onBack;
+
+  /// See [ChannelLines.onRule].
+  final ValueChanged<ComparisonRule>? onRule;
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +84,13 @@ class StepPage extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.red),
             ),
           ),
-        FindingBody(item: item, shots: shots, mode: mode, onMode: onMode),
+        FindingBody(
+          item: item,
+          shots: shots,
+          mode: mode,
+          onMode: onMode,
+          onRule: onRule,
+        ),
       ],
     );
   }

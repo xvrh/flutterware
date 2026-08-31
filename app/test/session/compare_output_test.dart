@@ -1,4 +1,5 @@
 import 'package:flutterware_app/src/comparison/artifact.dart';
+import 'package:flutterware_app/src/comparison/compare_command.dart';
 import 'package:flutterware_app/src/comparison/runner.dart';
 import 'package:flutterware_app/src/session/cli.dart';
 import 'package:test/test.dart';
@@ -142,6 +143,51 @@ void main() {
       );
 
       expect(out.toString().trim(), '0 scenarios, 0 run, 3 skipped in 0ms');
+    });
+
+    // The printed warning was not enough: a CI job reads the exit code, and a
+    // consumer gating a pull request on `fw compare` recorded a comparison
+    // that could not run as a pass. The gap is the exit-code's reason, and
+    // the artifact stays written either way — the record is whole, the
+    // verdict is not.
+    test('leaves a verdict gap, so the command can refuse to exit 0', () {
+      var broken = ComparisonArtifact(
+        previews: previews(),
+        scenarios: ScenarioResults.of(
+          items: const [],
+          ran: 0,
+          skipped: 0,
+          elapsed: Duration.zero,
+          note:
+              'The scenarios harness does not compile:\n'
+              "harness.dart:12:5: Error: Method not found: 'runScenarios'.",
+        ),
+      );
+
+      expect(
+        verdictGap(broken),
+        'the scenario half produced no verdict — '
+        'The scenarios harness does not compile:',
+      );
+    });
+
+    test('a half that ran leaves no gap, and neither does a missing one', () {
+      expect(
+        verdictGap(
+          ComparisonArtifact(
+            previews: previews(),
+            scenarios: ScenarioResults.of(
+              items: const [],
+              ran: 3,
+              skipped: 0,
+              elapsed: Duration.zero,
+            ),
+          ),
+        ),
+        isNull,
+      );
+      // No scenarios plugin at all is an absent half, not a silent one.
+      expect(verdictGap(ComparisonArtifact(previews: previews())), isNull);
     });
   });
 }

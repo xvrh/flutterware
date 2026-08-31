@@ -133,6 +133,14 @@ Iterable<String> _filesIn(
   }
   for (var entity in entries) {
     var name = p.basename(entity.path);
+    // Finder drops one into any directory somebody has opened, `.gitignore`
+    // hides it by convention — so it exists in the worktree and never in a
+    // base checkout made from git, and every closure that folds the directory
+    // in differs forever. It cannot affect a pixel, and the cost of hashing it
+    // is a silent 20× with slowness as the only symptom: measured on a real
+    // 51-scenario suite, deleting two of these took a no-change comparison
+    // from 2m52s to 8s.
+    if (name == '.DS_Store') continue;
     if (entity is File && wanted(name)) {
       yield p.join(relativeDir, name);
     }

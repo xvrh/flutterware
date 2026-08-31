@@ -142,15 +142,14 @@ void main() {
 
   // Sliding against nothing is a control that does something and means
   // nothing.
-  testWidgets('a mode needing two frames is not offered with one', (
-    tester,
-  ) async {
+  // With one frame there is nothing to switch between, so the mode bar is
+  // not drawn at all — five inert pills were furniture over a picture that
+  // has no modes.
+  testWidgets('the mode bar is not drawn with one frame', (tester) async {
     var shots = await pair(tester, base: false);
     await pumpStage(tester, shots);
 
-    await tester.tap(find.byKey(stageModeKey(StageMode.slider)));
-    await tester.pump();
-
+    expect(find.byKey(stageModeKey(StageMode.slider)), findsNothing);
     expect(find.text('head only'), findsOneWidget);
   });
 

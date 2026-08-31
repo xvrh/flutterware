@@ -8,6 +8,7 @@ import '../../ui/theme.dart';
 import '../../ui/zoomable_canvas.dart';
 import '../../utils/graphite.dart';
 import '../shot_store.dart';
+import 'channel_signature.dart';
 import 'shot_image.dart';
 import 'state_chip.dart';
 
@@ -227,12 +228,15 @@ const _gap = 40.0;
 
 /// Room under the thumbnail for everything the node says about the step.
 ///
-/// Counted rather than guessed, because guessing is what broke it: the node
-/// grew a line naming the channels that fired and this stayed at 70, so a
-/// finding node overflowed its cell by a measured 10px. The budget is a gap
-/// (4), two lines of label (~28), a gap (2), a state chip (~18), a gap (2) and
-/// two lines of channel names (~24) — 78, plus slack for a larger text scale.
-const _captionHeight = 92.0;
+/// Counted rather than guessed, because guessing is what broke it — twice
+/// now: the node grew a line naming the channels that fired and this stayed
+/// at 70, a measured 10px overflow; then the channel line gained a bold
+/// `pixels 94%` span and wrapped 3px past 92. The budget is a gap (4), two
+/// lines of label (~28), a gap (2), a state chip (~18), a gap (2) and two
+/// lines of channel signature (~28, its bold span is taller than plain
+/// micro) — 82, plus slack for a larger text scale. The signature is also
+/// capped at two lines, so the slot cannot be outgrown a third way.
+const _captionHeight = 100.0;
 
 /// How wide a node is, from the shape of the frames it holds.
 ///
@@ -305,6 +309,11 @@ class _StepNode extends StatelessWidget {
             children: [
               Container(
                 height: _thumbHeight,
+                // The node's width, not the picture's: a step with no frame —
+                // a `Shot.skip`, a run that ended before it — otherwise
+                // collapses this box to its own border, a 2px sliver in the
+                // middle of the flow.
+                width: double.infinity,
                 decoration: BoxDecoration(
                   // **A ring, not a tint.** The frame is the subject; colouring
                   // it changes the very thing a reader is trying to judge.
@@ -338,11 +347,12 @@ class _StepNode extends StatelessWidget {
                 if (item.channelsFired case var channels
                     when channels.isNotEmpty) ...[
                   const Gap(2),
-                  Text(
-                    channels.join(' · '),
-                    style: context.type.micro.copyWith(color: colors.mut),
+                  ChannelSignature(
+                    channels: channels,
                     maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                    pixelFraction: item.pixels?.changed ?? false
+                        ? item.pixels?.diff.fraction
+                        : null,
                   ),
                 ],
               ],
@@ -396,7 +406,16 @@ class _ThumbnailState extends State<_Thumbnail> {
   @override
   Widget build(BuildContext context) {
     var shot = _shot;
-    if (shot == null) return const SizedBox.shrink();
+    if (shot == null) {
+      // No frame at all is a fact worth a word; still decoding is not.
+      if (widget.frame != null) return const SizedBox.shrink();
+      return Center(
+        child: Text(
+          'no frame',
+          style: context.type.micro.copyWith(color: context.colors.mut3),
+        ),
+      );
+    }
     return Padding(padding: const EdgeInsets.all(2), child: ShotView(shot));
   }
 

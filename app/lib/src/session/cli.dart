@@ -643,6 +643,14 @@ class FwCli {
         }
         out.writeln('  ${outcome.indexPath}');
       }
+      // A half that could not run is not a clean half. The artifact, the
+      // export and the `--json` document are all written and printed above —
+      // the record is whole — and only the exit code is left to say the
+      // verdict is not. See [verdictGap].
+      if (verdictGap(outcome.artifact) case var gap?) {
+        err.writeln('fw: $gap');
+        return 1;
+      }
       return 0;
     } finally {
       session.dispose();

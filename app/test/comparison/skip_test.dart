@@ -391,6 +391,29 @@ void main() {
       expect(decision.changed, ['pkg/assets/logo.png']);
     });
 
+    // Finder drops one into any directory somebody has opened and
+    // `.gitignore` hides it by convention — so it exists in the worktree and
+    // never in a base checkout made from git, which is exactly the pair the
+    // closure compares. Folding it in made every entry render on every
+    // comparison: a silent 20×, with slowness as the only symptom.
+    test('a .DS_Store in an asset directory is not an input', () {
+      var pubspec =
+          'name: pkg\n'
+          'flutter:\n'
+          '  assets:\n'
+          '    - assets/\n';
+      var head = checkout('head5', {
+        'pkg/pubspec.yaml': pubspec,
+        'pkg/assets/logo.png': 'red',
+        'pkg/assets/.DS_Store': 'finder was here',
+      });
+
+      var paths = pixelInputsOf(packagePath: 'pkg', roots: [head]);
+
+      expect(paths, contains('pkg/assets/logo.png'));
+      expect(paths, isNot(contains('pkg/assets/.DS_Store')));
+    });
+
     test('a package with no flutter section still hashes its lockfiles', () {
       var head = checkout('head4', {'pkg/pubspec.yaml': 'name: pkg\n'});
       var paths = pixelInputsOf(packagePath: 'pkg', roots: [head]);

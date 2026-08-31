@@ -10,6 +10,8 @@ import '../comparison_controller.dart';
 import '../rules.dart';
 import '../shot_store.dart';
 import 'finding_body.dart';
+import 'channel_signature.dart';
+import 'index_filter.dart';
 import 'shot_image.dart';
 import 'stage.dart';
 import 'state_chip.dart';
@@ -59,6 +61,7 @@ class _PreviewsTabState extends State<PreviewsTab> {
   // each frame is, and its head half carries the diff's boxes for where to
   // look.
   var _mode = StageMode.sideBySide;
+  var _filter = const IndexFilter();
 
   @override
   void initState() {
@@ -127,10 +130,27 @@ class _PreviewsTabState extends State<PreviewsTab> {
             decoration: BoxDecoration(
               border: Border(right: BorderSide(color: colors.line)),
             ),
-            child: _Index(
-              half: widget.half,
-              selected: current?.id,
-              onSelect: widget.onSelect,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                IndexFilterBar(
+                  filter: _filter,
+                  onFilter: (filter) => setState(() => _filter = filter),
+                  changes: widget.half.rows
+                      .where((row) => row.state.isFinding)
+                      .length,
+                  all: widget.half.rows.length + widget.half.pending.length,
+                ),
+                Divider(height: 1, color: colors.line),
+                Expanded(
+                  child: _Index(
+                    half: widget.half,
+                    filter: _filter,
+                    selected: current?.id,
+                    onSelect: widget.onSelect,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -142,6 +162,7 @@ class _PreviewsTabState extends State<PreviewsTab> {
                   shots: _shots,
                   mode: _mode,
                   onMode: (mode) => setState(() => _mode = mode),
+                  onRule: widget.half.toggleRule,
                 ),
         ),
       ],
@@ -180,11 +201,13 @@ class _PreviewsTabState extends State<PreviewsTab> {
 class _Index extends StatelessWidget {
   const _Index({
     required this.half,
+    required this.filter,
     required this.selected,
     required this.onSelect,
   });
 
   final ComparisonHalf half;
+  final IndexFilter filter;
   final String? selected;
   final ValueChanged<String> onSelect;
 
@@ -193,7 +216,10 @@ class _Index extends StatelessWidget {
     var rules = RuleSet(half.rules);
     var findings = [
       for (var row in half.rows)
-        if (row.state.isFinding && !rules.hidesAll(row)) row,
+        if (row.state.isFinding &&
+            !rules.hidesAll(row) &&
+            filter.matches(row.id))
+          row,
     ];
     // Demoted, not deleted. The comparison design already settled this shape
     // for `skipped` rows — a row that is missing tells a reader nothing — and
@@ -201,11 +227,21 @@ class _Index extends StatelessWidget {
     // of about the tool.
     var hidden = [
       for (var row in half.rows)
-        if (row.state.isFinding && rules.hidesAll(row)) row,
+        if (row.state.isFinding &&
+            rules.hidesAll(row) &&
+            filter.matches(row.id))
+          row,
     ];
     var quiet = [
       for (var row in half.rows)
-        if (!row.state.isFinding) row,
+        if (filter.scope == IndexScope.all &&
+            !row.state.isFinding &&
+            filter.matches(row.id))
+          row,
+    ];
+    var pending = [
+      for (var id in half.pending)
+        if (filter.matches(id)) id,
     ];
 
     return ListView(
@@ -221,60 +257,30 @@ class _Index extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.all(FwSpacing.xl),
             child: Text(
-              'Nothing changed.',
+              filter.query.isEmpty ? 'No changes' : 'No matches',
               style: context.type.body.copyWith(color: context.colors.mut),
             ),
           ),
         // The rows still owed a verdict, so the list has its full shape from
         // the moment the plan lands and only the answers arrive late.
-        if (half.pending.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              FwSpacing.lg,
-              FwSpacing.xl,
-              FwSpacing.sm,
-            ),
-            child: Text(
-              'STILL RENDERING · ${half.pending.length}',
-              style: context.type.micro.copyWith(color: context.colors.mut),
-            ),
-          ),
-          for (var id in half.pending) _PendingRow(id),
+        if (pending.isNotEmpty) ...[
+          _SectionHeader('STILL RENDERING', pending.length),
+          for (var id in pending) _PendingRow(id),
         ],
-        if (hidden.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              FwSpacing.lg,
-              FwSpacing.xl,
-              FwSpacing.sm,
-            ),
-            child: Text(
-              '${hidden.length} HIDDEN BY YOUR RULES',
-              style: context.type.micro.copyWith(color: context.colors.mut),
-            ),
+        if (hidden.isNotEmpty)
+          HiddenRows(
+            count: hidden.length,
+            children: [
+              for (var row in hidden)
+                _IndexRow(
+                  item: row,
+                  selected: row.id == selected,
+                  onTap: () => onSelect(row.id),
+                ),
+            ],
           ),
-          for (var row in hidden)
-            _IndexRow(
-              item: row,
-              selected: row.id == selected,
-              onTap: () => onSelect(row.id),
-            ),
-        ],
         if (quiet.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.xl,
-              FwSpacing.lg,
-              FwSpacing.xl,
-              FwSpacing.sm,
-            ),
-            child: Text(
-              '${quiet.length} UNCHANGED',
-              style: context.type.micro.copyWith(color: context.colors.mut),
-            ),
-          ),
+          _SectionHeader('UNCHANGED', quiet.length),
           for (var row in quiet)
             _IndexRow(
               item: row,
@@ -285,6 +291,27 @@ class _Index extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label, this.count);
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      FwSpacing.xl,
+      FwSpacing.lg,
+      FwSpacing.xl,
+      FwSpacing.sm,
+    ),
+    child: Text(
+      '$label · $count',
+      style: context.type.micro.copyWith(color: context.colors.mut),
+    ),
+  );
 }
 
 /// A row whose verdict has not landed yet. Not tappable — there is nothing
@@ -365,40 +392,48 @@ class _IndexRow extends StatelessWidget {
           vertical: FwSpacing.sm,
         ),
         color: selected ? colors.accent.withValues(alpha: 0.10) : null,
-        child: Row(
+        // The name owns its line and the signature owns the next — trailing
+        // both crushed a long name to `Coun…` in the one column where names
+        // are how a reader recognises anything.
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
                     name,
                     style: context.type.body,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (file.isNotEmpty)
-                    Text(
-                      file,
-                      style: context.type.micro.copyWith(color: colors.mut),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
+                ),
+                const Gap(FwSpacing.sm),
+                StateChip(item.state),
+              ],
             ),
-            const Gap(FwSpacing.sm),
-            // Named, not coloured. The row already carries a `StateChip`, and
-            // the events pane's channel palette collides with it on the two
-            // colours that carry meaning — green is `added` and `analytics`,
-            // amber is `changed` and `db`. Colour stays for state.
-            if (item.state.isFinding) ...[
-              Text(
-                item.channelsFired.join(' · '),
-                style: context.type.micro.copyWith(color: colors.mut),
-              ),
-              const Gap(FwSpacing.sm),
-              StateChip(item.state),
-            ],
+            Row(
+              children: [
+                Expanded(
+                  child: file.isEmpty
+                      ? const SizedBox.shrink()
+                      : Text(
+                          file,
+                          style: context.type.micro.copyWith(color: colors.mut),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
+                if (item.state.isFinding) ...[
+                  const Gap(FwSpacing.sm),
+                  ChannelSignature(
+                    channels: item.channelsFired,
+                    pixelFraction: item.pixels?.changed ?? false
+                        ? item.pixels?.diff.fraction
+                        : null,
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
@@ -413,12 +448,16 @@ class _Detail extends StatelessWidget {
     required this.shots,
     required this.mode,
     required this.onMode,
+    this.onRule,
   });
 
   final ComparedItem item;
   final ShotPair shots;
   final StageMode mode;
   final ValueChanged<StageMode> onMode;
+
+  /// See [ChannelLines.onRule].
+  final ValueChanged<ComparisonRule>? onRule;
 
   @override
   Widget build(BuildContext context) {
@@ -458,6 +497,7 @@ class _Detail extends StatelessWidget {
           shots: shots,
           mode: mode,
           onMode: onMode,
+          onRule: onRule,
           // A skipped entry has no pictures and never will: nothing was
           // rendered *on purpose*, which is not a failed decode and owes the
           // reader a sentence rather than a spinner.

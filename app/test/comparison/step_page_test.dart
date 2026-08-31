@@ -67,19 +67,19 @@ void main() {
   ) async {
     await pump(tester, eventsOnly());
 
-    expect(find.text('both frames are identical'), findsOne);
+    expect(find.text('Frames identical'), findsOne);
     expect(find.byType(ComparisonStage), findsNothing);
-    expect(find.textContaining('200 → 500'), findsOne);
+    expect(find.textContaining('200'), findsOne);
   });
 
   // `identical` is a claim, and somebody is eventually going to check it.
   testWidgets('the frames can still be opened', (tester) async {
     await pump(tester, eventsOnly());
-    await tester.tap(find.text('compare anyway'));
+    await tester.tap(find.text('Show frames'));
     await tester.pump();
 
     expect(find.byType(ComparisonStage), findsOne);
-    expect(find.text('hide the frames'), findsOne);
+    expect(find.text('Hide frames'), findsOne);
   });
 
   testWidgets('pixels that moved still lead with the pictures', (tester) async {
@@ -99,7 +99,7 @@ void main() {
     );
 
     expect(find.byType(ComparisonStage), findsOne);
-    expect(find.text('both frames are identical'), findsNothing);
+    expect(find.text('Frames identical'), findsNothing);
   });
 
   // One side missing is its own finding and the stage already draws it well:
@@ -112,13 +112,13 @@ void main() {
     );
 
     expect(find.byType(ComparisonStage), findsOne);
-    expect(find.text('both frames are identical'), findsNothing);
+    expect(find.text('Frames identical'), findsNothing);
   });
 
   testWidgets('a step where nothing moved says so in words', (tester) async {
     await pump(tester, ComparedItem.of(id: 'Welcome'));
 
-    expect(find.text('Nothing changed on any channel.'), findsOne);
+    expect(find.text('No changes on any channel'), findsOne);
   });
 }
 
