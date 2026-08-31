@@ -38,8 +38,10 @@ android {
     // short version is that a product flavor and an icon set are not the same
     // thing, and this block is where they come apart.
     //
-    // `flutter run` with no --flavor still works because pubspec.yaml declares
-    // `default-flavor: free`, which is Flutter's own field.
+    // A bare `flutter run` here needs a --flavor: the pubspec deliberately
+    // declares no `default-flavor` (the flutter tool applies that field on
+    // every platform and breaks macOS/iOS launches — see pubspec.yaml).
+    // Cockpit launches pair `free` per entry point in tool/flutterware.dart.
     flavorDimensions += "tier"
     productFlavors {
         // No res folder of its own: it builds with main's icons, and so has no

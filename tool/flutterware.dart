@@ -269,12 +269,14 @@ void main() => Flutterware.configure((fw) {
         .new(
           example,
           // The sample declares Android product flavors — fixtures for the
-          // launcher-icon viewer, see `examples/example/README.md` — and
-          // `default-flavor: free` in its pubspec so `flutter run` needs no
-          // argument. Said here too, because the pubspec's field is one word
-          // for every platform and only Android has flavors at all: the empty
-          // lists are what drop `--flavor` on a desktop build, which would
-          // otherwise fail on an Xcode project that defines no custom schemes.
+          // launcher-icon viewer, see `examples/example/README.md` — but its
+          // pubspec deliberately has no `default-flavor`: the flutter tool
+          // applies that field on every platform, and on macOS and iOS it
+          // then demands an Xcode scheme named after a flavor only Android
+          // has, underneath any flag the cockpit drops. So the pairing is
+          // said per entry point (`flavorByPlatform` below), and the empty
+          // lists here stay truthful: those platforms have no flavors, and
+          // nothing re-adds one after the vocabulary drops the flag.
           flavors: {
             RunPlatform.android: [
               'free',
@@ -293,6 +295,7 @@ void main() => Flutterware.configure((fw) {
               'lib/main.dart',
               name: 'App',
               description: 'The example app, with the devbar mounted',
+              flavorByPlatform: {RunPlatform.android: 'free'},
               knobs: [
                 Knob(
                   'fwMarker',
@@ -307,6 +310,7 @@ void main() => Flutterware.configure((fw) {
               'lib/devbar_example.dart',
               name: 'Devbar',
               description: 'Every devbar plugin, on a demo screen',
+              flavorByPlatform: {RunPlatform.android: 'free'},
             ),
             Entrypoint(
               'lib/shop_devbar.dart',
@@ -315,6 +319,7 @@ void main() => Flutterware.configure((fw) {
                   'The shop, with a plugin that pushes a notification into '
                   'it — the sample for driving an app from the cockpit, '
                   '`fw` or an agent',
+              flavorByPlatform: {RunPlatform.android: 'free'},
             ),
             Entrypoint(
               'lib/network_spike.dart',
@@ -322,6 +327,7 @@ void main() => Flutterware.configure((fw) {
               description:
                   'Self-contained http traffic generator for the '
                   'ext.dart.io http-profile spike',
+              flavorByPlatform: {RunPlatform.android: 'free'},
             ),
             // Outside `lib/`, which is the reason it is declared: the wrapper
             // that installs the run guest names this file by path and the enum

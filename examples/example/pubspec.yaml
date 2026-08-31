@@ -83,9 +83,12 @@ dev_dependencies:
 flutter:
 
   # The Android side declares product flavors (see android/app/build.gradle.kts),
-  # which would otherwise make `flutter run` demand a --flavor. This is Flutter's
-  # own field, and it is the one the run cockpit reads.
-  default-flavor: free
+  # but deliberately no `default-flavor` here: the flutter tool applies that
+  # field on every platform, and on macOS and iOS it then demands an Xcode
+  # scheme named after a flavor only Android has — no desktop or iOS launch
+  # survives it (measured on Flutter 3.48.0-0.2.pre). The Android pairing lives
+  # in tool/flutterware.dart (`flavorByPlatform`), so cockpit launches still
+  # need no argument; a bare `flutter run` on Android must say --flavor.
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
