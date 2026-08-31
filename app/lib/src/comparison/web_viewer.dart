@@ -24,30 +24,19 @@ import '../ui/loading_state.dart';
 /// this process. Nothing here compares anything — the verdict was computed on
 /// the machine that exported the page, and this is what it concluded.
 ///
-/// The same shape as `ScenarioWebViewerApp`, for the same reason: the viewer
+/// The same shape as `ScenarioWebViewer`, for the same reason: the viewer
 /// bundle is data-free, built once, and copied beside whatever `index.json`
 /// an export just wrote.
-class ComparisonWebViewerApp extends StatelessWidget {
-  const ComparisonWebViewerApp({super.key, required this.base});
-
-  /// What `index.json` and every frame path are resolved against — the page's
-  /// own URL, so a page moved to another host or a subdirectory still finds
-  /// its own files.
-  final Uri base;
-
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Comparison',
-    theme: appTheme,
-    debugShowCheckedModeBanner: false,
-    home: ComparisonWebViewer(base: base),
-  );
-}
-
 class ComparisonWebViewer extends StatefulWidget {
-  const ComparisonWebViewer({super.key, required this.base});
+  const ComparisonWebViewer({super.key, required this.base, this.raw});
 
+  /// What every frame path is resolved against — the page's own URL, so a
+  /// page moved to another host or a subdirectory still finds its own files.
   final Uri base;
+
+  /// The already-fetched `index.json`, when the entry point read it to decide
+  /// what this page is. Null makes the viewer fetch it itself.
+  final String? raw;
 
   @override
   State<ComparisonWebViewer> createState() => _ComparisonWebViewerState();
@@ -76,7 +65,11 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    if (widget.raw case var raw?) {
+      _apply(raw);
+    } else {
+      unawaited(_load());
+    }
   }
 
   Future<void> _load() async {
@@ -86,38 +79,41 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
       if (response.statusCode == 200) raw = response.body;
     } catch (_) {}
     if (!mounted) return;
-    if (raw == null) {
-      setState(() {
+    setState(() {
+      if (raw == null) {
         _error =
             'This page could not read its own index.json. A comparison page '
             'has to be served over HTTP — opening index.html from the '
             'filesystem leaves the browser unable to fetch anything beside '
             'it.';
-      });
-      return;
-    }
+      } else {
+        _apply(raw);
+      }
+    });
+  }
+
+  /// Parses [raw] into the fields the next build draws from. No [setState] of
+  /// its own, so [initState] can call it for a body the entry point already
+  /// fetched.
+  void _apply(String raw) {
     try {
       var index = ComparisonIndex.fromJson(
         (jsonDecode(raw) as Map).cast<String, Object?>(),
       );
-      var previews = ComparisonHalf(
+      _index = index;
+      _previews = ComparisonHalf(
         ComparisonHalfKind.previews,
         stage: HalfStage.done,
       )..rows.addAll(index.previewItems);
-      var scenarios = ComparisonHalf(
+      _scenarios = ComparisonHalf(
         ComparisonHalfKind.scenarios,
         stage: HalfStage.done,
       )..scenarios.addAll(index.scenarios);
-      setState(() {
-        _index = index;
-        _previews = previews;
-        _scenarios = scenarios;
-        if (index.previewItems.isEmpty && index.scenarios.isNotEmpty) {
-          _tab = 'scenarios';
-        }
-      });
+      if (index.previewItems.isEmpty && index.scenarios.isNotEmpty) {
+        _tab = 'scenarios';
+      }
     } catch (error) {
-      setState(() => _error = 'index.json could not be read:\n$error');
+      _error = 'index.json could not be read:\n$error';
     }
   }
 

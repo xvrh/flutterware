@@ -26,9 +26,8 @@ void main() {
           )
           ..debugCompile = (arguments) async {
             // What a real build leaves behind: an index.html with a base tag.
-            var viewer = Directory(
-              p.join(temp.path, 'build', 'comparison_web_viewer'),
-            )..createSync(recursive: true);
+            var viewer = Directory(exporter.viewerDir)
+              ..createSync(recursive: true);
             File(
               p.join(viewer.path, 'index.html'),
             ).writeAsStringSync('<base href="/">\n<title>Comparison</title>');

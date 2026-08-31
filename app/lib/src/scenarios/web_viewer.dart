@@ -31,27 +31,16 @@ import '../ui/loading_state.dart';
 /// scenarios re-run in a hidden client iframe, replaces
 /// [HttpScenarioArtifacts] and this widget's report future; everything below
 /// stays as it is.
-class ScenarioWebViewerApp extends StatelessWidget {
-  const ScenarioWebViewerApp({super.key, required this.base});
-
-  /// What `report.json` and every artifact path are resolved against — the
-  /// page's own URL, so a page moved to another host or a subdirectory still
-  /// finds its own files.
-  final Uri base;
-
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Scenarios',
-    theme: appTheme,
-    debugShowCheckedModeBanner: false,
-    home: ScenarioWebViewer(base: base),
-  );
-}
-
 class ScenarioWebViewer extends StatefulWidget {
-  const ScenarioWebViewer({super.key, required this.base});
+  const ScenarioWebViewer({super.key, required this.base, this.raw});
 
+  /// What every artifact path is resolved against — the page's own URL, so a
+  /// page moved to another host or a subdirectory still finds its own files.
   final Uri base;
+
+  /// The already-fetched `report.json`, when the entry point read it to
+  /// decide what this page is. Null makes the viewer fetch it itself.
+  final String? raw;
 
   @override
   State<ScenarioWebViewer> createState() => _ScenarioWebViewerState();
@@ -90,7 +79,11 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
   @override
   void initState() {
     super.initState();
-    unawaited(_load());
+    if (widget.raw case var raw?) {
+      _apply(raw);
+    } else {
+      unawaited(_load());
+    }
   }
 
   @override
@@ -103,25 +96,29 @@ class _ScenarioWebViewerState extends State<ScenarioWebViewer> {
   Future<void> _load() async {
     var raw = await _artifacts.readString(scenarioWebReportFile);
     if (!mounted) return;
-    if (raw == null) {
-      setState(() {
+    setState(() {
+      if (raw == null) {
         _error =
             'This page could not read its own $scenarioWebReportFile. A '
             'scenario page has to be served over HTTP — opening index.html '
             'from the filesystem leaves the browser unable to fetch anything '
             'beside it.';
-      });
-      return;
-    }
+      } else {
+        _apply(raw);
+      }
+    });
+  }
+
+  /// Parses [raw] into the fields the next build draws from. No [setState] of
+  /// its own, so [initState] can call it for a body the entry point already
+  /// fetched.
+  void _apply(String raw) {
     try {
-      var report = ScenarioWebReport.fromJson(
+      _report = ScenarioWebReport.fromJson(
         (jsonDecode(raw) as Map).cast<String, Object?>(),
       );
-      setState(() => _report = report);
     } catch (error) {
-      setState(
-        () => _error = '$scenarioWebReportFile could not be read:\n$error',
-      );
+      _error = '$scenarioWebReportFile could not be read:\n$error';
     }
   }
 

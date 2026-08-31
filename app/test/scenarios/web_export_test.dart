@@ -15,6 +15,7 @@ import 'package:flutterware_app/src/scenarios/web_report.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:flutterware_app/src/utils/viewer_bundle.dart';
 import 'package:path/path.dart' as p;
 
 /// What an exported page is made of.
@@ -32,8 +33,12 @@ void main() {
     root = Directory.systemTemp.createTempSync('fw_scenario_export_test');
     // A stand-in for the compiled bundle. `index.html` carries the base href
     // the tool would have written.
-    viewer = Directory(p.join(root.path, 'app', 'build', 'scenario_web_viewer'))
-      ..createSync(recursive: true);
+    viewer = Directory(
+      ViewerBundle(
+        flutterExecutable: '/none/flutter',
+        appToolRoot: p.join(root.path, 'app'),
+      ).viewerDir,
+    )..createSync(recursive: true);
     File(p.join(viewer.path, 'index.html')).writeAsStringSync(
       '<!DOCTYPE html><html><head><base href="/"></head><body></body></html>',
     );
