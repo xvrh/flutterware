@@ -1,4 +1,4 @@
-# Scene runtime — drive, notify, and the slot: sketches 8–13
+# Scene runtime — drive, notify, and the slot: sketches 8–14
 
 **Date:** 2026-08-31
 **Status:** round two of the parameter sketches, opened by three owner
@@ -451,6 +451,56 @@ ergonomics make that trade worse here than in the ecosystems where it
 works. If aliasing ever bites in practice, the in-family mitigation is a
 read-only projection type (`SceneReader`) handed to consumers who should
 not write — discipline in types, not a different architecture.
+
+## Sketch 14 — does full mutability disturb the motion framework?
+
+The owner's follow-up to 13: with the fully mutable system, does the
+animation framework still work? It does, and the reasons are the pieces
+already in place:
+
+- **The law is untouched by construction.** `evaluate(t)` reads tracks,
+  never the scene — scene mutability cannot reach it.
+- **The plane split is what makes the combination sound.** Motion writes
+  `fx`; the app writes authored; render composes `base op fx` *reading the
+  live base each frame*. Mutate `glow.opacity` mid-animation and the
+  composed result follows next frame — no race, no staleness — precisely
+  because the two writers never share a slot. (Had motion written authored
+  values, app mutation and animation would fight last-writer-wins; the
+  Save test already forbade that for its own reasons.)
+- **In-app animation always composed over mutable state anyway.** A real
+  screen changes under its animations constantly; Flutter's whole
+  animation system runs over the mutable render tree. Live in-app motion
+  quietly assumed a mutable ground; this design just names it.
+
+What mutation *can* touch, enumerated honestly:
+
+1. **Structural removal** — the dangling typed reference (sketch 12's
+   surviving con): tracks animating an unmounted node, silent. The
+   applicator should count and report it (the *not seen read* surface);
+   judging-by-running is the planned mitigation.
+2. **Replace-properties mid-transit.** `lerp(below, value, u)` reads a
+   live `below`; a base mutation during a transit shifts the blend origin
+   — defined and smooth-ish, but visible. Composable operators (×, +) are
+   immune, since their contribution is base-independent.
+3. **Snapshot-based geometry** (a fly-from captured at transition start)
+   can go stale if layout mutates mid-flight — the same behavior `Hero`
+   has always had; known territory, not new risk.
+4. **The headless/video half needs one rule:** resolve-then-render already
+   freezes cardinality, duration and geometry before frame zero — a
+   mutable scene adds *scene state* to that list. **Export renders from a
+   `copy()` taken at resolve**; the render owns its snapshot, determinism
+   and parallel frame ranges survive. (`copy()` collects its third
+   consumer.)
+5. **Animated parameters need the plane split too.** If motion drives a
+   nested scene's param (the Rive-inputs feature), it must write the box's
+   evaluated plane, not `value` — or the same Save-test/two-writer
+   violations return one level up. A design detail for the motion grammar
+   rewrite, flagged now.
+
+Net: no impact on the model of motion, one rule for export (snapshot at
+resolve), one reporting duty for the applicator (unmounted targets), and
+one detail for animated params. The framework was designed against a
+changing ground before the ground was declared mutable.
 
 ## Round-2 scoreboard
 
