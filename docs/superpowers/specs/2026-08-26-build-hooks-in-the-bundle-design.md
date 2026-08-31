@@ -1,8 +1,9 @@
 # Running build hooks in the catalog's bundle
 
 **Date:** 2026-08-26
-**Status:** Piece 1 built. Pieces 2 and 3 stand as written, and the reason
-they wait is in each.
+**Status:** Pieces 1 and 3 built — 3 on 2026-08-31, the day a real suite
+needed it (see its section). Piece 2 stands as written, and the reason it
+waits is in it.
 **Follows:** the Flutter GPU research of the same day, which is where the gap
 surfaced and where every number below was measured.
 **Sibling:** `2026-08-17-asset-transformers-design.md`. That one runs a chain
@@ -137,13 +138,42 @@ SDK, *running* the hooks is the entire fix. This piece becomes load-bearing the
 day the feature reaches beta, and building it before then means building against
 a path nothing here can exercise.
 
-### 3. A real NativeAssetsManifest
+### 3. A real NativeAssetsManifest — built 2026-08-31
 
 From the `CodeAsset`s of the same run, replacing the empty map.
 
-Last, and behind a test, because nothing measured needed it: no package in
-reach shipped native code through a hook. Writing it now would be writing it
-blind.
+It was deferred because nothing measured needed it — and then a real suite
+did: a consumer's 51 scenarios all open a database through `sqlite3` 3.x,
+which resolves its C functions via `@Native` and this manifest, with no
+runtime override left in the package. The empty map does not even fail
+honestly. The VM falls back to looking the symbols up in the running process,
+which happens to succeed on macOS `flutter_tester` (with the *system's*
+SQLite) and fail on Linux and Windows — so the suite was green on every
+laptop and red on CI, identically, on step 1, while the previews half of the
+same comparison was perfect. Installing the system package changes nothing;
+it is the build that is missing, not the library.
+
+The build asks with a `CodeAssetExtension` for the host — `OS.current`,
+`Architecture.current`, dynamic linking — because that is `flutter test`'s
+tester target and `flutter_tester` is a host binary. No `cCompiler` is named:
+`flutter test` itself tolerates not finding one for this target
+(`mustMatchAppBuild: false`), a compiling hook discovers the host toolchain
+the way it does under plain `dart test`, and `sqlite3`'s hook turns out to
+*download* its library rather than compile it at all. The manifest points a
+bundled library at the hook's own output under `.dart_tool/hooks_runner` —
+no copy step, unlike `flutter_tools`, whose tester manifest is absolute host
+paths anyway. Link hooks stay off (`linkingEnabled: false`), as `flutter
+test` decides for a JIT build.
+
+Open question 1 below is thereby half-settled: the target asked for is the
+host's. What a hook emits for a *device* target is still nobody's question
+here.
+
+Verified end-to-end by `examples/example/test/scenarios/database_test.dart`,
+which shows the version of the SQLite it loaded — the bundled library is
+newer than the macOS system one, so the manifest lane is distinguishable
+from the fallback that masks a regression on a Mac. The Windows CI scenarios
+run is the honest platform.
 
 ## What a failure becomes
 

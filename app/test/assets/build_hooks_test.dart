@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:code_assets/code_assets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/assets/build_hooks.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:hooks_runner/hooks_runner.dart' show KernelAssets, Target;
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
@@ -10,10 +13,10 @@ import 'package:yaml/yaml.dart';
 ///
 /// A fixture can say that [BuildHooks] calls what it is told to call. What it
 /// cannot say is whether the thing being called still behaves the way the whole
-/// design rests on — that asking for no asset types leaves a native hook doing
-/// nothing, and that the runner reads a package graph the same way it did when
-/// this was written. Both of those live in packages that move under us, so this
-/// asks them.
+/// design rests on — that asking for the host's code assets gets a native hook
+/// built for the machine the tester runs on, and that the runner reads a
+/// package graph the same way it did when this was written. Both of those live
+/// in packages that move under us, so this asks them.
 void main() {
   late FlutterSdkPath sdk;
   var repoRoot = p.normalize(p.absolute('..'));
@@ -44,34 +47,83 @@ void main() {
     expect(result.failure, isNull);
   });
 
-  test(
-    'this workspace runs its own hooks without building native code',
-    () async {
-      var watch = Stopwatch()..start();
-      var result = await BuildHooks(
-        dartExecutable: sdk.dart,
-        packageConfigPath: p.join(
-          repoRoot,
-          '.dart_tool',
-          'package_config.json',
-        ),
-        rootPackageRoot: p.join(repoRoot, 'app'),
-      ).run();
-      watch.stop();
+  test('this workspace runs its own hooks, native code included', () async {
+    var result = await BuildHooks(
+      dartExecutable: sdk.dart,
+      packageConfigPath: p.join(repoRoot, '.dart_tool', 'package_config.json'),
+      rootPackageRoot: p.join(repoRoot, 'app'),
+    ).run();
 
-      expect(result.failure, isNull);
-      // Which packages ship a hook is the resolution's business and differs by
-      // host — `objective_c` is here on macOS and not on Linux. What must hold
-      // everywhere is that running them is a rounding error, because every hook
-      // in reach compiles native code and we ask for none of it. Measured 40ms
-      // on macOS; an order of magnitude of headroom against a loaded CI host.
-      expect(
-        watch.elapsed,
-        lessThan(const Duration(seconds: 20)),
-        reason: 'ran ${result.packages}',
-      );
-    },
-  );
+    expect(result.failure, isNull, reason: 'ran ${result.packages}');
+    // Which packages ship a hook is the resolution's business and differs by
+    // host — `objective_c` is here on macOS and not on Linux — so what the
+    // manifest *names* cannot be asserted. That it is the engine's shape can:
+    // whatever the run produced, this is the file a `flutter_tester` will
+    // parse before its first frame.
+    var manifest = jsonDecode(result.nativeAssetsManifest) as Map;
+    expect(manifest['format-version'], [1, 0, 0]);
+    var assets = (manifest['native-assets'] as Map).map(
+      (target, ids) => MapEntry('$target', (ids as Map).keys),
+    );
+    // Every mapped asset is for this machine: the tester is a host binary, and
+    // an entry under any other target would never be read.
+    for (var target in assets.keys) {
+      expect(target, '${Target.current}');
+    }
+    // No timing bound any more, deliberately: a hook that compiles native code
+    // now genuinely compiles, once per machine per resolution, and the first
+    // run on a cold `.dart_tool/hooks_runner` is a real build. The warm path
+    // stays memoised — the test below pins that.
+  }, timeout: const Timeout(Duration(minutes: 5)));
+
+  test('the manifest speaks each link mode the way the engine reads it', () {
+    var libPath = p.join(Directory.systemTemp.path, 'libsqlite3.dylib');
+    var manifest = KernelAssets([
+      BuildHooks.kernelAssetOf(
+        CodeAsset(
+          package: 'sqlite3',
+          name: 'src/ffi/libsqlite3.g.dart',
+          linkMode: DynamicLoadingBundled(),
+          file: Uri.file(libPath),
+        ),
+      ),
+      BuildHooks.kernelAssetOf(
+        CodeAsset(
+          package: 'other',
+          name: 'system.dart',
+          linkMode: DynamicLoadingSystem(Uri.file('libsystem.so')),
+        ),
+      ),
+      BuildHooks.kernelAssetOf(
+        CodeAsset(
+          package: 'other',
+          name: 'process.dart',
+          linkMode: LookupInProcess(),
+        ),
+      ),
+      BuildHooks.kernelAssetOf(
+        CodeAsset(
+          package: 'other',
+          name: 'executable.dart',
+          linkMode: LookupInExecutable(),
+        ),
+      ),
+    ]).toNativeAssetsFile();
+
+    var byId =
+        ((jsonDecode(manifest) as Map)['native-assets']
+                as Map)['${Target.current}']
+            as Map;
+    // A bundled library is an absolute host path — pointed at where the hook
+    // left it, since nothing here copies. The rest carry no file at all.
+    expect(byId['package:sqlite3/src/ffi/libsqlite3.g.dart'], [
+      'absolute',
+      libPath,
+    ]);
+    expect(byId['package:other/system.dart'], ['system', 'libsystem.so']);
+    expect(byId['package:other/process.dart'], ['process']);
+    expect(byId['package:other/executable.dart'], ['executable']);
+  });
 
   test('a root the resolution cannot name is a failure, not silence', () async {
     var temp = Directory.systemTemp.createTempSync('fw_hooks_root');

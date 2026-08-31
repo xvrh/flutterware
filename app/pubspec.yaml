@@ -36,6 +36,10 @@ dependencies:
   built_collection:
   # The one clock a widget test can move. See lib/src/ui/startup_progress.dart.
   clock:
+  # The vocabulary `hooks_runner` speaks for native code — the extension the
+  # bundle builder asks with, and the link modes it maps into
+  # `NativeAssetsManifest.json`. Rides the `hooks_runner` pin's resolution.
+  code_assets:
   collection:
   crypto:
   dart_mcp: ^0.5.2

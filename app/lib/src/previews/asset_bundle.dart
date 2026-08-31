@@ -194,12 +194,13 @@ class AssetBundleBuilder {
     // them into a directory its pubspec declares, and [AssetCatalog] lists that
     // directory's contents as it resolves. Run second and the catalog is a
     // faithful reading of an empty directory.
-    // The result is deliberately dropped: a hook is a program a *dependency*
-    // ships, so one that fails is closer to a compile error in that dependency
-    // than to a broken catalog, and every entry that did not need its output
-    // still builds. [BuildHooks] says so on stderr itself, because the logger
-    // is not listened to in the two processes that call this most.
-    await BuildHooks(
+    // The failure is deliberately not acted on: a hook is a program a
+    // *dependency* ships, so one that fails is closer to a compile error in
+    // that dependency than to a broken catalog, and every entry that did not
+    // need its output still builds. [BuildHooks] says so on stderr itself,
+    // because the logger is not listened to in the two processes that call
+    // this most. What *is* consumed is the native-assets mapping, below.
+    var hooks = await BuildHooks(
       dartExecutable: cache.dart,
       packageConfigPath: packageConfigPath,
       rootPackageRoot: rootPackageRoot,
@@ -213,7 +214,7 @@ class AssetBundleBuilder {
     Directory(output).createSync(recursive: true);
 
     var sync = _Sync();
-    _writeManifests(output, catalog, sync);
+    _writeManifests(output, catalog, hooks.nativeAssetsManifest, sync);
     _linkPayloads(output, catalog, await _transformed(catalog), sync);
     await _linkCompiledShaders(output, sync);
     _prune(output, sync);
@@ -258,7 +259,12 @@ class AssetBundleBuilder {
     return transformed;
   }
 
-  void _writeManifests(String output, AssetCatalog catalog, _Sync sync) {
+  void _writeManifests(
+    String output,
+    AssetCatalog catalog,
+    String nativeAssetsManifest,
+    _Sync sync,
+  ) {
     var families = <Map<String, Object?>>[
       for (var family in catalog.fonts)
         {
@@ -306,15 +312,14 @@ class AssetBundleBuilder {
       sync,
     );
 
+    // The map the VM resolves `@Native` external functions through, produced
+    // by the hooks run above — where a scenario's `sqlite3` finds its dylib.
+    // Same channel `flutter test` uses: it copies this file into the test
+    // asset directory, and the engine reads it from `--flutter-assets-dir`.
     _write(
       output,
       'NativeAssetsManifest.json',
-      utf8.encode(
-        jsonEncode({
-          'format-version': [1, 0, 0],
-          'native-assets': <String, Object?>{},
-        }),
-      ),
+      utf8.encode(nativeAssetsManifest),
       sync,
     );
 
