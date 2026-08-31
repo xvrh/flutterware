@@ -358,6 +358,38 @@ mutable; the editor brings its own door** — the operation layer it needs
 anyway for undo, name-minting and round-tripping — while the app uses the
 raw graph and pays only the two runtime costs above.
 
+### What is engineering, and what is irreducible
+
+Pressed once more — *which pushbacks are not fixable?* — the surviving
+list sorts almost entirely into the fixable column: the two violent
+invariants (checked operations), observable collections (tax), the
+re-entrancy rule (an assert), the mutated-instance clone (`copy()`).
+What remains, unfixable in kind and only manageable in degree:
+
+1. **Aliasing.** Shared mutable state is action at a distance: two holders
+   of one instance, and one's writes are the other's surprise; "who set my
+   opacity" has no local answer. Debug-mode write provenance makes it
+   *debuggable*; nothing makes it absent. (It is also the binding feature
+   — a shared `Param` box is aliasing *on purpose* — which is exactly why
+   it cannot be engineered away.)
+2. **Loss of derivability.** A mutated instance's state is
+   history-dependent — never again reproducible from `(class, args)`.
+   Snapshots and journals patch specific needs (repro, persistence,
+   comparison), but the property itself is spent the moment the first
+   setter runs.
+3. **No static safety for structure.** A runtime removal orphaning a
+   typed reference, an invariant broken by a bad add — these move from
+   compile/parse time to runtime detection permanently. They can all be
+   made *loud*; none can be made *impossible*.
+4. **UI-thread confinement.** A mutable object graph cannot cross
+   isolates or be mutated off-thread; an immutable value could. Dart-level
+   and, for objects that exist to be rendered, mostly theoretical.
+
+Flutter's own render tree lives with 1 and 3 for the same reasons; the
+editor keeps derivability where it is load-bearing (files, documents); and
+4 is the domain's natural habitat. These are the honest prices of the
+all-in, and they are prices, not blockers.
+
 ## Round-2 scoreboard
 
 - **The edit API can drive animation** as the app's escape hatch (measured
