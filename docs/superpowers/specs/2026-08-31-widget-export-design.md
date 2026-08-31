@@ -282,9 +282,9 @@ in-process, may use the full callback API directly.
 | `WidgetRender`/`DocumentRender` contract + `flutterware_render` package | **Built** — workspace member `render/`; registrar (`@RenderRegistry` on a function receiving `RenderHost`) settled over per-entry annotations; `RenderContext.captureSvg` mounts widgets offscreen, so both entry kinds execute in-process |
 | `fw render bundle` | **Built** — registrar scan, generated driver main, kernel via the embedder compiler, asset bundle with symlinks materialized, engine artifacts local or fetched per `--platform`, versions bound in `manifest.json` |
 | `RenderPool` + driver protocol | **Built** — `flutterware_render/client.dart` over marker-prefixed line JSON on the guest's stdio; guest mounts offscreen per request (no frame pacing), covered end to end by `app/integration_test/render_bundle_test.dart` |
-| Studio panel: render entries live, knobs for args, document viewer | **Missing** — previews panel is the template |
-| `fw render <entry>` one-shot CLI | **Missing** — thin |
-| Regression diffs of rendered documents | **Exists as organ** (comparison plugin) — point it at render entries |
+| Studio panel: render entries live, knobs for args, document viewer | **Built (v1)** — `flutterware.render` plugin: point list from the warm guest, JSON args + size + policies, instant PNG preview, Save SVG/PNG/PDF, warnings shown. Typed knobs for args and an in-studio PDF page viewer are the follow-ups |
+| `fw render <entry>` one-shot CLI | **Built** — plus the same render as a plugin action for `fw run`/MCP, returning an `Artifact` |
+| Regression diffs of rendered documents | **Deferred, deliberately** — `ComparisonSide` is a real seam (a `RendersSide` is a genuine third implementation, ~250 lines), but its currency is raw RGBA frames and its skip rule keys on source files: all points share one registrar file, so per-point attribution needs a decision before the hookup is honest |
 | Reproducibility: pinned clock, locale, seeded random | **Exists as precedent** (scenario clock slot) |
 | Structured errors with stacks over the wire | **Exists as precedent** (scenario step events) |
 
