@@ -358,6 +358,11 @@ intro.copyStateInto(darkIntro);   // walks both timelines (same class, same
                                   // targets are already the copy's own
 ```
 
+*(Superseded in the settled decisions below: the owner chose a
+tool-emitted `copy()` wrapping this same walk — `scene.copy()` /
+`intro.copy(dark)` — so the construct lines above move into the model
+files as one forwarding expression each.)*
+
 Because runtime growth is composition (never field injection), the two
 timelines of one class always have the same graph shape — the parallel
 walk never desynchronizes, and no retarget map is needed on the motion
@@ -621,29 +626,54 @@ What the probes settled:
   retargeted deep copy when it is; a mount guard turns the
   wrong-instance mistake into a refusal.
 
-Open, for the owner (sketch 21 sharpened the list; question 1 from the
-first draft dissolved into the mandatory `timeline` field):
+### Settled by the owner, 2026-09-01
 
-1. **The group spelling** — probe M5 killed `Animate.text(…)` for a
-   mutable motion (its static type hides the per-kind tracks). The two
-   typed-both-ways spellings: extension form
-   `scene.headline.animate(opacity: …, color: …)` (target-first, used in
-   the sketch) vs class form `AnimateText(scene.headline, …)` (honest
-   construction). One must be the file's canonical spelling.
-2. **The `timeline` field is mandatory** (like a scene's `root`) — and is
-   a group *not* placed in it allowed as a library asset (a `tapPulse`
-   played on events), or refused like a scene orphan?
-3. **Always-present empty tracks** — `fontSize` exists on every text
-   group, empty means no contribution, only non-empty tracks are written
-   to the file (recommended: lets runtime and editor animate any property
-   by inserting a key) — vs nullable `Track<double>?` (file-faithful,
-   null-checks everywhere, unmentioned properties unanimatable).
+All six spelling questions closed in one sitting (question 1 of the
+first draft had already dissolved into the mandatory `timeline` field):
+
+1. **The group spelling is the extension form** —
+   `scene.headline.animate(opacity: …, color: …)`: target reads first,
+   matching the editor gesture, and the static return type carries the
+   per-kind tracks (probe M5 had killed `Animate.text(…)` for a mutable
+   motion: a named constructor's static type hides them).
+2. **Unplaced groups are allowed, as library assets.** A group not in the
+   `timeline` does not autoplay but stays independently playable
+   (`MotionPlayer(intro.tapPulse)` fired on events); the editor shows
+   them in a separate library section of the panel. Motion earns the
+   asymmetry with scene orphans: event-fired fragments are a real need.
+3. **Tracks are always present, empty until a key arrives.** Empty
+   contributes nothing; Save writes only non-empty tracks; inserting one
+   key brings any property alive at runtime or in the editor, no null
+   anywhere. Accepted consequence: deleting a track's last key silently
+   disables that lane.
 4. **Ext args stay stringly** — `args: {'progress': Track(…)}` is the one
-   surviving magic string, because an external widget's args are
-   discovered by scan, not declared here. Accept the boundary
-   (recommended), or generate typed ext facades (the refused codegen
-   direction)?
-5. **The pair-copy spelling** — reconstruct + `copyStateInto` parallel
-   walks (recommended, shown in half 4), or tool-emitted per-class
-   `copy()` members?
-6. **The mount guard** — refuse at mount (recommended), or warn-and-render?
+   boundary of the no-magic-strings rule, because the type information
+   genuinely lives outside our system (discovered by scan). A typo fails
+   loudly through the not-seen-read reporting.
+5. **The pair copies through a tool-emitted `copy()` in the model file**
+   — the owner took the one-call spelling over the caller-writes-the-
+   construct-line recommendation. What keeps it cheap: the generic
+   parallel walk stays in the framework's base classes, so the emitted
+   member is a *single forwarding expression* the grammar can verify
+   mechanically —
+
+   ```dart
+   // in banner.scene.dart, tool-maintained:
+   BannerScene copy() => copyStateInto(BannerScene(title: title));
+   // in the motion file — takes the copied scene:
+   BannerIntro copy(BannerScene scene) =>
+       copyStateInto(BannerIntro(scene, slideFrom: slideFrom));
+   // at the call site:
+   final dark = scene.copy();
+   final darkIntro = intro.copy(dark);
+   ```
+
+   Grammar treatment, per the invariant triple: `copy()` is *derived*
+   from the header — the parser accepts a stale or missing one as a
+   tolerated spelling and the next emit converges it (a hand-added
+   parameter never has to touch it by hand); anything other than the
+   canonical single-expression form is refused with a teaching message.
+6. **The mount guard refuses loudly.** A motion whose targets the
+   mounted scene does not own is a named, teaching error at mount —
+   naming both instances and pointing at the reconstruct/copy spelling —
+   in `SceneView` and the export renderer both.
