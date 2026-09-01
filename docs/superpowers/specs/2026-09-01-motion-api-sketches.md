@@ -473,6 +473,75 @@ drag-a-selection and stretch-handles); `scale` multiplies key times in the
 range and needs no pins when the range edges sit on keys — the editor's
 handles are the keys, so that is the normal case.
 
+*Owner's framing note: the gap was one example of a family — the precise
+operator vocabulary is deliberately left for a later round. What this
+sketch pins is the family's mechanics: the correctness invariant, the
+pin-then-shift rule, the structural walk through combinators, and
+operations-as-doors.*
+
+## Sketch 24 — the player: why not AnimationController, and who owns the
+## ticker
+
+Three owner questions, two probed in a real widget test (M7):
+
+```
+at 200ms of 400: value=0.5
+100ms after duration doubled: value=0.75   # still on the OLD schedule
+under TickerMode(enabled: false): vsync ticker fired 0 times,
+                                  raw Ticker fired 5 times
+[framework] _HostState was disposed with an active Ticker  # loud, vsync-only
+```
+
+**Can AnimationController be the player? No — and the probe names the
+sharpest reason: it cannot host a live timeline.** Its `duration` is a
+snapshot read when `forward()` starts; changing it mid-flight does
+nothing until the next start (probed: value marched to 1.0 on the old
+400ms schedule after the duration doubled). Our timeline's duration is
+*live* — a key inserted mid-play extends the motion under the playhead
+(probe M1). Beyond that mismatch: the controller's value is normalized
+progress (seek means computing a fraction, in tension with a moving
+denominator), it has no `rate`, and — decisive — the player's real job
+was never ticking. It is the **applicator**: call `apply(t, fx)` per
+frame, clear fx on stop/cancel (the probed cancel semantics — base
+untouched), host the machines' clock and their `go()` events, refuse a
+second driver on an already-driven playable. AnimationController does
+none of that; some object must; that object is `MotionPlayer` whatever
+it wraps internally (a raw `Ticker`, whose elapsed `Duration` is
+motion time with no normalization to fight).
+
+**Nothing is lost:** AnimationController remains a first-class *clock* —
+`Drive.animation(controller)` drives progress through it, so springs,
+fling, curves and reverse all reach a motion unchanged. The layering:
+player = applicator + motion-native transport (time-based seek, live
+duration, rate); controller = one of its optional clocks.
+
+**The vsync question: optional, with the sugar always providing it.**
+The probe shows what `vsync:` buys: TickerMode muting (a route hidden
+under an opaque route stops paying — 0 ticks vs 5) and the framework's
+loud leak-on-dispose diagnostics (the quoted error is the probe's own
+vsync ticker being caught; the raw ticker would have leaked silently).
+But *requiring* vsync chains every player to a `State` with a mixin —
+hostile to controllers-layer and event-handler use, which sketch 22 just
+opened. So:
+
+```dart
+MotionPlayer(intro)                    // raw Ticker: works anywhere,
+                                       // not muted by TickerMode
+MotionPlayer(intro, vsync: this)       // muting + leak diagnostics
+SceneView(scene, motion: intro)        // sugar: its own State's vsync,
+                                       // muting and dispose for free
+```
+
+**Dispose: yes, and the teeth are mostly pulled.** A non-looping player
+auto-stops at completion, and a stopped player holds no frame callbacks —
+it is plain garbage; forgetting `dispose()` on it is harmless. The real
+hazard is a player *still playing* (a looping machine motion) with no
+owner: it ticks and writes fx forever. `dispose()` = stop + clear fx +
+release the ticker — same discipline as AnimationController, needed
+exactly when the player might still be running; the sugar absorbs it for
+the mount-and-autoplay case, and passing `vsync` buys the loud leak
+detection for the rest.
+
 ## The scoreboard, and what is for the owner to pick
 
 What the probes settled:
