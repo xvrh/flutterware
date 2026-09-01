@@ -10,7 +10,9 @@
 // mockup data, its theme, its own animations all live here, on this side.
 import 'package:flutter/material.dart';
 
+import '../previews/playhead.dart';
 import 'core/model.dart';
+import 'core/motion_runtime.dart';
 import 'core/values.dart';
 import 'flutter_bridge.dart';
 
@@ -30,6 +32,7 @@ class SceneView extends StatefulWidget {
   const SceneView(
     this.scene, {
     super.key,
+    this.motion,
     this.externals = const {},
     this.selected = const {},
     this.onMeasured,
@@ -39,6 +42,14 @@ class SceneView extends StatefulWidget {
   /// redraws from the RENDERED plane — base composed with every fx writer —
   /// so a playing motion and a saved layout are one picture.
   final SceneDocument scene;
+
+  /// What animates this scene, bound to it. Mounting one REGISTERS A
+  /// PLAYHEAD: an export walks it, a test parks it, and `previews` can
+  /// photograph the scene at any moment without the app wiring anything.
+  ///
+  /// The view never plays it — a clock is the app's business, and a
+  /// [MotionPlayer] over the same playable is how a scene plays on screen.
+  final Playable? motion;
 
   /// The app's widgets, by the entry name a node holds.
   final Map<String, SceneExternalBuilder> externals;
@@ -58,11 +69,26 @@ class _SceneViewState extends State<SceneView> {
 
   GlobalKey _key(String name) => _keys.putIfAbsent(name, GlobalKey.new);
 
+  String? _playheadId;
+
   @override
   void initState() {
     super.initState();
     installSceneFrameFlush();
     widget.scene.addListener(_onChanged);
+    _mountPlayhead();
+  }
+
+  void _mountPlayhead() {
+    var motion = widget.motion;
+    if (motion == null) return;
+    _playheadId = PlayheadRegistry.instance.attach(_ScenePlayhead(motion));
+  }
+
+  void _unmountPlayhead() {
+    var id = _playheadId;
+    if (id != null) PlayheadRegistry.instance.detach(id);
+    _playheadId = null;
   }
 
   @override
@@ -72,10 +98,15 @@ class _SceneViewState extends State<SceneView> {
       old.scene.removeListener(_onChanged);
       widget.scene.addListener(_onChanged);
     }
+    if (old.motion != widget.motion) {
+      _unmountPlayhead();
+      _mountPlayhead();
+    }
   }
 
   @override
   void dispose() {
+    _unmountPlayhead();
     widget.scene.removeListener(_onChanged);
     super.dispose();
   }
@@ -248,4 +279,19 @@ class _MissingExternal extends StatelessWidget {
       style: const TextStyle(fontSize: 10, color: Color(0xFFCC3333)),
     ),
   );
+}
+
+/// A bound motion as a [Playhead]: parking it applies the fx plane for that
+/// moment, and the document's own flush repaints whatever is watching. No
+/// clock — that is the point, and what makes a walk repeatable.
+class _ScenePlayhead implements Playhead {
+  _ScenePlayhead(this.playable);
+
+  final Playable playable;
+
+  @override
+  Duration get duration => playable.duration;
+
+  @override
+  void seek(Duration position) => playable.apply(position);
 }

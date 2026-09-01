@@ -41,6 +41,61 @@ final _externals = <String, SceneExternalBuilder>{
   ),
 };
 
+/// A scene and its motion, played from the file the editor wrote — the shape
+/// an export walks.
+///
+/// The knob carries a path rather than the document itself: a scene is
+/// kilobytes of JSON, and a walk asks for it once. Mounting `SceneView` with
+/// a bound motion is what registers the playhead the harness drives, so every
+/// stop of the clip is `evaluate(t)` and nothing else.
+class ScenePlayerHost extends StatelessWidget {
+  const ScenePlayerHost({super.key, required this.pairPath});
+
+  final String pairPath;
+
+  @override
+  Widget build(BuildContext context) {
+    if (pairPath.isEmpty) {
+      return const _Waiting('scene player — no pair given');
+    }
+    var file = File(pairPath);
+    if (!file.existsSync()) return _Waiting('no such pair: $pairPath');
+    var pair = sceneFileFromJson(
+      jsonDecode(file.readAsStringSync()) as Map<String, Object?>,
+    );
+    var motion = pair.motions.values.firstOrNull;
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
+      home: Align(
+        alignment: Alignment.topLeft,
+        child: SceneView(
+          pair.scene,
+          motion: motion == null ? null : BoundMotion.bind(motion, pair.scene),
+          externals: _externals,
+        ),
+      ),
+    );
+  }
+}
+
+class _Waiting extends StatelessWidget {
+  const _Waiting(this.message);
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: ColoredBox(
+      color: const Color(0xFF26282C),
+      child: Center(
+        child: Text(message, style: const TextStyle(color: Colors.white54)),
+      ),
+    ),
+  );
+}
+
 class SceneHostApp extends StatefulWidget {
   const SceneHostApp({super.key, this.bare = false});
 

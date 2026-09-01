@@ -1813,7 +1813,32 @@ restarted: List<String>   # The package paths whose harness was dropped.
 
 Scenes this project owns — a design and the motion animating it, in one tool-written file per scene, rendered by the app itself.
 
-No actions.
+#### `list` — List
+
+The scenes this project has, with the class each declares and the motions beside it.
+
+```sh
+fw run scene list [--package=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+
+#### `video` — Video
+
+Renders a scene's motion to an mp4, drawn by the app itself — its theme, its widgets — one frame per moment on the harness lane, where a frame cannot be of a moment other than the one it was drawn for. Needs ffmpeg.
+
+```sh
+fw run scene video [--package=…] --scene=<string> --fps=<string>
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `scene` | string | yes | — | The scene file, by name or path. |
+| `fps` | string | yes | — | Default 30. |
+
 
 ### `flutterware.render`
 

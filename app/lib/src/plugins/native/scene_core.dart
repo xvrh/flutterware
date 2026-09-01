@@ -1,7 +1,20 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutterware/plugins.dart';
+import 'package:flutterware/scene_authoring.dart';
 import 'package:path/path.dart' as p;
 
+import '../../embedder/build_directory.dart';
+import '../../previews/catalog_entry.dart';
+import '../../previews/catalog_render.dart';
+import '../../previews/devices.dart';
+import '../../previews/discovery.dart';
+import '../../previews/test_runner.dart';
+import '../../previews/tester_renderer.dart';
 import '../../scene/discovery.dart';
+import '../../scene/export/video.dart';
+import '../../scene/scene_file.dart';
 import '../../utils/string/plural.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -73,6 +86,137 @@ class SceneCore extends PluginCore {
     await Future.wait([for (var package in packages) _cache.load(package)]);
   }
 
+  /// The preview entry that plays a scene from a file — the registration a
+  /// project declares so its scenes can be exported with its own widgets and
+  /// its own theme.
+  static const playerEntrySymbol = 'scenePlayer';
+
+  /// Renders a clip of [scene]'s motion.
+  ///
+  /// The harness lane, not the guest: a clip's frames must each be *of* the
+  /// moment they claim, and only the tester can promise that — it parks the
+  /// playhead and rasterises the tree that pump produced. The scene travels
+  /// as a file because a walk asks for it once and a scene is kilobytes.
+  Future<Artifact> exportVideo({
+    required String package,
+    required String scenePath,
+    int fps = 30,
+  }) async {
+    var opened = parseSceneFile(File(scenePath).readAsStringSync());
+    if (!opened.ok) {
+      throw StateError(
+        'that scene does not parse, so there is nothing to render:\n'
+        '${opened.refusals.take(3).join('\n')}',
+      );
+    }
+    if (opened.motions.isEmpty) {
+      throw StateError(
+        '${p.basename(scenePath)} has no motion — a clip of a still scene '
+        'would be one frame repeated',
+      );
+    }
+    var entry = _playerEntry(package);
+    var pair =
+        File(
+          p.join(
+            Directory.systemTemp.createTempSync('fw-scene').path,
+            'pair.json',
+          ),
+        )..writeAsStringSync(
+          jsonEncode(
+            sceneFileToJson(
+              opened.doc!,
+              className: opened.className!,
+              motions: opened.motions,
+            ),
+          ),
+        );
+
+    var output = p.join(
+      host.workspace.appContext.appToolDirectory.path,
+      'build',
+      'scene',
+      '${opened.className}.mp4',
+    );
+    // The whole motion at `fps`: only the running motion knows how long it
+    // is, so the stops are not computed here.
+    // The artboard's own size, not the panel's: a clip of a scene is the
+    // scene, and rendering it in a viewport of another shape crops one edge
+    // and letterboxes the other.
+    var root = opened.doc!.root;
+    var walk = await TesterRenderer(runner: _runnerFor(package, entry)).walk(
+      CatalogWalk(
+        entryId: entry.id,
+        fps: fps,
+        viewport: CaptureViewport(
+          width: (root.width ?? 1024).round(),
+          height: (root.height ?? 500).round(),
+        ),
+        knobs: {'pair': pair.path},
+      ),
+    );
+    var video = await encodeWalk(walk, output: output, fps: fps);
+    pair.parent.deleteSync(recursive: true);
+
+    return Artifact(
+      kind: Artifact.mp4,
+      address: Address(
+        worktree: host.worktree.name,
+        plugin: host.id,
+        segments: [package, p.basename(scenePath)],
+      ),
+      path: p.relative(video.file.path, from: host.worktree.path),
+      meta: {
+        'scene': opened.className,
+        'size': [root.width, root.height],
+        'motion': opened.motions.keys.first,
+        'file': p.relative(scenePath, from: host.worktree.path),
+        'fps': video.fps,
+        'frames': video.frames,
+        'durationMs': video.durationMs,
+        'renderMs': video.renderTime.inMilliseconds,
+        'encodeMs': video.encodeTime.inMilliseconds,
+        'bytes': video.file.lengthSync(),
+      },
+    );
+  }
+
+  /// The project's scene-player entry, or a refusal naming what to declare.
+  ///
+  /// Scanned rather than asked of the previews plugin: an export must work
+  /// whether or not that panel has ever been opened.
+  CatalogEntry _playerEntry(String package) {
+    var scan = CatalogScanner(projectRoot: p.join(host.worktree.path, package))
+        .scan();
+    for (var entry in scan.entries) {
+      if (entry.symbol == playerEntrySymbol) return entry;
+    }
+    throw StateError(
+      'this project declares no scene player, so a scene cannot be rendered '
+      'with its widgets. Add a @Preview entry named `$playerEntrySymbol` '
+      'taking a `pair` knob — see the example project.',
+    );
+  }
+
+  /// The harness this plugin renders on, one per declared package — its own
+  /// lane, because two hosts on one build directory are two
+  /// `frontend_server`s writing one dill.
+  PreviewTestRunner _runnerFor(String package, CatalogEntry entry) =>
+      _runners.putIfAbsent(
+        package,
+        () => PreviewTestRunner(
+          packageRoot: p.join(host.worktree.path, package),
+          flutterSdkRoot: host.workspace.flutterSdk.root,
+          // One entry, not the catalog: the generated harness imports every
+          // entry it is given, so a clip would otherwise pay a cold compile
+          // of every demo in the project.
+          read: () => (entries: [entry], canvases: const []),
+          buildDirectory: sceneBuildRoot,
+        ),
+      );
+
+  final _runners = <String, PreviewTestRunner>{};
+
   @override
   PluginReport get report => PluginReport(
     id: host.id,
@@ -88,8 +232,115 @@ class SceneCore extends PluginCore {
           status: _childStatus(path),
         ),
     ],
+    actions: _actions,
     view: _view,
   );
+
+  List<PluginAction> get _actions => [
+    PluginAction(
+      'list',
+      'List',
+      description:
+          'The scenes this project has, with the class each declares and the '
+          'motions beside it.',
+      parameters: [_packageParameter],
+    ),
+    PluginAction(
+      'video',
+      'Video',
+      description:
+          "Renders a scene's motion to an mp4, drawn by the app itself — "
+          'its theme, its widgets — one frame per moment on the harness '
+          'lane, where a frame cannot be of a moment other than the one it '
+          'was drawn for. Needs ffmpeg.',
+      parameters: [
+        _packageParameter,
+        ActionParameter(
+          'scene',
+          'Scene',
+          description: 'The scene file, by name or path.',
+          required: true,
+        ),
+        ActionParameter('fps', 'Frames a second', description: 'Default 30.'),
+      ],
+    ),
+  ];
+
+  ActionParameter get _packageParameter => ActionParameter(
+    'package',
+    'Package',
+    required: false,
+    description: 'Which declared package; the first when omitted.',
+    options: [for (var path in packages) ActionOption(path)],
+  );
+
+  @override
+  Future<Object?> invoke(
+    String actionId, {
+    Map<String, Object?> arguments = const {},
+  }) async {
+    var package = switch (arguments['package']) {
+      String named when packages.contains(named) => named,
+      String named => throw ArgumentError.value(
+        named,
+        'package',
+        'no such declared package. Declared: ${packages.join(', ')}',
+      ),
+      _ => packages.firstOrNull,
+    };
+    if (package == null) {
+      throw StateError('this plugin is declared for no package');
+    }
+    switch (actionId) {
+      case 'list':
+        await _cache.load(package);
+        return {
+          'package': package,
+          'scenes': [
+            for (var scene in scenesFor(package) ?? const <SceneEntry>[])
+              {
+                'class': scene.className,
+                'path': p.relative(scene.path, from: host.worktree.path),
+              },
+          ],
+        };
+      case 'video':
+        return exportVideo(
+          package: package,
+          scenePath: _resolveScene(package, arguments['scene']),
+          fps: switch (arguments['fps']) {
+            int value => value,
+            String text when int.tryParse(text) != null => int.parse(text),
+            _ => 30,
+          }.clamp(1, 120),
+        );
+      default:
+        return super.invoke(actionId, arguments: arguments);
+    }
+  }
+
+  /// A scene named by class, file name or path — refused by listing what
+  /// this package actually has, which is the only useful answer to a typo.
+  String _resolveScene(String package, Object? wanted) {
+    var scenes = scenesFor(package) ?? discoverScenes(rootFor(package));
+    if (wanted is String) {
+      for (var scene in scenes) {
+        if (scene.className == wanted ||
+            scene.fileName == wanted ||
+            scene.path == wanted ||
+            p.relative(scene.path, from: host.worktree.path) == wanted) {
+          return scene.path;
+        }
+      }
+    }
+    throw ArgumentError.value(
+      wanted,
+      'scene',
+      scenes.isEmpty
+          ? 'this package has no scenes'
+          : 'no such scene. Found: ${scenes.map((s) => s.className).join(', ')}',
+    );
+  }
 
   Status get _status {
     var scanned = packages.where((p) => scenesFor(p) != null).toList();

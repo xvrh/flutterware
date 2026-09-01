@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 
 import 'controller.dart';
 import 'values.dart';
+import '../previews/playhead.dart';
 
 /// Which body a scope builds.
 ///
@@ -90,6 +91,25 @@ abstract class MotionSurface {
 /// up. A scrubber that answered earlier would report positions the screen had
 /// not reached, which is indistinguishable from a slow guest and much harder to
 /// diagnose.
+/// The old runtime as a [Playhead]: progress is a fraction of a duration the
+/// values resolve, which is exactly what the contract asks for.
+class _MotionPlayhead implements Playhead {
+  _MotionPlayhead(this.scope);
+
+  final MotionSurface scope;
+
+  @override
+  Duration get duration => scope.motionValues.resolveDuration();
+
+  @override
+  void seek(Duration position) {
+    var total = duration.inMicroseconds;
+    scope.controller.progress = total == 0
+        ? 0
+        : position.inMicroseconds / total;
+  }
+}
+
 class MotionRegistry {
   MotionRegistry._();
 
@@ -109,14 +129,24 @@ class MotionRegistry {
   /// Mount order, which is also the order the panel lists them in.
   Iterable<String> get ids => _scopes.keys;
 
+  /// Ids handed out by the neutral registry, so both answer to the same
+  /// name — the previews walk drives [Playhead] now, and this runtime is one
+  /// implementer of it until it is deleted.
+  final _playheads = <String, String>{};
+
   String attach(MotionSurface scope) {
     var id = '${_nextId++}';
     _scopes[id] = scope;
+    _playheads[id] = PlayheadRegistry.instance.attach(_MotionPlayhead(scope));
     _registerExtensions();
     return id;
   }
 
-  void detach(String id) => _scopes.remove(id);
+  void detach(String id) {
+    _scopes.remove(id);
+    var playhead = _playheads.remove(id);
+    if (playhead != null) PlayheadRegistry.instance.detach(playhead);
+  }
 
   /// The scope an argument names, the only one when there is only one, or null.
   ///
