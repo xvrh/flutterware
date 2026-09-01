@@ -45,9 +45,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:dart_style/dart_style.dart';
-import 'package:flutter/material.dart';
-
-import 'model.dart';
+import 'package:flutterware/scene_authoring.dart';
 
 const sceneFileMarker = '//@flutterware:scene=0.4';
 
@@ -149,7 +147,7 @@ $sceneFileMarker
 String _paramDefault(SceneParamDecl p) => switch (p.kind) {
   SceneParamKind.string => _str(p.defaultValue as String),
   SceneParamKind.number => _num(p.defaultValue as double),
-  SceneParamKind.color => 'const ${_color(p.defaultValue as Color)}',
+  SceneParamKind.color => 'const ${_color(p.defaultValue as SceneColor)}',
 };
 
 void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
@@ -194,10 +192,10 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
       }
       if (f.gap != 8) add('gap', f.gap, () => _num(f.gap));
       if (f.padding != 0) add('padding', f.padding, () => _num(f.padding));
-      if (f.mainAlign != MainAxisAlignment.start) {
+      if (f.mainAlign != SceneMainAxisAlignment.start) {
         props.add('mainAlign: MainAxisAlignment.${f.mainAlign.name}');
       }
-      if (f.crossAlign != CrossAxisAlignment.center) {
+      if (f.crossAlign != SceneCrossAxisAlignment.center) {
         props.add('crossAlign: CrossAxisAlignment.${f.crossAlign.name}');
       }
       if (f.children.isNotEmpty) {
@@ -208,10 +206,10 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
       props.add(ref('text', t.text) ?? _str(t.text));
       common();
       if (t.fontSize != 16) add('fontSize', t.fontSize, () => _num(t.fontSize));
-      if (t.weight != FontWeight.w400) {
+      if (t.weight != SceneFontWeight.w400) {
         props.add('weight: FontWeight.w${t.weight.value}');
       }
-      if (t.color != const Color(0xFF1A1A1A)) {
+      if (t.color != const SceneColor(0xFF1A1A1A)) {
         add('color', t.color, () => _color(t.color));
       }
       out.write('Text(${props.join(', ')})');
@@ -240,8 +238,8 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
 String _num(double v) =>
     v == v.roundToDouble() && v.abs() < 1e15 ? '${v.round()}' : '$v';
 
-String _color(Color c) =>
-    'Color(0x${c.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()})';
+String _color(SceneColor c) =>
+    'Color(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
 
 String _str(String s) {
   var out = StringBuffer("'");
@@ -583,7 +581,7 @@ class _Parser {
             when args.arguments.length == 1) {
           var v = args.arguments.single.argumentExpression;
           if (v is IntegerLiteral && v.value != null) {
-            return (SceneParamKind.color, Color(v.value!));
+            return (SceneParamKind.color, SceneColor(v.value!));
           }
         }
         return null;
@@ -667,17 +665,21 @@ class _Parser {
           var v = _enum(
             e,
             'MainAxisAlignment',
-            MainAxisAlignment.values.map((v) => v.name),
+            SceneMainAxisAlignment.values.map((v) => v.name),
           );
-          if (v != null) node.mainAlign = MainAxisAlignment.values.byName(v);
+          if (v != null) {
+            node.mainAlign = SceneMainAxisAlignment.values.byName(v);
+          }
         });
         _take(named, 'crossAlign', (e) {
           var v = _enum(
             e,
             'CrossAxisAlignment',
-            CrossAxisAlignment.values.map((v) => v.name),
+            SceneCrossAxisAlignment.values.map((v) => v.name),
           );
-          if (v != null) node.crossAlign = CrossAxisAlignment.values.byName(v);
+          if (v != null) {
+            node.crossAlign = SceneCrossAxisAlignment.values.byName(v);
+          }
         });
         _take(named, 'children', (e) {
           if (e is! ListLiteral) {
@@ -737,7 +739,7 @@ class _Parser {
           ]);
           if (v != null) {
             node.weight =
-                FontWeight.values[int.parse(v.substring(1)) ~/ 100 - 1];
+                SceneFontWeight.values[int.parse(v.substring(1)) ~/ 100 - 1];
           }
         });
         _take(
@@ -922,10 +924,10 @@ class _Parser {
     return _string(e);
   }
 
-  Color? _colorV(Expression e, SceneNode n, String prop) {
+  SceneColor? _colorV(Expression e, SceneNode n, String prop) {
     var v = _paramRef(e, SceneParamKind.color, n, prop);
     if (identical(v, _refused)) return null;
-    if (v != null) return v as Color;
+    if (v != null) return v as SceneColor;
     return _colorOf(e);
   }
 
@@ -975,11 +977,11 @@ class _Parser {
     return null;
   }
 
-  Color? _colorOf(Expression e) {
+  SceneColor? _colorOf(Expression e) {
     if (_invocation(e) case ('Color', var args)
         when args.arguments.length == 1) {
       var v = args.arguments.single.argumentExpression;
-      if (v is IntegerLiteral && v.value != null) return Color(v.value!);
+      if (v is IntegerLiteral && v.value != null) return SceneColor(v.value!);
     }
     refuse(e.offset, _kind(e), 'expected a color, spelled Color(0xAARRGGBB)');
     return null;

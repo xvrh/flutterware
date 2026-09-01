@@ -1,10 +1,9 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware_app/canvas_toy/model.dart';
-import 'package:flutterware_app/canvas_toy/motion_file.dart';
-import 'package:flutterware_app/canvas_toy/motion_model.dart';
+import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/canvas_toy/drafts.dart';
+import 'package:flutterware_app/src/scene/motion_file.dart';
 
 void main() {
   var scene = coffeeBannerDraft();
@@ -515,7 +514,7 @@ MotionTrack _randomTrack(Random random, TrackKind kind, MotionDocument doc) {
     Object value;
     String? paramRef;
     if (kind == TrackKind.color) {
-      value = Color(0xFF000000 | random.nextInt(0xFFFFFF));
+      value = SceneColor(0xFF000000 | random.nextInt(0xFFFFFF));
     } else if (doc.params.isNotEmpty && random.nextInt(4) == 0) {
       var p = doc.params.first;
       value = p.defaultValue;

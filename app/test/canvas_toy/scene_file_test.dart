@@ -1,9 +1,9 @@
 import 'dart:math';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware_app/canvas_toy/model.dart';
-import 'package:flutterware_app/canvas_toy/scene_file.dart';
+import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/canvas_toy/drafts.dart';
+import 'package:flutterware_app/src/scene/scene_file.dart';
 
 void main() {
   test('the coffee banner round-trips', () {
@@ -111,7 +111,7 @@ class BannerScene({
       expect(headline.paramRefs['text'], 'title');
       var cta = doc.root.children[1] as FrameNode;
       expect(cta.x, 24);
-      expect(cta.fill, const Color(0xFFE8632B));
+      expect(cta.fill, const SceneColor(0xFFE8632B));
 
       var emitted = emitSceneFile(doc, className: 'BannerScene');
       expect(emitted, contains('class BannerScene({'));
@@ -427,7 +427,7 @@ double _randomDouble(Random r) {
   return v == 0 ? 1 : v;
 }
 
-Color _randomColor(Random r) => Color(r.nextInt(0xFFFFFFFF) + 1);
+SceneColor _randomColor(Random r) => SceneColor(r.nextInt(0xFFFFFFFF) + 1);
 
 int _counter = 0;
 
@@ -440,8 +440,8 @@ SceneNode _randomNode(Random r, int depth) {
         ..layout = NodeLayout.values[r.nextInt(3)]
         ..gap = _randomDouble(r).abs()
         ..padding = r.nextBool() ? 0 : _randomDouble(r).abs()
-        ..mainAlign = MainAxisAlignment.values[r.nextInt(4)]
-        ..crossAlign = CrossAxisAlignment.values[r.nextInt(4)];
+        ..mainAlign = SceneMainAxisAlignment.values[r.nextInt(4)]
+        ..crossAlign = SceneCrossAxisAlignment.values[r.nextInt(4)];
       for (var i = 0; i < r.nextInt(5); i++) {
         frame.children.add(_randomNode(r, depth + 1));
       }
@@ -449,7 +449,7 @@ SceneNode _randomNode(Random r, int depth) {
     case 1:
       node = TextNode(name, _randomString(r))
         ..fontSize = 8 + _randomDouble(r).abs() % 90
-        ..weight = FontWeight.values[r.nextInt(9)]
+        ..weight = SceneFontWeight.values[r.nextInt(9)]
         ..color = _randomColor(r);
     case 2:
       node = ShapeNode(name, circle: r.nextBool());
@@ -517,7 +517,7 @@ SceneDocument _randomDoc(Random r) {
         var decl = SceneParamDecl(name, SceneParamKind.color, _randomColor(r));
         doc.params.add(decl);
         var n = nodes[r.nextInt(nodes.length)];
-        n.fill = decl.defaultValue as Color;
+        n.fill = decl.defaultValue as SceneColor;
         n.paramRefs['fill'] = name;
     }
   }

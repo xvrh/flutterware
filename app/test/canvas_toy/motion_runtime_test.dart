@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/scene.dart';
+import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/canvas_toy/drafts.dart';
 import 'package:flutterware_app/canvas_toy/main.dart';
-import 'package:flutterware_app/canvas_toy/model.dart';
-import 'package:flutterware_app/canvas_toy/motion_file.dart';
-import 'package:flutterware_app/canvas_toy/motion_model.dart';
-import 'package:flutterware_app/canvas_toy/motion_runtime.dart';
+import 'package:flutterware_app/src/scene/motion_file.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('the grammar and the runtime agree on the curve allowlist', () {
-    expect(motionCurveObjects.keys.toSet(), motionCurves.toSet());
+    expect(sceneCurvesByName.keys.toSet(), motionCurves.toSet());
   });
 
   group('track evaluation', () {
@@ -36,18 +36,22 @@ void main() {
       expect(mid, isNot(0.5));
     });
 
-    test('a color track lerps through Color.lerp', () {
+    test('a color track lerps through SceneColor.lerp', () {
       var colors = MotionTrack(TrackKind.color, [
-        MotionKey(at: Duration.zero, value: const Color(0xFF000000)),
+        MotionKey(at: Duration.zero, value: const SceneColor(0xFF000000)),
         MotionKey(
           at: const Duration(milliseconds: 100),
-          value: const Color(0xFFFFFFFF),
+          value: const SceneColor(0xFFFFFFFF),
         ),
       ]);
       var mid = colors.evaluate(const Duration(milliseconds: 50));
       expect(
         mid,
-        Color.lerp(const Color(0xFF000000), const Color(0xFFFFFFFF), 0.5),
+        SceneColor.lerp(
+          const SceneColor(0xFF000000),
+          const SceneColor(0xFFFFFFFF),
+          0.5,
+        ),
       );
     });
 
@@ -419,7 +423,7 @@ void main() {
                 MotionTransport(scene, coffeeIntroDraft()),
                 Expanded(
                   child: AnimatedBuilder(
-                    animation: scene,
+                    animation: scene.listenable,
                     builder: (context, _) =>
                         FittedBox(child: NodeView(scene.root)),
                   ),

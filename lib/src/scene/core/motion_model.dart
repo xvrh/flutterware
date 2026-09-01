@@ -1,5 +1,5 @@
-// Disposable spike: the motion document model — the editor-plane half of the
-// motion grammar rewrite (sketches 17–25). A motion names its scene, declares
+// The motion document model — the editor-plane half of the motion grammar
+// (sketches 17–25). A motion names its scene, declares
 // animation groups over that scene's nodes (typed targets, field-name
 // identity — the same law the scene settled), arranges them on a mandatory
 // `timeline`, and may keep unplaced groups as library assets fired on events.
@@ -189,66 +189,4 @@ class MotionDocument {
 
     yield* visit(timeline);
   }
-}
-
-/// The hard-coded "agent draft" intro for the coffee banner — the motion
-/// sibling of [coffeeBannerDraft], target names matching its node fields.
-MotionDocument coffeeIntroDraft() {
-  var doc = MotionDocument(sceneClassName: 'BannerScene');
-  doc.params.add(SceneParamDecl('slideFrom', SceneParamKind.number, 24.0));
-
-  var headlineIn = AnimateGroup('headlineIn', 'headline');
-  headlineIn.tracks['opacity'] = MotionTrack(TrackKind.number, [
-    MotionKey(at: Duration.zero, value: 0.0),
-    MotionKey(
-      at: const Duration(milliseconds: 260),
-      value: 1.0,
-      curve: 'easeOut',
-    ),
-  ]);
-  headlineIn.tracks['translateY'] = MotionTrack(TrackKind.number, [
-    MotionKey(at: Duration.zero, value: 24.0, paramRef: 'slideFrom'),
-    MotionKey(
-      at: const Duration(milliseconds: 260),
-      value: 0.0,
-      curve: 'easeOut',
-    ),
-  ]);
-
-  var glowMood = AnimateGroup('glowMood', 'glow');
-  glowMood.tracks['opacity'] = MotionTrack(TrackKind.number, [
-    MotionKey(at: Duration.zero, value: 1.0),
-    MotionKey(at: const Duration(milliseconds: 900), value: 0.85),
-    MotionKey(at: const Duration(milliseconds: 1800), value: 1.0),
-  ]);
-
-  var badgePop = AnimateGroup('badgePop', 'badge');
-  badgePop.tracks['scale'] = MotionTrack(TrackKind.number, [
-    MotionKey(at: Duration.zero, value: 0.6),
-    MotionKey(
-      at: const Duration(milliseconds: 240),
-      value: 1.0,
-      curve: 'easeOutBack',
-    ),
-  ]);
-  badgePop.args['progress'] = MotionTrack(TrackKind.number, [
-    MotionKey(at: Duration.zero, value: 0.0),
-    MotionKey(at: const Duration(milliseconds: 300), value: 1.0),
-  ]);
-
-  // A library asset: not in the timeline, fired on events by its own player.
-  var tapPulse = AnimateGroup('tapPulse', 'cta');
-  tapPulse.tracks['scale'] = MotionTrack(TrackKind.number, [
-    MotionKey(at: Duration.zero, value: 1.0),
-    MotionKey(at: const Duration(milliseconds: 120), value: 1.06),
-    MotionKey(at: const Duration(milliseconds: 240), value: 1.0),
-  ]);
-
-  doc.groups.addAll([headlineIn, glowMood, badgePop, tapPulse]);
-  doc.timeline = ParExpr([
-    GroupRef('headlineIn'),
-    AtExpr(const Duration(milliseconds: 400), GroupRef('badgePop')),
-    GroupRef('glowMood'),
-  ]);
-  return doc;
 }

@@ -1,9 +1,9 @@
-// Disposable spike: the scene-canvas toy's model. A deliberately *uniform*
-// node — every node carries the same styling bag (fill, corner, opacity) and
-// the same geometry slots — to feel where the Figma-shaped model fits Flutter
-// and where it fights it. Not a design; an instrument.
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+// The scene document — a deliberately *uniform* node: every node carries the
+// same styling bag (fill, corner, opacity) and the same geometry slots.
+// Graduated from the canvas-toy spike 2026-09-01; pure Dart by decision
+// (2026-09-01-scene-graduation-plan.md) so the headless surface can hold it.
+import 'listenable.dart';
+import 'values.dart';
 
 enum NodeLayout { absolute, row, column }
 
@@ -23,9 +23,9 @@ bool isValidNodeName(String name) =>
     _identifier.hasMatch(name) && !_reserved.contains(name);
 
 /// The typed hole: a constructor parameter whose default is the mockup.
-/// Declared in the file as `this.<name> = <literal>` plus its
-/// `final <Type> <name>;` field; referenced by node properties by bare
-/// identifier. Parameters share the class namespace with node fields.
+/// Declared in the file as a primary-constructor formal with a default;
+/// referenced by node properties by bare identifier. Parameters share the
+/// class namespace with node fields.
 enum SceneParamKind { string, number, color }
 
 class SceneParamDecl {
@@ -34,8 +34,9 @@ class SceneParamDecl {
   final String name;
   final SceneParamKind kind;
 
-  /// String, double or Color — the mockup, read by every consumer that
-  /// passes no argument (the editor, the export matrix at the base point).
+  /// String, double or [SceneColor] — the mockup, read by every consumer
+  /// that passes no argument (the editor, the export matrix at the base
+  /// point).
   final Object defaultValue;
 
   String get typeName => switch (kind) {
@@ -50,10 +51,6 @@ sealed class SceneNode {
 
   final String name;
 
-  /// Measurement anchor: the editor reads laid-out geometry back from the
-  /// render tree, because flex children have no authored position.
-  final key = GlobalKey();
-
   // Authored geometry. x/y are meaningful only under an absolute parent;
   // null width/height means hug content.
   double x = 0;
@@ -62,12 +59,13 @@ sealed class SceneNode {
   double? height;
 
   // The uniform styling bag — the bet under test.
-  Color? fill;
+  SceneColor? fill;
   double cornerRadius = 0;
   double opacity = 1;
 
-  /// Laid-out rect in artboard coordinates, swept after each frame.
-  Rect? measured;
+  /// Laid-out rect in artboard coordinates, swept after each frame by
+  /// whichever renderer measured it.
+  SceneRect? measured;
 
   /// Which properties read a parameter: property key → parameter name.
   /// The property still holds the resolved value (the default, until
@@ -130,7 +128,7 @@ sealed class SceneNode {
     'fontSize' => (this as TextNode).fontSize,
     'color' => (this as TextNode).color,
     'gap' => (this as FrameNode).gap,
-    'fill' => fill ?? const Color(0x00000000),
+    'fill' => fill ?? const SceneColor(0x00000000),
     _ => throw ArgumentError('no animatable property "$prop"'),
   };
 
@@ -183,8 +181,8 @@ class FrameNode extends SceneNode {
   NodeLayout layout;
   double gap = 8;
   double padding = 0;
-  MainAxisAlignment mainAlign = MainAxisAlignment.start;
-  CrossAxisAlignment crossAlign = CrossAxisAlignment.center;
+  SceneMainAxisAlignment mainAlign = SceneMainAxisAlignment.start;
+  SceneCrossAxisAlignment crossAlign = SceneCrossAxisAlignment.center;
 
   @override
   final List<SceneNode> children = [];
@@ -198,8 +196,8 @@ class TextNode extends SceneNode {
 
   String text;
   double fontSize = 16;
-  FontWeight weight = FontWeight.w400;
-  Color color = const Color(0xFF1A1A1A);
+  SceneFontWeight weight = SceneFontWeight.w400;
+  SceneColor color = const SceneColor(0xFF1A1A1A);
 
   @override
   String get typeName => 'Text';
@@ -239,7 +237,7 @@ class ExternalNode extends SceneNode {
   String get typeName => 'Ext';
 }
 
-class SceneDocument extends ChangeNotifier {
+class SceneDocument extends SceneListenable {
   SceneDocument(this.root) {
     _adopt();
   }
@@ -257,16 +255,15 @@ class SceneDocument extends ChangeNotifier {
   var _fxScheduled = false;
 
   /// The probed frame-aligned flush (500 writes → 1 rebuild): coalesce all
-  /// fx writes of a frame into one notification, and make sure a frame is
-  /// coming — a hidden or idle window schedules none on its own.
+  /// fx writes of a batch into one notification, through whatever
+  /// [sceneFlushScheduler] the process installed.
   void fxTick() {
     if (_fxScheduled) return;
     _fxScheduled = true;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
+    sceneFlushScheduler(() {
       _fxScheduled = false;
       notifyListeners();
     });
-    SchedulerBinding.instance.ensureVisualUpdate();
   }
 
   /// The scene's declared parameters, in declaration order.
@@ -298,13 +295,13 @@ class SceneDocument extends ChangeNotifier {
             case 'opacity':
               node.opacity = (v! as num).toDouble();
             case 'fill':
-              node.fill = v as Color?;
+              node.fill = v as SceneColor?;
             case 'text':
               (node as TextNode).text = v! as String;
             case 'fontSize':
               (node as TextNode).fontSize = (v! as num).toDouble();
             case 'color':
-              (node as TextNode).color = v! as Color;
+              (node as TextNode).color = v! as SceneColor;
             case 'gap':
               (node as FrameNode).gap = (v! as num).toDouble();
             case 'padding':
@@ -317,7 +314,7 @@ class SceneDocument extends ChangeNotifier {
 
   /// Bumped when a post-frame sweep finds moved geometry, so overlays repaint
   /// without rebuilding the scene.
-  final geometryEpoch = ValueNotifier(0);
+  final geometryEpoch = SceneValue(0);
 
   void edit(void Function() fn) {
     fn();
@@ -338,14 +335,14 @@ class SceneDocument extends ChangeNotifier {
     var ty = n.fxRendered('translateY') as double;
     var scale = n.fxRendered('scale') as double;
     var rotate = n.fxRendered('rotate') as double;
-    var fill = n.hasFx('fill') ? n.fxRendered('fill') as Color : n.fill;
+    var fill = n.hasFx('fill') ? n.fxRendered('fill') as SceneColor : n.fill;
     return {
       'name': n.name,
       'x': n.x,
       'y': n.y,
       'w': n.width,
       'h': n.height,
-      'fill': fill?.toARGB32(),
+      'fill': fill?.argb,
       'corner': n.cornerRadius,
       'opacity': n.fxRendered('opacity'),
       // The imposed transforms have no authored slots — identity is the
@@ -366,8 +363,8 @@ class SceneDocument extends ChangeNotifier {
           'kind': 'text',
           'text': t.text,
           'fontSize': t.fxRendered('fontSize'),
-          'weight': FontWeight.values.indexOf(t.weight),
-          'color': (t.fxRendered('color') as Color).toARGB32(),
+          'weight': t.weight.index,
+          'color': (t.fxRendered('color') as SceneColor).argb,
         },
         ShapeNode s => {'kind': 'shape', 'circle': s.circle},
         ExternalNode e => {
@@ -481,21 +478,21 @@ class SceneDocument extends ChangeNotifier {
     return out;
   }
 
-  /// Topmost direct child of [scope] containing [point] (artboard coords).
-  SceneNode? hitShallow(Offset point, {FrameNode? scope}) {
+  /// Topmost direct child of [scope] containing the point (artboard coords).
+  SceneNode? hitShallow(double x, double y, {FrameNode? scope}) {
     var frame = scope ?? root;
     for (var c in frame.children.reversed) {
       var rect = c.measured;
-      if (rect != null && rect.contains(point)) return c;
+      if (rect != null && rect.contains(x, y)) return c;
     }
     return null;
   }
 
-  /// Deepest node under [point].
-  SceneNode? hitDeep(Offset point) {
+  /// Deepest node under the point.
+  SceneNode? hitDeep(double x, double y) {
     SceneNode? visit(SceneNode n) {
       var rect = n.measured;
-      if (rect == null || !rect.contains(point)) return null;
+      if (rect == null || !rect.contains(x, y)) return null;
       for (var c in n.children.reversed) {
         var hit = visit(c);
         if (hit != null) return hit;
@@ -505,74 +502,4 @@ class SceneDocument extends ChangeNotifier {
 
     return visit(root);
   }
-}
-
-/// The hard-coded "agent draft" of the coffee store banner: roughly right,
-/// to be refined by direct manipulation.
-SceneDocument coffeeBannerDraft() {
-  var root = FrameNode('root')
-    ..width = 1024
-    ..height = 500
-    ..fill = const Color(0xFF2B1B12);
-
-  var glow = ShapeNode('glow', circle: true)
-    ..x = 600
-    ..y = -110
-    ..width = 480
-    ..height = 480
-    ..fill = const Color(0xFF4A2F1F)
-    ..opacity = 0.7;
-
-  var cup = TextNode('cup', '☕')
-    ..x = 690
-    ..y = 110
-    ..fontSize = 190;
-
-  var headline = TextNode('headline', 'Fresh coffee, faster')
-    ..fontSize = 54
-    ..weight = FontWeight.w700
-    ..color = Colors.white;
-
-  var sub = TextNode('subtitle', 'Order ahead. Skip the line. Earn rewards.')
-    ..fontSize = 20
-    ..color = const Color(0xFFD8C9BD);
-
-  var ctaLabel = TextNode('ctaLabel', 'Get the app')
-    ..fontSize = 17
-    ..weight = FontWeight.w600
-    ..color = Colors.white;
-
-  var cta = FrameNode('cta', layout: NodeLayout.row)
-    ..padding = 16
-    ..fill = const Color(0xFFE8632B)
-    ..cornerRadius = 28;
-  cta.children.add(ctaLabel);
-
-  var copy = FrameNode('copy', layout: NodeLayout.column)
-    ..x = 64
-    ..y = 120
-    ..width = 500
-    ..gap = 16
-    ..crossAlign = CrossAxisAlignment.start;
-  copy.children.addAll([headline, sub, cta]);
-
-  // External widgets — rendered as placeholders here, natively in the guest.
-  var badge = ExternalNode('badge', 'DrinkBadge', args: {'size': 140.0})
-    ..x = 560
-    ..y = 290
-    ..width = 140
-    ..height = 140;
-  var spinner = ExternalNode('loading', 'Spinner', args: {'size': 40.0})
-    ..x = 950
-    ..y = 430
-    ..width = 40
-    ..height = 40;
-  var order = ExternalNode('order', 'OrderButton', args: {'label': 'Order now'})
-    ..x = 830
-    ..y = 400
-    ..width = 150
-    ..height = 44;
-
-  root.children.addAll([glow, cup, copy, badge, spinner, order]);
-  return SceneDocument(root);
 }

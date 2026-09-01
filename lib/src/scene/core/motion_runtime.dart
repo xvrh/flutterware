@@ -1,38 +1,20 @@
-// Disposable spike: the motion runtime — the half that plays what the
-// grammar persists. Every shape here was probed first (sketches 17–25):
-// tracks evaluate under the hold rule with the curve riding the arriving
-// key; a bound motion writes contributions into the scene nodes' fx plane
-// (writer-keyed, stack-ordered, composed over the LIVE authored base);
-// combinators are pure time transforms, so seek and backwards scrub cost
-// nothing; Repeat's last frame holds the child's end, not cycle-0; and the
-// player is the APPLICATOR — the ticker is almost incidental.
+// The motion runtime — the half that plays what the grammar persists. Every
+// shape here was probed first (sketches 17–25): tracks evaluate under the
+// hold rule with the curve riding the arriving key; a bound motion writes
+// contributions into the scene nodes' fx plane (writer-keyed, stack-ordered,
+// composed over the LIVE authored base); combinators are pure time
+// transforms, so seek and backwards scrub cost nothing; Repeat's last frame
+// holds the child's end, not cycle-0; and the player is the APPLICATOR —
+// the ticker is almost incidental, and lives in the Flutter half
+// (lib/src/scene/player.dart).
 //
 // Binding is the document-plane version of the pair: group targets resolve
 // by name against the scene the motion is bound to, and a name the scene
 // does not have refuses at bind — the copy-trap guard, one moment early.
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
-
+import 'curves.dart';
 import 'model.dart';
 import 'motion_model.dart';
-
-/// The runtime side of the curve allowlist. `motion_file.dart` accepts
-/// exactly these names; a test holds the two lists together.
-final motionCurveObjects = <String, Curve>{
-  'linear': Curves.linear,
-  'ease': Curves.ease,
-  'easeIn': Curves.easeIn,
-  'easeOut': Curves.easeOut,
-  'easeInOut': Curves.easeInOut,
-  'easeInBack': Curves.easeInBack,
-  'easeOutBack': Curves.easeOutBack,
-  'easeInCubic': Curves.easeInCubic,
-  'easeOutCubic': Curves.easeOutCubic,
-  'decelerate': Curves.decelerate,
-  'fastOutSlowIn': Curves.fastOutSlowIn,
-  'bounceOut': Curves.bounceOut,
-  'elasticOut': Curves.elasticOut,
-};
+import 'values.dart';
 
 extension MotionTrackEvaluate on MotionTrack {
   /// The hold rule: before the first key its value, after the last the
@@ -51,18 +33,18 @@ extension MotionTrackEvaluate on MotionTrack {
       if (t <= keys[i].at) {
         var a = keys[i - 1], b = keys[i];
         var u = (t - a.at).inMicroseconds / (b.at - a.at).inMicroseconds;
-        var shaped = (motionCurveObjects[b.curve] ?? Curves.linear).transform(
-          u,
-        );
+        var shaped =
+            (sceneCurvesByName[b.curve] ?? sceneCurvesByName['linear']!)
+                .transform(u);
         return switch (kind) {
           TrackKind.number =>
             (a.value as double) +
                 ((b.value as double) - (a.value as double)) * shaped,
-          TrackKind.color => Color.lerp(
-            a.value as Color,
-            b.value as Color,
+          TrackKind.color => SceneColor.lerp(
+            a.value as SceneColor,
+            b.value as SceneColor,
             shaped,
-          )!,
+          ),
         };
       }
     }
@@ -77,9 +59,28 @@ extension MotionTrackEvaluate on MotionTrack {
 /// motion.
 abstract class Playable {
   /// One driver at a time: two players ticking one playable is a per-frame
-  /// double-write. Claimed by [MotionPlayer.play], released on stop,
-  /// dispose or completion.
+  /// double-write. Claimed by the player's play, released on stop, dispose
+  /// or completion.
   Object? _driver;
+
+  /// Claim exclusive drive. Refuses (with the fix) when another driver
+  /// holds it; re-claiming by the same driver is a no-op.
+  void claimDriver(Object driver) {
+    var current = _driver;
+    if (current != null && !identical(current, driver)) {
+      throw StateError(
+        'this playable is already driven by another player — one driver at '
+        'a time (two would double-write every frame); stop the other '
+        'player first',
+      );
+    }
+    _driver = driver;
+  }
+
+  /// Release, if [driver] is the one holding it.
+  void releaseDriver(Object driver) {
+    if (identical(_driver, driver)) _driver = null;
+  }
 
   Duration get duration;
 
@@ -246,7 +247,7 @@ class BoundMotion extends Playable {
   final Playable _root;
 
   /// A bound group by name — placed or library asset alike; hand it to its
-  /// own [MotionPlayer] for independent play.
+  /// own player for independent play.
   BoundGroup group(String name) {
     var g = _groups[name];
     if (g == null) {
@@ -263,93 +264,4 @@ class BoundMotion extends Playable {
 
   @override
   void clearFx() => _root.clearFx();
-}
-
-enum MotionPlayerStatus { idle, playing, paused, completed }
-
-/// The applicator with a clock: seek is pure (`apply(t)`, any direction),
-/// play owns a ticker (a raw one anywhere, a vsync-muted one when a
-/// [TickerProvider] is given), pause keeps the picture, stop is cancel —
-/// the fx drops and the authored values were never touched. A non-looping
-/// player stops itself at the end, so a completed player holds no frame
-/// callbacks and forgetting to dispose it is harmless; dispose matters
-/// exactly while it might still be playing.
-class MotionPlayer {
-  MotionPlayer(this.playable, {TickerProvider? vsync}) {
-    _ticker = vsync?.createTicker(_tick) ?? Ticker(_tick);
-  }
-
-  final Playable playable;
-  late final Ticker _ticker;
-
-  var status = MotionPlayerStatus.idle;
-  var _position = Duration.zero;
-  var _lastElapsed = Duration.zero;
-
-  /// Tempo lives here, never in the file. Takes effect from the next tick.
-  double rate = 1;
-
-  Duration get position => _position;
-
-  void play() {
-    if (status == MotionPlayerStatus.playing) return;
-    var driver = playable._driver;
-    if (driver != null && !identical(driver, this)) {
-      throw StateError(
-        'this playable is already driven by another player — one driver at '
-        'a time (two would double-write every frame); stop the other '
-        'player first',
-      );
-    }
-    playable._driver = this;
-    if (_position >= playable.duration) _position = Duration.zero;
-    _lastElapsed = Duration.zero;
-    status = MotionPlayerStatus.playing;
-    _ticker.start();
-  }
-
-  void pause() {
-    if (status != MotionPlayerStatus.playing) return;
-    _ticker.stop();
-    status = MotionPlayerStatus.paused;
-  }
-
-  /// Pure: always legal, any direction, any state. Does not start a clock.
-  void seek(Duration t) {
-    _position = _clamp(t, playable.duration);
-    playable.apply(_position);
-  }
-
-  /// Cancel: the fx drops, the base was never touched.
-  void stop() {
-    _ticker.stop();
-    playable.clearFx();
-    _release();
-    _position = Duration.zero;
-    status = MotionPlayerStatus.idle;
-  }
-
-  void dispose() {
-    stop();
-    _ticker.dispose();
-  }
-
-  void _tick(Duration elapsed) {
-    var delta = elapsed - _lastElapsed;
-    _lastElapsed = elapsed;
-    _position += delta * rate;
-    if (_position >= playable.duration) {
-      _position = playable.duration;
-      playable.apply(_position);
-      _ticker.stop();
-      _release();
-      status = MotionPlayerStatus.completed;
-      return;
-    }
-    playable.apply(_position);
-  }
-
-  void _release() {
-    if (identical(playable._driver, this)) playable._driver = null;
-  }
 }

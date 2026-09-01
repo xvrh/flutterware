@@ -41,10 +41,8 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:dart_style/dart_style.dart';
-import 'package:flutter/material.dart';
+import 'package:flutterware/scene_authoring.dart';
 
-import 'model.dart';
-import 'motion_model.dart';
 import 'scene_file.dart' show SceneRefusal;
 
 const motionFileMarker = '//@flutterware:motion=0.1';
@@ -178,7 +176,7 @@ String _track(MotionTrack t, TrackKind kind, Map<String, SceneParamDecl> ps) {
       parts.add('value: ${k.paramRef}');
     } else {
       parts.add(
-        'value: ${kind == TrackKind.color ? _color(k.value as Color) : _num((k.value as num).toDouble())}',
+        'value: ${kind == TrackKind.color ? _color(k.value as SceneColor) : _num((k.value as num).toDouble())}',
       );
     }
     if (k.curve case var curve? when curve != 'linear') {
@@ -214,14 +212,14 @@ String _dur(Duration d) {
 String _paramDefault(SceneParamDecl p) => switch (p.kind) {
   SceneParamKind.string => _str(p.defaultValue as String),
   SceneParamKind.number => _num(p.defaultValue as double),
-  SceneParamKind.color => 'const ${_color(p.defaultValue as Color)}',
+  SceneParamKind.color => 'const ${_color(p.defaultValue as SceneColor)}',
 };
 
 String _num(double v) =>
     v == v.roundToDouble() && v.abs() < 1e15 ? '${v.round()}' : '$v';
 
-String _color(Color c) =>
-    'Color(0x${c.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()})';
+String _color(SceneColor c) =>
+    'Color(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
 
 String _str(String s) {
   var out = StringBuffer("'");
@@ -590,7 +588,7 @@ class _Parser {
             when args.arguments.length == 1) {
           var v = args.arguments.single.argumentExpression;
           if (v is IntegerLiteral && v.value != null) {
-            return (SceneParamKind.color, Color(v.value!));
+            return (SceneParamKind.color, SceneColor(v.value!));
           }
         }
         return null;
@@ -1040,11 +1038,11 @@ class _Parser {
     return negate ? -value : value;
   }
 
-  Color? _colorOf(Expression e) {
+  SceneColor? _colorOf(Expression e) {
     if (_invocation(e) case ('Color', var args)
         when args.arguments.length == 1) {
       var v = args.arguments.single.argumentExpression;
-      if (v is IntegerLiteral && v.value != null) return Color(v.value!);
+      if (v is IntegerLiteral && v.value != null) return SceneColor(v.value!);
     }
     refuse(e.offset, _kind(e), 'expected a color, spelled Color(0xAARRGGBB)');
     return null;

@@ -12,13 +12,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:flutterware/scene.dart';
+import 'package:flutterware/scene_authoring.dart';
+
+import 'canvas_toy/drafts.dart';
 import 'canvas_toy/main.dart';
-import 'canvas_toy/model.dart';
-import 'canvas_toy/motion_file.dart';
-import 'canvas_toy/motion_model.dart';
-import 'canvas_toy/scene_file.dart';
 import 'src/embedder/embedded_engine.dart';
 import 'src/embedder/guest_texture.dart';
+import 'src/scene/motion_file.dart';
+import 'src/scene/scene_file.dart';
 import 'src/previews/catalog_session.dart';
 import 'src/previews/compiler_daemon_client.dart';
 
@@ -85,6 +87,7 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
   @override
   void initState() {
     super.initState();
+    installSceneFrameFlush();
     var worktree = p.normalize(p.join(widget.appRoot, '..'));
     var projectRoot = p.join(worktree, 'examples', 'example');
     _scenePath = p.join(projectRoot, 'demo', 'banner.scene.dart');
@@ -241,7 +244,7 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
     for (var (node, _) in doc.walk()) {
       var raw = rects[node.name];
       if (raw is List && raw.length == 4) {
-        var rect = Rect.fromLTWH(
+        var rect = SceneRect(
           (raw[0] as num).toDouble(),
           (raw[1] as num).toDouble(),
           (raw[2] as num).toDouble(),
@@ -307,7 +310,7 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
             ],
             Expanded(
               child: AnimatedBuilder(
-                animation: doc,
+                animation: doc.listenable,
                 builder: (context, _) => Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [

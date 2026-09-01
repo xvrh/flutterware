@@ -15,7 +15,7 @@ import 'package:flutter/foundation.dart';
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
 
-import 'model.dart';
+import 'package:flutterware/scene_authoring.dart';
 
 class RemoteSceneLink {
   RemoteSceneLink(this.doc) {

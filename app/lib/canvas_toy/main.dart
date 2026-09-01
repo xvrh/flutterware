@@ -6,11 +6,17 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutterware/scene.dart';
+import 'package:flutterware/scene_authoring.dart';
 
-import 'model.dart';
-import 'motion_model.dart';
-import 'motion_runtime.dart';
+import 'drafts.dart';
 import 'remote.dart';
+
+/// The toy's own measurement anchors — the core model carries no widget
+/// keys, so the local mirror keys nodes itself, the way the guest does.
+final _nodeKeys = Expando<GlobalKey>();
+
+GlobalKey _nodeKey(SceneNode node) => _nodeKeys[node] ??= GlobalKey();
 
 void main() {
   runApp(const CanvasToyApp());
@@ -26,6 +32,12 @@ class CanvasToyApp extends StatefulWidget {
 class _CanvasToyAppState extends State<CanvasToyApp> {
   final doc = coffeeBannerDraft();
   late final link = RemoteSceneLink(doc);
+
+  @override
+  void initState() {
+    super.initState();
+    installSceneFrameFlush();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +56,7 @@ class _CanvasToyAppState extends State<CanvasToyApp> {
             const Divider(height: 1),
             Expanded(
               child: AnimatedBuilder(
-                animation: doc,
+                animation: doc.listenable,
                 builder: (context, _) => Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -85,6 +97,12 @@ class _MotionTransportState extends State<MotionTransport>
   static const _rates = [0.5, 1.0, 2.0];
 
   @override
+  void initState() {
+    super.initState();
+    installSceneFrameFlush();
+  }
+
+  @override
   void dispose() {
     _player.dispose();
     super.dispose();
@@ -95,7 +113,7 @@ class _MotionTransportState extends State<MotionTransport>
     // Rebuilds ride the document's own flush: a playing motion notifies
     // once per frame, which is exactly the scrubber's clock.
     return AnimatedBuilder(
-      animation: widget.doc,
+      animation: widget.doc.listenable,
       builder: (context, _) {
         var playing = _player.status == MotionPlayerStatus.playing;
         var total = _bound.duration.inMilliseconds;
@@ -182,7 +200,7 @@ class TreePanel extends StatelessWidget {
                   ShapeNode(doc.uniqueName('shape'))
                     ..width = 80
                     ..height = 80
-                    ..fill = const Color(0xFF888888),
+                    ..fill = const SceneColor(0xFF888888),
                 ),
               ),
               _AddButton(
@@ -276,11 +294,13 @@ class TreePanel extends StatelessWidget {
           ? (ShapeNode('s${k}x$i', circle: true)
                   ..width = 8
                   ..height = 8
-                  ..fill = Color.fromARGB(255, 90 + i, 130, 220 - i))
+                  ..fill = SceneColor(
+                    0xFF000000 | (90 + i) << 16 | 130 << 8 | (220 - i),
+                  ))
                 as SceneNode
           : (TextNode('t${k}x$i', '$i')
               ..fontSize = 9
-              ..color = const Color(0xB3FFFFFF));
+              ..color = const SceneColor(0xB3FFFFFF));
       node
         ..x = col * 39.0
         ..y = row * 13.0;
@@ -454,21 +474,21 @@ class _CanvasAreaState extends State<CanvasArea> {
         clipBehavior: Clip.none,
         children: [
           widget.canvasContent ?? NodeView(doc.root),
-          ValueListenableBuilder(
-            valueListenable: doc.geometryEpoch,
-            builder: (context, _, _) => _HitLayer(doc),
+          AnimatedBuilder(
+            animation: doc.geometryEpoch.listenable,
+            builder: (context, _) => _HitLayer(doc),
           ),
-          ValueListenableBuilder(
-            valueListenable: doc.geometryEpoch,
-            builder: (context, _, _) => Positioned.fill(
+          AnimatedBuilder(
+            animation: doc.geometryEpoch.listenable,
+            builder: (context, _) => Positioned.fill(
               child: IgnorePointer(
                 child: CustomPaint(painter: _SelectionPainter(doc)),
               ),
             ),
           ),
-          ValueListenableBuilder(
-            valueListenable: doc.geometryEpoch,
-            builder: (context, _, _) {
+          AnimatedBuilder(
+            animation: doc.geometryEpoch.listenable,
+            builder: (context, _) {
               var rect = doc.selected?.measured;
               if (rect == null) return const SizedBox();
               return Positioned(
@@ -487,14 +507,15 @@ class _CanvasAreaState extends State<CanvasArea> {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       var rootBox =
-          doc.root.key.currentContext?.findRenderObject() as RenderBox?;
+          _nodeKey(doc.root).currentContext?.findRenderObject() as RenderBox?;
       if (rootBox == null) return;
       var changed = false;
       for (var (node, _) in doc.walk()) {
-        var box = node.key.currentContext?.findRenderObject() as RenderBox?;
+        var box =
+            _nodeKey(node).currentContext?.findRenderObject() as RenderBox?;
         if (box == null || !box.hasSize) continue;
         var topLeft = box.localToGlobal(Offset.zero, ancestor: rootBox);
-        var rect = topLeft & box.size;
+        var rect = (topLeft & box.size).scene;
         if (node.measured != rect) {
           node.measured = rect;
           changed = true;
@@ -520,8 +541,8 @@ class NodeView extends StatelessWidget {
           t.text,
           style: TextStyle(
             fontSize: t.fxRendered('fontSize') as double,
-            fontWeight: t.weight,
-            color: t.fxRendered('color') as Color,
+            fontWeight: t.weight.flutter,
+            color: (t.fxRendered('color') as SceneColor).flutter,
             height: 1.15,
           ),
         );
@@ -550,15 +571,15 @@ class NodeView extends StatelessWidget {
           ),
           NodeLayout.row => Row(
             mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: f.mainAlign,
-            crossAxisAlignment: f.crossAlign,
+            mainAxisAlignment: f.mainAlign.flutter,
+            crossAxisAlignment: f.crossAlign.flutter,
             spacing: f.fxRendered('gap') as double,
             children: children,
           ),
           NodeLayout.column => Column(
             mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: f.mainAlign,
-            crossAxisAlignment: f.crossAlign,
+            mainAxisAlignment: f.mainAlign.flutter,
+            crossAxisAlignment: f.crossAlign.flutter,
             spacing: f.fxRendered('gap') as double,
             children: children,
           ),
@@ -569,10 +590,10 @@ class NodeView extends StatelessWidget {
     // The mirror draws the RENDERED plane — base op fx — so a playing
     // motion and an app effect are visible here exactly as in the guest.
     var fill = node.hasFx('fill')
-        ? node.fxRendered('fill') as Color
+        ? node.fxRendered('fill') as SceneColor
         : node.fill;
     Widget result = Container(
-      key: node.key,
+      key: _nodeKey(node),
       width: node.width,
       height: node.height,
       padding: node is FrameNode && (node as FrameNode).padding > 0
@@ -583,7 +604,7 @@ class NodeView extends StatelessWidget {
           : null,
       decoration: fill != null || node.cornerRadius > 0
           ? BoxDecoration(
-              color: fill,
+              color: fill?.flutter,
               shape: shape ? BoxShape.circle : BoxShape.rectangle,
               borderRadius: shape || node.cornerRadius == 0
                   ? null
@@ -647,7 +668,7 @@ class _HitLayer extends StatelessWidget {
           for (var node in doc.addressable())
             if (node.measured != null)
               Positioned.fromRect(
-                rect: node.measured!,
+                rect: node.measured!.flutter,
                 child: _NodeTarget(
                   doc,
                   node,
@@ -691,7 +712,8 @@ class _NodeTargetState extends State<_NodeTarget> {
     } else {
       // Flex parent: a drag is a reorder, not a move. Position in artboard
       // coords = target origin + local offset.
-      var p = (node.measured?.topLeft ?? Offset.zero) + localPosition;
+      var m = node.measured;
+      var p = (m == null ? Offset.zero : Offset(m.left, m.top)) + localPosition;
       var main = parent.layout == NodeLayout.row ? p.dx : p.dy;
       var index = 0;
       for (var sibling in parent.children) {
@@ -699,8 +721,8 @@ class _NodeTargetState extends State<_NodeTarget> {
         var rect = sibling.measured;
         if (rect == null) continue;
         var center = parent.layout == NodeLayout.row
-            ? rect.center.dx
-            : rect.center.dy;
+            ? rect.centerX
+            : rect.centerY;
         if (main > center) index++;
       }
       doc.reorder(node, index);
@@ -781,7 +803,7 @@ class _SelectionPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..color = const Color(0xFF4A64D0);
-    canvas.drawRect(rect, paint);
+    canvas.drawRect(rect.flutter, paint);
   }
 
   @override
@@ -792,18 +814,18 @@ class _SelectionPainter extends CustomPainter {
 // Inspector
 // ---------------------------------------------------------------------------
 
-const _palette = [
+const _palette = <SceneColor?>[
   null,
-  Colors.white,
-  Color(0xFF1A1A1A),
-  Color(0xFF2B1B12),
-  Color(0xFF4A2F1F),
-  Color(0xFF6B4226),
-  Color(0xFFD8C9BD),
-  Color(0xFFE8632B),
-  Color(0xFFF2B705),
-  Color(0xFF3E7C4F),
-  Color(0xFF4A64D0),
+  SceneColor(0xFFFFFFFF),
+  SceneColor(0xFF1A1A1A),
+  SceneColor(0xFF2B1B12),
+  SceneColor(0xFF4A2F1F),
+  SceneColor(0xFF6B4226),
+  SceneColor(0xFFD8C9BD),
+  SceneColor(0xFFE8632B),
+  SceneColor(0xFFF2B705),
+  SceneColor(0xFF3E7C4F),
+  SceneColor(0xFF4A64D0),
 ];
 
 class InspectorPanel extends StatelessWidget {
@@ -936,7 +958,7 @@ class InspectorPanel extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: DropdownButtonFormField<FontWeight>(
+            child: DropdownButtonFormField<SceneFontWeight>(
               initialValue: t.weight,
               decoration: const InputDecoration(
                 labelText: 'Weight',
@@ -945,25 +967,38 @@ class InspectorPanel extends StatelessWidget {
               style: const TextStyle(fontSize: 12, color: Colors.black87),
               items: const [
                 DropdownMenuItem(
-                  value: FontWeight.w400,
+                  value: SceneFontWeight.w400,
                   child: Text('Regular'),
                 ),
-                DropdownMenuItem(value: FontWeight.w500, child: Text('Medium')),
                 DropdownMenuItem(
-                  value: FontWeight.w600,
+                  value: SceneFontWeight.w500,
+                  child: Text('Medium'),
+                ),
+                DropdownMenuItem(
+                  value: SceneFontWeight.w600,
                   child: Text('Semibold'),
                 ),
-                DropdownMenuItem(value: FontWeight.w700, child: Text('Bold')),
-                DropdownMenuItem(value: FontWeight.w900, child: Text('Black')),
+                DropdownMenuItem(
+                  value: SceneFontWeight.w700,
+                  child: Text('Bold'),
+                ),
+                DropdownMenuItem(
+                  value: SceneFontWeight.w900,
+                  child: Text('Black'),
+                ),
               ],
-              onChanged: (v) => doc.edit(() => t.weight = v ?? FontWeight.w400),
+              onChanged: (v) =>
+                  doc.edit(() => t.weight = v ?? SceneFontWeight.w400),
             ),
           ),
         ],
       ),
       const SizedBox(height: 8),
       _label('Color'),
-      _swatches(t.color, (c) => doc.edit(() => t.color = c ?? Colors.black)),
+      _swatches(
+        t.color,
+        (c) => doc.edit(() => t.color = c ?? const SceneColor(0xFF000000)),
+      ),
     ];
   }
 
@@ -982,13 +1017,13 @@ class InspectorPanel extends StatelessWidget {
         // x/y; entering flex re-derives order from visual position.
         onSelectionChanged: (s) => doc.edit(() {
           var next = s.first;
-          var origin = f.measured?.topLeft ?? Offset.zero;
+          var origin = f.measured;
           if (next == NodeLayout.absolute) {
             for (var c in f.children) {
               var rect = c.measured;
               if (rect != null) {
-                c.x = rect.left - origin.dx;
-                c.y = rect.top - origin.dy;
+                c.x = rect.left - (origin?.left ?? 0);
+                c.y = rect.top - (origin?.top ?? 0);
               }
             }
           } else {
@@ -1026,7 +1061,7 @@ class InspectorPanel extends StatelessWidget {
       ),
       const SizedBox(height: 8),
       if (f.layout != NodeLayout.absolute)
-        DropdownButtonFormField<CrossAxisAlignment>(
+        DropdownButtonFormField<SceneCrossAxisAlignment>(
           initialValue: f.crossAlign,
           decoration: const InputDecoration(
             labelText: 'Cross align',
@@ -1035,21 +1070,25 @@ class InspectorPanel extends StatelessWidget {
           style: const TextStyle(fontSize: 12, color: Colors.black87),
           items: const [
             DropdownMenuItem(
-              value: CrossAxisAlignment.start,
+              value: SceneCrossAxisAlignment.start,
               child: Text('Start'),
             ),
             DropdownMenuItem(
-              value: CrossAxisAlignment.center,
+              value: SceneCrossAxisAlignment.center,
               child: Text('Center'),
             ),
-            DropdownMenuItem(value: CrossAxisAlignment.end, child: Text('End')),
             DropdownMenuItem(
-              value: CrossAxisAlignment.stretch,
+              value: SceneCrossAxisAlignment.end,
+              child: Text('End'),
+            ),
+            DropdownMenuItem(
+              value: SceneCrossAxisAlignment.stretch,
               child: Text('Stretch'),
             ),
           ],
-          onChanged: (v) =>
-              doc.edit(() => f.crossAlign = v ?? CrossAxisAlignment.center),
+          onChanged: (v) => doc.edit(
+            () => f.crossAlign = v ?? SceneCrossAxisAlignment.center,
+          ),
         ),
     ];
   }
@@ -1096,7 +1135,7 @@ class InspectorPanel extends StatelessWidget {
     child: Text(text, style: const TextStyle(fontSize: 11, color: Colors.grey)),
   );
 
-  Widget _swatches(Color? current, void Function(Color?) onPick) {
+  Widget _swatches(SceneColor? current, void Function(SceneColor?) onPick) {
     return Wrap(
       spacing: 6,
       runSpacing: 6,
@@ -1108,7 +1147,7 @@ class InspectorPanel extends StatelessWidget {
               width: 22,
               height: 22,
               decoration: BoxDecoration(
-                color: color,
+                color: color?.flutter,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: current == color
