@@ -403,9 +403,11 @@ class _KeyStripState extends State<_KeyStrip> {
     return LayoutBuilder(
       builder: (context, constraints) {
         var width = math.max(1.0, constraints.maxWidth);
+        // The drag's own down, and no tap recognizer beside it: a tap is a
+        // drag that never moved, and two recognizers both answering the
+        // press toggled a shift-click twice.
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapDown: (d) => _down(d.localPosition, width),
           onHorizontalDragDown: (d) => _down(d.localPosition, width),
           onHorizontalDragUpdate: (d) => _update(d.delta.dx, width),
           onHorizontalDragEnd: (_) => _end(),

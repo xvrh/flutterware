@@ -1,0 +1,151 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/src/scene/editor.dart';
+import 'package:flutterware_app/src/scene/fixtures.dart';
+import 'package:flutterware_app/src/scene/playback.dart';
+import 'package:flutterware_app/src/scene/ui/timeline.dart';
+import 'package:flutterware_app/src/ui/theme.dart';
+
+/// The keyframe editor over the coffee intro: keys are hit by time, moved
+/// by time, selected as a set, and every edit is one journal entry.
+void main() {
+  late SceneEditor editor;
+  late MotionDocument motion;
+
+  /// The strip is 800 wide over a 1800ms motion, so 1ms is 4/9 px.
+  const stripWidth = 800.0;
+  const gutter = 240.0;
+  const totalMs = 1800;
+
+  double xOf(Duration at) =>
+      gutter + 1 + at.inMilliseconds / totalMs * stripWidth;
+
+  Future<void> pump(WidgetTester tester) async {
+    tester.view.physicalSize = Size(gutter + 1 + stripWidth, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var doc = coffeeBannerDraft();
+    motion = coffeeIntroDraft();
+    editor = SceneEditor(doc, motions: {'BannerIntro': motion});
+    await tester.pumpWidget(MaterialApp(theme: appTheme, home: _Host(editor)));
+    await tester.pump();
+  }
+
+  /// The row of a lane: the ruler is 28 + 1, then 26 per lane.
+  double yOfLane(int index) => 29 + 26 * index + 13;
+
+  MotionTrack track(String group, String prop) =>
+      motion.groupNamed(group)!.tracks[prop]!;
+
+  testWidgets('a tap on a key selects it, elsewhere seeks', (tester) async {
+    await pump(tester);
+    var opacity = track('headlineIn', 'opacity');
+    await tester.tapAt(Offset(xOf(opacity.keys[1].at), yOfLane(0)));
+    await tester.pump();
+    expect(editor.selectedKeys, hasLength(1));
+    expect(editor.selectedKeys.single.keyId, opacity.keys[1].id);
+
+    await tester.tapAt(
+      Offset(xOf(const Duration(milliseconds: 900)), yOfLane(0)),
+    );
+    await tester.pump();
+    expect(editor.selectedKeys, isEmpty);
+    var playback = tester.state<_HostState>(find.byType(_Host)).playback;
+    expect(playback.position.inMilliseconds, closeTo(900, 3));
+  });
+
+  testWidgets(
+    'a drag moves the key by the time it crossed, as one undo entry',
+    (tester) async {
+      await pump(tester);
+      var opacity = track('headlineIn', 'opacity');
+      var key = opacity.keys[1];
+      var from = Offset(xOf(key.at), yOfLane(0));
+      var gesture = await tester.startGesture(
+        from,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      for (var i = 0; i < 10; i++) {
+        await gesture.moveBy(const Offset(stripWidth / totalMs * 20, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pump();
+      expect(key.at.inMilliseconds, closeTo(260 + 200, 3));
+      expect(editor.undoLabel, 'Move 1 key');
+      editor.undo();
+      expect(key.at.inMilliseconds, 260);
+      expect(editor.canUndo, isFalse, reason: 'the whole drag was one entry');
+    },
+  );
+
+  testWidgets('shift-tap adds to the selection and arrows nudge the set', (
+    tester,
+  ) async {
+    await pump(tester);
+    var opacity = track('headlineIn', 'opacity');
+    var translate = track('headlineIn', 'translateY');
+    await tester.tapAt(Offset(xOf(opacity.keys[1].at), yOfLane(0)));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.tapAt(Offset(xOf(translate.keys[1].at), yOfLane(1)));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pump();
+    expect(editor.selectedKeys, hasLength(2));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(opacity.keys[1].at.inMilliseconds, 270);
+    expect(translate.keys[1].at.inMilliseconds, 270);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await tester.pump();
+    expect(opacity.keys, hasLength(1));
+    expect(translate.keys, hasLength(1));
+    expect(editor.selectedKeys, isEmpty);
+  });
+
+  testWidgets('the library places a group at the playhead', (tester) async {
+    await pump(tester);
+    expect(motion.placements.containsKey('tapPulse'), isFalse);
+    var playback = tester.state<_HostState>(find.byType(_Host)).playback;
+    playback.seek(const Duration(milliseconds: 500));
+    await tester.pump();
+    await tester.tap(find.text('tapPulse'));
+    await tester.pump();
+    expect(motion.placements['tapPulse'], const Duration(milliseconds: 500));
+    expect(find.text('LIBRARY'), findsNothing);
+    expect(editor.undoLabel, 'Place tapPulse');
+  });
+}
+
+class _Host extends StatefulWidget {
+  const _Host(this.editor);
+
+  final SceneEditor editor;
+
+  @override
+  State<_Host> createState() => _HostState();
+}
+
+class _HostState extends State<_Host> with TickerProviderStateMixin {
+  late final playback = ScenePlayback(
+    widget.editor,
+    'BannerIntro',
+    vsync: this,
+  );
+
+  @override
+  void dispose() {
+    playback.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      Material(child: SceneTimeline(widget.editor, playback));
+}

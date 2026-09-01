@@ -218,12 +218,18 @@ panels migrate, because it mounts the same widgets the plugin does. It is
 deleted in one PR when the rebuild finishes — nothing stranded, no second
 shell kept alive forever.
 
-## Open: the workspace shape
+## Decided, same day: one surface, timeline docked under the canvas
 
-Whether the pair is one surface with a docked timeline, two modes over one
-document, or a timeline panel you open, is **not decided** — it is to be
-answered by building the arrangements and looking at them, not by
-argument. The experiment is cheap once the panels are widgets over
+The three arrangements were built as catalog demos over the same panels and
+the same stage-set editor, photographed at the wide window, and chosen from
+the pictures: **tree · canvas over timeline · inspector**, transport in the
+timeline's gutter (`SceneWorkspaceView`). Design/Animate modes lost because
+Animate dropped the tree exactly when the lanes reference its nodes; the
+drawer lost because it is the docked shape with a toggle, and the toggle can
+be added later without changing anything else. Whether the pair is one surface
+with a docked timeline, two modes over one document, or a timeline panel you
+open, was to be answered by building the arrangements and looking at them,
+not by argument — and it was. The experiment is cheap once the panels are widgets over
 `SceneEditor`: a catalog demo per arrangement, stage-set state, one
 `previews screenshot` each.
 

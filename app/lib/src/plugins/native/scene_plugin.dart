@@ -1,19 +1,17 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutterware/scene.dart';
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
-import '../../../canvas_toy/main.dart';
 import '../../embedder/embedded_engine.dart';
 import '../../embedder/guest_texture.dart';
 import '../../previews/catalog_session.dart';
 import '../../previews/compiler_daemon_client.dart';
 import '../../scene/discovery.dart';
 import '../../scene/guest.dart';
-import '../../scene/ui/inspector.dart';
-import '../../scene/ui/shortcuts.dart';
+import '../../scene/playback.dart';
+import '../../scene/ui/workspace_view.dart';
 import '../../scene/workspace.dart';
 import '../native_plugin.dart';
 import 'no_packages.dart';
@@ -71,7 +69,8 @@ class _ScenePanel extends StatefulWidget {
   State<_ScenePanel> createState() => _ScenePanelState();
 }
 
-class _ScenePanelState extends State<_ScenePanel> {
+class _ScenePanelState extends State<_ScenePanel>
+    with TickerProviderStateMixin {
   String? _tracked;
   String? _package;
 
@@ -80,6 +79,26 @@ class _ScenePanelState extends State<_ScenePanel> {
   SceneWorkspace? _workspace;
   SceneGuest? _guest;
   String _note = '';
+
+  /// One playback per file that has a motion, made the first time that file
+  /// is the active one — the nested scene entered later gets its own.
+  final _playbacks = <String, ScenePlayback>{};
+
+  ScenePlayback? _playbackFor(SceneFile file) {
+    var motion = file.motions.keys.firstOrNull;
+    if (motion == null) return null;
+    return _playbacks.putIfAbsent(
+      file.path,
+      () => ScenePlayback(file.editor, motion, vsync: this),
+    );
+  }
+
+  void _disposePlaybacks() {
+    for (var playback in _playbacks.values) {
+      playback.dispose();
+    }
+    _playbacks.clear();
+  }
 
   SceneCore get _core => widget.plugin.core;
 
@@ -102,6 +121,7 @@ class _ScenePanelState extends State<_ScenePanel> {
   }
 
   void _close() {
+    _disposePlaybacks();
     _guest?.dispose();
     _guest = null;
     _workspace = null;
@@ -147,6 +167,7 @@ class _ScenePanelState extends State<_ScenePanel> {
 
   @override
   void dispose() {
+    _disposePlaybacks();
     _guest?.dispose();
     super.dispose();
   }
@@ -295,42 +316,12 @@ class _ScenePanelState extends State<_ScenePanel> {
           ),
         ),
         const Divider(height: 1),
-        if (workspace.active.motions.values.firstOrNull case var motion?) ...[
-          MotionTransport(workspace.active.scene, motion),
-          const Divider(height: 1),
-        ],
         Expanded(
-          child: AnimatedBuilder(
-            animation: Listenable.merge([
-              workspace.active.scene.listenable,
-              editor.listenable,
-            ]),
-            builder: (context, _) => Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: EditorShortcuts(
-                    editor,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(width: 230, child: TreePanel(editor)),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                          child: CanvasArea(
-                            editor,
-                            status: _guest?.status,
-                            canvasContent: _guestCanvas(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const VerticalDivider(width: 1),
-                SizedBox(width: 290, child: SceneInspector(editor)),
-              ],
-            ),
+          child: SceneWorkspaceView(
+            editor,
+            playback: _playbackFor(workspace.active),
+            content: _guestCanvas(),
+            status: _guest?.status,
           ),
         ),
       ],
