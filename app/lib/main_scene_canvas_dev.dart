@@ -20,7 +20,7 @@ import 'canvas_toy/main.dart';
 import 'src/scene/editor.dart';
 import 'src/embedder/embedded_engine.dart';
 import 'src/embedder/guest_texture.dart';
-import 'src/scene/scene_file.dart';
+import 'src/scene/workspace.dart';
 import 'src/previews/catalog_session.dart';
 import 'src/previews/compiler_daemon_client.dart';
 
@@ -69,13 +69,13 @@ class SceneCanvasDevApp extends StatefulWidget {
 }
 
 class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
-  late final SceneDocument doc;
-  late final editor = SceneEditor(doc);
+  late final SceneWorkspace workspace;
+  SceneDocument get doc => workspace.active.scene;
+  SceneEditor get editor => workspace.editor;
   final status = ValueNotifier('guest: booting…');
   late final CatalogSession session;
   late final String _scenePath;
   var _fileNote = '';
-  MotionDocument? _motion;
 
   var _inflight = false;
   var _dirty = false;
@@ -90,8 +90,7 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
     var worktree = p.normalize(p.join(widget.appRoot, '..'));
     var projectRoot = p.join(worktree, 'examples', 'example');
     _scenePath = p.join(projectRoot, 'demo', 'banner.scene.dart');
-    doc = _loadOrDraft();
-    _motion = _pickMotion(_parsed);
+    workspace = SceneWorkspace(_loadOrDraft());
     session = CatalogSession(
       appPackageRoot: widget.appRoot,
       flutterSdkRoot: widget.flutterSdkRoot,
@@ -113,58 +112,51 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
     });
   }
 
-  /// Load the persisted scene through the parse door, or fall back to the
-  /// hard-coded draft. Refusals are the collecting kind: all printed, and the
-  /// file yields no document.
-  SceneParse? _parsed;
-
-  SceneDocument _loadOrDraft() {
+  /// Load the file through the parse door, or fall back to the hard-coded
+  /// draft pair. Refusals are the collecting kind: all printed, and the file
+  /// yields no document.
+  SceneFile _loadOrDraft() {
+    SceneFile draft() => SceneFile(
+      path: _scenePath,
+      className: 'BannerScene',
+      scene: coffeeBannerDraft(),
+      motions: {'BannerIntro': coffeeIntroDraft()},
+    );
     var file = File(_scenePath);
     if (!file.existsSync()) {
       _fileNote = 'no ${p.basename(_scenePath)} yet — using the draft';
-      return coffeeBannerDraft();
+      return draft();
     }
-    var parsed = _parsed = parseSceneFile(file.readAsStringSync());
-    if (parsed.ok) {
-      _fileNote = 'loaded ${p.basename(_scenePath)} (${parsed.className})';
-      return parsed.doc!;
+    var opened = SceneFile.open(_scenePath, file.readAsStringSync());
+    if (opened.ok) {
+      var loaded = opened.file!;
+      _fileNote =
+          'loaded ${p.basename(_scenePath)} (${loaded.className}'
+          '${loaded.motions.isEmpty ? '' : ' · ${loaded.motions.keys.join(', ')}'})';
+      return loaded;
     }
     _fileNote =
-        '${p.basename(_scenePath)}: ${parsed.refusals.length} refusal(s) — '
+        '${p.basename(_scenePath)}: ${opened.refusals.length} refusal(s) — '
         'using the draft';
-    for (var refusal in parsed.refusals) {
+    for (var refusal in opened.refusals) {
       print('scene refusal: $refusal');
     }
-    return coffeeBannerDraft();
+    return draft();
   }
 
-  /// The motions of the pair ride in the scene file (grammar 0.5), so the
-  /// scene parse already has them. No file, or a scene that carries none,
-  /// falls back to the hard-coded draft intro so play always exists.
-  MotionDocument? _pickMotion(SceneParse? parsed) {
-    var motions = parsed?.motions ?? const <String, MotionDocument>{};
-    if (motions.isEmpty) return coffeeIntroDraft();
-    var entry = motions.entries.first;
-    _fileNote += ' · motion ${entry.key}';
-    return entry.value;
-  }
-
+  /// Save through the file's own door — it emits, refuses to write anything
+  /// the parser would reject, and only then hands the text over.
   void _save() {
-    var emitted = emitSceneFile(
-      doc,
-      className: 'BannerScene',
-      motions: {'BannerIntro': ?_motion},
+    var refusals = workspace.active.save(
+      (path, source) => File(path).writeAsStringSync(source),
     );
-    // The door works both ways: never write a file the parser would refuse.
-    var check = parseSceneFile(emitted);
-    if (!check.ok) {
+    if (refusals.isNotEmpty) {
       setState(() => _fileNote = 'not saved — emit refused its own output');
-      for (var refusal in check.refusals) {
+      for (var refusal in refusals) {
         print('scene refusal: $refusal');
       }
       return;
     }
-    File(_scenePath).writeAsStringSync(emitted);
     var nodes = doc.walk().length;
     setState(
       () => _fileNote = 'saved ${p.basename(_scenePath)} · $nodes nodes',
@@ -298,7 +290,8 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
               ),
             ),
             const Divider(height: 1),
-            if (_motion case var motion?) ...[
+            if (workspace.active.motions.values.firstOrNull
+                case var motion?) ...[
               MotionTransport(doc, motion),
               const Divider(height: 1),
             ],

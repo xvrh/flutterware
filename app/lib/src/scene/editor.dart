@@ -1,28 +1,67 @@
 // The editor-state layer between the document and the widgets — the
 // foundation milestone 2 of the graduation plan builds everything else on.
 // The document stays pure domain; everything about *editing* it lives here:
-// selection (a set of node NAMES — names survive undo replacing the node
-// objects), hover, and the command door every mutation passes through,
-// which is what makes the undo stack a journal instead of a wish.
+// selection in two domains (node NAMES on the scene, key REFS on the
+// timeline — both survive undo, because a name and a key id outlive the
+// objects a restore touches), hover, and the command door every mutation
+// passes through, which is what makes the undo stack a journal instead of
+// a wish. Scene and motions are one document here: one journal, one undo.
 //
 // Pure Dart on purpose: a codemod or the fw CLI can drive the same doors
 // the GUI does, and the purity wall (test/scene_pure_test.dart) holds it.
 import 'package:flutterware/scene_authoring.dart';
 
-/// One undo journal entry: what the document looked like before the door
-/// ran, and the label the UI shows.
+/// One undo journal entry: what the file looked like before the door ran,
+/// and the label the UI shows. Both planes ride together — a timeline edit
+/// and a layout edit undo through the same journal, because they are one
+/// document.
 class _JournalEntry {
-  _JournalEntry(this.label, this.before, this.mergeKey);
+  _JournalEntry(this.label, this.scene, this.motions, this.mergeKey);
 
   final String label;
-  final SceneSnapshot before;
+  final SceneSnapshot scene;
+  final Map<String, MotionSnapshot> motions;
   final String? mergeKey;
 }
 
+/// Where a key lives: which motion, which group, which track. The key
+/// itself is held by [MotionKey.id], which survives sorting and undo.
+class MotionKeyRef {
+  const MotionKeyRef(this.motion, this.group, this.prop, this.keyId);
+
+  final String motion;
+  final String group;
+
+  /// The track's property — an arg track is spelled `args.<name>`, the way
+  /// the fx plane spells it.
+  final String prop;
+
+  final int keyId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MotionKeyRef &&
+      other.motion == motion &&
+      other.group == group &&
+      other.prop == prop &&
+      other.keyId == keyId;
+
+  @override
+  int get hashCode => Object.hash(motion, group, prop, keyId);
+
+  @override
+  String toString() => '$motion.$group.$prop#$keyId';
+}
+
 class SceneEditor extends SceneListenable {
-  SceneEditor(this.doc);
+  SceneEditor(this.doc, {Map<String, MotionDocument> motions = const {}})
+    : motions = {...motions};
 
   final SceneDocument doc;
+
+  /// The motions of the file, by class name — the same document as the
+  /// scene, so they share this editor's selection, doors and journal.
+  final Map<String, MotionDocument> motions;
 
   // -------------------------------------------------------------------------
   // Selection — a set of node names, in selection order.
@@ -70,6 +109,7 @@ class SceneEditor extends SceneListenable {
         ..clear()
         ..add(node.name);
     }
+    _keySelection.clear();
     notifyListeners();
   }
 
@@ -87,6 +127,7 @@ class SceneEditor extends SceneListenable {
     _selection
       ..clear()
       ..addAll(names);
+    if (_selection.isNotEmpty) _keySelection.clear();
     notifyListeners();
   }
 
@@ -136,6 +177,100 @@ class SceneEditor extends SceneListenable {
   }
 
   // -------------------------------------------------------------------------
+  // Selection, second domain: keys on the timeline.
+  // -------------------------------------------------------------------------
+
+  final _keySelection = <MotionKeyRef>{};
+
+  /// The two domains do not mix: selecting a node clears the key selection
+  /// and vice versa, because every verb (nudge, delete, duplicate) means a
+  /// different thing in each, and a verb must never be ambiguous about what
+  /// it acts on.
+  Iterable<MotionKeyRef> get selectedKeys =>
+      _keySelection.where((ref) => keyOf(ref) != null);
+
+  bool isKeySelected(MotionKeyRef ref) => _keySelection.contains(ref);
+
+  /// Resolve a ref against the live model, or null if it no longer exists
+  /// (deleted, or undone away) — the same lazy-prune rule node names get.
+  MotionKey? keyOf(MotionKeyRef ref) {
+    var track = trackOf(ref.motion, ref.group, ref.prop);
+    if (track == null) return null;
+    for (var key in track.keys) {
+      if (key.id == ref.keyId) return key;
+    }
+    return null;
+  }
+
+  MotionTrack? trackOf(String motion, String group, String prop) {
+    var g = motions[motion]?.groupNamed(group);
+    if (g == null) return null;
+    return prop.startsWith('args.')
+        ? g.args[prop.substring(5)]
+        : g.tracks[prop];
+  }
+
+  void selectKey(MotionKeyRef? ref, {bool toggle = false}) {
+    if (ref == null) {
+      if (!toggle) clearKeySelection();
+      return;
+    }
+    if (toggle) {
+      if (!_keySelection.remove(ref)) _keySelection.add(ref);
+    } else {
+      _keySelection
+        ..clear()
+        ..add(ref);
+    }
+    _selection.clear();
+    notifyListeners();
+  }
+
+  void setKeySelection(Iterable<MotionKeyRef> refs) {
+    _keySelection
+      ..clear()
+      ..addAll(refs);
+    if (_keySelection.isNotEmpty) _selection.clear();
+    notifyListeners();
+  }
+
+  void clearKeySelection() {
+    if (_keySelection.isEmpty) return;
+    _keySelection.clear();
+    notifyListeners();
+  }
+
+  /// Move every selected key in time, through the track's sorting door so a
+  /// key dragged past a neighbour cannot break the hold rule. One gesture is
+  /// one undo entry: pass the gesture's [mergeKey].
+  void nudgeKeys(Duration by, {String? mergeKey}) {
+    var refs = selectedKeys.toList();
+    if (refs.isEmpty) return;
+    perform('Move ${_keyCount(refs)}', mergeKey: mergeKey, () {
+      for (var ref in refs) {
+        var track = trackOf(ref.motion, ref.group, ref.prop)!;
+        var key = keyOf(ref)!;
+        var at = key.at + by;
+        track.moveKey(key, at < Duration.zero ? Duration.zero : at);
+      }
+    });
+  }
+
+  void deleteKeys() {
+    var refs = selectedKeys.toList();
+    if (refs.isEmpty) return;
+    perform('Delete ${_keyCount(refs)}', () {
+      for (var ref in refs) {
+        trackOf(ref.motion, ref.group, ref.prop)!.removeKey(keyOf(ref)!);
+      }
+    });
+    clearKeySelection();
+  }
+
+  String _keyCount(List<MotionKeyRef> refs) =>
+      refs.length == 1 ? '1 key' : '${refs.length} keys';
+
+  // -------------------------------------------------------------------------
   // The command door and its journal.
   // -------------------------------------------------------------------------
 
@@ -160,29 +295,55 @@ class SceneEditor extends SceneListenable {
         _undo.isNotEmpty &&
         _undo.last.mergeKey == mergeKey;
     if (!merge) {
-      _undo.add(_JournalEntry(label, doc.snapshot(), mergeKey));
+      _undo.add(
+        _JournalEntry(label, doc.snapshot(), _motionSnapshots(), mergeKey),
+      );
       if (_undo.length > _journalCap) _undo.removeAt(0);
       _redo.clear();
     }
     doc.edit(mutate);
+    _revision++;
     notifyListeners();
   }
 
   void undo() {
     if (_undo.isEmpty) return;
     var entry = _undo.removeLast();
-    _redo.add(_JournalEntry(entry.label, doc.snapshot(), null));
-    doc.restore(entry.before);
+    _redo.add(
+      _JournalEntry(entry.label, doc.snapshot(), _motionSnapshots(), null),
+    );
+    _restore(entry);
     notifyListeners();
   }
 
   void redo() {
     if (_redo.isEmpty) return;
     var entry = _redo.removeLast();
-    _undo.add(_JournalEntry(entry.label, doc.snapshot(), null));
-    doc.restore(entry.before);
+    _undo.add(
+      _JournalEntry(entry.label, doc.snapshot(), _motionSnapshots(), null),
+    );
+    _restore(entry);
     notifyListeners();
   }
+
+  Map<String, MotionSnapshot> _motionSnapshots() => {
+    for (var e in motions.entries) e.key: e.value.snapshot(),
+  };
+
+  void _restore(_JournalEntry entry) {
+    doc.restore(entry.scene);
+    for (var e in entry.motions.entries) {
+      motions[e.key]?.restore(e.value);
+    }
+    _revision++;
+  }
+
+  /// Bumped by every door, undo and redo — what a file's dirty flag counts.
+  /// Deliberately not content-comparing: undoing back to the saved state
+  /// still reads as dirty, which is the safe direction to be wrong in.
+  var _revision = 0;
+
+  int get revision => _revision;
 
   // -------------------------------------------------------------------------
   // Editing verbs, all doors.

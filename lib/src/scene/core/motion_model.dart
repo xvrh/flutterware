@@ -14,12 +14,25 @@ enum TrackKind { number, color }
 /// provenance — which motion parameter fed the value — and survives a save
 /// only while the value still equals that parameter's default.
 class MotionKey {
-  MotionKey({required this.at, required this.value, this.curve, this.paramRef});
+  MotionKey({required this.at, required this.value, this.curve, this.paramRef})
+    : id = _nextId++;
+
+  MotionKey._copy(this.id, this.at, this.value, this.curve, this.paramRef);
+
+  static var _nextId = 1;
+
+  /// Runtime identity. A key has no name, so nothing on disk carries this —
+  /// but the timeline must hold a selection while keys are dragged past one
+  /// another (which re-sorts the list) and across an undo (which restores
+  /// values into the same objects), and an index cannot do that.
+  final int id;
 
   Duration at;
   Object value;
   String? curve;
   String? paramRef;
+
+  MotionKey copy() => MotionKey._copy(id, at, value, curve, paramRef);
 }
 
 /// A mutable track with the door the probes demanded: key *values* retune
@@ -49,6 +62,8 @@ class MotionTrack {
   void removeKey(MotionKey k) => keys.remove(k);
 
   void _sort() => keys.sort((a, b) => a.at.compareTo(b.at));
+
+  MotionTrack copy() => MotionTrack(kind, [for (var k in keys) k.copy()]);
 }
 
 /// One `late final <name> = scene.<target>.animate(…)` field. The field name
@@ -72,6 +87,10 @@ class AnimateGroup {
     for (var t in tracks.values) t.duration,
     for (var t in args.values) t.duration,
   ].fold(Duration.zero, (m, d) => d > m ? d : m);
+
+  AnimateGroup copy() => AnimateGroup(name, target)
+    ..tracks.addAll({for (var e in tracks.entries) e.key: e.value.copy()})
+    ..args.addAll({for (var e in args.entries) e.key: e.value.copy()});
 }
 
 /// The imposed vocabulary: every node kind animates these.
@@ -189,4 +208,84 @@ class MotionDocument {
 
     yield* visit(timeline);
   }
+
+  /// The motion at one moment, deep-copied — the other half of the editor's
+  /// undo journal (the scene's is [SceneDocument.snapshot]).
+  MotionSnapshot snapshot() => MotionSnapshot._(
+    [...params],
+    [for (var g in groups) g.copy()],
+    _copyExpr(timeline),
+  );
+
+  /// Write [state] back. Groups are REVIVED by name and keys by id, the way
+  /// the scene revives nodes: a bound motion holds group objects and a
+  /// player holds its writers, and an undo must not detach them.
+  void restore(MotionSnapshot state) {
+    params
+      ..clear()
+      ..addAll(state._params);
+    var live = {for (var g in groups) g.name: g};
+    var revived = <AnimateGroup>[];
+    for (var snap in state._groups) {
+      var into = live[snap.name];
+      if (into == null || into.target != snap.target) {
+        revived.add(snap.copy());
+        continue;
+      }
+      _restoreTracks(into.tracks, snap.tracks);
+      _restoreTracks(into.args, snap.args);
+      revived.add(into);
+    }
+    groups
+      ..clear()
+      ..addAll(revived);
+    timeline = _copyExpr(state._timeline);
+  }
+
+  void _restoreTracks(
+    Map<String, MotionTrack> into,
+    Map<String, MotionTrack> from,
+  ) {
+    var liveKeys = {
+      for (var track in into.values)
+        for (var k in track.keys) k.id: k,
+    };
+    into.clear();
+    for (var entry in from.entries) {
+      var track = MotionTrack(entry.value.kind);
+      for (var snap in entry.value.keys) {
+        var key = liveKeys[snap.id];
+        if (key == null) {
+          track.keys.add(snap.copy());
+        } else {
+          key
+            ..at = snap.at
+            ..value = snap.value
+            ..curve = snap.curve
+            ..paramRef = snap.paramRef;
+          track.keys.add(key);
+        }
+      }
+      into[entry.key] = track;
+    }
+  }
 }
+
+/// One motion's state at a moment: opaque, made by
+/// [MotionDocument.snapshot], consumed by [MotionDocument.restore].
+class MotionSnapshot {
+  MotionSnapshot._(this._params, this._groups, this._timeline);
+
+  final List<SceneParamDecl> _params;
+  final List<AnimateGroup> _groups;
+  final TimelineExpr _timeline;
+}
+
+TimelineExpr _copyExpr(TimelineExpr e) => switch (e) {
+  GroupRef r => GroupRef(r.name),
+  ParExpr p => ParExpr([for (var c in p.children) _copyExpr(c)]),
+  SeqExpr s => SeqExpr([for (var c in s.children) _copyExpr(c)]),
+  AtExpr a => AtExpr(a.offset, _copyExpr(a.child)),
+  SpeedExpr s => SpeedExpr(s.factor, _copyExpr(s.child)),
+  RepeatExpr r => RepeatExpr(r.times, _copyExpr(r.child)),
+};
