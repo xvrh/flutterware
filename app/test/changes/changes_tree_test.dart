@@ -87,7 +87,7 @@ void main() {
         ),
         at('lib/small.dart', added: 3),
       ]);
-      expect(tree.sortedChildren.single.sortedFiles.map((f) => f.path), [
+      expect(tree.sortedChildren.single.sortedLeaves.map((f) => f.path), [
         'lib/big.dart',
         'lib/gone.dart',
         'lib/small.dart',
@@ -102,7 +102,7 @@ void main() {
         at('app/README.md'),
         at('app/analysis_options.yaml'),
       ]);
-      expect(tree.sortedChildren.single.sortedFiles.map((f) => f.path), [
+      expect(tree.sortedChildren.single.sortedLeaves.map((f) => f.path), [
         'app/analysis_options.yaml',
         'app/pubspec.yaml',
         'app/README.md',
@@ -112,6 +112,57 @@ void main() {
     test('two spellings of one name keep a stable order', () {
       var tree = buildTree([at('Foo/x.dart'), at('foo/y.dart')]);
       expect(tree.sortedChildren.map((c) => c.name), ['Foo', 'foo']);
+    });
+
+    test('an untracked file sits among its neighbours, by name', () {
+      // The whole middle ground: git hands us the full path of an untracked
+      // *file*, so placing it costs nothing and hides nothing — and a file an
+      // agent wrote thirty seconds ago is the one you are most likely to be
+      // looking for. Sorted with them rather than after them: an order that
+      // put new files last would be a sort by a fact the row does not print.
+      var tree = buildTree(
+        [at('lib/alpha.dart'), at('lib/zulu.dart')],
+        untracked: const [UntrackedEntry('lib/middle.dart')],
+      );
+      var lib = tree.sortedChildren.single;
+      expect(lib.sortedLeaves.map((l) => l.path), [
+        'lib/alpha.dart',
+        'lib/middle.dart',
+        'lib/zulu.dart',
+      ]);
+      expect(lib.sortedLeaves[1], isA<UntrackedLeaf>());
+      expect(
+        lib.totalFiles,
+        3,
+        reason: 'a count that skipped it would be quietly wrong',
+      );
+    });
+
+    test('an untracked directory is never placed in the tree', () {
+      // The freeze-guard, and the one thing it is actually about: git reports
+      // the topmost wholly-untracked directory and does not descend, so this
+      // one entry stands for a subtree nobody has walked. A tree is a map of a
+      // shape that was read, and it would also draw a folder that cannot open.
+      var tree = buildTree(
+        [at('lib/a.dart')],
+        untracked: const [
+          UntrackedEntry.directory('build/'),
+          UntrackedEntry.directory('packages/newpkg/build/'),
+        ],
+      );
+      expect(tree.sortedChildren.map((c) => c.name), ['lib']);
+      expect(tree.totalFiles, 1);
+    });
+
+    test('an untracked file in a directory nothing else touched', () {
+      // It brings its own folder with it, and the folding applies to it like
+      // any other: the row is `db/migrations`, not three of them.
+      var tree = buildTree(
+        [],
+        untracked: const [UntrackedEntry('db/migrations/2.sql')],
+      );
+      expect(tree.sortedChildren.single.name, 'db/migrations');
+      expect(tree.totalFiles, 1);
     });
   });
 
@@ -140,12 +191,17 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    ChangeSet setOf(List<FileChange> files, {Ranking? ranking}) => ChangeSet(
+    ChangeSet setOf(
+      List<FileChange> files, {
+      Ranking? ranking,
+      List<UntrackedEntry> untracked = const [],
+    }) => ChangeSet(
       worktreePath: worktree.path,
       patch: PatchIndex.empty,
       base: 'master',
       baseSource: BaseSource.inferred,
       files: files,
+      untracked: untracked,
       ranking: ranking,
     );
 
@@ -235,6 +291,38 @@ void main() {
         hasLength(1),
       );
     });
+
+    testWidgets(
+      'an untracked file is in the tree; a directory is in the tail',
+      (tester) async {
+        current = setOf(
+          [at('app/lib/a.dart')],
+          untracked: const [
+            UntrackedEntry('app/lib/fresh.dart'),
+            UntrackedEntry.directory('build/'),
+          ],
+        );
+        await pump(tester);
+
+        // The new file is under `app/lib` with the file it sits beside, and it
+        // does not repeat its directory any more than a tracked one does.
+        expect(find.text('app/lib'), findsOneWidget);
+        expect(find.text('fresh.dart'), findsOneWidget);
+        expect(
+          tester.getTopLeft(find.text('a.dart')).dx,
+          tester.getTopLeft(find.text('fresh.dart')).dx,
+          reason: 'the same row, at the same indent, under the same folder',
+        );
+        // Both counted: two files under `app/lib`.
+        expect(find.text('2'), findsOneWidget);
+
+        // The directory keeps the tail, under a heading that says which of the
+        // two things git calls untracked this one is.
+        expect(find.text('Untracked directories'), findsOneWidget);
+        expect(find.text('build/'), findsOneWidget);
+        expect(find.text('directory, not scanned'), findsOneWidget);
+      },
+    );
 
     testWidgets('folders open one level down, and can be shut', (tester) async {
       current = setOf([at('app/lib/deep/a.dart'), at('app/test/b.dart')]);

@@ -56,8 +56,12 @@ enum BaseSource {
 /// 30,000 rows. Nothing here counts what is inside: counting *is* the walk
 /// being avoided.
 class UntrackedEntry {
-  const UntrackedEntry(this.path, {this.reason}) : isDirectory = false;
-  const UntrackedEntry.directory(this.path) : isDirectory = true, reason = null;
+  const UntrackedEntry(this.path, {this.reason, this.stamp})
+    : isDirectory = false;
+  const UntrackedEntry.directory(this.path)
+    : isDirectory = true,
+      reason = null,
+      stamp = null;
 
   final String path;
   final bool isDirectory;
@@ -66,10 +70,19 @@ class UntrackedEntry {
   /// directory — see `attentionForUntracked`.
   final String? reason;
 
+  /// What a stat knows about this file's content — see [untrackedStamp].
+  ///
+  /// Null for a directory, which is never stat'ed, and for a file that was
+  /// gone by the time the probe reached it.
+  final String? stamp;
+
   bool get isPinned => reason != null;
 
   UntrackedEntry withReason(String? reason) =>
-      isDirectory ? this : UntrackedEntry(path, reason: reason);
+      isDirectory ? this : UntrackedEntry(path, reason: reason, stamp: stamp);
+
+  UntrackedEntry withStamp(String? stamp) =>
+      isDirectory ? this : UntrackedEntry(path, reason: reason, stamp: stamp);
 
   Map<String, Object?> toJson() => {
     'path': path,
@@ -77,6 +90,37 @@ class UntrackedEntry {
     'why': ?reason,
   };
 }
+
+/// What a stat knows about an untracked file's content, as a fingerprint.
+///
+/// **A stat, never a read.** An untracked file's bytes are on disk rather than
+/// in the patch, and reading every one of them on every probe is precisely the
+/// read this whole design refuses. Size and the microsecond of the last write
+/// is what is affordable, and it is the same pair `FileContentStore` already
+/// treats as the identity of those bytes — so *is this the same file* and *did
+/// it move since I commented* answer to one fact rather than to two.
+///
+/// What it claims is therefore *this file was written since*, not *its bytes
+/// differ*. That is the same grade of claim the tracked side makes: a digest
+/// over a file's slice of the patch moves when any part of the file moves,
+/// whether or not the commented lines did. See [ReviewComment.fileDigest].
+///
+/// **Tagged**, and the tag is load-bearing. This is compared against a sha1 of
+/// a patch slice for the same path the moment that path is staged, and *the
+/// file became tracked* is not *the file changed* — so the two kinds are
+/// recognisable, and [sameDigestKind] is what stops a `git add` from lighting
+/// up every note on a new file.
+String untrackedStamp({required int size, required DateTime modified}) =>
+    '$_diskPrefix$size:${modified.microsecondsSinceEpoch}';
+
+/// Whether two fingerprints are of the same kind, and so comparable at all.
+///
+/// Different kinds mean the path crossed between untracked and tracked, which
+/// is a change of *what git knows*, not of the file. Nothing is claimed.
+bool sameDigestKind(String a, String b) =>
+    a.startsWith(_diskPrefix) == b.startsWith(_diskPrefix);
+
+const _diskPrefix = 'disk:';
 
 /// Everything the changes screen and `fw changes` read.
 class ChangeSet {
@@ -220,7 +264,14 @@ class ChangeSet {
       var a = untracked[i], b = other.untracked[i];
       if (a.path != b.path ||
           a.isDirectory != b.isDirectory ||
-          a.reason != b.reason) {
+          a.reason != b.reason ||
+          // **The stamp is compared, so an in-place overwrite is an answer
+          // that moved.** It used to not be: rewriting an untracked file
+          // changes neither the patch bytes nor the list of paths, so this said
+          // *nothing happened* and the screen kept the previous set. The bodies
+          // survived on `readAt` alone, and anything reading the set itself —
+          // the drift a note claims — could not see the write at all.
+          a.stamp != b.stamp) {
         return false;
       }
     }

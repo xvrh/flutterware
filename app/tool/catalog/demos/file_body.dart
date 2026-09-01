@@ -4,13 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutterware_app/src/changes/diff_view.dart';
 import 'package:flutterware_app/src/changes/file_body.dart';
+import 'package:flutterware_app/src/ui/syntax.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 import 'app_theme.dart';
 
 /// The changes screen's non-diff bodies, stacked: rendered markdown, an SVG
 /// preview (and one with broken bytes, because the refusal is part of the
-/// design), an untracked file's numbered lines, and the refusal notice.
+/// design), an untracked file's own lines, and the refusal notice.
+///
+/// The untracked body is the one to look at beside the diff: it draws the same
+/// syntax colours, the same `+` in the margin, the same accent behind a picked
+/// span, and puts a thread under the line it is about. What git can say about a
+/// file is not what you can do with it.
 ///
 /// The image differ is deliberately not here: its two sides come from a
 /// worktree and a git revision, and a demo faking both would be a stage set —
@@ -21,6 +27,22 @@ Widget fileBodies() => const _FileBodies();
 
 @Preview(name: 'File bodies (dark)', group: 'Changes', wrapper: wrapInDarkTheme)
 Widget fileBodiesDark() => const _FileBodies();
+
+/// The untracked body on its own, because it is the one worth putting beside
+/// the diff: same syntax colours, same `+` in the margin, same accent behind
+/// the picked span, and a thread under the line it is about. Whether an agent
+/// got as far as `git add` decides what git can tell us about a file, not what
+/// you can do with it on your screen.
+@Preview(name: 'Untracked file', group: 'Changes', wrapper: wrapInAppTheme)
+Widget untrackedText() => const SizedBox(height: 320, child: _UntrackedText());
+
+@Preview(
+  name: 'Untracked file (dark)',
+  group: 'Changes',
+  wrapper: wrapInDarkTheme,
+)
+Widget untrackedTextDark() =>
+    const SizedBox(height: 320, child: _UntrackedText());
 
 class _FileBodies extends StatefulWidget {
   const _FileBodies();
@@ -67,23 +89,7 @@ class _FileBodiesState extends State<_FileBodies> {
         const Gap(FwSpacing.xl),
         Text('UNTRACKED TEXT', style: label),
         const Gap(FwSpacing.sm),
-        SizedBox(
-          height: 200,
-          child: Builder(
-            builder: (context) {
-              var style = diffTextStyle(context);
-              var painter = TextPainter(
-                text: TextSpan(text: 'M' * 10, style: style),
-                textDirection: TextDirection.ltr,
-              )..layout();
-              return TextFileBody(
-                lines: _lines,
-                scrollX: _scrollX,
-                charWidth: painter.width / 10,
-              );
-            },
-          ),
-        ),
+        const SizedBox(height: 260, child: _UntrackedText()),
         const Gap(FwSpacing.xl),
         Text('REFUSAL', style: label),
         const Gap(FwSpacing.sm),
@@ -92,6 +98,62 @@ class _FileBodiesState extends State<_FileBodies> {
           'your editor.',
         ),
       ],
+    );
+  }
+}
+
+class _UntrackedText extends StatefulWidget {
+  const _UntrackedText();
+
+  @override
+  State<_UntrackedText> createState() => _UntrackedTextState();
+}
+
+class _UntrackedTextState extends State<_UntrackedText> {
+  final _scrollX = DiffScrollX();
+
+  @override
+  void dispose() {
+    _scrollX.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var style = diffTextStyle(context);
+    var painter = TextPainter(
+      text: TextSpan(text: 'M' * 10, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return TextFileBody(
+      lines: _lines,
+      tokens: LazyLineTokens(_lines, language: 'dart'),
+      scrollX: _scrollX,
+      charWidth: painter.width / 10,
+      // A picked span and a thread under it, which is the state worth
+      // photographing: an unmarked file is what the plain body already was.
+      selected: const {3, 4},
+      placed: {
+        4: [
+          Container(
+            margin: const EdgeInsets.symmetric(
+              horizontal: FwSpacing.xxl,
+              vertical: FwSpacing.sm,
+            ),
+            padding: const EdgeInsets.all(FwSpacing.md),
+            decoration: BoxDecoration(
+              border: Border.all(color: context.colors.line),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+            ),
+            child: Text(
+              'A thread sits here, under the line it is about — the same '
+              'place the diff puts one.',
+              style: context.type.bodySmall,
+            ),
+          ),
+        ],
+      },
+      onComment: (_) {},
     );
   }
 }
@@ -121,11 +183,15 @@ const _svg = '''
 ''';
 
 const _lines = [
-  'A scratch file an agent wrote thirty seconds ago.',
-  'Not staged, not tracked, and until now not shown at all.',
+  '// A source file an agent wrote thirty seconds ago and has not staged.',
+  'class Migration {',
+  "  static const name = 'add the missing index';",
+  '  var applied = false;',
   '',
-  'Numbered like a diff, tinted like nothing — "every line is new"',
-  "is the header's claim, and repeating it in green for the length",
-  'of the file would be noise.',
-  'This line is deliberately long enough to give the shared horizontal scroll a reason to exist, which takes a certain amount of typing to achieve.',
+  '  // Numbered like a diff and tinted like nothing: "every line is new" is',
+  "  // the header's claim, and repeating it in green for the length of the",
+  '  // file would be noise. The colours are the tokeniser, which is a third',
+  '  // channel and does not compete with it.',
+  '  void run() => throw UnimplementedError("this line is deliberately long enough to give the shared horizontal scroll a reason to exist");',
+  '}',
 ];

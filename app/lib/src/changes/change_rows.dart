@@ -8,11 +8,12 @@
 /// moved the lines you were reading, and getting to the next file meant
 /// scrolling through the last one's diff.
 ///
-/// So [buildImportantRows] and [buildUntrackedRows] are the left column's two
-/// flat lists and [buildFileRows] is the right pane. The body stays flat and
-/// virtualised for the same reason as before: a file is thousands of diff
-/// lines, and only a flat list stays smooth at that size — which needs every
-/// row addressable by index without building the ones above it.
+/// So [buildImportantRows] and [buildUntrackedDirectoryRows] are the left
+/// column's two flat lists and [buildFileRows] is the right pane. The body
+/// stays flat and virtualised for the same reason as before: a file is
+/// thousands of diff lines, and only a flat list stays smooth at that size —
+/// which needs every row addressable by index without building the ones above
+/// it.
 ///
 /// What makes that affordable is [HunkSpan.displayLines]: a hunk's header says
 /// how many lines it will draw, so the row list is built from **metadata
@@ -163,33 +164,44 @@ List<ChangeRow> buildImportantRows(
   return rows;
 }
 
-/// The **All** tab's flat tail: the untracked paths, under one heading.
+/// The **All** tab's flat tail: the untracked *directories*, under one heading.
 ///
-/// Everything tracked is in the tree above it — see [treeFiles]. Untracked
-/// entries cannot join it: git reports the topmost wholly-untracked *directory*
-/// and does not descend, so `build/` is one entry standing for a subtree nobody
-/// has walked, and folding that into a directory tree would claim a shape that
-/// was never read.
+/// Everything else is in the tree above it — tracked files and untracked files
+/// alike, see [treeFiles] and [treeUntracked]. A directory cannot join them:
+/// git reports the topmost wholly-untracked directory and does not descend, so
+/// `build/` is one entry standing for a subtree nobody has walked. Folding that
+/// into a directory tree would claim a shape that was never read, and draw a
+/// folder row that does not open.
 ///
-/// Pinned ones are listed here too. All means all: a tab that quietly drops
-/// the four files the other tab is about is a tab whose count disagrees with
-/// the header, which is the same bug the tree had when pins were held out of it.
-List<ChangeRow> buildUntrackedRows(
+/// So the tail is short and it is about one thing, which is what lets its rows
+/// say the only sentence there is to say about them: *not scanned*.
+List<ChangeRow> buildUntrackedDirectoryRows(
   ChangeSet set, {
   String? selected,
   Set<String>? visible,
 }) {
   var kept = [
     for (var entry in set.untracked)
-      if (visible == null || visible.contains(entry.path)) entry,
+      if (entry.isDirectory)
+        if (visible == null || visible.contains(entry.path)) entry,
   ];
   if (kept.isEmpty) return const [];
   return [
-    const SectionRow('Untracked'),
+    const SectionRow('Untracked directories'),
     for (var entry in kept)
       UntrackedRow(entry, selected: entry.path == selected),
   ];
 }
+
+/// The untracked **files** the tree holds — the other half of [treeFiles].
+///
+/// Never a directory: [buildUntrackedDirectoryRows] draws those, and the reason
+/// they are apart is the whole of `buildTree`'s doc.
+List<UntrackedEntry> treeUntracked(ChangeSet set, {Set<String>? visible}) => [
+  for (var entry in set.untracked)
+    if (!entry.isDirectory)
+      if (visible == null || visible.contains(entry.path)) entry,
+];
 
 /// The files the **tree** holds: every one of them.
 ///

@@ -221,12 +221,18 @@ class ReviewComment {
   /// review tool must not have.
   final List<String> quote;
 
-  /// A fingerprint of the file's slice of the patch at capture time.
+  /// A fingerprint of the file at capture time.
   ///
   /// The only drift claim we can make honestly: *this file changed after you
   /// commented*. Whether **your** line moved is not knowable from a patch, and
   /// a badge that claimed it would be wrong exactly when it mattered. Null for
   /// [ReviewWide], which is about no file.
+  ///
+  /// **Two kinds, and they are told apart rather than compared.** A tracked
+  /// file's is a sha1 over its slice of the patch; an untracked file has no
+  /// slice, so its is what a stat knows — see `untrackedStamp`, which carries
+  /// the whole argument. Opaque here either way: this class stores it and the
+  /// screen decides what it means.
   final String? fileDigest;
 
   /// Who dealt with this and what they said, or null while it is outstanding.

@@ -327,6 +327,11 @@ class ChangesProbe {
   ///
   /// `-z` rather than the quoted default, so a path with a space or a quote in
   /// it arrives whole.
+  ///
+  /// Each **file** is then stat'ed — see [untrackedStamp] for what that buys
+  /// and why it is a stat rather than a read. Concurrently, and never for a
+  /// directory: a directory here stands for a subtree nobody has walked, and
+  /// stat'ing into it would be that walk.
   Future<List<UntrackedEntry>> _untracked(String worktreePath) async {
     var result = await _git(worktreePath, [
       'status',
@@ -335,7 +340,35 @@ class ChangesProbe {
       '-z',
     ]);
     if (!result.ok) return const [];
-    return parseUntrackedV2Z(_splitNul(result.stdout));
+    var entries = parseUntrackedV2Z(_splitNul(result.stdout));
+    return Future.wait([
+      for (var entry in entries)
+        if (entry.isDirectory)
+          Future.value(entry)
+        else
+          _stamp(worktreePath, entry),
+    ]);
+  }
+
+  /// [entry] with what a stat says about it.
+  ///
+  /// A file that has gone between git's answer and this keeps a null stamp
+  /// rather than failing the probe: the next read will not list it at all, and
+  /// a delta that refuses to load because a scratch file was deleted mid-probe
+  /// would be a worse program.
+  static Future<UntrackedEntry> _stamp(
+    String worktreePath,
+    UntrackedEntry entry,
+  ) async {
+    try {
+      var stat = await File('$worktreePath/${entry.path}').stat();
+      if (stat.type == FileSystemEntityType.notFound) return entry;
+      return entry.withStamp(
+        untrackedStamp(size: stat.size, modified: stat.modified),
+      );
+    } on FileSystemException {
+      return entry;
+    }
   }
 
   static Future<GitOutput> _defaultRunner(

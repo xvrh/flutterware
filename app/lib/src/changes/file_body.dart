@@ -19,6 +19,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../ui/selectable_line.dart';
+import '../ui/syntax.dart';
 import '../ui/theme.dart';
 import 'change_set.dart';
 import 'diff_view.dart';
@@ -30,9 +31,9 @@ import 'patch_index.dart';
 ///
 /// [signature] is the identity of the answer: when it changes, [load] runs
 /// again. The new side's signature carries the probe's `readAt`, which is how
-/// an in-place overwrite of an untracked file — invisible to the patch and to
-/// the untracked list alike — still reaches the screen: the watcher fires, the
-/// probe stamps a new time, and the re-stat picks up the new mtime.
+/// an in-place overwrite still reaches the screen even when the patch did not
+/// move: the watcher fires, the probe stamps a new time, and the re-stat picks
+/// up the new mtime.
 class FileContentBuilder extends StatefulWidget {
   const FileContentBuilder({
     required this.signature,
@@ -537,11 +538,18 @@ class SvgFileBody extends StatelessWidget {
 /// What a row of [TextFileBody] spends before its text starts. Named for the
 /// same reason as `diffChromeWidth`: the pane subtracts it to know how wide
 /// the text column is.
-const textChromeWidth = FwSpacing.md + 44 + FwSpacing.sm + FwSpacing.lg;
+const textChromeWidth = CommentMargin.width + 44 + FwSpacing.sm + FwSpacing.lg;
 
 /// The lines of a file git has no other side for. One gutter, no markers, no
 /// tint: "every line is new" is the *index's* claim; drawing three hundred
 /// green rows would repeat it at the reader for the length of the file.
+///
+/// **Everything else about a line is the same as in a diff**, and deliberately
+/// so: the syntax colours come from the same tokeniser, the `+` in the margin
+/// is the same [CommentMargin], and a thread drawn under a line sits where the
+/// diff puts it. Whether an agent happened to run `git add` before you looked
+/// decides what git can tell us about a file — it does not decide what you can
+/// do with the file on your screen.
 ///
 /// The same discipline as the diff body: fixed-height monospace rows in a
 /// virtualised list, never wrapped, translated by one shared [DiffScrollX].
@@ -550,8 +558,12 @@ class TextFileBody extends StatelessWidget {
     required this.lines,
     required this.scrollX,
     required this.charWidth,
+    this.tokens,
     this.controller,
     this.leading = const [],
+    this.placed = const {},
+    this.selected = const {},
+    this.onComment,
     super.key,
   });
 
@@ -561,91 +573,168 @@ class TextFileBody extends StatelessWidget {
   /// One character's advance in [diffTextStyle], measured once by the pane.
   final double charWidth;
 
+  /// This file's lines, tokenised on demand — null for a file whose language
+  /// nothing here reads, which draws exactly as it always did.
+  ///
+  /// Held by the pane rather than built here: it caches parsed chunks, and a
+  /// cache rebuilt with the widget would be thrown away on every re-probe.
+  final LazyLineTokens? tokens;
+
   final ScrollController? controller;
+
+  /// Drawn above line 1 — what is about the file rather than about a line of
+  /// it, and any note whose line this file no longer has.
   final List<Widget> leading;
 
+  /// Threads and the composer, by the 1-based line they are drawn **under**.
+  final Map<int, List<Widget>> placed;
+
+  /// Lines inside the span the open composer is about, so you can see what you
+  /// picked while you write about it.
+  final Set<int> selected;
+
+  /// Called with a 1-based line number when its `+` is pressed. Null on a host
+  /// with no review — the catalog's demo, and a widget test pumping a body.
+  final ValueChanged<int>? onComment;
+
   @override
-  Widget build(BuildContext context) => SelectionArea(
-    child: ListView.builder(
-      controller: controller,
-      itemCount: leading.length + lines.length,
-      itemBuilder: (context, index) => index < leading.length
-          ? leading[index]
-          : _TextLineView(
-              number: index - leading.length + 1,
-              text: lines[index - leading.length],
-              scrollX: scrollX,
-              charWidth: charWidth,
-            ),
-    ),
-  );
+  Widget build(BuildContext context) {
+    // One flat row list, the way the diff body builds one: a virtualised list
+    // needs every row addressable by index without building the ones above it,
+    // and a comment is a variable-height row among fixed-height ones.
+    var rows = <Object>[
+      ...leading,
+      for (var number = 1; number <= lines.length; number++) ...[
+        number,
+        ...?placed[number],
+      ],
+    ];
+    return SelectionArea(
+      child: ListView.builder(
+        controller: controller,
+        itemCount: rows.length,
+        itemBuilder: (context, index) => switch (rows[index]) {
+          int number => _TextLineView(
+            number: number,
+            text: lines[number - 1],
+            tokens: tokens?.at(number - 1),
+            scrollX: scrollX,
+            charWidth: charWidth,
+            selected: selected.contains(number),
+            onComment: onComment == null ? null : () => onComment!(number),
+          ),
+          var widget => widget as Widget,
+        },
+      ),
+    );
+  }
 }
 
-class _TextLineView extends StatelessWidget {
+class _TextLineView extends StatefulWidget {
   const _TextLineView({
     required this.number,
     required this.text,
+    required this.tokens,
     required this.scrollX,
     required this.charWidth,
+    required this.selected,
+    required this.onComment,
   });
 
   final int number;
   final String text;
+  final List<Token>? tokens;
   final DiffScrollX scrollX;
   final double charWidth;
+  final bool selected;
+  final VoidCallback? onComment;
+
+  @override
+  State<_TextLineView> createState() => _TextLineViewState();
+}
+
+class _TextLineViewState extends State<_TextLineView> {
+  /// Hover, for the same reason as the diff's row: the row holds selectable
+  /// text, so only the margin is pressable and hover is what reveals it.
+  var _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     var style = diffTextStyle(context);
+    var colors = context.colors;
     // Reported from `build`, which is why [DiffScrollX.see] does not notify.
-    scrollX.see(text.length * charWidth);
-    return Padding(
-      padding: const EdgeInsets.only(left: FwSpacing.md, right: FwSpacing.lg),
-      // The diff body's argument, unchanged: one line for the purpose of a
-      // selection, and the line number is furniture rather than content.
-      child: FwSelectableLine(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SelectionContainer.disabled(
-              child: SizedBox(
-                width: 44,
-                child: Text(
-                  '$number',
-                  textAlign: TextAlign.right,
-                  style: style.copyWith(color: context.colors.mut3),
+    widget.scrollX.see(widget.text.length * widget.charWidth);
+    return MouseRegion(
+      onEnter: (_) {
+        if (widget.onComment != null) setState(() => _hovered = true);
+      },
+      onExit: (_) {
+        if (_hovered) setState(() => _hovered = false);
+      },
+      child: Container(
+        color: widget.selected ? colors.accentSoft : null,
+        padding: const EdgeInsets.only(right: FwSpacing.lg),
+        // The diff body's argument, unchanged: one line for the purpose of a
+        // selection, and the line number is furniture rather than content.
+        child: FwSelectableLine(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CommentMargin(
+                visible: _hovered,
+                onTap: widget.onComment,
+                style: style,
+              ),
+              SelectionContainer.disabled(
+                child: SizedBox(
+                  width: 44,
+                  child: Text(
+                    '${widget.number}',
+                    textAlign: TextAlign.right,
+                    style: style.copyWith(color: colors.mut3),
+                  ),
                 ),
               ),
-            ),
-            const Gap(FwSpacing.sm),
-            Expanded(
-              // The same translate-inside-a-clip as the diff's `_Code`, and for
-              // the same reason: every row must move by the same amount or the
-              // indentation stops lining up.
-              child: SizedBox(
-                height: diffLineHeight(style),
-                child: ClipRect(
-                  child: AnimatedBuilder(
-                    animation: scrollX,
-                    builder: (context, child) => Transform.translate(
-                      offset: Offset(-scrollX.x, 0),
-                      child: OverflowBox(
-                        alignment: Alignment.centerLeft,
-                        maxWidth: double.infinity,
-                        child: child,
+              const Gap(FwSpacing.sm),
+              Expanded(
+                // The same translate-inside-a-clip as the diff's `_Code`, and
+                // for the same reason: every row must move by the same amount
+                // or the indentation stops lining up.
+                child: SizedBox(
+                  height: diffLineHeight(style),
+                  child: ClipRect(
+                    child: AnimatedBuilder(
+                      animation: widget.scrollX,
+                      builder: (context, child) => Transform.translate(
+                        offset: Offset(-widget.scrollX.x, 0),
+                        child: OverflowBox(
+                          alignment: Alignment.centerLeft,
+                          maxWidth: double.infinity,
+                          child: child,
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      text,
-                      style: style,
-                      softWrap: false,
-                      overflow: TextOverflow.clip,
+                      child: switch (widget.tokens) {
+                        var it? => Text.rich(
+                          TextSpan(
+                            children: spansFor(context, it, style: style),
+                          ),
+                          style: style,
+                          softWrap: false,
+                          overflow: TextOverflow.clip,
+                        ),
+                        null => Text(
+                          widget.text,
+                          style: style,
+                          softWrap: false,
+                          overflow: TextOverflow.clip,
+                        ),
+                      },
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
