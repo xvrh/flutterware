@@ -89,6 +89,34 @@ void main() {
       expect(set.untracked.map((e) => e.path), ['scratch.txt']);
     });
 
+    test('an untracked file is stamped; a directory is not stat-ed', () async {
+      // The stamp is what a note's drift is compared against — see
+      // `untrackedStamp`. A stat, and only for files: a directory here stands
+      // for a subtree nobody has walked, and reaching into it would be the
+      // walk `--untracked-files=normal` exists to avoid.
+      Directory(p.join(root.path, 'junk')).createSync();
+      write('junk/a.txt', 'one\n');
+      write('junk/b.txt', 'two\n');
+
+      var set = await ChangesProbe().probe(root.path);
+      var byPath = {for (var e in set.untracked) e.path: e};
+
+      expect(byPath['scratch.txt']!.stamp, startsWith('disk:'));
+      expect(
+        byPath['junk/']!.stamp,
+        isNull,
+        reason: 'git reported the directory and stopped; so does this',
+      );
+
+      // And it moves when the file does, which is the whole job.
+      write('scratch.txt', 'untracked, and rewritten since\n');
+      var again = await ChangesProbe().probe(root.path);
+      expect(
+        again.untracked.firstWhere((e) => e.path == 'scratch.txt').stamp,
+        isNot(byPath['scratch.txt']!.stamp),
+      );
+    });
+
     test('a rename survives to the model with both ends', () async {
       var set = await ChangesProbe().probe(root.path);
       var renamed = set.changed

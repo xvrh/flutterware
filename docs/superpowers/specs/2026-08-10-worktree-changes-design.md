@@ -366,6 +366,30 @@ stops, so `normal` costs nothing even when the directory is enormous — the gua
 is asking git the right question, not a cap we invent and tune. `-uall` is 30,000
 rows through our model, our ranking and our widget layer, which is the freeze.
 
+> **Corrected 2026-09-01: this rule is about directories, and only about
+> them.** The guard above was written once and then applied to the word
+> *untracked* rather than to the thing it protects, so an untracked **file** —
+> which git hands us by full path, at no cost, and which is usually the file an
+> agent wrote thirty seconds ago — was kept out of the tree along with the
+> directories, and out of the syntax colouring and the line comments with it.
+> Three second-class treatments, one of which had an argument behind it.
+>
+> An untracked file is now a row **in the tree**, beside the tracked files of
+> its own directory, counted in its folder's total and dressed like any other
+> row. Placing it costs nothing: no walk, no stat, no count — the path is
+> already in `git status`'s answer.
+>
+> An untracked **directory** still cannot join, and the reason is unchanged and
+> load-bearing: it stands for a subtree nobody has walked, so a tree is the one
+> place it must not be — a map of a shape that was never read, drawn as a
+> folder row that does not open. Those keep the tail, under a heading that now
+> says which of the two things git means: *Untracked directories*.
+>
+> The prompt for it: an agent in its own worktree does one piece of work and
+> never switches branch, so the disaster below — a `.gitignore` that left with
+> a branch — is a main-checkout hazard. It is still real there, and nothing
+> here relaxes the guard against it. See `buildTree`.
+
 **Nothing else may descend either.** Two rules follow, and they are where the
 freeze would sneak back in:
 
@@ -612,16 +636,23 @@ the wrong one presented as fact.
 │ ────────  ───────────  ├─────────────────────────────────────────────────┤
 │ [3 just changed][11 low│ @@ -1,6 +1,9 @@ class Ranking {                  │
 │ ▾ app              46  │  one                                            │
-│   ▾ lib/src/changes 12 │ +import 'dart:io';                              │
+│   ▾ lib/src/changes 13 │ +import 'dart:io';                              │
 │     M diff_view.dart   │ …                                               │
 │    ▌M ranking.dart     │                                                 │
 │      matches lib/*.dart│                                                 │
+│     ? scratch.txt      │                                                 │
+│       not tracked yet  │                                                 │
 │   ▸ test           19  │                                                 │
 │ ▸ docs              2  │                                                 │
-│ UNTRACKED              │                                                 │
-│ ? scratch.txt          │                                                 │
+│ UNTRACKED DIRECTORIES  │                                                 │
+│ ? build/               │                                                 │
+│   directory, not scan… │                                                 │
 └────────────────────────┴─────────────────────────────────────────────────┘
 ```
+
+An untracked **file** is in the tree where it lives and in its folder's count —
+see the 2026-09-01 correction in §3. The tail is the directories, which stand
+for subtrees nobody walked.
 
 The *Important* tab is the same column, flat and all of it open:
 
@@ -740,6 +771,15 @@ it to say so.
 never eagerly. It is the one thing on this screen expensive enough to show up in
 a frame budget, and the only thing that gets a cache keyed by hunk. Still not
 built.
+
+> **Built 2026-08-12, and extended 2026-09-01.** "Never per file" turned out to
+> be a statement about *eagerness* rather than about files: the unit is a chunk
+> of 200 lines, parsed forward on demand with the tokeniser's state threaded
+> between chunks, so there is no size at which the screen quietly stops
+> colouring. That makes a whole untracked file the same problem as a hunk with
+> one side, and it is now coloured by the same `LazyLineTokens`. An untracked
+> file is in fact the *easier* case: it is a whole file, so none of the
+> fragment caveats above apply to it.
 
 Changed from the prototype, and still true:
 

@@ -85,6 +85,44 @@ void main() {
     );
   });
 
+  test('an untracked file rewritten in place', () {
+    // **The one an in-place overwrite used to slip through.** Nothing about
+    // the path list moves and the patch never looks at untracked files, so
+    // this said *the same answer* and the screen kept the previous set — with
+    // the previous stamp on it, which is what a note's drift is compared
+    // against. The stat is what makes the write visible here.
+    expect(
+      setOf(
+        untracked: const [UntrackedEntry('scratch.txt', stamp: 'disk:14:1000')],
+      ).sameAnswerAs(
+        setOf(
+          untracked: const [
+            UntrackedEntry('scratch.txt', stamp: 'disk:31:2000'),
+          ],
+        ),
+      ),
+      isFalse,
+    );
+  });
+
+  test('an untracked file nobody touched', () {
+    // And the other half of it: a probe every couple of seconds over a quiet
+    // checkout must keep saying *the same answer*, or the decoded text of
+    // every open hunk is thrown away twice a minute for nothing.
+    expect(
+      setOf(
+        untracked: const [UntrackedEntry('scratch.txt', stamp: 'disk:14:1000')],
+      ).sameAnswerAs(
+        setOf(
+          untracked: const [
+            UntrackedEntry('scratch.txt', stamp: 'disk:14:1000'),
+          ],
+        ),
+      ),
+      isTrue,
+    );
+  });
+
   test('an untracked file that just became pinned', () {
     // Only the reason changed — the rules were edited, not the checkout.
     expect(

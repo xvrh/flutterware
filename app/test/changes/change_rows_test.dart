@@ -149,12 +149,23 @@ diff --git a/lib/b.dart b/lib/b.dart
         'db/migrations/2.sql',
       );
 
-      // **All means all.** It is listed here too — a tab that quietly drops
+      // **All means all.** It is in the tree there — a tab that quietly drops
       // the file the other tab is about is a tab whose count disagrees with
       // the header.
-      var all = buildUntrackedRows(set);
-      expect(all.whereType<SectionRow>().map((r) => r.label), ['Untracked']);
-      expect(all.whereType<UntrackedRow>(), hasLength(3));
+      expect(treeUntracked(set).map((e) => e.path), [
+        'db/migrations/2.sql',
+        'scratch.txt',
+      ]);
+
+      // The directory is the one thing that stays in the tail: it stands for a
+      // subtree nobody walked, and a tree is a map of a shape that was read.
+      var tail = buildUntrackedDirectoryRows(set);
+      expect(tail.whereType<SectionRow>().map((r) => r.label), [
+        'Untracked directories',
+      ]);
+      expect(tail.whereType<UntrackedRow>().map((r) => r.entry.path), [
+        'build/',
+      ]);
     });
 
     test('an untracked directory is never pinned', () {
@@ -186,7 +197,7 @@ diff --git a/lib/b.dart b/lib/b.dart
       // Nothing pinned, nothing untracked: both flat lists are empty and every
       // file is the tree's.
       expect(buildImportantRows(set), isEmpty);
-      expect(buildUntrackedRows(set), isEmpty);
+      expect(buildUntrackedDirectoryRows(set), isEmpty);
       expect(treeFiles(set), hasLength(2));
     });
 
@@ -219,19 +230,30 @@ diff --git a/lib/b.dart b/lib/b.dart
       },
     );
 
-    test('filtering removes rows; the untracked section goes with it', () {
+    test('filtering removes rows; untracked paths go with them', () {
       var patch = index(twoFiles);
-      var set = setOf(patch, untracked: const [UntrackedEntry('scratch.txt')]);
+      var set = setOf(
+        patch,
+        untracked: const [
+          UntrackedEntry('scratch.txt'),
+          UntrackedEntry.directory('build/'),
+        ],
+      );
 
-      var all = buildUntrackedRows(set);
-      expect(all.whereType<UntrackedRow>(), hasLength(1));
+      expect(treeUntracked(set), hasLength(1));
+      expect(buildUntrackedDirectoryRows(set).whereType<UntrackedRow>(), [
+        isA<UntrackedRow>(),
+      ]);
 
-      var filtered = buildUntrackedRows(set, visible: {'lib/b.dart'});
       expect(treeFiles(set, visible: {'lib/b.dart'}), hasLength(1));
       expect(
-        filtered.whereType<UntrackedRow>(),
+        treeUntracked(set, visible: {'lib/b.dart'}),
         isEmpty,
         reason: 'a filter over changed paths says nothing about untracked ones',
+      );
+      expect(
+        buildUntrackedDirectoryRows(set, visible: {'lib/b.dart'}),
+        isEmpty,
       );
     });
 

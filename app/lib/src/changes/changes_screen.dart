@@ -319,11 +319,25 @@ class _ChangesScreenState extends State<ChangesScreen> {
       // and the row that says so is the one in the review list, which still
       // has the quote. Claiming a change here would be a second, weaker
       // statement of the same thing.
-      return now != null && now != was;
+      if (now == null) return false;
+      // **A `git add` is not an edit.** Staging an untracked file swaps which
+      // fingerprint this path answers to — a stat's stamp for a sha1 of a
+      // patch slice — and comparing the two would badge every note on a new
+      // file the moment the agent staged it. Different kinds claim nothing.
+      if (!sameDigestKind(was, now)) return false;
+      return now != was;
     }
     return false;
   }
 
+  /// This path's fingerprint as the checkout has it now, or null when the path
+  /// is not in the delta at all.
+  ///
+  /// **Two kinds, one for each side of the screen.** A tracked file is a sha1
+  /// over its slice of the patch, which is already in memory. An untracked file
+  /// has no slice, so it is the stamp the probe took with a stat — see
+  /// [untrackedStamp], which is also where the tagging that keeps the two apart
+  /// is explained.
   String? _digestFor(String? path, ChangeSet set) {
     if (path == null) return null;
     if (!identical(_digestsFor, set)) {
@@ -332,7 +346,10 @@ class _ChangesScreenState extends State<ChangesScreen> {
     }
     if (_digests[path] case var it?) return it;
     var file = set.changed.where((f) => f.path == path).firstOrNull;
-    if (file == null) return null;
+    if (file == null) {
+      var stamp = set.untracked.where((e) => e.path == path).firstOrNull?.stamp;
+      return stamp == null ? null : _digests[path] = stamp;
+    }
     return _digests[path] = digestOfPatchSlice(
       set.patch.bytes.sublist(file.byteStart, file.byteEnd),
     );
@@ -486,25 +503,41 @@ class _ChangesScreenState extends State<ChangesScreen> {
   }
 
   /// The `+` in a diff line's margin.
-  ///
-  /// Shift extends the span rather than starting a new comment. Two clicks
-  /// is the whole gesture for *this block*, and it is the gesture every diff
-  /// viewer already teaches — a modifier that silently started over instead
-  /// would lose whatever you had already typed.
   void _composeLine(FileChange file, DiffLine line) {
     // A line exists on one side or the other, and the side it exists on is the
     // only numbering that can be looked up in a file.
     var number = line.newNumber ?? line.oldNumber;
     if (number == null) return;
-    var side = line.newNumber != null ? ReviewSide.after : ReviewSide.before;
+    _composeAt(
+      file.path,
+      number,
+      line.newNumber != null ? ReviewSide.after : ReviewSide.before,
+    );
+  }
+
+  /// The same `+`, in the margin of a file with no diff — an untracked one.
+  ///
+  /// Always [ReviewSide.after]: the numbers drawn beside those lines are the
+  /// file's own, in the checkout, and there is no other side for them to be
+  /// counted on.
+  void _composeTextLine(String path, int number) =>
+      _composeAt(path, number, ReviewSide.after);
+
+  /// Opens the composer on a line, or extends the span it is already about.
+  ///
+  /// Shift extends rather than starting a new comment. Two clicks is the whole
+  /// gesture for *this block*, and it is the gesture every diff viewer already
+  /// teaches — a modifier that silently started over instead would lose
+  /// whatever you had already typed.
+  void _composeAt(String path, int number, ReviewSide side) {
     var current = _composing;
     setState(() {
       if (HardwareKeyboard.instance.isShiftPressed &&
           current is LineAnchor &&
-          current.path == file.path &&
+          current.path == path &&
           current.side == side) {
         _composing = LineAnchor(
-          path: file.path,
+          path: path,
           from: math.min(current.from, number),
           to: math.max(current.to, number),
           side: side,
@@ -512,12 +545,7 @@ class _ChangesScreenState extends State<ChangesScreen> {
         return;
       }
       _cancelComposing();
-      _composing = LineAnchor(
-        path: file.path,
-        from: number,
-        to: number,
-        side: side,
-      );
+      _composing = LineAnchor(path: path, from: number, to: number, side: side);
     });
   }
 
@@ -543,10 +571,17 @@ class _ChangesScreenState extends State<ChangesScreen> {
 
   /// Writes the draft down, and closes the composer.
   ///
-  /// The quote is read here, once. This is the moment the comment stops
-  /// depending on the checkout: from now on it carries its own evidence, and
-  /// the agent can keep editing without any of this going wrong.
-  void _submitComment(ChangeSet set) {
+  /// The quote is **the one the composer was showing**, handed up by whichever
+  /// body drew it. This is the moment the comment stops depending on the
+  /// checkout: from now on it carries its own evidence, and the agent can keep
+  /// editing without any of this going wrong.
+  ///
+  /// Handed up rather than read again here, which is what this used to do.
+  /// Two reads of the same span is two chances to disagree — and one of the
+  /// bodies has no span to re-read: an untracked file's lines are on disk, not
+  /// in the patch, and the pane that loaded them is the only thing that has
+  /// them.
+  void _submitComment(ChangeSet set, [List<String> quote = const []]) {
     var body = _draft.text.trim();
     var anchor = _composing;
     if (anchor == null || body.isEmpty) return;
@@ -554,24 +589,13 @@ class _ChangesScreenState extends State<ChangesScreen> {
     if (_editing case var id?) {
       _review.edit(id, body);
     } else {
-      var file = anchor.path == null
-          ? null
-          : set.changed.where((f) => f.path == anchor.path).firstOrNull;
       _review.add(
         ReviewComment(
           id: newReviewId(),
           anchor: anchor,
           body: body,
           createdAt: DateTime.now(),
-          quote: anchor is LineAnchor && file != null
-              ? quoteFor(
-                  file,
-                  anchor.from,
-                  anchor.to,
-                  anchor.side,
-                  _linesFor(set).linesFor,
-                )
-              : const [],
+          quote: anchor is LineAnchor ? quote : const [],
           fileDigest: _digestFor(anchor.path, set),
         ),
       );
@@ -825,8 +849,9 @@ class _ChangesScreenState extends State<ChangesScreen> {
                         editingQuote: _editingQuote,
                         onUndoDelete: _undoDelete,
                         onCommentLine: _composeLine,
+                        onCommentTextLine: _composeTextLine,
                         onCommentFile: _composeFile,
-                        onSubmit: () => _submitComment(set),
+                        onSubmit: (quote) => _submitComment(set, quote),
                         onCancel: () => setState(_cancelComposing),
                         onEditComment: _composeEdit,
                         onDeleteComment: _deleteComment,
@@ -1342,10 +1367,14 @@ class _IndexPane extends StatelessWidget {
     );
   }
 
-  /// Everything in the delta: the tree, then the untracked paths under it.
+  /// Everything in the delta: the tree — tracked and untracked files alike —
+  /// and then the untracked directories, which have no shape to put in it.
   Widget _all(BuildContext context) {
-    var tree = buildTree(treeFiles(set, visible: visible));
-    var untracked = buildUntrackedRows(
+    var tree = buildTree(
+      treeFiles(set, visible: visible),
+      untracked: treeUntracked(set, visible: visible),
+    );
+    var untracked = buildUntrackedDirectoryRows(
       set,
       selected: selected,
       visible: visible,
@@ -1910,29 +1939,47 @@ class _TreeNodeViewState extends State<_TreeNodeView> {
               onSelect: widget.onSelect,
               openDepth: widget.openDepth,
             ),
-          for (var file in node.sortedFiles)
-            if (widget.ranking.forPath(file.path) case var ranked)
-              Padding(
-                padding: EdgeInsets.only(
-                  left: isRoot ? 0 : widget.depth * FwSpacing.lg,
-                ),
-                child: IndexFileRow(
-                  file: file,
-                  selected: file.path == widget.selected,
-                  // The second place attention is surfaced: a pinned file says
-                  // what pinned it here too, where you are browsing, not only
-                  // in the tab you may not have opened.
-                  reason: ranked?.reason,
-                  pinned: ranked?.tier == RankTier.attention,
-                  // **No directory line under a file in the tree.** Its
-                  // position already says where it is, and repeating the path
-                  // is what the tree exists to remove.
-                  showDirectory: false,
-                  onTap: () => widget.onSelect(file.path),
-                ),
+          for (var leaf in node.sortedLeaves)
+            Padding(
+              padding: EdgeInsets.only(
+                left: isRoot ? 0 : widget.depth * FwSpacing.lg,
               ),
+              child: _leaf(leaf),
+            ),
         ],
       ],
+    );
+  }
+
+  /// One row under this directory: a file in the patch, or an untracked one.
+  ///
+  /// **Neither draws its directory.** Its position already says where it is,
+  /// and repeating the path is what the tree exists to remove.
+  Widget _leaf(TreeLeaf leaf) => switch (leaf) {
+    ChangedLeaf(:var file) => _fileRow(file),
+    // An untracked entry carries its own pin. It never reached the ranking,
+    // which is built from the patch — see `attentionForUntracked`.
+    UntrackedLeaf(:var entry) => IndexUntrackedRow(
+      entry: entry,
+      selected: entry.path == widget.selected,
+      pinned: entry.isPinned,
+      showDirectory: false,
+      onTap: () => widget.onSelect(entry.path),
+    ),
+  };
+
+  Widget _fileRow(FileChange file) {
+    var ranked = widget.ranking.forPath(file.path);
+    return IndexFileRow(
+      file: file,
+      selected: file.path == widget.selected,
+      // The second place attention is surfaced: a pinned file says what pinned
+      // it here too, where you are browsing, not only in the tab you may not
+      // have opened.
+      reason: ranked?.reason,
+      pinned: ranked?.tier == RankTier.attention,
+      showDirectory: false,
+      onTap: () => widget.onSelect(file.path),
     );
   }
 }
@@ -1962,6 +2009,7 @@ class _FilePane extends StatefulWidget {
     required this.editingQuote,
     required this.onUndoDelete,
     required this.onCommentLine,
+    required this.onCommentTextLine,
     required this.onCommentFile,
     required this.onSubmit,
     required this.onCancel,
@@ -1988,9 +2036,9 @@ class _FilePane extends StatefulWidget {
   final String? baseRevision;
 
   /// When the probe last read the worktree. The new-side bodies key their
-  /// reload on it: an in-place overwrite of an untracked file moves neither
-  /// the patch nor the untracked list, so this stamp is the only signal that
-  /// reaches them.
+  /// reload on it, which is what carries an in-place overwrite of a file whose
+  /// patch did not move — a tracked file's working-tree side, edited and then
+  /// edited back, and every untracked one before the probe stamped them.
   final DateTime? readAt;
 
   final HunkLineCache lines;
@@ -2027,8 +2075,17 @@ class _FilePane extends StatefulWidget {
   final List<String>? editingQuote;
 
   final void Function(FileChange, DiffLine) onCommentLine;
+
+  /// The same, for a body that draws a file's own lines rather than a diff of
+  /// them: a path and a 1-based line number, which is all an untracked file
+  /// has and all this anchor needs.
+  final void Function(String path, int line) onCommentTextLine;
+
   final ValueChanged<String> onCommentFile;
-  final VoidCallback onSubmit;
+
+  /// Takes the quote the composer was showing — see `_submitComment`.
+  final ValueChanged<List<String>> onSubmit;
+
   final VoidCallback onCancel;
   final ValueChanged<ReviewComment> onEditComment;
   final ValueChanged<String> onDeleteComment;
@@ -2048,8 +2105,24 @@ class _FilePaneState extends State<_FilePane> {
   /// The reveal request already served, so a rebuild does not re-scroll.
   int? _served;
 
-  /// This build's rows — what [_revealNow] counts positions in.
-  List<ChangeRow> _rows = const [];
+  /// Where each thread this build drew sits in the body's flat row list, and
+  /// how many rows there are — what [_revealNow] estimates an offset from.
+  ///
+  /// Both bodies fill this: a diff's rows and an untracked file's lines are
+  /// two flat lists, and a note in either can be four hundred rows down.
+  var _threadRow = <String, int>{};
+  var _bodyRows = 0;
+
+  /// The open untracked file's lines and their colours.
+  ///
+  /// Keyed on the [FileBytes] **object**, which the content store re-hands
+  /// unchanged until the file's mtime or size moves — so identity here means
+  /// exactly *the file has not changed*, and the split text and the tokeniser's
+  /// parsed chunks survive as long as that is true. Not keyed on the probe's
+  /// `readAt`, which moves every couple of seconds on a checkout nobody is
+  /// touching and would throw the colours away under a reader.
+  ({List<String> lines, LazyLineTokens? tokens})? _text;
+  FileBytes? _textFor;
 
   /// How far right the code column is, shared by every row it draws.
   final _scrollX = DiffScrollX();
@@ -2130,13 +2203,11 @@ class _FilePaneState extends State<_FilePane> {
       );
       return;
     }
-    var index = _rows.indexWhere(
-      (row) => row is CommentRow && row.comment.id == id,
-    );
+    var index = _threadRow[id];
     var controller = widget.controller;
-    if (index < 0 || !controller.hasClients || _rows.isEmpty) return;
+    if (index == null || !controller.hasClients || _bodyRows == 0) return;
     var position = controller.position;
-    var estimate = position.maxScrollExtent * (index / _rows.length);
+    var estimate = position.maxScrollExtent * (index / _bodyRows);
     controller.jumpTo(estimate.clamp(0.0, position.maxScrollExtent));
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _revealNow(id, tries - 1),
@@ -2249,12 +2320,12 @@ class _FilePaneState extends State<_FilePane> {
             builder: (context, content) => switch (content) {
               FileBytes f when kind == FileBodyKind.svg => SvgFileBody(
                 bytes: f.bytes,
-                leading: _leadingFor(it.path),
+                leading: _leadingFor(it.path, composerQuote: _patchQuote(it)),
               ),
               FileBytes f => MarkdownFileBody(
                 content: f.text,
                 imageDirectory: _imageDirectoryOf(it.path),
-                leading: _leadingFor(it.path),
+                leading: _leadingFor(it.path, composerQuote: _patchQuote(it)),
               ),
               FileMissing() => const FileBodyNotice(
                 'Not on disk any more — Source still shows the diff.',
@@ -2279,7 +2350,12 @@ class _FilePaneState extends State<_FilePane> {
     required bool faces,
     required FileBodyView view,
   }) {
-    var rows = _rows = _rowsFor(it);
+    var rows = _rowsFor(it);
+    _threadRow = {
+      for (var (index, row) in rows.indexed)
+        if (row is CommentRow) row.comment.id: index,
+    };
+    _bodyRows = rows.length;
     var lines = widget.lines;
     // The lines the composer's anchor covers, so you can see what you picked
     // while you write about it. Resolved per line rather than per span
@@ -2321,6 +2397,10 @@ class _FilePaneState extends State<_FilePane> {
   /// An untracked file's body. There is no diff to draw — git has no other
   /// side — but there is a file, and showing it beats a placeholder that says
   /// every line is new without showing one of them.
+  ///
+  /// Everything a diff body offers over its lines is offered here: the syntax
+  /// colours, the `+` in the margin, and threads drawn under the line they are
+  /// about. What git can say about a file is not what you can say about it.
   Widget _untrackedPage(BuildContext context, UntrackedEntry it) {
     var kind = fileBodyKind(it.path);
     var faces = kind == FileBodyKind.markdown || kind == FileBodyKind.svg;
@@ -2331,7 +2411,6 @@ class _FilePaneState extends State<_FilePane> {
         (kind == FileBodyKind.markdown
             ? FileBodyView.rendered
             : FileBodyView.source);
-    var charWidth = _measure(context);
 
     Widget body;
     if (kind == FileBodyKind.image) {
@@ -2357,11 +2436,20 @@ class _FilePaneState extends State<_FilePane> {
           ),
           FileBytes f when faces && view == FileBodyView.rendered =>
             kind == FileBodyKind.svg
-                ? SvgFileBody(bytes: f.bytes, leading: _leadingFor(it.path))
+                ? SvgFileBody(
+                    bytes: f.bytes,
+                    leading: _leadingFor(
+                      it.path,
+                      composerQuote: _diskQuote(it.path, f),
+                    ),
+                  )
                 : MarkdownFileBody(
                     content: f.text,
                     imageDirectory: _imageDirectoryOf(it.path),
-                    leading: _leadingFor(it.path),
+                    leading: _leadingFor(
+                      it.path,
+                      composerQuote: _diskQuote(it.path, f),
+                    ),
                   ),
           // The one sniff worth doing: no patch has classified this file, and
           // a NUL-ridden blob drawn as monospace rows is a screen of tofu.
@@ -2369,13 +2457,7 @@ class _FilePaneState extends State<_FilePane> {
             'Binary file — ${bytesLabel(f.bytes.length)}, and no text to '
             'draw.',
           ),
-          FileBytes f => TextFileBody(
-            lines: _linesOf(f.text),
-            scrollX: _scrollX,
-            charWidth: charWidth,
-            controller: widget.controller,
-            leading: _leadingFor(it.path),
-          ),
+          FileBytes f => _untrackedText(context, it.path, f),
         },
       );
     }
@@ -2405,16 +2487,194 @@ class _FilePaneState extends State<_FilePane> {
     );
   }
 
+  /// An untracked file's lines, with what has been said about them woven in.
+  ///
+  /// The twin of [_rowsFor], and the same rule: a note whose line this file no
+  /// longer has is drawn at the top rather than dropped — that happens exactly
+  /// when the agent rewrote the file out from under it, which is the moment
+  /// the note matters, and it still carries the code it was written about.
+  Widget _untrackedText(BuildContext context, String path, FileBytes bytes) {
+    var text = _textOf(bytes, path);
+
+    // Everything drawn between the lines, in the order it will appear. Built
+    // as one list so the row each thread lands on can be counted for a reveal
+    // — see [_indexThreads].
+    var leading = <({String? id, Widget row})>[];
+    var attached = <({int line, String? id, Widget row})>[];
+
+    // A line anchor is placeable only if this file still has that line, and
+    // only on the side those numbers are counted on: an untracked file has no
+    // *before*, so a note carrying one is about a file that has since been
+    // committed and is drawn at the top.
+    int? lineOf(ReviewAnchor anchor) => switch (anchor) {
+      LineAnchor(:var to, :var side)
+          when side == ReviewSide.after && to >= 1 && to <= text.lines.length =>
+        to,
+      _ => null,
+    };
+
+    for (var comment in widget.comments) {
+      if (comment.anchor.path != path) continue;
+      var row = comment.id == widget.deleted
+          ? ReviewUndoStrip(onUndo: widget.onUndoDelete)
+          : ReviewThread(
+              key: _threads[comment.id] ??= GlobalKey(),
+              comment: comment,
+              drifted: widget.drifted(comment),
+              highlighted: comment.id == widget.flash,
+              onEdit: () => widget.onEditComment(comment),
+              onDelete: () => widget.onDeleteComment(comment.id),
+              onResolve: () => widget.onResolveComment(comment.id),
+              onUnresolve: () => widget.onUnresolveComment(comment.id),
+            );
+      if (lineOf(comment.anchor) case var line?) {
+        attached.add((line: line, id: comment.id, row: row));
+      } else {
+        leading.add((id: comment.id, row: row));
+      }
+    }
+
+    if (widget.composing case var anchor? when anchor.path == path) {
+      var row = _composer(
+        anchor,
+        widget.editingQuote ?? _diskQuote(path, bytes),
+      );
+      if (lineOf(anchor) case var line?) {
+        attached.add((line: line, id: null, row: row));
+      } else {
+        leading.add((id: null, row: row));
+      }
+    }
+
+    // Stable, so two notes on one line keep the order they were written in.
+    attached.sort((a, b) => a.line.compareTo(b.line));
+    _indexThreads(leading, attached, lines: text.lines.length);
+
+    var placed = <int, List<Widget>>{};
+    for (var item in attached) {
+      (placed[item.line] ??= []).add(item.row);
+    }
+
+    return TextFileBody(
+      lines: text.lines,
+      tokens: text.tokens,
+      scrollX: _scrollX,
+      charWidth: _measure(context),
+      controller: widget.controller,
+      leading: [for (var item in leading) item.row],
+      placed: placed,
+      selected: switch (widget.composing) {
+        LineAnchor a when a.path == path && a.side == ReviewSide.after => {
+          for (var line = a.from; line <= a.to; line++) line,
+        },
+        _ => const {},
+      },
+      onComment: (line) => widget.onCommentTextLine(path, line),
+    );
+  }
+
+  /// The lines a line anchor covers, read from the patch.
+  ///
+  /// For the rendered face of a tracked file, where the composer can be open
+  /// on a line the body is not drawing — you picked it in *Source* and
+  /// switched. It quotes what it would have quoted there rather than nothing.
+  List<String> _patchQuote(FileChange file) {
+    if (widget.composing case LineAnchor a when a.path == file.path) {
+      return quoteFor(file, a.from, a.to, a.side, widget.lines.linesFor);
+    }
+    return const [];
+  }
+
+  /// The lines a line anchor covers, read from the file on disk.
+  ///
+  /// The untracked half of [quoteFor], and the only reading of it there is:
+  /// nothing in the patch has these lines, so the composer's own copy is what
+  /// the comment will carry.
+  List<String> _diskQuote(String path, FileBytes bytes) {
+    if (widget.composing case LineAnchor a when a.path == path) {
+      if (a.side == ReviewSide.before) return const [];
+      var lines = _textOf(bytes, path).lines;
+      return [
+        for (var line = a.from; line <= a.to; line++)
+          if (line >= 1 && line <= lines.length) lines[line - 1],
+      ];
+    }
+    return const [];
+  }
+
   /// What the second face is called: an SVG is *previewed*, prose is
   /// *rendered*. One word each, shown beside `Source` in the toggle.
   static String _renderedLabel(FileBodyKind kind) =>
       kind == FileBodyKind.svg ? 'Preview' : 'Rendered';
 
+  /// The composer, wherever it is drawn.
+  ///
+  /// One place, because the quote is the thing three bodies would otherwise
+  /// each have to remember to pass on twice: **what it shows is what it
+  /// stores**, and that is true by construction here rather than by two
+  /// readings of the same span agreeing.
+  Widget _composer(ReviewAnchor anchor, List<String> quote) => ReviewComposer(
+    anchor: anchor,
+    controller: widget.draft,
+    editing: widget.editing,
+    quote: quote,
+    onSubmit: () => widget.onSubmit(quote),
+    onCancel: widget.onCancel,
+  );
+
+  /// This file's lines and their colours, split and prepared once per version
+  /// of the file. See [_text] for what "version" means here.
+  ///
+  /// Nothing is tokenised by this call: [LazyLineTokens] parses forward as
+  /// rows ask for it, so opening a four-thousand-line file costs one split.
+  ({List<String> lines, LazyLineTokens? tokens}) _textOf(
+    FileBytes bytes,
+    String path,
+  ) {
+    if (!identical(_textFor, bytes)) {
+      _textFor = bytes;
+      var lines = _linesOf(bytes.text);
+      var language = languageForPath(path);
+      _text = (
+        lines: lines,
+        tokens: language == null
+            ? null
+            : LazyLineTokens(lines, language: language),
+      );
+    }
+    return _text!;
+  }
+
+  /// Which row of the untracked body each thread lands on.
+  ///
+  /// One line of the file is one row, so a thread's row is the leading rows,
+  /// plus its own line number, plus everything already inserted above it. The
+  /// arithmetic is here rather than inside [TextFileBody] because a reveal has
+  /// to know it *before* the list has built a single one of those rows.
+  void _indexThreads(
+    List<({String? id, Widget row})> leading,
+    List<({int line, String? id, Widget row})> attached, {
+    required int lines,
+  }) {
+    _threadRow = {
+      for (var (index, item) in leading.indexed) ?item.id: index,
+      for (var (inserted, item) in attached.indexed)
+        ?item.id: leading.length + item.line + inserted,
+    };
+    _bodyRows = leading.length + lines + attached.length;
+  }
+
   /// Comment threads and the composer, for a body with no diff rows to weave
   /// them into. They draw at the top — the same place a diff puts a comment
   /// whose line could not be found, and *about this file* means the same
   /// thing over pixels as over three hundred lines.
-  List<Widget> _leadingFor(String path) {
+  ///
+  /// [composerQuote] is what the composer will store if it is submitted from
+  /// here — empty for a body with no lines to quote, which is most of them.
+  List<Widget> _leadingFor(
+    String path, {
+    List<String> composerQuote = const [],
+  }) {
     var rows = <Widget>[];
     for (var comment in widget.comments) {
       if (comment.anchor.path != path) continue;
@@ -2434,16 +2694,7 @@ class _FilePaneState extends State<_FilePane> {
       );
     }
     if (widget.composing case var anchor? when anchor.path == path) {
-      rows.add(
-        ReviewComposer(
-          anchor: anchor,
-          controller: widget.draft,
-          editing: widget.editing,
-          quote: widget.editingQuote ?? const [],
-          onSubmit: widget.onSubmit,
-          onCancel: widget.onCancel,
-        ),
-      );
+      rows.add(_composer(anchor, widget.editingQuote ?? composerQuote));
     }
     return rows;
   }
@@ -2530,15 +2781,12 @@ class _FilePaneState extends State<_FilePane> {
                       onResolve: () => widget.onResolveComment(comment.id),
                       onUnresolve: () => widget.onUnresolveComment(comment.id),
                     ),
-            ComposerRow(:var anchor) => ReviewComposer(
-              anchor: anchor,
-              controller: widget.draft,
-              editing: widget.editing,
-              // Read here rather than counted: the composer shows the same
-              // lines the diff has just tinted behind it, and the submit
-              // reads them again for keeps — see `_submitComment`.
-              quote:
-                  widget.editingQuote ??
+            ComposerRow(:var anchor) => _composer(
+              anchor,
+              // The composer shows the same lines the diff has just tinted
+              // behind it, and hands exactly those to the submit — see
+              // `_submitComment`, which used to read them a second time.
+              widget.editingQuote ??
                   (anchor is LineAnchor
                       ? quoteFor(
                           it,
@@ -2548,8 +2796,6 @@ class _FilePaneState extends State<_FilePane> {
                           lines.linesFor,
                         )
                       : const []),
-              onSubmit: widget.onSubmit,
-              onCancel: widget.onCancel,
             ),
             FileNoticeRow(:var message) => Padding(
               padding: const EdgeInsets.all(FwSpacing.xxl),

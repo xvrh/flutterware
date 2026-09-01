@@ -427,7 +427,7 @@ class _DiffLineViewState extends State<DiffLineView> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _AddComment(
+              CommentMargin(
                 visible: _hovered,
                 onTap: widget.onComment,
                 style: style,
@@ -569,11 +569,16 @@ double diffLineHeight(TextStyle style) =>
 /// Leaving the target live costs nothing: a 20 px margin to the left of the
 /// line numbers is not where a stray click lands, and the Review tab's empty
 /// state names the gesture for anyone who has not found it by moving a pointer.
-class _AddComment extends StatelessWidget {
-  const _AddComment({
+///
+/// Shared with the plain-text body an untracked file gets, so *leave a note on
+/// this line* is one gesture with one target and one tooltip wherever lines of
+/// a file are drawn.
+class CommentMargin extends StatelessWidget {
+  const CommentMargin({
     required this.visible,
     required this.onTap,
     required this.style,
+    super.key,
   });
 
   final bool visible;
@@ -583,9 +588,9 @@ class _AddComment extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    if (onTap == null) return const SizedBox(width: _width);
+    if (onTap == null) return const SizedBox(width: width);
     return SizedBox(
-      width: _width,
+      width: width,
       child: Tooltip(
         message: 'Comment on this line — shift-click to extend a span',
         waitDuration: const Duration(milliseconds: 600),
@@ -620,7 +625,7 @@ class _AddComment extends StatelessWidget {
     );
   }
 
-  static const _width = FwSpacing.lg + 8;
+  static const width = FwSpacing.lg + 8;
 }
 
 /// The body's horizontal scrollbar: a thumb you can drag, and the only thing on
@@ -702,11 +707,20 @@ class _Gutter extends StatelessWidget {
 }
 
 /// An untracked path, exactly as git reported it.
+///
+/// Two places draw this, and the difference between them is the difference
+/// between the two things git means by *untracked*. An untracked **file** is a
+/// row in the tree, beside the tracked files of the same directory, dressed the
+/// same as [IndexFileRow] down to the pin edge. An untracked **directory** is a
+/// row in the tail below the tree, spelling its whole path, because it stands
+/// for a subtree nobody has walked and has no place in a map of one.
 class IndexUntrackedRow extends StatelessWidget {
   const IndexUntrackedRow({
     required this.entry,
     required this.selected,
     required this.onTap,
+    this.showDirectory = true,
+    this.pinned = false,
     super.key,
   });
 
@@ -716,6 +730,14 @@ class IndexUntrackedRow extends StatelessWidget {
   /// Null for a directory, which is the one row here that opens nothing: there
   /// is no diff behind it and reading it would be the walk this avoids.
   final VoidCallback? onTap;
+
+  /// False inside the tree, where the row's position already says where the
+  /// file is — the same rule, for the same reason, as [IndexFileRow].
+  final bool showDirectory;
+
+  /// Draws the accent edge an attention rule earned this file. Set inside the
+  /// tree; not in the tail, which is where you have already arrived.
+  final bool pinned;
 
   @override
   Widget build(BuildContext context) {
@@ -732,7 +754,8 @@ class IndexUntrackedRow extends StatelessWidget {
         'not tracked yet',
       // Not for a directory: its own path is already drawn in full above, and
       // repeating the parent under it reads as two different places.
-      if (slash > 0 && !entry.isDirectory) entry.path.substring(0, slash),
+      if (showDirectory && slash > 0 && !entry.isDirectory)
+        entry.path.substring(0, slash),
     ];
 
     return Tappable(
@@ -740,10 +763,15 @@ class IndexUntrackedRow extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: selected ? colors.accentSoft : Colors.transparent,
+          border: pinned
+              ? Border(left: BorderSide(color: colors.accent, width: 2))
+              : null,
         ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.md,
-          vertical: FwSpacing.sm,
+        padding: EdgeInsets.only(
+          left: pinned ? FwSpacing.md - 2 : FwSpacing.md,
+          right: FwSpacing.md,
+          top: FwSpacing.sm,
+          bottom: FwSpacing.sm,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -774,8 +802,18 @@ class IndexUntrackedRow extends StatelessWidget {
                   Text(
                     entry.isDirectory ? entry.path : name,
                     style: context.type.bodySmall.copyWith(
-                      // A pinned path is being read, not skimmed past.
-                      color: entry.isPinned ? null : colors.mut,
+                      // **A file's name is a file's name.** It used to be
+                      // dimmed unless a rule had pinned it, which was fair
+                      // when every untracked row lived in a drawer at the foot
+                      // of the list; in the tree, beside the tracked files of
+                      // the same directory, a grey name reads as *disabled*
+                      // rather than as *new*. The `?`, the missing counts and
+                      // the note under it say what this row is, and a pin now
+                      // has the accent edge every other pinned row has.
+                      //
+                      // A directory keeps the dimming: it is the one row here
+                      // that opens nothing.
+                      color: entry.isDirectory ? colors.mut : null,
                     ),
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
@@ -822,7 +860,7 @@ TextStyle diffTextStyle(BuildContext context) =>
 /// is, and a viewport that is wrong by 118 px is a scroll that stops short of
 /// the end of the longest line.
 const diffChromeWidth =
-    _AddComment._width + 44 * 2 + FwSpacing.sm + 10 + FwSpacing.lg;
+    CommentMargin.width + 44 * 2 + FwSpacing.sm + 10 + FwSpacing.lg;
 
 /// Where the body is scrolled to horizontally, shared by every row.
 ///
