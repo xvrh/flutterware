@@ -8,11 +8,11 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 // ignore: implementation_imports
-import 'package:flutterware/src/motion/stops.dart';
+import 'package:flutterware/scene_authoring.dart';
 // ignore: implementation_imports
-export 'package:flutterware/src/motion/stops.dart' show videoStops;
+export 'package:flutterware/scene_authoring.dart' show videoStops;
 
-import '../previews/catalog_render.dart';
+import '../../previews/catalog_render.dart';
 
 /// Encodes a sequence of rendered frames into a video file, through `ffmpeg`.
 ///

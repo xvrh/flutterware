@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutterware_app/src/motion/filmstrip.dart';
+import 'package:flutterware_app/src/scene/export/filmstrip.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';

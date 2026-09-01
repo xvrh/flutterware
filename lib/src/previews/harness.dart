@@ -38,7 +38,7 @@ import '../scenarios/real_work.dart';
 import '../scenarios/run_args.dart';
 import '../scenarios/settle.dart';
 import '../motion/guest.dart';
-import '../motion/stops.dart';
+import '../scene/core/stops.dart';
 import '../motion/testing.dart';
 import '../scenarios/staging.dart';
 import '../ui_catalog/axes.dart';

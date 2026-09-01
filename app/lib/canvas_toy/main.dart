@@ -11,6 +11,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../src/scene/editor.dart';
+import '../src/scene/ui/inspector.dart';
 import 'drafts.dart';
 import 'remote.dart';
 
@@ -86,7 +87,7 @@ class _CanvasToyAppState extends State<CanvasToyApp> {
                       ),
                     ),
                     const VerticalDivider(width: 1),
-                    SizedBox(width: 290, child: InspectorPanel(editor)),
+                    SizedBox(width: 290, child: SceneInspector(editor)),
                   ],
                 ),
               ),
@@ -850,10 +851,6 @@ class _NodeTarget extends StatefulWidget {
   State<_NodeTarget> createState() => _NodeTargetState();
 }
 
-/// Distinguishes one drag gesture from the next, so a whole drag merges
-/// into ONE undo entry and the next drag starts a fresh one.
-var _dragSeq = 0;
-
 class _NodeTargetState extends State<_NodeTarget> {
   var _downLocal = Offset.zero;
 
@@ -870,7 +867,7 @@ class _NodeTargetState extends State<_NodeTarget> {
     if (parent == null) return;
     if (parent.layout == NodeLayout.absolute) {
       // Dragging any selected node moves the whole selection.
-      editor.nudgeSelection(delta.dx, delta.dy, mergeKey: 'drag$_dragSeq');
+      editor.nudgeSelection(delta.dx, delta.dy, mergeKey: 'drag');
     } else {
       // Flex parent: a drag is a reorder, not a move. Position in artboard
       // coords = target origin + local offset.
@@ -889,7 +886,7 @@ class _NodeTargetState extends State<_NodeTarget> {
       }
       var from = parent.children.indexOf(node);
       if (from == index) return;
-      editor.perform('Reorder ${node.name}', mergeKey: 'drag$_dragSeq', () {
+      editor.perform('Reorder ${node.name}', mergeKey: 'drag', () {
         parent.children
           ..removeAt(from)
           ..insert(index, node);
@@ -909,11 +906,13 @@ class _NodeTargetState extends State<_NodeTarget> {
         onTapDown: (_) => editor.select(node, toggle: _toggleModifier),
         onPanDown: (d) => _downLocal = d.localPosition,
         onPanStart: (d) {
-          _dragSeq++;
           if (!editor.isSelected(node)) editor.select(node);
           _apply(d.localPosition, d.localPosition - _downLocal);
         },
         onPanUpdate: (d) => _apply(d.localPosition, d.delta),
+        // The gesture's undo entry closes here, so the next drag is its own.
+        onPanEnd: (_) => editor.endMerge(),
+        onPanCancel: editor.endMerge,
       ),
     );
   }
@@ -934,32 +933,27 @@ class _ResizeHandleState extends State<_ResizeHandle> {
   void _apply(Offset delta) {
     var node = widget.editor.single;
     if (node == null) return;
-    widget.editor.perform(
-      'Resize ${node.name}',
-      mergeKey: 'resize$_dragSeq',
-      () {
-        var rect = node.measured;
-        node.width = ((node.width ?? rect?.width ?? 100) + delta.dx).clamp(
-          8,
-          4000,
-        );
-        node.height = ((node.height ?? rect?.height ?? 100) + delta.dy).clamp(
-          8,
-          4000,
-        );
-      },
-    );
+    widget.editor.perform('Resize ${node.name}', mergeKey: 'resize', () {
+      var rect = node.measured;
+      node.width = ((node.width ?? rect?.width ?? 100) + delta.dx).clamp(
+        8,
+        4000,
+      );
+      node.height = ((node.height ?? rect?.height ?? 100) + delta.dy).clamp(
+        8,
+        4000,
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onPanDown: (d) => _downLocal = d.localPosition,
-      onPanStart: (d) {
-        _dragSeq++;
-        _apply(d.localPosition - _downLocal);
-      },
+      onPanStart: (d) => _apply(d.localPosition - _downLocal),
       onPanUpdate: (d) => _apply(d.delta),
+      onPanEnd: (_) => widget.editor.endMerge(),
+      onPanCancel: widget.editor.endMerge,
       child: Container(
         width: 12,
         height: 12,
@@ -1016,468 +1010,4 @@ class _SelectionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SelectionPainter oldDelegate) => true;
-}
-
-// ---------------------------------------------------------------------------
-// Inspector
-// ---------------------------------------------------------------------------
-
-const _palette = <SceneColor?>[
-  null,
-  SceneColor(0xFFFFFFFF),
-  SceneColor(0xFF1A1A1A),
-  SceneColor(0xFF2B1B12),
-  SceneColor(0xFF4A2F1F),
-  SceneColor(0xFF6B4226),
-  SceneColor(0xFFD8C9BD),
-  SceneColor(0xFFE8632B),
-  SceneColor(0xFFF2B705),
-  SceneColor(0xFF3E7C4F),
-  SceneColor(0xFF4A64D0),
-];
-
-class InspectorPanel extends StatelessWidget {
-  const InspectorPanel(this.editor, {super.key});
-
-  final SceneEditor editor;
-
-  SceneDocument get doc => editor.doc;
-
-  /// Every inspector edit is a door; consecutive edits of one property on
-  /// one node merge into a single undo entry (live keystrokes, swatch
-  /// browsing).
-  void _door(String prop, void Function() fn) {
-    var name = (editor.primary ?? doc.root).name;
-    editor.perform('Edit $prop', mergeKey: 'inspect:$prop:$name', fn);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    var node = editor.primary ?? doc.root;
-    var parent = node == doc.root ? null : doc.parentOf(node);
-    var inFlex = parent != null && parent.layout != NodeLayout.absolute;
-
-    return ListView(
-      // Fresh field state per node: a reused NumField would commit the
-      // previous node's text onto the next one on focus loss.
-      key: ValueKey('inspector:${node.name}'),
-      padding: const EdgeInsets.all(12),
-      children: [
-        Text(
-          '${node.typeName} · ${node.name}',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        ),
-        const SizedBox(height: 12),
-        if (inFlex)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Position measured by parent layout',
-              style: TextStyle(fontSize: 11, color: Colors.grey),
-            ),
-          ),
-        Row(
-          children: [
-            Expanded(
-              child: NumField(
-                'X',
-                node.x,
-                enabled: !inFlex && node != doc.root,
-                onChanged: (v) => _door('x', () => node.x = v ?? 0),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: NumField(
-                'Y',
-                node.y,
-                enabled: !inFlex && node != doc.root,
-                onChanged: (v) => _door('y', () => node.y = v ?? 0),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: NumField(
-                'W',
-                node.width,
-                nullable: true,
-                hint: 'hug',
-                onChanged: (v) => _door('width', () => node.width = v),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: NumField(
-                'H',
-                node.height,
-                nullable: true,
-                hint: 'hug',
-                onChanged: (v) => _door('height', () => node.height = v),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _label('Fill'),
-        _swatches(node.fill, (c) => _door('fill', () => node.fill = c)),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: NumField(
-                'Corner',
-                node.cornerRadius,
-                onChanged: (v) =>
-                    _door('corner', () => node.cornerRadius = v ?? 0),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: NumField(
-                'Opacity',
-                node.opacity,
-                onChanged: (v) =>
-                    _door('opacity', () => node.opacity = (v ?? 1).clamp(0, 1)),
-              ),
-            ),
-          ],
-        ),
-        const Divider(height: 24),
-        ...switch (node) {
-          TextNode t => _textProps(t),
-          FrameNode f => _frameProps(f),
-          ShapeNode s => _shapeProps(s),
-          ExternalNode e => _extProps(e),
-        },
-      ],
-    );
-  }
-
-  List<Widget> _textProps(TextNode t) {
-    return [
-      _label('Content'),
-      TextFormField(
-        key: ValueKey(t),
-        initialValue: t.text,
-        style: const TextStyle(fontSize: 12),
-        maxLines: 3,
-        minLines: 1,
-        onChanged: (v) => _door('text', () => t.text = v),
-      ),
-      const SizedBox(height: 8),
-      Row(
-        children: [
-          Expanded(
-            child: NumField(
-              'Size',
-              t.fontSize,
-              onChanged: (v) => _door('fontSize', () => t.fontSize = v ?? 14),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: DropdownButtonFormField<SceneFontWeight>(
-              initialValue: t.weight,
-              decoration: const InputDecoration(
-                labelText: 'Weight',
-                isDense: true,
-              ),
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
-              items: const [
-                DropdownMenuItem(
-                  value: SceneFontWeight.w400,
-                  child: Text('Regular'),
-                ),
-                DropdownMenuItem(
-                  value: SceneFontWeight.w500,
-                  child: Text('Medium'),
-                ),
-                DropdownMenuItem(
-                  value: SceneFontWeight.w600,
-                  child: Text('Semibold'),
-                ),
-                DropdownMenuItem(
-                  value: SceneFontWeight.w700,
-                  child: Text('Bold'),
-                ),
-                DropdownMenuItem(
-                  value: SceneFontWeight.w900,
-                  child: Text('Black'),
-                ),
-              ],
-              onChanged: (v) =>
-                  _door('weight', () => t.weight = v ?? SceneFontWeight.w400),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 8),
-      _label('Color'),
-      _swatches(
-        t.color,
-        (c) =>
-            _door('color', () => t.color = c ?? const SceneColor(0xFF000000)),
-      ),
-    ];
-  }
-
-  List<Widget> _frameProps(FrameNode f) {
-    return [
-      _label('Layout'),
-      SegmentedButton<NodeLayout>(
-        segments: const [
-          ButtonSegment(value: NodeLayout.absolute, label: Text('Free')),
-          ButtonSegment(value: NodeLayout.row, label: Text('Row')),
-          ButtonSegment(value: NodeLayout.column, label: Text('Col')),
-        ],
-        selected: {f.layout},
-        // A layout-mode switch is a geometry transaction, not a flag flip:
-        // entering Free bakes each child's measured position into authored
-        // x/y; entering flex re-derives order from visual position.
-        onSelectionChanged: (s) => _door('layout', () {
-          var next = s.first;
-          var origin = f.measured;
-          if (next == NodeLayout.absolute) {
-            for (var c in f.children) {
-              var rect = c.measured;
-              if (rect != null) {
-                c.x = rect.left - (origin?.left ?? 0);
-                c.y = rect.top - (origin?.top ?? 0);
-              }
-            }
-          } else {
-            f.children.sort((a, b) {
-              var ra = a.measured, rb = b.measured;
-              if (ra == null || rb == null) return 0;
-              return next == NodeLayout.row
-                  ? ra.left.compareTo(rb.left)
-                  : ra.top.compareTo(rb.top);
-            });
-          }
-          f.layout = next;
-        }),
-        style: const ButtonStyle(visualDensity: VisualDensity.compact),
-      ),
-      const SizedBox(height: 8),
-      Row(
-        children: [
-          Expanded(
-            child: NumField(
-              'Gap',
-              f.gap,
-              onChanged: (v) => _door('gap', () => f.gap = v ?? 0),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: NumField(
-              'Padding',
-              f.padding,
-              onChanged: (v) => _door('padding', () => f.padding = v ?? 0),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 8),
-      if (f.layout != NodeLayout.absolute)
-        DropdownButtonFormField<SceneCrossAxisAlignment>(
-          initialValue: f.crossAlign,
-          decoration: const InputDecoration(
-            labelText: 'Cross align',
-            isDense: true,
-          ),
-          style: const TextStyle(fontSize: 12, color: Colors.black87),
-          items: const [
-            DropdownMenuItem(
-              value: SceneCrossAxisAlignment.start,
-              child: Text('Start'),
-            ),
-            DropdownMenuItem(
-              value: SceneCrossAxisAlignment.center,
-              child: Text('Center'),
-            ),
-            DropdownMenuItem(
-              value: SceneCrossAxisAlignment.end,
-              child: Text('End'),
-            ),
-            DropdownMenuItem(
-              value: SceneCrossAxisAlignment.stretch,
-              child: Text('Stretch'),
-            ),
-          ],
-          onChanged: (v) => _door(
-            'crossAlign',
-            () => f.crossAlign = v ?? SceneCrossAxisAlignment.center,
-          ),
-        ),
-    ];
-  }
-
-  List<Widget> _extProps(ExternalNode e) {
-    return [
-      _label('Entry'),
-      Text(e.entry, style: const TextStyle(fontSize: 12)),
-      const SizedBox(height: 12),
-      for (var arg in e.args.entries) ...[
-        if (arg.value case num number)
-          NumField(
-            arg.key,
-            number.toDouble(),
-            onChanged: (v) => _door('args', () => e.args[arg.key] = v),
-          )
-        else
-          TextFormField(
-            key: ValueKey('${e.name}:${arg.key}'),
-            initialValue: '${arg.value}',
-            style: const TextStyle(fontSize: 12),
-            decoration: InputDecoration(labelText: arg.key, isDense: true),
-            onChanged: (v) => _door('args', () => e.args[arg.key] = v),
-          ),
-        const SizedBox(height: 8),
-      ],
-    ];
-  }
-
-  List<Widget> _shapeProps(ShapeNode s) {
-    return [
-      SwitchListTile(
-        dense: true,
-        contentPadding: EdgeInsets.zero,
-        title: const Text('Circle', style: TextStyle(fontSize: 12)),
-        value: s.circle,
-        onChanged: (v) => _door('circle', () => s.circle = v),
-      ),
-    ];
-  }
-
-  Widget _label(String text) => Padding(
-    padding: const EdgeInsets.only(bottom: 4),
-    child: Text(text, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-  );
-
-  Widget _swatches(SceneColor? current, void Function(SceneColor?) onPick) {
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (var color in _palette)
-          InkWell(
-            onTap: () => onPick(color),
-            child: Container(
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                color: color?.flutter,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: current == color
-                      ? const Color(0xFF4A64D0)
-                      : Colors.black26,
-                  width: current == color ? 2 : 1,
-                ),
-              ),
-              child: color == null
-                  ? const Icon(Icons.block, size: 14, color: Colors.black38)
-                  : null,
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// A number field that commits on submit or focus loss. Blank commits null
-/// when [nullable] (spelled "hug" in the UI).
-class NumField extends StatefulWidget {
-  const NumField(
-    this.label,
-    this.value, {
-    super.key,
-    required this.onChanged,
-    this.nullable = false,
-    this.enabled = true,
-    this.hint,
-  });
-
-  final String label;
-  final double? value;
-  final void Function(double?) onChanged;
-  final bool nullable;
-  final bool enabled;
-  final String? hint;
-
-  @override
-  State<NumField> createState() => _NumFieldState();
-}
-
-class _NumFieldState extends State<NumField> {
-  late final controller = TextEditingController(text: _format(widget.value));
-  final focus = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    focus.addListener(() {
-      if (!focus.hasFocus) _commit();
-    });
-  }
-
-  @override
-  void didUpdateWidget(NumField old) {
-    super.didUpdateWidget(old);
-    if (old.value != widget.value && !focus.hasFocus) {
-      controller.text = _format(widget.value);
-    }
-  }
-
-  @override
-  void dispose() {
-    controller.dispose();
-    focus.dispose();
-    super.dispose();
-  }
-
-  String _format(double? v) {
-    if (v == null) return '';
-    return v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
-  }
-
-  // Commits only a CHANGE: a focus-loss echo of the value already held
-  // must not open a door (it would spam the undo journal).
-  void _commit() {
-    var text = controller.text.trim();
-    if (text.isEmpty) {
-      var v = widget.nullable ? null : 0.0;
-      if (widget.value != v) widget.onChanged(v);
-      return;
-    }
-    var parsed = double.tryParse(text);
-    if (parsed != null && parsed != widget.value) widget.onChanged(parsed);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      focusNode: focus,
-      enabled: widget.enabled,
-      style: const TextStyle(fontSize: 12),
-      decoration: InputDecoration(
-        labelText: widget.label,
-        hintText: widget.hint,
-        isDense: true,
-      ),
-      // Live commit: the canvas is the feedback, so a parseable keystroke
-      // lands immediately. Blank (→ null/hug) waits for blur or submit.
-      onChanged: (v) {
-        var parsed = double.tryParse(v.trim());
-        if (parsed != null && parsed != widget.value) widget.onChanged(parsed);
-      },
-      onSubmitted: (_) => _commit(),
-    );
-  }
 }

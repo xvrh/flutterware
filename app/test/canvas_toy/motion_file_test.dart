@@ -510,8 +510,8 @@ MotionDocument _randomMotion(Random random, SceneDocument scene) {
     var group = AnimateGroup('g$i', target.name);
     var props = animatableProps(target)..shuffle(random);
     var trackCount = 1 + random.nextInt(2);
-    for (var (prop, kind) in props.take(trackCount)) {
-      group.tracks[prop] = _randomTrack(random, kind, doc);
+    for (var spec in props.take(trackCount)) {
+      group.tracks[spec.name] = _randomTrack(random, spec.kind, doc);
     }
     if (target is ExternalNode && random.nextBool()) {
       group.args['arg${random.nextInt(3)}'] = _randomTrack(

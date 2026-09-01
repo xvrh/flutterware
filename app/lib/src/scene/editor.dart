@@ -293,7 +293,8 @@ class SceneEditor extends SceneListenable {
         mergeKey != null &&
         _redo.isEmpty &&
         _undo.isNotEmpty &&
-        _undo.last.mergeKey == mergeKey;
+        _openMerge == mergeKey;
+    _openMerge = mergeKey;
     if (!merge) {
       _undo.add(
         _JournalEntry(label, doc.snapshot(), _motionSnapshots(), mergeKey),
@@ -305,6 +306,15 @@ class SceneEditor extends SceneListenable {
     _revision++;
     notifyListeners();
   }
+
+  /// The merge key still open, if a gesture is running. Held rather than read
+  /// off the last journal entry so that TWO drags of the same property are
+  /// two entries: the first ends when [endMerge] is called, and the second
+  /// starts fresh even though it carries the same key.
+  String? _openMerge;
+
+  /// Close the current merge run — what a gesture calls on release.
+  void endMerge() => _openMerge = null;
 
   void undo() {
     if (_undo.isEmpty) return;
@@ -331,6 +341,7 @@ class SceneEditor extends SceneListenable {
   };
 
   void _restore(_JournalEntry entry) {
+    _openMerge = null;
     doc.restore(entry.scene);
     for (var e in entry.motions.entries) {
       motions[e.key]?.restore(e.value);

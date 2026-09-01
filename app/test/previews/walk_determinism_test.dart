@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/embedder/build_directory.dart';
 // ignore: implementation_imports
-import 'package:flutterware/src/motion/stops.dart';
+import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/previews/catalog_render.dart';
 import 'package:flutterware_app/src/previews/discovery.dart';
 import 'package:flutterware_app/src/previews/test_runner.dart';

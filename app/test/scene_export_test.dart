@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware_app/src/motion/video.dart';
+import 'package:flutterware_app/src/scene/export/video.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 

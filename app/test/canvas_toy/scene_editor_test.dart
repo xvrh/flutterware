@@ -10,6 +10,7 @@ import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/canvas_toy/drafts.dart';
 import 'package:flutterware_app/canvas_toy/main.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
+import 'package:flutterware_app/src/scene/ui/inspector.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -119,6 +120,26 @@ void main() {
       editor.undo(); // drops the whole second gesture
       editor.undo(); // drops the whole first gesture
       expect(editor.doc.nodeNamed('glow')!.x, before);
+      expect(editor.canUndo, false);
+    });
+
+    test('two gestures on one property are two entries', () {
+      // The merge key alone cannot tell one drag from the next — both carry
+      // 'x'. endMerge is what closes a run, and a field calls it on release.
+      var editor = SceneEditor(coffeeBannerDraft());
+      var glow = editor.doc.nodeNamed('glow')!;
+      for (var v in [601.0, 602.0, 603.0]) {
+        editor.perform('Edit x', mergeKey: 'x', () => glow.x = v);
+      }
+      editor.endMerge();
+      for (var v in [610.0, 620.0]) {
+        editor.perform('Edit x', mergeKey: 'x', () => glow.x = v);
+      }
+      expect(editor.doc.nodeNamed('glow')!.x, 620);
+      editor.undo();
+      expect(editor.doc.nodeNamed('glow')!.x, 603, reason: 'second gesture');
+      editor.undo();
+      expect(editor.doc.nodeNamed('glow')!.x, 600, reason: 'first gesture');
       expect(editor.canUndo, false);
     });
 
@@ -258,7 +279,7 @@ void main() {
       // the field's own undo, which beeps on macOS once it is empty.
       var editor = SceneEditor(coffeeBannerDraft());
       await tester.pumpWidget(
-        canvasHarness(editor, beside: () => InspectorPanel(editor)),
+        canvasHarness(editor, beside: () => SceneInspector(editor)),
       );
       await tester.pump();
       editor.select(editor.doc.nodeNamed('headline'));
@@ -292,7 +313,7 @@ void main() {
       // beeps on macOS once its history is empty) instead of the editor's.
       var editor = SceneEditor(coffeeBannerDraft());
       await tester.pumpWidget(
-        harness(editor, beside: () => InspectorPanel(editor)),
+        harness(editor, beside: () => SceneInspector(editor)),
       );
       await tester.tap(find.text('headline'));
       await tester.pump();

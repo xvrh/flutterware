@@ -113,7 +113,7 @@ void emitMotionClass(
       throw ArgumentError('"${g.target}" is not a node in this scene');
     }
     out.write('  late final ${g.name} = scene.${g.target}.animate(');
-    for (var (prop, kind) in animatableProps(target)) {
+    for (var ScenePropSpec(name: prop, :kind) in animatableProps(target)) {
       var track = g.tracks[prop];
       if (track == null) continue;
       out.write('$prop: ${_track(track, kind, params)}, ');
@@ -634,7 +634,7 @@ class _Parser {
     }
     var group = AnimateGroup(name, targetName);
     var allowed = {
-      for (var (prop, kind) in animatableProps(target)) prop: kind,
+      for (var spec in animatableProps(target)) spec.name: spec.kind,
     };
     for (var arg in args.arguments) {
       if (arg is! NamedArgument) {

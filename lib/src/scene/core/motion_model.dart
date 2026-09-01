@@ -93,29 +93,138 @@ class AnimateGroup {
     ..args.addAll({for (var e in args.entries) e.key: e.value.copy()});
 }
 
+/// What an editor needs to know about an animatable property without a
+/// switch on its name: what it is, where it rests, how it reads, and where a
+/// slider would mean something.
+///
+/// The metadata earns its place by deciding two things elsewhere — which
+/// control a number gets (a bounded range is a slider, an angle is a dial,
+/// everything else is a drag) and how much one pixel of that drag is worth,
+/// which is what makes the same gesture sensible on a property running 0..1
+/// and one running 0..64.
+class ScenePropSpec {
+  const ScenePropSpec(
+    this.name,
+    this.kind, {
+    this.identity,
+    this.unit,
+    this.softMin,
+    this.softMax,
+    this.angular = false,
+    this.entrance,
+  });
+
+  final String name;
+  final TrackKind kind;
+
+  /// The value the property has when nothing animates it — where a track
+  /// should land so the scene looks right at the end.
+  final double? identity;
+
+  /// Shown beside the number, never parsed.
+  final String? unit;
+
+  /// Where a slider should sit. A hint, not a clamp: a scale of 40 is
+  /// legitimate, it just is not what the drag should make easy.
+  final double? softMin;
+  final double? softMax;
+
+  /// Stored in degrees and shown in degrees, but a dial rather than a number:
+  /// degrees answer "how far", only a dial answers "which way".
+  final bool angular;
+
+  /// Where a newly created track starts, arriving at [identity]. An entrance
+  /// is the common case, and landing on the resting value means the scene is
+  /// *correct* at the end of a track the moment you make one.
+  final double? entrance;
+}
+
 /// The imposed vocabulary: every node kind animates these.
-const imposedProps = <(String, TrackKind)>[
-  ('opacity', TrackKind.number),
-  ('translateX', TrackKind.number),
-  ('translateY', TrackKind.number),
-  ('scale', TrackKind.number),
-  ('rotate', TrackKind.number),
+const imposedProps = <ScenePropSpec>[
+  ScenePropSpec(
+    'opacity',
+    TrackKind.number,
+    identity: 1,
+    softMin: 0,
+    softMax: 1,
+    entrance: 0,
+  ),
+  ScenePropSpec(
+    'translateX',
+    TrackKind.number,
+    identity: 0,
+    unit: 'px',
+    softMin: -200,
+    softMax: 200,
+    entrance: 24,
+  ),
+  ScenePropSpec(
+    'translateY',
+    TrackKind.number,
+    identity: 0,
+    unit: 'px',
+    softMin: -200,
+    softMax: 200,
+    entrance: 24,
+  ),
+  ScenePropSpec(
+    'scale',
+    TrackKind.number,
+    identity: 1,
+    softMin: 0,
+    softMax: 2,
+    entrance: 0.92,
+  ),
+  ScenePropSpec(
+    'rotate',
+    TrackKind.number,
+    identity: 0,
+    unit: '°',
+    angular: true,
+    softMin: -180,
+    softMax: 180,
+    entrance: -8,
+  ),
 ];
 
 /// Imposed plus the target kind's intrinsic properties, in canonical emit
 /// order.
-List<(String, TrackKind)> animatableProps(SceneNode node) => [
+List<ScenePropSpec> animatableProps(SceneNode node) => [
   ...imposedProps,
   ...switch (node) {
     TextNode() => const [
-      ('fontSize', TrackKind.number),
-      ('color', TrackKind.color),
+      ScenePropSpec(
+        'fontSize',
+        TrackKind.number,
+        unit: 'px',
+        softMin: 8,
+        softMax: 96,
+      ),
+      ScenePropSpec('color', TrackKind.color),
     ],
-    FrameNode() => const [('gap', TrackKind.number), ('fill', TrackKind.color)],
-    ShapeNode() => const [('fill', TrackKind.color)],
-    ExternalNode() => const <(String, TrackKind)>[],
+    FrameNode() => const [
+      ScenePropSpec(
+        'gap',
+        TrackKind.number,
+        unit: 'px',
+        softMin: 0,
+        softMax: 64,
+      ),
+      ScenePropSpec('fill', TrackKind.color),
+    ],
+    ShapeNode() => const [ScenePropSpec('fill', TrackKind.color)],
+    ExternalNode() => const <ScenePropSpec>[],
   },
 ];
+
+/// The spec for one property of one node, or null when that node does not
+/// animate it.
+ScenePropSpec? propSpecFor(SceneNode node, String prop) {
+  for (var spec in animatableProps(node)) {
+    if (spec.name == prop) return spec;
+  }
+  return null;
+}
 
 /// The arrangement — a pure time-transform tree over group references.
 /// A group appears at most once in the whole tree; groups it never names are
