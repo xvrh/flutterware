@@ -542,6 +542,68 @@ exactly when the player might still be running; the sugar absorbs it for
 the mount-and-autoplay case, and passing `vsync` buys the loud leak
 detection for the rest.
 
+## Sketch 25 — the fx spelling: writer handles, because one slot is a
+## collision
+
+The owner's question: one fx lane per property, or several keyed by
+writer (`head.scale.fx(myMotion) = 0.1`)? And what do others do?
+
+**The engine never had one lane.** Since the compose probe the sink has
+keyed contributions by *(writer, node, property)* — that is what lets two
+motions and a machine share one property through the operator table, and
+what makes the writer-stack order normative. Only the *app-facing
+spelling* was one-slot: sketch 16's `scene.cta.fx.scale = …` implied one
+anonymous slot per node. The question is which surface to expose.
+
+**The survey — the field is unanimous, writer-keyed:**
+
+- **Core Animation** (the closest architectural neighbour: its model vs
+  presentation layer is exactly authored vs rendered) — every animation
+  is *added under a key* (`layer.add(anim, forKey:)`), removable
+  individually; additive animations stack on one keyPath, which is how
+  UIKit's smooth spring retargeting works.
+- **Web Animations API** — `element.animate(…)` returns an `Animation`
+  handle; each has its own `composite: replace|add|accumulate` and its
+  own `cancel()`; `getAnimations()` enumerates the writers. CSS grew
+  `animation-composition` for the same reason.
+- **GSAP** — every tween is a handle with `kill()`; same-property
+  collisions are its notorious `overwrite` modes: writer identity
+  retrofitted after one-slot pain.
+- **Unity / Unreal** — named animation layers with blend mode and
+  weight, composited in declared order.
+- **SwiftUI** is the one handle-less design (additive, system-owned) —
+  and it affords that only because the system owns retargeting entirely.
+
+Nobody ships a single anonymous slot: two effects collide immediately.
+
+**Probe M8** ran the handle shape: a motion lane plus two independent app
+effects compose on one property (`1.2 × 1.04 × 0.96`, exact); clearing
+one handle leaves the others; `hover.scale = null` removes one property
+of one writer; and a re-write does not move a writer's stack position
+(first write fixes it — the determinism the golden-frame rule needs).
+The anonymous slot, for contrast: the hover write is silently gone the
+moment press writes.
+
+**The spelling.** The owner's literal form cannot exist in Dart — a
+method invocation is not an assignment target — and would put the
+*motion* in app code's mouth, which is the player's job (motion lanes
+are already writer-keyed internally; the app never writes "as" a
+motion). The handle-first form:
+
+```dart
+final hover = scene.cta.effect();     // mint a writer
+hover.scale = 1.04;                   // composes with motions and other effects
+hover.scale = null;                   // remove one property
+hover.clear();                        // remove this writer entirely
+```
+
+Recommendation: **handles are the only app surface** — sketch 16's
+anonymous `node.fx.…` is dropped rather than kept as sugar, closing the
+collision door completely; the one-line cost is minting the handle. A
+per-handle `weight` (Unity's layer weight) is the natural future knob and
+changes nothing structural. `node.rendered.scale` stays the composed
+read.
+
 ## The scoreboard, and what is for the owner to pick
 
 What the probes settled:
