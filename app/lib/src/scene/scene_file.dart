@@ -5,7 +5,10 @@
 // THE GRAMMAR, on a page. A scene file is:
 //   - a `//@flutterware:scene=…` marker in its first line
 //   - file-level comments and imports (before the class; not parsed)
-//   - exactly one class declaration. Its parameters — typed holes whose
+//   - one SCENE class, and after it any number of MOTION classes that
+//     animate it (`class X(super.scene) extends SceneMotion<Scene>`) — the
+//     pair is one file, one marker, one round trip. The motion grammar is
+//     in motion_file.dart. Its parameters — typed holes whose
 //     default is the mockup — are the class's PRIMARY CONSTRUCTOR: each is
 //     `final <String|double|Color> <name> = <literal>` in the class header,
 //     which is one spelling for the formal, the field and the default at
@@ -28,7 +31,8 @@
 //     typed hole
 //   - nothing else: no comments inside the class body, no loops, no
 //     conditionals, no method calls, no arithmetic, no identifiers off the
-//     allowlist, no inline nodes in children, no orphan fields (an
+//     allowlist, no inline nodes in children, no class that is neither the
+//     scene nor a motion, no orphan fields (an
 //     undeclared drop on the next save is the shredder this grammar exists
 //     to prevent). Refused with a line number, never dropped.
 //
@@ -47,7 +51,9 @@ import 'package:analyzer/dart/ast/token.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:flutterware/scene_authoring.dart';
 
-const sceneFileMarker = '//@flutterware:scene=0.4';
+import 'motion_file.dart';
+
+const sceneFileMarker = '//@flutterware:scene=0.5';
 
 /// One refused construct: where it is and what to do instead.
 class SceneRefusal {
@@ -71,11 +77,20 @@ class SceneRefusal {
 /// the editor must never tell — but the refusals are *collected*, so one
 /// hostile edit does not hide the next.
 class SceneParse {
-  SceneParse(this.doc, this.className, this.refusals);
+  SceneParse(
+    this.doc,
+    this.className,
+    this.refusals, [
+    this.motions = const {},
+  ]);
 
   final SceneDocument? doc;
   final String? className;
   final List<SceneRefusal> refusals;
+
+  /// The motion classes declared beside the scene, by class name, in file
+  /// order — a scene may carry several (an intro, an outro) or none.
+  final Map<String, MotionDocument> motions;
 
   bool get ok => doc != null;
 }
@@ -88,7 +103,11 @@ final _formatter = DartFormatter(
   languageVersion: DartFormatter.latestLanguageVersion,
 );
 
-String emitSceneFile(SceneDocument doc, {String className = 'SceneFile'}) {
+String emitSceneFile(
+  SceneDocument doc, {
+  String className = 'SceneFile',
+  Map<String, MotionDocument> motions = const {},
+}) {
   if (doc.root.name != 'root') {
     throw ArgumentError(
       'the root node is the `root` field, so its name '
@@ -141,6 +160,12 @@ $sceneFileMarker
 
   field(doc.root);
   out.writeln('}');
+  // The motions of the pair live in the same file, after the scene they
+  // animate — one document, one marker, one round trip (grammar 0.5).
+  for (var entry in motions.entries) {
+    out.writeln();
+    emitMotionClass(out, entry.value, doc, className: entry.key);
+  }
   return _formatter.format(out.toString());
 }
 
@@ -279,7 +304,27 @@ String _argValue(Object? v) => switch (v) {
 SceneParse parseSceneFile(String source) {
   var p = _Parser(source);
   var doc = p.parse();
-  return SceneParse(p.refusals.isEmpty ? doc : null, p.className, p.refusals);
+  var motions = <String, MotionDocument>{};
+  // A motion is half a pair and resolves its targets against the scene, so
+  // the motions of the file are read only once the scene is in hand.
+  if (doc != null && p.refusals.isEmpty) {
+    for (var decl in p.motionClasses) {
+      var parsed = parseMotionClass(
+        decl,
+        source,
+        scene: doc,
+        sceneClassName: p.className!,
+      );
+      p.refusals.addAll(parsed.refusals);
+      if (parsed.doc case var motion?) motions[parsed.className!] = motion;
+    }
+  }
+  return SceneParse(
+    p.refusals.isEmpty ? doc : null,
+    p.className,
+    p.refusals,
+    motions,
+  );
 }
 
 class _Parser {
@@ -288,6 +333,10 @@ class _Parser {
   final String source;
   final refusals = <SceneRefusal>[];
   String? className;
+
+  /// Classes carrying `extends SceneMotion<…>` — parsed after the scene.
+  final motionClasses = <ClassDeclaration>[];
+
   late final _lines = source.split('\n');
 
   /// Declared parameters, filled from the class header before any field is
@@ -322,11 +371,20 @@ class _Parser {
     ClassDeclaration? found;
     for (var decl in result.unit.declarations) {
       if (decl is ClassDeclaration) {
-        if (found != null) {
+        // The pair shares one file: the scene class, and the motion classes
+        // that animate it — told apart by the extends clause they must have.
+        if (decl.extendsClause?.superclass.name.lexeme == 'SceneMotion') {
+          motionClasses.add(decl);
+        } else if (found != null) {
+          // The file holds the pair: the scene, and the motions animating
+          // it. A second class with no extends clause is a motion missing
+          // the one thing that makes it one.
           refuse(
             decl.offset,
-            'second class',
-            'a scene file holds exactly one class',
+            'extends',
+            'a scene file holds one scene class and its motions — a motion '
+                'is `class ${decl.namePart.typeName.lexeme}(super.scene) '
+                'extends SceneMotion<${found.namePart.typeName.lexeme}>`',
           );
         } else {
           found = decl;
@@ -335,12 +393,12 @@ class _Parser {
         refuse(
           decl.offset,
           'declaration',
-          'only the scene class may be declared here',
+          'only the scene class and its motions may be declared here',
         );
       }
     }
     if (found == null) {
-      refuse(0, 'no class', 'a scene file holds exactly one class');
+      refuse(0, 'no class', 'a scene file holds exactly one scene class');
       return null;
     }
     className = found.namePart.typeName.lexeme;

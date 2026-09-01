@@ -4,13 +4,42 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/canvas_toy/drafts.dart';
 import 'package:flutterware_app/src/scene/motion_file.dart';
+import 'package:flutterware_app/src/scene/scene_file.dart';
 
 void main() {
   var scene = coffeeBannerDraft();
   const sceneClass = 'BannerScene';
 
-  MotionParse parseWithScene(String source) =>
-      parseMotionFile(source, scene: scene, sceneClassName: sceneClass);
+  // A motion has no file of its own (grammar 0.5): it is a class in the
+  // scene file, beside the scene it animates. So every fixture here is a
+  // whole pair — [filePrefix] is the scene half the fixture appends to,
+  // and the helpers below read and write the motion through that one door.
+  var filePrefix = emitSceneFile(scene, className: sceneClass).trimRight();
+
+  String emitMotionFile(
+    MotionDocument doc,
+    SceneDocument scene, {
+    required String className,
+  }) => emitSceneFile(scene, className: sceneClass, motions: {className: doc});
+
+  ({
+    MotionDocument? doc,
+    String? className,
+    List<SceneRefusal> refusals,
+    bool ok,
+  })
+  parseWithScene(String source) {
+    var parsed = parseSceneFile(source);
+    var motion = parsed.motions.entries.isEmpty
+        ? null
+        : parsed.motions.entries.first;
+    return (
+      doc: motion?.value,
+      className: motion?.key,
+      refusals: parsed.refusals,
+      ok: parsed.ok && motion != null,
+    );
+  }
 
   test('the coffee intro round-trips', () {
     var doc = coffeeIntroDraft();
@@ -75,7 +104,7 @@ void main() {
     // `final` for `late final`, Curves.linear for no curve, a missing copy,
     // a type-less parameter formal: accepted, then canonical.
     var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene, {final slideFrom = 24}) extends SceneMotion<BannerScene> {
   final glowIn = scene.glow.animate(
     opacity: Track([
@@ -104,7 +133,7 @@ class M(super.scene, {final slideFrom = 24}) extends SceneMotion<BannerScene> {
     // The class gained a parameter but copy was not updated — the shape is
     // canonical, the argument list stale. Parse accepts; emit rewrites.
     var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> {
   late final glowIn = scene.glow.animate(
     opacity: Track([Key(at: 0.ms, value: 0), Key(at: 400.ms, value: 1)]),
@@ -120,7 +149,7 @@ class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> 
 
   test('two keys of one param: the reference survives only at the default', () {
     var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene, {final double slide = 24}) extends SceneMotion<BannerScene> {
   late final headlineIn = scene.headline.animate(
     translateY: Track([Key(at: 0.ms, value: slide), Key(at: 300.ms, value: 0)]),
@@ -174,7 +203,7 @@ class M(super.scene, {final double slide = 24}) extends SceneMotion<BannerScene>
   group('hostile hand edits are refused with a name and a line', () {
     String wrap(String members) =>
         '''
-$motionFileMarker
+$filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
 $members
   late final timeline = Par([]);
@@ -304,7 +333,7 @@ $members
   group('the class header is half the grammar', () {
     test('a class without super.scene', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M({final double x = 1}) extends SceneMotion<BannerScene> {
   late final timeline = Par([]);
 }
@@ -314,7 +343,7 @@ class M({final double x = 1}) extends SceneMotion<BannerScene> {
 
     test('a class extending nothing', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene) {
   late final timeline = Par([]);
 }
@@ -324,7 +353,7 @@ class M(super.scene) {
 
     test('a motion naming the wrong scene', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene) extends SceneMotion<OtherScene> {
   late final timeline = Par([]);
 }
@@ -338,7 +367,7 @@ class M(super.scene) extends SceneMotion<OtherScene> {
 
     test('a this. parameter teaches the header spelling', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene, {this.x = 1}) extends SceneMotion<BannerScene> {
   late final timeline = Par([]);
 }
@@ -350,7 +379,7 @@ class M(super.scene, {this.x = 1}) extends SceneMotion<BannerScene> {
   group('the timeline is mandatory and placement is single', () {
     test('a motion without a timeline', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
   late final g = scene.glow.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
 }
@@ -360,7 +389,7 @@ class M(super.scene) extends SceneMotion<BannerScene> {
 
     test('a group placed twice', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
   late final g = scene.glow.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
   late final timeline = Par([g, Seq([g])]);
@@ -371,7 +400,7 @@ class M(super.scene) extends SceneMotion<BannerScene> {
 
     test('an unknown reference and a parameter in the timeline', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> {
   late final timeline = Par([ghost, tempo]);
 }
@@ -384,7 +413,7 @@ class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> 
 
     test('an unplaced group is NOT refused — it is a library asset', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
   late final tapPulse = scene.cta.animate(
     scale: Track([Key(at: 0.ms, value: 1), Key(at: 120.ms, value: 1.06)]),
@@ -399,7 +428,7 @@ class M(super.scene) extends SceneMotion<BannerScene> {
 
     test('combinator argument rules refuse with names', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
   late final a = scene.glow.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
   late final b = scene.cup.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
@@ -415,7 +444,7 @@ class M(super.scene) extends SceneMotion<BannerScene> {
 
     test('a nested arrangement round-trips', () {
       var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
   late final a = scene.glow.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
   late final b = scene.cup.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
@@ -434,7 +463,7 @@ class M(super.scene) extends SceneMotion<BannerScene> {
 
   test('several hostile constructs are all reported at once', () {
     var parsed = parseWithScene('''
-$motionFileMarker
+$filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
   late final g = scene.rocket.animate(opacity: Track([]));
   late final h = scene.glow.animate(warp: Track([Key(at: 0.ms, value: 1)]));
@@ -449,7 +478,7 @@ class M(super.scene) extends SceneMotion<BannerScene> {
   });
 
   test('broken syntax reports rather than throws', () {
-    var parsed = parseWithScene('$motionFileMarker\nclass M(super.scene {');
+    var parsed = parseWithScene('$filePrefix\nclass M(super.scene {');
     expect(parsed.ok, isFalse);
     expect(parsed.refusals, isNotEmpty);
   });

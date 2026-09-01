@@ -1,10 +1,11 @@
-// Disposable spike: the motion file grammar, its parser and its emitter —
+// Disposable spike: the motion class grammar, its parser and its emitter —
 // the scene grammar's discipline applied to the motion rewrite (sketches
 // 17–25, decisions owner-signed 2026-09-01).
 //
-// THE GRAMMAR, on a page. A motion file is:
-//   - a `//@flutterware:motion=…` marker in its first line
-//   - exactly one class declaration:
+// THE GRAMMAR, on a page. A motion is a class in the SCENE file, beside
+// the scene it animates (grammar 0.5 folded the two files into one, so
+// there is no marker and no file of its own here — scene_file.dart is the
+// door). A motion class is:
 //       class <Name>(super.scene, {final double p = 24, …})
 //           extends SceneMotion<SceneClass> { … }
 //     — the primary constructor's first formal is `super.scene`; each other
@@ -37,15 +38,11 @@
 // non-canonical spellings (`final` for `late final`, `Curves.linear`,
 // a missing or stale `copy`, a type-less parameter formal) converge in one
 // emit; every hostile construct is refused with an offset and a name.
-import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
-import 'package:dart_style/dart_style.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import 'scene_file.dart' show SceneRefusal;
-
-const motionFileMarker = '//@flutterware:motion=0.1';
 
 /// The curves a key may name — canonical spelling `Curves.<name>`; `linear`
 /// is accepted and converges to no curve at all.
@@ -79,25 +76,14 @@ class MotionParse {
 // Emit
 // ---------------------------------------------------------------------------
 
-final _formatter = DartFormatter(
-  languageVersion: DartFormatter.latestLanguageVersion,
-);
-
-String emitMotionFile(
+/// Write one motion class into the scene file being emitted — a motion is
+/// half a pair and has no file of its own (grammar 0.5).
+void emitMotionClass(
+  StringBuffer out,
   MotionDocument doc,
   SceneDocument scene, {
-  String className = 'MotionFile',
+  required String className,
 }) {
-  var out = StringBuffer('''
-$motionFileMarker
-// Owned by the flutterware motion editor, which reads and writes this whole
-// file. Hand edits are welcome inside the grammar: a group is a `late final`
-// field animating one scene node (the field name is the group's identity),
-// the `timeline` field is what plays, a group left out of it is a library
-// asset, and `copy` is derived — the editor rewrites it. Anything outside
-// the grammar is refused with a line number rather than silently dropped.
-
-''');
   var seen = <String>{...motionReservedNames};
   var params = <String, SceneParamDecl>{};
   for (var p in doc.params) {
@@ -152,7 +138,6 @@ $motionFileMarker
   }
   out.writeln('));');
   out.writeln('}');
-  return _formatter.format(out.toString());
 }
 
 String _track(MotionTrack t, TrackKind kind, Map<String, SceneParamDecl> ps) {
@@ -252,13 +237,16 @@ String _str(String s) {
 /// Parses [source] against the scene it animates: targets resolve to
 /// [scene]'s nodes, and the extends clause must name [sceneClassName] —
 /// a motion is one half of a pair, never read alone.
-MotionParse parseMotionFile(
+/// Read one motion class out of the scene file the door already parsed —
+/// targets resolve against [scene], which the door parsed first.
+MotionParse parseMotionClass(
+  ClassDeclaration decl,
   String source, {
   required SceneDocument scene,
   required String sceneClassName,
 }) {
   var p = _Parser(source, scene, sceneClassName);
-  var doc = p.parse();
+  var doc = p.parseClass(decl);
   return MotionParse(p.refusals.isEmpty ? doc : null, p.className, p.refusals);
 }
 
@@ -285,44 +273,7 @@ class _Parser {
     refusals.add(SceneRefusal(offset, line, construct, message));
   }
 
-  MotionDocument? parse() {
-    if (!_lines.first.contains('@flutterware:motion')) {
-      refuse(
-        0,
-        'missing marker',
-        'a motion file starts with "$motionFileMarker"',
-      );
-    }
-    var result = parseString(content: source, throwIfDiagnostics: false);
-    for (var error in result.errors) {
-      refuse(error.offset, 'syntax error', error.message);
-    }
-    if (refusals.isNotEmpty && result.errors.isNotEmpty) return null;
-
-    ClassDeclaration? found;
-    for (var decl in result.unit.declarations) {
-      if (decl is ClassDeclaration) {
-        if (found != null) {
-          refuse(
-            decl.offset,
-            'second class',
-            'a motion file holds exactly one class',
-          );
-        } else {
-          found = decl;
-        }
-      } else {
-        refuse(
-          decl.offset,
-          'declaration',
-          'only the motion class may be declared here',
-        );
-      }
-    }
-    if (found == null) {
-      refuse(0, 'no class', 'a motion file holds exactly one class');
-      return null;
-    }
+  MotionDocument? parseClass(ClassDeclaration found) {
     className = found.namePart.typeName.lexeme;
     _refuseComments(found);
     _readHeader(found);

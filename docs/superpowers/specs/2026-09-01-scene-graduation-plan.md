@@ -157,3 +157,83 @@ stays pure domain (which is the same refactor decision 3 needs).
 
 Steps 2–3 carry the catalog-driven UI iteration in parallel; step 4's
 extraction half can start any time.
+
+---
+
+# Addendum, same day: the pair is one file, and the road to the real editor
+
+Milestones 1 and 2 landed (the core graduated; `SceneEditor` gave the
+editor selection sets, command doors, undo and a keyboard). Driving the
+result raised the question this addendum answers: the toy is not the
+editor, so what replaces it, in what order, and what holds scene and
+motion together.
+
+## Decision 4 — one file per pair (grammar 0.5)
+
+A scene file now holds **one scene class and any number of motion classes
+that animate it**. `banner_intro.motion.dart` is gone; `banner.scene.dart`
+carries `BannerScene` and `BannerIntro`. There is one marker, one parse
+door (`parseSceneFile`), one emitter (`emitSceneFile(doc, motions: …)`),
+one round-trip invariant.
+
+What decided it:
+
+- **The pair was already indivisible.** A motion resolves its targets
+  against a scene by field name, so `parseMotionFile` had to be handed the
+  scene document and its class name — "half a pair, never read alone" was
+  a comment in the code. One file deletes that ceremony.
+- **Compilable files are the next milestone.** Two files would have to
+  import each other the moment the vocabulary becomes a real library; one
+  file needs no import between the halves at all.
+- **A rename is atomic.** Renaming a node updates the motions that target
+  it in the same buffer — no window where one file of a pair is stale.
+- **One document in the UI wants one document on disk.** The workspace
+  shows a scene and its motion together; the file now matches.
+
+Two costs, accepted rather than dodged:
+
+- **One version marker for both halves.** `scene=0.5` covers the motion
+  grammar too; a motion-grammar change bumps the scene file version. They
+  ship together anyway.
+- **All-or-nothing across the pair.** A hand edit that breaks the motion
+  half now refuses the whole file, layout included. That is the standing
+  policy (a partially loaded document is the lie the editor must never
+  tell), and the refusal still carries a line number and a fix.
+
+A second class with no `extends SceneMotion<…>` is refused as `extends`,
+teaching the clause that makes a class a motion.
+
+## Decision 5 — plugin home first
+
+The order is: **workspace model → `flutterware.scene` plugin (mounting
+today's widgets) → panel-by-panel rebuild → nesting.** Panels are built
+once, in their final home; the alternative pays the migration cost on
+finished work. The motion plugin and `lib/motion.dart` die at the plugin
+step, before parity, as decision 2 already settled.
+
+## Decision 6 — the toy stays until the last panel moves
+
+`canvas_toy/` remains the fast standalone loop (no studio boot) while
+panels migrate, because it mounts the same widgets the plugin does. It is
+deleted in one PR when the rebuild finishes — nothing stranded, no second
+shell kept alive forever.
+
+## Open: the workspace shape
+
+Whether the pair is one surface with a docked timeline, two modes over one
+document, or a timeline panel you open, is **not decided** — it is to be
+answered by building the arrangements and looking at them, not by
+argument. The experiment is cheap once the panels are widgets over
+`SceneEditor`: a catalog demo per arrangement, stage-set state, one
+`previews screenshot` each.
+
+What is *not* open, because earlier decisions imply it:
+
+- **Timeline rows are scene nodes.** An `AnimateGroup` targets a node by
+  field name; the gutter is the node tree filtered to animated ones.
+- **Unplaced groups are library assets**, so they need a home beside the
+  timeline, not on the playhead.
+- **Nesting is a drill-in.** An instance's internals are not addressable
+  (the nesting research law), so entering a nested scene switches the
+  whole workspace, with a breadcrumb back — and a parent may animate only
+  the nested scene's declared parameters plus the imposed props.

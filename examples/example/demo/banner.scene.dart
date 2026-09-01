@@ -1,9 +1,10 @@
-//@flutterware:scene=0.2
+//@flutterware:scene=0.5
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
-// once in a children list. Anything outside the grammar is refused with a
-// line number rather than silently dropped.
+// once in a children list; a parameter is a `final` in the class header
+// whose default is the mockup. Anything outside the grammar is refused with
+// a line number rather than silently dropped.
 
 class BannerScene {
   late final glow = Shape(
@@ -17,7 +18,7 @@ class BannerScene {
   );
   late final cup = Text('☕', x: 690, y: 110, fontSize: 190);
   late final headline = Text(
-    'Fresh coffee, even faster',
+    'Fresh coffee, faster',
     fontSize: 54,
     weight: FontWeight.w700,
     color: Color(0xFFFFFFFF),
@@ -79,4 +80,44 @@ class BannerScene {
     fill: Color(0xFF2B1B12),
     children: [glow, cup, copy, badge, loading, order],
   );
+}
+
+class BannerIntro(super.scene, {final double slideFrom = 24})
+    extends SceneMotion<BannerScene> {
+  late final headlineIn = scene.headline.animate(
+    opacity: Track([
+      Key(at: 0.ms, value: 0),
+      Key(at: 260.ms, value: 1, curve: Curves.easeOut),
+    ]),
+    translateY: Track([
+      Key(at: 0.ms, value: slideFrom),
+      Key(at: 260.ms, value: 0, curve: Curves.easeOut),
+    ]),
+  );
+  late final glowMood = scene.glow.animate(
+    opacity: Track([
+      Key(at: 0.ms, value: 1),
+      Key(at: 900.ms, value: 0.85),
+      Key(at: 1800.ms, value: 1),
+    ]),
+  );
+  late final badgePop = scene.badge.animate(
+    scale: Track([
+      Key(at: 0.ms, value: 0.6),
+      Key(at: 240.ms, value: 1, curve: Curves.easeOutBack),
+    ]),
+    args: {
+      'progress': Track([Key(at: 0.ms, value: 0), Key(at: 300.ms, value: 1)]),
+    },
+  );
+  late final tapPulse = scene.cta.animate(
+    scale: Track([
+      Key(at: 0.ms, value: 1),
+      Key(at: 120.ms, value: 1.06),
+      Key(at: 240.ms, value: 1),
+    ]),
+  );
+  late final timeline = Par([headlineIn, At(400.ms, badgePop), glowMood]);
+  BannerIntro copy(BannerScene scene) =>
+      copyStateInto(BannerIntro(scene, slideFrom: slideFrom));
 }
