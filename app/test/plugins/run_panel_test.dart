@@ -628,7 +628,7 @@ void main() {
     File(p.join(worktree.path, 'pubspec.yaml'))
       ..createSync(recursive: true)
       ..writeAsStringSync('name: app\n');
-    File(p.join(worktree.path, 'lib', 'main_patient.dart'))
+    File(p.join(worktree.path, 'lib', 'main_kiosk.dart'))
       ..createSync(recursive: true)
       ..writeAsStringSync('void main() {}');
     DeviceCache.write(runDir.path, const [
@@ -652,14 +652,14 @@ void main() {
             {
               'path': '.',
               'flavors': {
-                'mobile': ['local', 'patientLocal'],
+                'mobile': ['local', 'kioskLocal'],
               },
               'entrypoints': [
                 {
-                  'path': 'lib/main_patient.dart',
-                  'name': 'Patient',
+                  'path': 'lib/main_kiosk.dart',
+                  'name': 'Kiosk',
                   'flavor': 'local',
-                  'flavorByPlatform': {'mobile': 'patientLocal'},
+                  'flavorByPlatform': {'mobile': 'kioskLocal'},
                 },
               ],
             },
@@ -673,7 +673,7 @@ void main() {
       worktree: worktree.path,
       worktreeName: Worktree(path: worktree.path).name,
       device: 'phone',
-      entrypoint: 'lib/main_patient.dart',
+      entrypoint: 'lib/main_kiosk.dart',
       launcherPid: pid,
       startedAt: DateTime.now(),
     ).publish(runDir.path);
@@ -701,7 +701,7 @@ void main() {
     await tester.pump();
 
     // The pairing resolved for the phone — not the plain declaration.
-    expect(find.text('patientLocal'), findsOneWidget);
+    expect(find.text('kioskLocal'), findsOneWidget);
     expect(find.text('from the entry point'), findsOneWidget);
 
     // Overriding offers the declared vocabulary instead of an empty box —
@@ -712,7 +712,7 @@ void main() {
     await tester.pump();
     expect(find.byType(TextField), findsNothing);
     var flavorPicker = find.ancestor(
-      of: find.text('patientLocal'),
+      of: find.text('kioskLocal'),
       matching: find.byType(FwPicker<String>),
     );
     expect(flavorPicker, findsOneWidget);
@@ -755,7 +755,7 @@ void main() {
             {
               'path': '.',
               'flavors': {
-                'mobile': ['local', 'patientLocal'],
+                'mobile': ['local', 'kioskLocal'],
                 'macos': <String>[],
               },
               'entrypoints': [

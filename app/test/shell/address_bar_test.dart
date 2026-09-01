@@ -15,6 +15,7 @@ import 'package:flutterware_app/src/shell/address_bar.dart';
 import 'package:flutterware_app/src/shell/shell_controller.dart';
 import 'package:flutterware_app/src/shell/shell_view.dart';
 import 'package:flutterware_app/src/shell/worktree_discovery.dart';
+import 'package:flutterware_app/src/ui/theme.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 
 const _listing =
@@ -310,6 +311,77 @@ void main() {
         ),
       );
       expect(label.textSpan, isNotNull);
+    });
+
+    testWidgets('a title on the row does not hide the branch', (tester) async {
+      // The shell's worktrees carry no title yet, so this is the readout on
+      // its own — which is what it was built to be testable as. A titled row
+      // shows the title, and the branch is then a name that is on the checkout
+      // and nowhere on the screen: it still has to be filterable, and what
+      // kept the row has to be visible on it.
+      var picked = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme,
+          home: Material(
+            child: Align(
+              alignment: Alignment.bottomLeft,
+              child: AddressReadout(
+                address: Address(worktree: '~'),
+                worktrees: const [
+                  WorktreeChoice(
+                    name: '~',
+                    displayName: 'master',
+                    branch: 'master',
+                    isOpen: true,
+                  ),
+                  WorktreeChoice(
+                    name: 'repo-split',
+                    displayName: 'Split button rework',
+                    branch: 'claude/split-button-rework',
+                    isOpen: false,
+                  ),
+                ],
+                onGo: (_) {},
+                onPickWorktree: (choice) => picked.add(choice.name),
+                onEdit: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      // The readout's own chevron: there is no bar around it here.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AddressReadout),
+          matching: find.byIcon(Icons.expand_more),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextField),
+        'claude/split-button-rework',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('No worktree matches.'), findsNothing);
+      expect(
+        find.widgetWithText(MenuItemButton, 'Split button rework'),
+        findsOneWidget,
+      );
+      // The branch is beside the title, lit where the query landed.
+      var branch = tester.widget<Text>(
+        find.descendant(
+          of: find.byType(MenuItemButton),
+          matching: find.text('claude/split-button-rework'),
+        ),
+      );
+      expect(branch.textSpan, isNotNull);
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(picked, ['repo-split']);
     });
 
     testWidgets('↵ picks the first match', (tester) async {

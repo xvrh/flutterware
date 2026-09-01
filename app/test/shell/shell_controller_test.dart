@@ -733,6 +733,35 @@ void main() {
     expect(_disposedIds, ['/repo-explorer:a.one', '/repo-explorer:a.two']);
   });
 
+  test('rescanning re-points an open tab at the branch git now reports', () async {
+    var shell = _controller();
+    await shell.start('/repo');
+    await shell.open(shell.closedWorktrees.first);
+    expect(shell.openWorktrees.map((w) => w.branch), [
+      'main',
+      'feature/explorer',
+    ]);
+
+    // The agent working in that checkout moved it to another branch. The tab
+    // stays — it is the same directory — and everything drawn from it (the tab
+    // label, both switchers' filters) has to say the new name. It used to keep
+    // the one it was opened with, so a branch the explorer listed could not be
+    // found in the switcher.
+    _currentListing =
+        'worktree /repo\nbranch refs/heads/main\n\n'
+        'worktree /repo-explorer\nbranch refs/heads/feature/renamed\n\n'
+        'worktree /repo-pty\nbranch refs/heads/fix/pty\n';
+    addTearDown(() => _currentListing = _listing);
+    await shell.rescanWorktrees();
+
+    expect(shell.openWorktrees.map((w) => w.branch), [
+      'main',
+      'feature/renamed',
+    ]);
+    // Same tab, not a reopened one: the path is the identity.
+    expect(shell.sessionFor(shell.worktrees[1]), isNotNull);
+  });
+
   /// Why the shell is quiet when nothing on it moved.
   ///
   /// Every one of these used to notify. The shell is one notifier under one

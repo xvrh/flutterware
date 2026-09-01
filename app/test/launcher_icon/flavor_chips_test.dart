@@ -127,18 +127,18 @@ void main() {
     await pump(
       tester,
       [
-        flavor('patient', {
+        flavor('kiosk', {
           IconFlavorSource.androidSourceSet,
           IconFlavorSource.iosCatalog,
         }),
       ],
-      selected: 'patient',
+      selected: 'kiosk',
       onSelect: picked.add,
     );
 
-    await tester.tap(find.textContaining('patient'));
+    await tester.tap(find.textContaining('kiosk'));
     await tester.tap(find.text('main'));
-    expect(picked, ['patient', null]);
+    expect(picked, ['kiosk', null]);
   });
 
   testWidgets('an ungenerated flavor is still worth opening', (tester) async {

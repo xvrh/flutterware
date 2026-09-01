@@ -146,7 +146,7 @@ void main() {
         // Characters above 127 travel raw — encoding them would cost the
         // legibility the sparse escaping is for.
         'fw:///worktrees/main/p/Signup — self path',
-        'fw:///worktrees/main/p/Créer un patient',
+        'fw:///worktrees/main/p/Créer un élément',
         'fw:///worktrees/main/p/日本語のシナリオ',
         'fw:///worktrees/main/p/e?device=iPhone%2015&locale=fran%C3%A7ais',
       ]) {

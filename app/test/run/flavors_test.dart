@@ -8,12 +8,12 @@ void main() {
   group('lookupByPlatform', () {
     const paired = {
       RunPlatform.ios: 'appleLocal',
-      RunPlatform.mobile: 'patientLocal',
+      RunPlatform.mobile: 'kioskLocal',
     };
 
     test('a concrete key beats the shorthand that contains it', () {
       expect(lookupByPlatform(paired, platformType: 'ios'), 'appleLocal');
-      expect(lookupByPlatform(paired, platformType: 'android'), 'patientLocal');
+      expect(lookupByPlatform(paired, platformType: 'android'), 'kioskLocal');
     });
 
     test('a platform in no key is nobody’s business', () {
@@ -27,7 +27,7 @@ void main() {
       // cannot, because the category does not say which member it is.
       expect(
         lookupByPlatform(paired, platformType: null, category: 'mobile'),
-        'patientLocal',
+        'kioskLocal',
       );
       expect(
         lookupByPlatform(const {
@@ -47,16 +47,16 @@ void main() {
       var resolved = resolveFlavor(
         entrypointFlavor: 'local',
         packageDefault: 'dev',
-        byPlatform: const {RunPlatform.mobile: 'patientLocal'},
+        byPlatform: const {RunPlatform.mobile: 'kioskLocal'},
         platformType: 'android',
       );
-      expect(resolved.flavor, 'patientLocal');
+      expect(resolved.flavor, 'kioskLocal');
       // Still the entry point's word — the map is part of its declaration.
       expect(resolved.source, FlavorSource.entrypoint);
     });
 
     test('and falls through the whole chain where it does not', () {
-      const paired = {RunPlatform.mobile: 'patientLocal'};
+      const paired = {RunPlatform.mobile: 'kioskLocal'};
       expect(
         resolveFlavor(
           entrypointFlavor: 'local',
@@ -90,10 +90,10 @@ void main() {
   group('the declaration round-trips', () {
     test('what Entrypoint writes is what the decoder reads', () {
       var declared = const Entrypoint(
-        'lib/main_patient.dart',
-        name: 'Patient',
+        'lib/main_kiosk.dart',
+        name: 'Kiosk',
         flavor: 'local',
-        flavorByPlatform: {RunPlatform.mobile: 'patientLocal'},
+        flavorByPlatform: {RunPlatform.mobile: 'kioskLocal'},
       ).toJson();
 
       var read = declaredEntrypoints({
@@ -101,7 +101,7 @@ void main() {
       }).single;
       expect(read.flavor, 'local');
       // As written: the shorthand key survives the wire unexpanded.
-      expect(read.flavorByPlatform, {RunPlatform.mobile: 'patientLocal'});
+      expect(read.flavorByPlatform, {RunPlatform.mobile: 'kioskLocal'});
     });
 
     test('an empty pairing writes no key at all', () {
@@ -115,13 +115,13 @@ void main() {
       var declared = const RunPackage(
         Pkg('app'),
         flavors: {
-          RunPlatform.mobile: ['local', 'patientLocal'],
+          RunPlatform.mobile: ['local', 'kioskLocal'],
           RunPlatform.linux: [],
         },
       ).toJson();
 
       expect(declaredFlavors(declared['flavors']), {
-        RunPlatform.mobile: ['local', 'patientLocal'],
+        RunPlatform.mobile: ['local', 'kioskLocal'],
         // The empty list survives the wire: it is a declaration, not a gap.
         RunPlatform.linux: <String>[],
       });

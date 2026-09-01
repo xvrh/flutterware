@@ -460,6 +460,55 @@ void main() {
     expect(find.text('feature/explorer'), findsOneWidget);
   });
 
+  testWidgets('a branch that moved under an open tab is still findable', (
+    tester,
+  ) async {
+    // The report: a branch the worktrees screen listed could not be found in
+    // the switcher, in the same window at the same moment. The checkout was
+    // open, and an open tab used to keep the worktree it was opened with — so
+    // the filter searched the name the branch had that morning.
+    var listing = _listing;
+    _loader = _StubLoader();
+    var shell = ShellController(
+      appContext: AppContext(logger: LogClient.print()),
+      flutterSdk: FlutterSdkPath('/tmp/flutter'),
+      registry: _panels(const ['a.deps', 'a.tests']),
+      coreRegistry: PluginCoreRegistry({
+        'a.deps': _FakeCore.new,
+        'a.tests': _FakeCore.new,
+      }),
+      manifestLoader: _loader,
+      discovery: WorktreeDiscovery(
+        runProcess: (_, _, {workingDirectory}) async =>
+            ProcessResult(0, 0, listing, ''),
+      ),
+    );
+    await shell.start('/repo');
+    await shell.open(shell.closedWorktrees.first);
+    await tester.pumpWidget(ShellApp(shell));
+    await tester.pumpAndSettle();
+    expect(find.text('feature/explorer'), findsWidgets);
+
+    // The agent working in that checkout moved it to another branch.
+    listing =
+        'worktree /repo\nbranch refs/heads/main\n\n'
+        'worktree /repo-explorer\nbranch refs/heads/claude/split-button-rework\n';
+
+    // Opening the switcher rescans, which is what makes the menu current.
+    await tester.tap(find.byTooltip('Switch worktree'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      'claude/split-button-rework',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No worktree matches.'), findsNothing);
+    expect(find.text('OPEN · 1'), findsOneWidget);
+    // And the tab behind the menu says the new name too.
+    expect(find.text('feature/explorer'), findsNothing);
+  });
+
   testWidgets('↵ in the switcher filter opens the first match', (tester) async {
     var shell = await _pumpShell(tester);
     await tester.tap(find.byTooltip('Switch worktree'));

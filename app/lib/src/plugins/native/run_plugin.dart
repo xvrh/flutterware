@@ -1776,7 +1776,7 @@ class _NewRunPageState extends State<_NewRunPage> {
       // stale flavor on an unrelated build.
       _rebuildKnobs(restored != null ? last?.knobs ?? const {} : const {});
       // The device before the flavor, because the flavor can depend on it —
-      // an entry point pairing `patientLocal` with `mobile` pre-fills
+      // an entry point pairing `kioskLocal` with `mobile` pre-fills
       // differently for a phone than for this machine.
       _device ??= _pickDevice(preferred: last?.device);
       _resetFlavor(used: restored != null ? last?.flavor : null);

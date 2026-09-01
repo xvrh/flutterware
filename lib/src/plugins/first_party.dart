@@ -633,7 +633,7 @@ class RunPackage extends PluginPackage {
   ///
   /// ```dart
   /// flavors: {
-  ///   RunPlatform.mobile: ['local', 'patientLocal', 'staging', 'prod'],
+  ///   RunPlatform.mobile: ['local', 'kioskLocal', 'staging', 'prod'],
   ///   RunPlatform.macos: ['local', 'staging', 'prod'],
   ///   RunPlatform.linux: [], // this platform has no flavors
   /// },
@@ -741,15 +741,15 @@ class Entrypoint {
   /// [flavor], where it depends on the platform the launch targets.
   ///
   /// The case is real: an app split into two store identities builds the same
-  /// entry point under `patientLocal` on a phone — where the flavor decides
+  /// entry point under `kioskLocal` on a phone — where the flavor decides
   /// the package id and the deep links, and the wrong one *installs over the
   /// other app* — and under plain `local` on a desktop, where none of that
   /// exists. One declaration:
   ///
   /// ```dart
-  /// Entrypoint('lib/main_patient.dart', name: 'Patient',
+  /// Entrypoint('lib/main_kiosk.dart', name: 'Kiosk',
   ///     flavor: 'local',
-  ///     flavorByPlatform: {RunPlatform.mobile: 'patientLocal'}),
+  ///     flavorByPlatform: {RunPlatform.mobile: 'kioskLocal'}),
   /// ```
   ///
   /// The launch resolves against the target device's platform: a concrete key
