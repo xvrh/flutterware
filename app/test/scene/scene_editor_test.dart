@@ -7,11 +7,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_app/canvas_toy/drafts.dart';
-import 'package:flutterware_app/canvas_toy/main.dart';
+import 'package:flutterware_app/src/scene/fixtures.dart';
+import 'package:flutterware_app/src/scene/measure.dart';
+import 'package:flutterware_app/src/scene/ui/canvas.dart';
+import 'package:flutterware_app/src/scene/ui/tree_panel.dart';
 import 'package:flutterware_app/src/scene/ui/shortcuts.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/ui/inspector.dart';
+import 'package:flutterware_app/src/ui/theme.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -203,6 +206,7 @@ void main() {
   group('focus discipline in widgets', () {
     Widget harness(SceneEditor editor, {Widget Function()? beside}) =>
         MaterialApp(
+          theme: appTheme,
           home: Scaffold(
             // The panels rebuild on editor changes, the way the shells do —
             // the inspector shows whatever is selected now.
@@ -211,7 +215,10 @@ void main() {
               builder: (context, _) => Row(
                 children: [
                   Expanded(
-                    child: EditorShortcuts(editor, child: TreePanel(editor)),
+                    child: EditorShortcuts(
+                      editor,
+                      child: SceneTreePanel(editor),
+                    ),
                   ),
                   if (beside != null) SizedBox(width: 320, child: beside()),
                 ],
@@ -220,15 +227,28 @@ void main() {
           ),
         );
 
+    // The renderer beside the editor is SceneView, measuring onto the nodes
+    // the way the guest does over the wire.
     Widget canvasHarness(SceneEditor editor, {Widget Function()? beside}) =>
         MaterialApp(
+          theme: appTheme,
           home: Scaffold(
             body: AnimatedBuilder(
               animation: editor.listenable,
               builder: (context, _) => Row(
                 children: [
                   Expanded(
-                    child: EditorShortcuts(editor, child: CanvasArea(editor)),
+                    child: EditorShortcuts(
+                      editor,
+                      child: SceneCanvas(
+                        editor,
+                        content: SceneView(
+                          editor.doc,
+                          onMeasured: (rects) =>
+                              applyMeasuredRects(editor.doc, rects),
+                        ),
+                      ),
+                    ),
                   ),
                   if (beside != null) SizedBox(width: 320, child: beside()),
                 ],

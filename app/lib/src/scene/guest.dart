@@ -27,6 +27,9 @@ class SceneGuest {
     editor.doc.addListener(_push);
     editor.addListener(_push);
     session.addListener(_onSession);
+    // A session that is already up notifies nobody about it: ask now, or a
+    // guest created over a running session shows what it was showing.
+    _onSession();
     // Until the guest's extension is registered (entry selected, first
     // build), pushes fail; retry until the first one lands.
     _retry = Timer.periodic(const Duration(milliseconds: 500), (_) {
@@ -53,14 +56,15 @@ class SceneGuest {
   /// booting state rather than a blank artboard.
   bool get isLive => _everApplied;
 
+  /// Puts the scene host on the guest whenever it is not already there —
+  /// including over whatever the session picked for itself while booting,
+  /// which is how a rebooted session came up showing the catalog's first
+  /// entry under the scene panel.
   void _onSession() {
-    if (session.phase != CatalogSessionPhase.ready ||
-        session.wantedEntryId != null) {
-      return;
-    }
+    if (session.phase != CatalogSessionPhase.ready) return;
     for (var entry in session.entries) {
       if (entry.symbol == sceneHostEntrySymbol) {
-        session.wantedEntryId = entry.id;
+        if (session.wantedEntryId != entry.id) session.wantedEntryId = entry.id;
         return;
       }
     }

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_app/canvas_toy/drafts.dart';
-import 'package:flutterware_app/canvas_toy/main.dart';
+import 'package:flutterware_app/src/scene/fixtures.dart';
+import 'package:flutterware_app/src/scene/editor.dart';
+import 'package:flutterware_app/src/scene/playback.dart';
+import 'package:flutterware_app/src/scene/ui/transport.dart';
 import 'package:flutterware_app/src/scene/motion_file.dart';
 
 void main() {
@@ -366,14 +368,14 @@ void main() {
       expect(headline2.containsKey('fx'), isFalse);
     });
 
-    testWidgets('the local mirror draws the rendered plane', (tester) async {
+    testWidgets('SceneView draws the rendered plane', (tester) async {
       var scene = coffeeBannerDraft();
       var headline = scene.nodeNamed('headline')!;
       headline.writeFx('m', 'opacity', 0.25);
       headline.writeFx('m', 'translateY', 12.0);
       await tester.pumpWidget(
         MaterialApp(
-          home: SizedBox(width: 1024, height: 500, child: NodeView(scene.root)),
+          home: SizedBox(width: 1024, height: 500, child: SceneView(scene)),
         ),
       );
       var text = find.text('Fresh coffee, faster');
@@ -390,10 +392,12 @@ void main() {
     testWidgets('the transport plays the pair end to end', (tester) async {
       var scene = coffeeBannerDraft();
       var headline = scene.nodeNamed('headline')!;
+      var editor = SceneEditor(
+        scene,
+        motions: {'BannerIntro': coffeeIntroDraft()},
+      );
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(body: MotionTransport(scene, coffeeIntroDraft())),
-        ),
+        MaterialApp(home: Scaffold(body: _TransportHost(editor))),
       );
       await tester.tap(find.byTooltip('Play'));
       await tester.pump(); // the ticker's first tick stamps its start time
@@ -408,26 +412,23 @@ void main() {
       expect(headline.fxRendered('opacity'), 1.0);
     });
 
-    testWidgets('a parked scrub repaints the mirror with the parked frame', (
+    testWidgets('a parked seek repaints SceneView with the parked frame', (
       tester,
     ) async {
-      // The full toy wiring: transport + AnimatedBuilder(doc) + NodeView —
-      // a slider seek AFTER completion must rebuild the mirror (the flush
-      // rides notifyListeners; without a listener the picture goes stale).
+      // A seek AFTER completion must rebuild the picture: the flush rides
+      // notifyListeners, and SceneView listens to the document.
       var scene = coffeeBannerDraft();
+      var editor = SceneEditor(
+        scene,
+        motions: {'BannerIntro': coffeeIntroDraft()},
+      );
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: Column(
               children: [
-                MotionTransport(scene, coffeeIntroDraft()),
-                Expanded(
-                  child: AnimatedBuilder(
-                    animation: scene.listenable,
-                    builder: (context, _) =>
-                        FittedBox(child: NodeView(scene.root)),
-                  ),
-                ),
+                _TransportHost(editor),
+                Expanded(child: FittedBox(child: SceneView(scene))),
               ],
             ),
           ),
@@ -442,13 +443,16 @@ void main() {
           .map((o) => o.opacity);
       expect(opacities, isNot(contains(0.0))); // end pose: identity fx
 
-      await tester.drag(find.byType(Slider), const Offset(-800, 0));
+      tester
+          .state<_TransportHostState>(find.byType(_TransportHost))
+          .playback
+          .seek(Duration.zero);
       await tester.pump(); // the flush's post-frame notify
       await tester.pump(); // the rebuild it schedules
       opacities = tester
           .widgetList<Opacity>(find.byType(Opacity))
           .map((o) => o.opacity);
-      expect(opacities, contains(0.0)); // headline parked at t=0: invisible
+      expect(opacities, contains(0.0)); // headline at t=0 is invisible
     });
 
     testWidgets('a burst of fx writes is one notification', (tester) async {
@@ -463,4 +467,31 @@ void main() {
       expect(notifications, 1);
     });
   });
+}
+
+class _TransportHost extends StatefulWidget {
+  const _TransportHost(this.editor);
+
+  final SceneEditor editor;
+
+  @override
+  State<_TransportHost> createState() => _TransportHostState();
+}
+
+class _TransportHostState extends State<_TransportHost>
+    with TickerProviderStateMixin {
+  late final playback = ScenePlayback(
+    widget.editor,
+    'BannerIntro',
+    vsync: this,
+  );
+
+  @override
+  void dispose() {
+    playback.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SceneTransport(playback);
 }

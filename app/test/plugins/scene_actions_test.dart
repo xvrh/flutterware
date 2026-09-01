@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/log_client.dart';
-import 'package:flutterware_app/canvas_toy/drafts.dart';
+import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/scene_core.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';

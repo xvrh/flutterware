@@ -2,7 +2,7 @@
 // journal), and the breadcrumb is how nesting is navigated.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_app/canvas_toy/drafts.dart';
+import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/workspace.dart';
 

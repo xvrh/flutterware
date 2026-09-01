@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_app/canvas_toy/drafts.dart';
+import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 
 void main() {
