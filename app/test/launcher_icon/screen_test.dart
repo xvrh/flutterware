@@ -319,7 +319,7 @@ void main() {
 
     writeManifest();
     writePng('android/app/src/main/res/mipmap-hdpi/ic_launcher.png', 72);
-    writePng('android/app/src/patient/res/mipmap-hdpi/ic_launcher.png', 72);
+    writePng('android/app/src/kiosk/res/mipmap-hdpi/ic_launcher.png', 72);
 
     var address = ValueNotifier(
       Address(
@@ -351,12 +351,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.textContaining('patient'));
+    await tester.tap(find.textContaining('kiosk'));
     await tester.pumpAndSettle();
 
     // The flavor is a segment: it names a different set of files, and the role
     // it was opened on belongs to the set it came from.
-    expect(written.single.segments, ['.', 'patient']);
+    expect(written.single.segments, ['.', 'kiosk']);
     expect(written.single.axes.containsKey('role'), isFalse);
   });
 

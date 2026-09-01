@@ -691,7 +691,8 @@ class ShellController extends ChangeNotifier {
     return best;
   }
 
-  /// Re-reads `git worktree list`. Open worktrees that disappeared are closed.
+  /// Re-reads `git worktree list`. Open worktrees that disappeared are closed,
+  /// and the ones still there are re-pointed at what git just said.
   ///
   /// Cheap enough to run whenever the switcher is opened, which is what keeps
   /// the list current without a watcher.
@@ -701,9 +702,19 @@ class ShellController extends ChangeNotifier {
     _worktrees = await _discovery.discover(_worktrees.first.path);
     var closed = false;
     for (var path in _open.keys.toList()) {
-      if (_worktreeAt(path) == null) {
+      var fresh = _worktreeAt(path);
+      if (fresh == null) {
         _closeAt(path);
         closed = true;
+      } else {
+        // **A tab's worktree is not a copy it keeps.** [openWorktrees] reads
+        // these, so a checkout that changed branch under an open tab used to
+        // keep the name it was opened with — on the tab, in both switchers'
+        // filters, and in the address a branch resolves through — while the
+        // explorer, which reads [worktrees], showed the new one. One window,
+        // two answers, and a branch you could find in the list and not in the
+        // switcher.
+        _open[path]!.worktree = fresh;
       }
     }
     // **A git event is rarely news.** The watch fires for any write under
@@ -1290,7 +1301,11 @@ enum GoResult {
 class _Open {
   _Open(this.worktree);
 
-  final Worktree worktree;
+  /// The checkout this tab is of. Replaced by [rescanWorktrees] when git
+  /// reports the same path with a different branch, head or name — the path is
+  /// the identity ([Worktree] is equal by it, and this map is keyed by it), so
+  /// everything else about it is news the tab has to take.
+  Worktree worktree;
 
   WorktreeSession? session;
   Workspace? workspace;

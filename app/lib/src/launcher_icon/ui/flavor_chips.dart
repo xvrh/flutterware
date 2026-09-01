@@ -11,7 +11,7 @@
 /// `AppIcon-<name>.appiconset` — and that spelling is `flutter_launcher_icons`'
 /// convention rather than a rule of Gradle or Xcode. A project that writes the
 /// wiring itself can point four product flavors at one `src/<name>/res` through
-/// a `sourceSets` block and name every patient configuration's
+/// a `sourceSets` block and point all four configurations'
 /// `ASSETCATALOG_COMPILER_APPICON_NAME` at one catalog; then `<name>` is an
 /// icon set that several flavors share and not a flavor anybody can build. The
 /// real list lives in Gradle and in Xcode schemes, which is two parsers this

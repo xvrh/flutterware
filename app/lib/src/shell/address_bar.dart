@@ -156,6 +156,7 @@ class _AddressBarState extends State<AddressBar> {
                   WorktreeChoice(
                     name: worktree.name,
                     displayName: worktree.displayName,
+                    branch: worktree.branch,
                     isOpen: shell.isOpen(worktree),
                   ),
               ],
@@ -181,6 +182,7 @@ class WorktreeChoice {
   const WorktreeChoice({
     required this.name,
     required this.displayName,
+    this.branch,
     required this.isOpen,
   });
 
@@ -190,8 +192,18 @@ class WorktreeChoice {
   /// The branch or title a human knows the checkout by.
   final String displayName;
 
+  /// The checked-out branch, when it is not already [displayName] — a title a
+  /// plugin contributed displaces it there, and a detached checkout has none.
+  /// Carried so the filter can find a row by a name the title hid.
+  final String? branch;
+
   /// Whether picking it navigates, or first opens it.
   final bool isOpen;
+
+  /// [branch], when the row is not already showing it as [displayName]. Null
+  /// otherwise, so the row draws it exactly when it would be new information —
+  /// and the filter never lights a run in a string twice.
+  String? get hiddenBranch => branch == displayName ? null : branch;
 }
 
 /// The address as parts rather than as a string, each part live on its own.
@@ -477,15 +489,20 @@ class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
     super.dispose();
   }
 
-  /// Both names, because both are on the rows: you filter by whichever of the
-  /// branch or the git name you happen to remember.
+  /// Every name on the row, because every one of them is a name you might
+  /// filter by: the label, git's own name, and the branch when a title has
+  /// taken the label from it.
   List<(WorktreeChoice, FilterMatch?)> get _matches {
     if (_query.trim().isEmpty) {
       return [for (var worktree in widget.worktrees) (worktree, null)];
     }
     return [
       for (var worktree in widget.worktrees)
-        if (matchWorktreeFilter(_query, [worktree.displayName, worktree.name])
+        if (matchWorktreeFilter(_query, [
+              worktree.displayName,
+              worktree.name,
+              worktree.hiddenBranch,
+            ])
             case var match?)
           (worktree, match),
     ];
@@ -561,6 +578,18 @@ class _WorktreeSwitcherState extends State<_WorktreeSwitcher> {
                   match: match,
                   field: 1,
                 ),
+                // Only when a title took the label: the branch is what you
+                // filtered by, so it has to be on the row that the filter kept.
+                if (worktree.hiddenBranch case var branch?) ...[
+                  const Gap(FwSpacing.sm),
+                  matchedName(
+                    context,
+                    branch,
+                    widget.style.copyWith(color: colors.mut3),
+                    match: match,
+                    field: 2,
+                  ),
+                ],
                 // Choosing it opens it, which costs a config subprocess and a
                 // cold compile. Cheap enough to be worth doing and dear enough
                 // to be worth knowing about first.

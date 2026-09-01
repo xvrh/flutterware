@@ -2118,7 +2118,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
 
     test('varies by the platform of the target device', () async {
       _writePackage(worktree, 'app', {
-        'lib/main_patient.dart': 'void main() {}',
+        'lib/main_kiosk.dart': 'void main() {}',
         'pubspec.yaml': 'name: app\n',
       });
       DeviceCache.write(runDir.path, [
@@ -2134,10 +2134,10 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
               'path': 'app',
               'entrypoints': [
                 {
-                  'path': 'lib/main_patient.dart',
-                  'name': 'Patient',
+                  'path': 'lib/main_kiosk.dart',
+                  'name': 'Kiosk',
                   'flavor': 'local',
-                  'flavorByPlatform': {'mobile': 'patientLocal'},
+                  'flavorByPlatform': {'mobile': 'kioskLocal'},
                 },
               ],
             },
@@ -2152,7 +2152,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
       // id on a phone, none of that on a desktop.
       expect(
         core.flavorFor('app', entry, device: 'phone').flavor,
-        'patientLocal',
+        'kioskLocal',
       );
       expect(core.flavorFor('app', entry, device: 'mac').flavor, 'local');
       // A device the cache never described, and no device at all, resolve
@@ -2163,7 +2163,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
 
     test('the pairing is echoed as written, unknown keys dropped', () async {
       _writePackage(worktree, 'app', {
-        'lib/main_patient.dart': 'void main() {}',
+        'lib/main_kiosk.dart': 'void main() {}',
         'pubspec.yaml': 'name: app\n',
       });
       core = _coreFor(
@@ -2174,14 +2174,14 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
               'path': 'app',
               'entrypoints': [
                 {
-                  'path': 'lib/main_patient.dart',
-                  'name': 'Patient',
+                  'path': 'lib/main_kiosk.dart',
+                  'name': 'Kiosk',
                   'flavor': 'local',
                   // `fuchsia` is a platform this build has no member for — the
                   // config can come from a newer flutterware than the GUI.
                   'flavorByPlatform': {
-                    'mobile': 'patientLocal',
-                    'fuchsia': 'patientNext',
+                    'mobile': 'kioskLocal',
+                    'fuchsia': 'kioskNext',
                   },
                 },
               ],
@@ -2192,7 +2192,7 @@ void main({int serverPort = 1, Backend backend = Backend.dev}) {}
 
       var result = (await core.invoke('entrypoints'))! as RunEntrypointsResult;
       var entry = result.packages.single.entrypoints.single;
-      expect(entry.flavorByPlatform, {'mobile': 'patientLocal'});
+      expect(entry.flavorByPlatform, {'mobile': 'kioskLocal'});
       // The map rides beside the base, not instead of it.
       expect(entry.flavor, 'local');
     });

@@ -43,6 +43,14 @@ const _worktrees = [
     displayName: 'feature/asset-pipeline',
     isOpen: true,
   ),
+  // The row a title has taken the label of. Its branch rides alongside, because
+  // it is a name you can still filter by and it is nowhere else on the row.
+  WorktreeChoice(
+    name: 'repo-split',
+    displayName: 'Split button rework',
+    branch: 'claude/split-button-rework',
+    isOpen: false,
+  ),
 ];
 
 Address get _deep => Address(
