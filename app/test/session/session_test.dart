@@ -46,6 +46,7 @@ void main() {
       'flutterware.render',
       'flutterware.previews',
       'flutterware.motion',
+      'flutterware.scene',
       'flutterware.splash',
       'flutterware.launcher_icon',
       'flutterware.store',

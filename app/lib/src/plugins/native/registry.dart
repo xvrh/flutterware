@@ -12,6 +12,7 @@ import 'run_plugin.dart';
 import 'server_plugin.dart';
 import 'renders_plugin.dart';
 import 'scenarios_plugin.dart';
+import 'scene_plugin.dart';
 import 'splash_plugin.dart';
 import 'store_plugin.dart';
 import 'previews_plugin.dart';
@@ -34,6 +35,7 @@ PluginRegistry buildNativeRegistry() => PluginRegistry({
   serverPluginId: panelFor<ServerCore>(ServerPlugin.new),
   motionPluginId: panelFor<MotionCore>(MotionPlugin.new),
   scenariosPluginId: panelFor<ScenariosCore>(ScenariosPlugin.new),
+  scenePluginId: panelFor<SceneCore>(ScenePlugin.new),
   rendersPluginId: panelFor<RendersCore>(RendersPlugin.new),
   launcherIconPluginId: panelFor<LauncherIconCore>(LauncherIconPlugin.new),
   splashPluginId: panelFor<SplashCore>(SplashPlugin.new),

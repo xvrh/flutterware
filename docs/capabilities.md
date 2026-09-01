@@ -1809,6 +1809,12 @@ restarted: List<String>   # The package paths whose harness was dropped.
 | `package` | choice | no | — | Which declared package; all of them when omitted |
 
 
+### `flutterware.scene`
+
+Scenes this project owns — a design and the motion animating it, in one tool-written file per scene, rendered by the app itself.
+
+No actions.
+
 ### `flutterware.render`
 
 The app's render points — widgets and pw.Documents bound in a @RenderRegistry() registrar — rendered as SVG, PNG or PDF: live in the studio, one-shot from the CLI, resident from a server through `fw render bundle`.

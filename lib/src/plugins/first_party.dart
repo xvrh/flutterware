@@ -498,6 +498,43 @@ final class LocalesPerKeyCatalog extends TranslationCatalog {
 /// Motion — timelines scrubbed against a live screen, with the tuned numbers in
 /// a file no human writes. See
 /// `docs/superpowers/specs/2026-07-31-motion-design.md`.
+/// The scene editor: WYSIWYG scenes and the motion that animates them, in
+/// files this tool owns end to end (`*.scene.dart`).
+///
+/// A scene is rendered by the app itself — declare a `@Preview` entry named
+/// `sceneCanvasHost` in the package whose theme and widgets the scenes use,
+/// and the editor composites it.
+class Scene extends Plugin {
+  Scene({this.packages = const [], String? label})
+    : super('flutterware.scene', label: label ?? 'Scene');
+
+  final List<ScenePackage> packages;
+
+  @override
+  Map<String, Object?> get config => {
+    'packages': [for (var p in packages) p.toJson()],
+  };
+}
+
+class ScenePackage extends PluginPackage {
+  const ScenePackage(super.pkg, {this.directory});
+
+  /// Where this package's scene files are, relative to the package; `lib`
+  /// when null. A scene is a screen that happens to be designed, so it lives
+  /// wherever the screens live.
+  final String? directory;
+
+  @override
+  Map<String, Object?> toJson() => {
+    ...super.toJson(),
+    if (directory != null) 'directory': directory,
+  };
+
+  static List<ScenePackage> each(List<Pkg> packages) => [
+    for (var pkg in packages) ScenePackage(pkg),
+  ];
+}
+
 class Motion extends Plugin {
   Motion({this.packages = const [], String? label})
     : super('flutterware.motion', label: label ?? 'Motion');

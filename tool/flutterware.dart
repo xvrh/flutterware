@@ -123,6 +123,10 @@ void main() => Flutterware.configure((fw) {
   // needs a mounted screen to scrub, and in this repo the screens that mount
   // one are the demos that exist to exercise it.
   fw.use(Motion(packages: [.new(app, directory: 'tool/catalog/demos')]));
+  // `example` only, pointed at `demo/`: a scene is rendered by the app whose
+  // theme and widgets it uses, and `demo/` is where the scene host entry that
+  // renders them lives.
+  fw.use(Scene(packages: [.new(example, directory: 'demo')]));
   // `example` only. `root` is a library and `app` is this GUI — neither has a
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
   fw.use(NativeSplash(packages: [.new(example)]));
@@ -265,27 +269,6 @@ void main() => Flutterware.configure((fw) {
                       'The flutterware_app package root — where tool/catalog/ '
                       'lives. Only the catalog panel reads it, and only when '
                       'it is opened',
-                ),
-              ],
-            ),
-            Entrypoint(
-              'lib/main_scene_canvas_dev.dart',
-              name: 'Scene canvas (spike)',
-              description:
-                  "Composited-canvas spike — the toy's editor over an "
-                  'embedder guest texture, latency measured in the toolbar',
-              platforms: [RunPlatform.desktop],
-              knobs: [
-                Knob(
-                  'flutterSdkRoot',
-                  label: 'Flutter SDK',
-                  from: ValueSource.flutterSdk,
-                  required: true,
-                ),
-                Knob(
-                  'appRoot',
-                  label: 'App root',
-                  description: 'The flutterware_app package root',
                 ),
               ],
             ),
