@@ -98,15 +98,35 @@ class _CanvasToyAppState extends State<CanvasToyApp> {
   }
 }
 
-/// The editing focus scope: keyboard verbs for whatever it wraps. A tap on
-/// the tree or the canvas lands focus here (see [focusEditor]), a tap in
-/// the inspector moves it away, and each binding acts on the shared
+/// The editing focus scope: keyboard verbs for whatever it wraps. Any
+/// press inside it takes the keyboard back, a press in the inspector
+/// (which is outside) leaves it, and each binding acts on the shared
 /// [SceneEditor].
-class EditorShortcuts extends StatelessWidget {
+class EditorShortcuts extends StatefulWidget {
   const EditorShortcuts(this.editor, {super.key, required this.child});
 
   final SceneEditor editor;
   final Widget child;
+
+  @override
+  State<EditorShortcuts> createState() => _EditorShortcutsState();
+}
+
+class _EditorShortcutsState extends State<EditorShortcuts> {
+  // The scope owns its node rather than letting call sites look one up:
+  // Focus.of() from a tree row finds whatever Focus happens to be nearest
+  // (a Scrollable brings its own), and focusing that does not necessarily
+  // take primary focus back from an inspector field — the keys then reach
+  // the field's own undo instead, which beeps once it is empty.
+  final _node = FocusNode(debugLabel: 'scene editor');
+
+  SceneEditor get editor => widget.editor;
+
+  @override
+  void dispose() {
+    _node.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -141,15 +161,17 @@ class EditorShortcuts extends StatelessWidget {
             .setSelection([for (var n in editor.doc.root.children) n.name]),
         ...arrows,
       },
-      child: Focus(autofocus: true, child: child),
+      // Any press inside the scope hands the keyboard back, whoever had
+      // it: the scope holds no text fields, so there is nothing here that
+      // wants the keys for itself.
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _node.requestFocus(),
+        child: Focus(focusNode: _node, autofocus: true, child: widget.child),
+      ),
     );
   }
 }
-
-/// Land keyboard focus on the editing scope — every tree and canvas tap
-/// calls this, so a click after typing in the inspector hands the keys
-/// back to the editor.
-void focusEditor(BuildContext context) => Focus.of(context).requestFocus();
 
 /// Whether the platform's multi-select modifier is down at this instant —
 /// how a tap knows to toggle instead of replace.
@@ -328,7 +350,6 @@ class TreePanel extends StatelessWidget {
               for (var (node, depth) in rows)
                 InkWell(
                   onTap: () {
-                    focusEditor(context);
                     editor.select(
                       node == doc.root ? null : node,
                       toggle: _toggleModifier,
@@ -784,12 +805,8 @@ class _HitLayerState extends State<_HitLayer> {
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTapDown: (_) {
-                focusEditor(context);
-                editor.clearSelection();
-              },
+              onTapDown: (_) => editor.clearSelection(),
               onPanStart: (d) {
-                focusEditor(context);
                 _marqueeStart = d.localPosition;
                 _updateMarquee(d.localPosition);
               },
@@ -889,13 +906,9 @@ class _NodeTargetState extends State<_NodeTarget> {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) {
-          focusEditor(context);
-          editor.select(node, toggle: _toggleModifier);
-        },
+        onTapDown: (_) => editor.select(node, toggle: _toggleModifier),
         onPanDown: (d) => _downLocal = d.localPosition,
         onPanStart: (d) {
-          focusEditor(context);
           _dragSeq++;
           if (!editor.isSelected(node)) editor.select(node);
           _apply(d.localPosition, d.localPosition - _downLocal);

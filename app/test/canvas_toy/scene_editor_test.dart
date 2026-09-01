@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/canvas_toy/drafts.dart';
 import 'package:flutterware_app/canvas_toy/main.dart';
@@ -178,16 +179,41 @@ void main() {
   });
 
   group('focus discipline in widgets', () {
-    Widget harness(SceneEditor editor, {Widget? beside}) => MaterialApp(
-      home: Scaffold(
-        body: Row(
-          children: [
-            Expanded(child: EditorShortcuts(editor, child: TreePanel(editor))),
-            if (beside != null) SizedBox(width: 200, child: beside),
-          ],
-        ),
-      ),
-    );
+    Widget harness(SceneEditor editor, {Widget Function()? beside}) =>
+        MaterialApp(
+          home: Scaffold(
+            // The panels rebuild on editor changes, the way the shells do —
+            // the inspector shows whatever is selected now.
+            body: AnimatedBuilder(
+              animation: editor.listenable,
+              builder: (context, _) => Row(
+                children: [
+                  Expanded(
+                    child: EditorShortcuts(editor, child: TreePanel(editor)),
+                  ),
+                  if (beside != null) SizedBox(width: 320, child: beside()),
+                ],
+              ),
+            ),
+          ),
+        );
+
+    Widget canvasHarness(SceneEditor editor, {Widget Function()? beside}) =>
+        MaterialApp(
+          home: Scaffold(
+            body: AnimatedBuilder(
+              animation: editor.listenable,
+              builder: (context, _) => Row(
+                children: [
+                  Expanded(
+                    child: EditorShortcuts(editor, child: CanvasArea(editor)),
+                  ),
+                  if (beside != null) SizedBox(width: 320, child: beside()),
+                ],
+              ),
+            ),
+          ),
+        );
 
     testWidgets('modifier-click in the tree toggles a multi-selection', (
       tester,
@@ -223,13 +249,81 @@ void main() {
       expect(editor.doc.nodeNamed('glow'), isNotNull);
     });
 
+    testWidgets('the canvas takes the keyboard back after a field edit', (
+      tester,
+    ) async {
+      // The reported bug, exactly: type in an inspector field, click the
+      // CANVAS (which holds no focusable widget of its own, unlike a tree
+      // row's InkWell), then press cmd+Z — the keys were still going to
+      // the field's own undo, which beeps on macOS once it is empty.
+      var editor = SceneEditor(coffeeBannerDraft());
+      await tester.pumpWidget(
+        canvasHarness(editor, beside: () => InspectorPanel(editor)),
+      );
+      await tester.pump();
+      editor.select(editor.doc.nodeNamed('headline'));
+      await tester.pump();
+      await tester.enterText(
+        find.byType(TextFormField),
+        'Fresh coffee, sooner',
+      );
+      await tester.pump();
+      expect(
+        (editor.doc.nodeNamed('headline')! as TextNode).text,
+        'Fresh coffee, sooner',
+      );
+      await tester.tapAt(const Offset(300, 500));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+      expect(
+        (editor.doc.nodeNamed('headline')! as TextNode).text,
+        'Fresh coffee, faster',
+      );
+    });
+
+    testWidgets('the scope takes the keyboard back after a field edit', (
+      tester,
+    ) async {
+      // The reported bug: type in an inspector field, click a node, press
+      // cmd+Z — the keys were still going to the field's own undo (which
+      // beeps on macOS once its history is empty) instead of the editor's.
+      var editor = SceneEditor(coffeeBannerDraft());
+      await tester.pumpWidget(
+        harness(editor, beside: () => InspectorPanel(editor)),
+      );
+      await tester.tap(find.text('headline'));
+      await tester.pump();
+      await tester.enterText(
+        find.byType(TextFormField),
+        'Fresh coffee, sooner',
+      );
+      await tester.pump();
+      expect(
+        (editor.doc.nodeNamed('headline')! as TextNode).text,
+        'Fresh coffee, sooner',
+      );
+      await tester.tap(find.text('glow'));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+      expect(
+        (editor.doc.nodeNamed('headline')! as TextNode).text,
+        'Fresh coffee, faster',
+      );
+    });
+
     testWidgets('a text field outside the scope keeps its keys', (
       tester,
     ) async {
       var editor = SceneEditor(coffeeBannerDraft());
       var nodes = editor.doc.walk().length;
       await tester.pumpWidget(
-        harness(editor, beside: const TextField(autofocus: false)),
+        harness(editor, beside: () => const TextField(autofocus: false)),
       );
       await tester.tap(find.text('glow'));
       await tester.pump();
