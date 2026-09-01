@@ -1,6 +1,8 @@
 # Motion — a timeline editor whose file format is Dart
 
 **Date:** 2026-07-31
+**Removed:** 2026-09-01 — the plugin, `lib/motion.dart` and the demos were deleted
+once the scene plugin covered export; see `2026-09-01-scene-graduation-plan.md`.
 **Status:** design, brainstormed with the owner. **Nothing is built** beyond the
 spike. **Spikes S5 and A ran the same day and both succeeded** — the seek is
 0.23ms against a 16.6ms frame, one seek dirties one scope, read-tracking works,

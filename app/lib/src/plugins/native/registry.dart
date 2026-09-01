@@ -7,7 +7,6 @@ import 'dev_stack_plugin.dart';
 import 'icon_plugin.dart';
 import 'lints_core.dart';
 import 'lints_plugin.dart';
-import 'motion_plugin.dart';
 import 'run_plugin.dart';
 import 'server_plugin.dart';
 import 'renders_plugin.dart';
@@ -33,7 +32,6 @@ PluginRegistry buildNativeRegistry() => PluginRegistry({
   dependenciesPluginId: panelFor<DependenciesCore>(DependenciesPlugin.new),
   runPluginId: panelFor<RunCore>(RunPlugin.new),
   serverPluginId: panelFor<ServerCore>(ServerPlugin.new),
-  motionPluginId: panelFor<MotionCore>(MotionPlugin.new),
   scenariosPluginId: panelFor<ScenariosCore>(ScenariosPlugin.new),
   scenePluginId: panelFor<SceneCore>(ScenePlugin.new),
   rendersPluginId: panelFor<RendersCore>(RendersPlugin.new),

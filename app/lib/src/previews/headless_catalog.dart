@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:collection/collection.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
@@ -203,10 +202,17 @@ class HeadlessCatalog extends CatalogRenderer {
         await guest.applyKnobs(entryId, request.knobs);
       }
       await guest.applyDebug(request.debug);
-      // After the knobs and the axes, because both rebuild the demo and a
-      // rebuilt scope would start wherever its controller says rather than
-      // where this was asked to put it.
-      if (request.motionT case var t?) await guest.seekMotion(t);
+      // A playhead is walked on the flutter_tester lane, which is where a
+      // seek can be exact (`walk_determinism_test`); this guest has no door to
+      // one, and answering with the wrong frame would be worse than refusing.
+      if (request.motionT case var t?) {
+        throw ArgumentError.value(
+          t,
+          'motionT',
+          'the embedder guest cannot park a playhead — render on the tester '
+              'lane',
+        );
+      }
 
       // **One frame, then every read off it.** This is the actual content of
       // "one render", and it was not true before: each `settled*` drew its own
@@ -690,89 +696,6 @@ class _GuestSession {
     await applyDebugFlags(_vmService, values);
   }
 
-  /// Parks the entry's motion at [t], 0..1.
-  ///
-  /// A frame first, for the reason [applyDebug] gives: a `MotionScope`
-  /// registers its extensions when it *mounts*, so a seek asked for before the
-  /// demo has built comes back "method not found" rather than seeking.
-  ///
-  /// The seek itself answers after the guest's next frame, so by the time this
-  /// returns the picture is already at `t` and the capture that follows needs no
-  /// settling of its own.
-  var _motionReady = false;
-
-  Future<void> seekMotion(double t, {String? scope}) async {
-    // Only the first one pays for it. Once the scope has mounted the extension
-    // stays registered, and a seek that rendered a throwaway frame first every
-    // time would double the cost of the thing it exists to make cheap.
-    if (!_motionReady) {
-      await _renderScratchFrame();
-      _motionReady = true;
-    }
-    // List first, and seek by id: the guest resolves a nameless seek only
-    // while exactly one scope is mounted, so a composed screen would refuse —
-    // and the refusal surfaced here as the misleading "no mounted
-    // MotionScope".
-    var listed = await _vmService.callExtension('ext.flutterware.motion.list');
-    var scopes = <Map<String, Object?>>[
-      for (var entry in (listed?['scopes'] as List?) ?? const [])
-        if (entry is Map) entry.cast<String, Object?>(),
-    ];
-    if (scopes.isEmpty) {
-      throw ArgumentError.value(
-        t,
-        't',
-        'this entry has no mounted MotionScope to seek',
-      );
-    }
-
-    var chosen = scope == null
-        ? scopes.first
-        : scopes.firstWhereOrNull((one) => one['id'] == scope);
-    if (chosen == null) {
-      throw ArgumentError.value(
-        scope,
-        'scope',
-        'no scope by that name is mounted. Mounted: '
-            '${scopes.map(_describeMountedScope).join('; ')}',
-      );
-    }
-
-    // Mount order is tree order, so the first is the outermost — the
-    // composition's own timeline rather than one of the components inside it.
-    var reply = await _vmService.callExtension(
-      'ext.flutterware.motion.seek',
-      args: {'scope': ?chosen['id'] as String?, 't': '$t'},
-    );
-    if (reply == null) {
-      throw ArgumentError.value(
-        t,
-        't',
-        'this entry has no mounted MotionScope to seek',
-      );
-    }
-  }
-
-  /// One mounted scope, for a refusal that teaches which to name.
-  static String _describeMountedScope(Map<String, Object?> scope) {
-    var targets = [
-      for (var target in (scope['targets'] as List?) ?? const [])
-        if (target is Map && target['name'] is String) target['name'] as String,
-    ];
-    return '${scope['id']} (${scope['durationMs']}ms'
-        '${targets.isEmpty ? '' : ', ${targets.join('/')}'})';
-  }
-
-  /// Draws one throwaway frame, so the demo has built.
-  ///
-  /// Separated from the reads because there were seven of these per
-  /// observation. Every `settled*` rendered its own, which was right when each
-  /// was a standalone call and wrong the moment one call wanted five answers:
-  /// `observe` drew a frame per projection, and `settledHitTest` drew *another*
-  /// tree to resolve against — so the ids on an annotated screenshot matched the
-  /// ids in the reported tree because the build is deterministic, not because
-  /// they were the same tree. Which is exactly the assumption collapsing the
-  /// actions was supposed to remove.
   Future<void> settle() => _renderScratchFrame();
 
   Future<void> _renderScratchFrame() async {

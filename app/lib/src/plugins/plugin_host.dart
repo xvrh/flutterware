@@ -60,7 +60,7 @@ class PluginHost {
   /// Where the catalog looks for entries in [package].
   ///
   /// Ask this before building a `DaemonConfig` or a `CatalogSession`. A plugin
-  /// that also scans sources of its own — motion looking for `MotionScope` —
+  /// that also scans sources of its own — scene looking for `*.scene.dart` —
   /// keeps that directory separate: where to *scan* and where the catalog
   /// *renders from* are different questions with one right answer each.
   ///

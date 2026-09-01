@@ -100,29 +100,12 @@ void main() => Flutterware.configure((fw) {
                 Devices.wideWindow,
               ],
             ),
-            // The exceptions, and they are exceptions: these two are *app
-            // content* rather than studio chrome — a receipt and a player
-            // card, which is what a motion demo has to be to be worth
-            // scrubbing. A phone first, and a small one beside it because
-            // that is where a stagger runs out of room.
-            PreviewCanvas(
-              'tool/catalog/demos/motion_receipt.dart',
-              devices: [Devices.iphone16, Devices.iphoneSe],
-            ),
-            PreviewCanvas(
-              'tool/catalog/demos/motion_player.dart',
-              devices: [Devices.iphone16, Devices.iphoneSe],
-            ),
           ],
         ),
         .new(example),
       ],
     ),
   );
-  // `app` only, and pointed at the catalog demos rather than `lib`: a motion
-  // needs a mounted screen to scrub, and in this repo the screens that mount
-  // one are the demos that exist to exercise it.
-  fw.use(Motion(packages: [.new(app, directory: 'tool/catalog/demos')]));
   // `example` only, pointed at `demo/`: a scene is rendered by the app whose
   // theme and widgets it uses, and `demo/` is where the scene host entry that
   // renders them lives.

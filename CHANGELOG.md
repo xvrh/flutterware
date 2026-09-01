@@ -1,5 +1,16 @@
 ## Unreleased
 
+- **The motion plugin and `package:flutterware/motion.dart` are gone.** The
+  scene plugin (`flutterware.scene`) replaces both: a scene and the motion
+  that animates it live in one `*.scene.dart` the editor owns, the app renders
+  it with `SceneView` (`package:flutterware/scene.dart`), and `fw run scene
+  video` exports the clip. `MotionScope`, `MotionValues`, `MotionBox`,
+  `MotionController`, `MotionExtent`, the `*.motion.dart` values files and
+  `MotionTester` in `flutter_test.dart` are all removed, along with `fw run
+  motion capture|filmstrip|video|verify`. The previews harness now drives a
+  neutral `Playhead` — anything that is a function of `t` can register one —
+  so an export does not know which runtime it is walking.
+
 - **`system` chatter is compared, carried, and decides nothing.** The read
   side has said it for a while — *"`system` is left out unless `channel` names
   it: it is most of the volume and none of the signal"* — but the comparison's

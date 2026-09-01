@@ -1,6 +1,6 @@
-/// The scene/motion authoring core — the vocabulary generated `.scene.dart`
-/// and `.motion.dart` files are built from, plus the pure document models
-/// and the motion runtime that evaluates them.
+/// The scene/motion authoring core — the vocabulary a generated `.scene.dart`
+/// is built from, plus the pure document models and the motion runtime that
+/// evaluates them.
 ///
 /// This library is pure Dart by decision (see
 /// `docs/superpowers/specs/2026-09-01-scene-graduation-plan.md`): a plain
