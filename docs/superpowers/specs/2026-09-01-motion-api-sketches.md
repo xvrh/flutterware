@@ -212,6 +212,159 @@ containing one. The relationship instead:
   state/transit rendered deterministically, the event dimension explored
   by scenario capture, not by the video renderer.
 
+## Sketch 21 — the API, both halves, on the settled ground
+
+Two spelling probes ran before this sketch:
+
+```
+# M4 — the motion class header
+class BannerIntro(super.scene, {final double slideFrom = 24})
+    extends SceneMotion<BannerScene> { … }        # compiles on the pin;
+super.scene in a primary constructor: node from 24.0   # params default and pass
+
+# M5 — the decided Animate.text spelling cannot type the mutation surface
+factory static type: TextAnimate seen as Animate —
+    intrinsic tracks unreachable without a cast
+class-name form: statically typed
+```
+
+M5 matters: a named or redirecting constructor's static type is the base
+class, so with `Animate.text(…)` the runtime handle `intro.headlineIn`
+loses its per-kind tracks — `intro.headlineIn.color` does not resolve.
+Play-only, that was invisible; a *mutable* motion makes the group's static
+type API. The two spellings that keep both directions typed are in the
+questions below; the sketch uses the extension form.
+
+### Half 1 — the generated motion file
+
+```dart
+//@flutterware:motion=2.0
+// Owned by the flutterware Motion editor. Hand edits welcome inside the
+// grammar; anything outside it is refused with a line number.
+
+import 'package:flutterware/motion.dart';
+import 'banner.scene.dart';
+
+class BannerIntro(super.scene, {final double slideFrom = 24})
+    extends SceneMotion<BannerScene> {
+
+  late final headlineIn = scene.headline.animate(
+    opacity: Track([
+      Key(at: 0.ms, value: 0),
+      Key(at: 260.ms, value: 1, curve: Curves.easeOut),
+    ]),
+    translateY: Track([
+      Key(at: 0.ms, value: slideFrom),
+      Key(at: 260.ms, value: 0, curve: Curves.easeOut),
+    ]),
+  );
+
+  late final badgePop = scene.badge.animate(
+    scale: Track([
+      Key(at: 0.ms, value: 0.6),
+      Key(at: 240.ms, value: 1, curve: Curves.easeOutBack),
+    ]),
+    args: {
+      'progress': Track([Key(at: 0.ms, value: 0), Key(at: 300.ms, value: 1)]),
+    },
+  );
+
+  late final glowMood = scene.glow.animate(
+    machine: StateMachine(
+      initial: GlowState.calm,
+      states: { /* as sketch 16 */ },
+    ),
+  );
+
+  // Mandatory, like a scene's `root`: THE thing that plays. The tool
+  // maintains it (default: everything in Par); hand edits rearrange.
+  late final timeline = Par([
+    headlineIn,
+    At(400.ms, badgePop),
+    glowMood,
+  ]);
+}
+
+enum GlowState { calm, excited }
+```
+
+The base class is small and closes the discovery problem: `SceneMotion`
+implements `Playable` by delegating to the abstract `timeline` (a field
+override in the subclass), which also gives `copyStateInto` its walkable
+graph. A scene has `root`; a motion has `timeline`; both are the one
+mandatory field, and the double-apply ambiguity of sketch 18 dissolves —
+there is no "default Par" rule because the Par is written down.
+
+### Half 2 — playing
+
+```dart
+final scene = BannerScene(title: t.banner.title);
+final intro = BannerIntro(scene);
+
+SceneView(scene, motion: intro);                          // autoplay on mount
+SceneView(scene, motion: intro, drive: Drive.progress(scrollFraction));
+
+final player = MotionPlayer(intro);                       // manual control
+player.play();  player.pause();  player.seek(300.ms);  player.rate = 0.5;
+
+// Any group or combinator is a playable — independent play is the same call:
+MotionPlayer(intro.headlineIn).play();
+SceneView(scene, motion: Repeat(3, intro.headlineIn));
+SceneView(scene, motion: Par([intro, shake]));            // several motions: compose
+
+intro.glowMood.machine.go(GlowState.excited);             // events, as before
+```
+
+### Half 3 — modifying, live
+
+```dart
+// Value retunes: plain setters, free, picked up by a running player next
+// tick; a PAUSED player re-applies at its parked t when the motion dirties.
+intro.headlineIn.opacity.keys[1].value = 0.9;
+intro.headlineIn.opacity.keys[1].curve = Curves.easeInOut;
+
+// Timing and key structure: the door — sorts, validates, notifies,
+// journals for undo. A Key is a handle: identity survives re-sorts.
+final k = intro.headlineIn.opacity.keys.last;
+intro.headlineIn.opacity.moveKey(k, 320.ms);
+intro.headlineIn.opacity.insertKey(Key(at: 500.ms, value: 0.5));
+intro.headlineIn.opacity.removeKey(k);
+
+// Animate a property the file never mentioned: every per-kind property is
+// an always-present track, empty until a key arrives (question 3 below).
+intro.headlineIn.fontSize
+  ..insertKey(Key(at: 0.ms, value: 34))
+  ..insertKey(Key(at: 300.ms, value: 54));
+
+// Growing a motion structurally: COMPOSE, never inject — a class cannot
+// gain fields at runtime, and does not need to:
+final shake = scene.glow.animate(translateX: Track([...]));
+SceneView(scene, motion: Par([intro, shake]));
+```
+
+### Half 4 — copying the pair
+
+```dart
+// Untweaked motion: reconstruct — every target rebinds by construction.
+final dark = BannerScene(title: scene.title)..root.fill = const Color(0xFF14100C);
+final darkIntro = BannerIntro(dark, slideFrom: 40);
+
+// Runtime-tweaked state: reconstruct, then carry state by parallel walk.
+final dark = BannerScene(title: scene.title);
+scene.copyStateInto(dark);        // node properties over; returns old→new map
+final darkIntro = BannerIntro(dark);
+intro.copyStateInto(darkIntro);   // walks both timelines (same class, same
+                                  // graph), carries key lists wholesale —
+                                  // targets are already the copy's own
+```
+
+Because runtime growth is composition (never field injection), the two
+timelines of one class always have the same graph shape — the parallel
+walk never desynchronizes, and no retarget map is needed on the motion
+side at all. The map from probe M3 remains the mechanism for the one case
+outside this spelling: deep-copying a runtime-composed playable graph
+that references scene nodes directly.
+
 ## The scoreboard, and what is for the owner to pick
 
 What the probes settled:
@@ -229,14 +382,29 @@ What the probes settled:
   retargeted deep copy when it is; a mount guard turns the
   wrong-instance mistake into a refusal.
 
-Open, for the owner:
+Open, for the owner (sketch 21 sharpened the list; question 1 from the
+first draft dissolved into the mandatory `timeline` field):
 
-1. **The arrangement rule** — no arrangement field means all `Animate`
-   fields in `Par`; a `timeline` field present means it alone plays
-   (recommended), or some other default?
-2. **Combinator vocabulary in the file grammar** — `Seq/Par/At/Speed/
-   Repeat` as node expressions over `Animate` fields (recommended,
-   parses like `children:`), or arrangement kept runtime-only at first?
-3. **The pair-copy spelling** — the one-line reconstruct +
-   `copyStateInto` walk (recommended), or tool-emitted per-class `copy()`?
-4. **The mount guard** — refuse at mount (recommended), or warn-and-render?
+1. **The group spelling** — probe M5 killed `Animate.text(…)` for a
+   mutable motion (its static type hides the per-kind tracks). The two
+   typed-both-ways spellings: extension form
+   `scene.headline.animate(opacity: …, color: …)` (target-first, used in
+   the sketch) vs class form `AnimateText(scene.headline, …)` (honest
+   construction). One must be the file's canonical spelling.
+2. **The `timeline` field is mandatory** (like a scene's `root`) — and is
+   a group *not* placed in it allowed as a library asset (a `tapPulse`
+   played on events), or refused like a scene orphan?
+3. **Always-present empty tracks** — `fontSize` exists on every text
+   group, empty means no contribution, only non-empty tracks are written
+   to the file (recommended: lets runtime and editor animate any property
+   by inserting a key) — vs nullable `Track<double>?` (file-faithful,
+   null-checks everywhere, unmentioned properties unanimatable).
+4. **Ext args stay stringly** — `args: {'progress': Track(…)}` is the one
+   surviving magic string, because an external widget's args are
+   discovered by scan, not declared here. Accept the boundary
+   (recommended), or generate typed ext facades (the refused codegen
+   direction)?
+5. **The pair-copy spelling** — reconstruct + `copyStateInto` parallel
+   walks (recommended, shown in half 4), or tool-emitted per-class
+   `copy()` members?
+6. **The mount guard** — refuse at mount (recommended), or warn-and-render?
