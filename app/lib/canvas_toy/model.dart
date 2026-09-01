@@ -256,6 +256,15 @@ class SceneDocument extends ChangeNotifier {
     return '$base$i';
   }
 
+  /// The node declared under [name], or null — names are field names, so
+  /// this is the resolution a motion target (`scene.headline`) performs.
+  SceneNode? nodeNamed(String name) {
+    for (var (node, _) in walk()) {
+      if (node.name == name) return node;
+    }
+    return null;
+  }
+
   FrameNode? parentOf(SceneNode node) {
     FrameNode? search(FrameNode frame) {
       if (frame.children.contains(node)) return frame;

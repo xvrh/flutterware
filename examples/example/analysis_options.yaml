@@ -3,10 +3,12 @@ include: ../../analysis_options.yaml
 analyzer:
   exclude:
     - build/**
-    # Scene files are parsed by the flutterware scene tooling, not compiled
-    # (yet): their node vocabulary has no importable library while the format
-    # is a spike, so the analyzer would report every identifier undefined.
+    # Scene and motion files are parsed by the flutterware scene tooling, not
+    # compiled (yet): their vocabulary has no importable library while the
+    # format is a spike, so the analyzer would report every identifier
+    # undefined.
     - '**.scene.dart'
+    - '**.motion.dart'
     - android/**
     - ios/**
     - web/**
