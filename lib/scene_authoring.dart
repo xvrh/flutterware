@@ -14,6 +14,7 @@
 library;
 
 export 'src/scene/core/curves.dart';
+export 'src/scene/core/json.dart';
 export 'src/scene/core/listenable.dart';
 export 'src/scene/core/model.dart';
 export 'src/scene/core/motion_model.dart';

@@ -34,7 +34,7 @@ class RemoteSceneLink {
   final SceneEditor? editor;
 
   Map<String, dynamic> _wire() =>
-      doc.toJson(selected: editor?.selectionNames ?? const []);
+      doc.toWire(selected: editor?.selectionNames ?? const []);
   final status = ValueNotifier('guests: searching…');
 
   final _conns = <String, _Conn>{};

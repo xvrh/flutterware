@@ -320,12 +320,16 @@ class SceneDocument extends SceneListenable {
     notifyListeners();
   }
 
-  /// The wire format the scene host renders from — data, never code. The
-  /// wire is the PICTURE, so it carries rendered values (base op fx): a
-  /// playing motion reaches the guest as a stream of these, one per flush.
-  /// Selection is editor chrome riding along for hosts that outline it —
-  /// the editor's, never the document's.
-  Map<String, dynamic> toJson({Iterable<String> selected = const []}) => {
+  /// The wire the scene host renders from — data, never code, and a
+  /// PICTURE rather than a document: it carries rendered values (base op
+  /// fx), so a playing motion reaches the guest as a stream of these, one
+  /// per flush. Selection is editor chrome riding along for hosts that
+  /// outline it — the editor's, never the document's.
+  ///
+  /// Deliberately not `toJson`: that name belongs to the authored document
+  /// (`SceneDocumentJson.toJson`), which is what a guest needs when it will
+  /// evaluate the motion itself instead of being fed frames.
+  Map<String, dynamic> toWire({Iterable<String> selected = const []}) => {
     'root': _json(root),
     'selected': [...selected],
   };

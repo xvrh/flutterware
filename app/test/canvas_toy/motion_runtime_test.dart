@@ -341,7 +341,7 @@ void main() {
       var scene = coffeeBannerDraft();
       var bound = BoundMotion.bind(coffeeIntroDraft(), scene);
       bound.apply(const Duration(milliseconds: 130));
-      var root = scene.toJson()['root'] as Map<String, dynamic>;
+      var root = scene.toWire()['root'] as Map<String, dynamic>;
       var copy = (root['children'] as List)[2] as Map<String, dynamic>;
       var headline = (copy['children'] as List)[0] as Map<String, dynamic>;
       expect(headline['opacity'], Curves.easeOut.transform(0.5));
@@ -353,12 +353,12 @@ void main() {
       // arg holds its first key.
       expect(badge['args'], containsPair('progress', 0.0));
       bound.apply(const Duration(milliseconds: 550));
-      var later = scene.toJson()['root'] as Map<String, dynamic>;
+      var later = scene.toWire()['root'] as Map<String, dynamic>;
       var badge2 = (later['children'] as List)[3] as Map<String, dynamic>;
       expect(badge2['args'], containsPair('progress', 0.5));
       // Cancel: the wire returns to the authored picture, no fx field.
       bound.clearFx();
-      var again = scene.toJson()['root'] as Map<String, dynamic>;
+      var again = scene.toWire()['root'] as Map<String, dynamic>;
       var headline2 =
           ((((again['children'] as List)[2] as Map)['children'] as List)[0])
               as Map<String, dynamic>;

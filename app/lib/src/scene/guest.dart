@@ -82,7 +82,7 @@ class SceneGuest {
             'ext.fw.scene.apply',
             args: {
               'scene': jsonEncode(
-                editor.doc.toJson(selected: editor.selectionNames),
+                editor.doc.toWire(selected: editor.selectionNames),
               ),
             },
           )

@@ -1,41 +1,43 @@
-// Disposable spike: the scene rendered where user code lives.
+// The scene rendered where the app lives.
 //
-// This app is what "the whole canvas rendered by the preview system, without
-// compile in the loop" means concretely: it is compiled against this package
-// once, then receives the editor's scene model as *data* over a VM-service
-// extension, renders it with the app's own theme, and reports measured rects
-// back. External widgets are native and live — a spinner spins, a button
-// takes the theme — because nothing is rasterized across a boundary.
+// This is what "the guest is the only renderer" means concretely: the editor
+// sends the scene as *data* over a VM-service extension, and this app draws it
+// with `SceneView` — its own theme, its own widgets, its own fonts — then
+// reports back what the layout measured, which is where the editor's selection
+// rectangles and drag targets come from.
 //
-// The editor half is the canvas toy's remote mode (app/lib/canvas_toy/).
+// The app's part is small on purpose: register the widgets a scene may name,
+// and mount the view. Everything else is flutterware's.
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer' as dev;
 import 'dart:io';
-import 'dart:math' as math;
+
+import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutterware/scene.dart';
+import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_example/shop/shop_app.dart';
 
 void main() {
   runApp(const SceneHostApp());
 }
 
-/// Everything the editor may inject, by name — the hand-written stand-in for
-/// the generated registration bridge. Mockups (a [Drink]) live here, on this
-/// side of the wire, and never serialize.
-final _registry = <String, Widget Function(Map<String, Object?> args)>{
-  'DrinkBadge': (a) =>
-      DrinkBadge(drinks[1], size: (a['size'] as num?)?.toDouble() ?? 56),
-  'Spinner': (a) => SizedBox(
-    width: (a['size'] as num?)?.toDouble() ?? 36,
-    height: (a['size'] as num?)?.toDouble() ?? 36,
+/// Everything a scene may name, by entry — the app's own widgets, with their
+/// mockup data on this side of the wire where it belongs. A [Drink] never
+/// serializes; the scene only knows the name `DrinkBadge`.
+final _externals = <String, SceneExternalBuilder>{
+  'DrinkBadge': (context, args) =>
+      DrinkBadge(drinks[1], size: (args['size'] as num?)?.toDouble() ?? 56),
+  'Spinner': (context, args) => SizedBox(
+    width: (args['size'] as num?)?.toDouble() ?? 36,
+    height: (args['size'] as num?)?.toDouble() ?? 36,
     child: const CircularProgressIndicator(strokeWidth: 3),
   ),
-  'OrderButton': (a) => FilledButton(
+  'OrderButton': (context, args) => FilledButton(
     onPressed: () {},
-    child: Text('${a['label'] ?? 'Order now'}'),
+    child: Text('${args['label'] ?? 'Order now'}'),
   ),
 };
 
@@ -53,15 +55,15 @@ class SceneHostApp extends StatefulWidget {
 }
 
 class _SceneHostAppState extends State<SceneHostApp> {
-  Map<String, dynamic>? _scene;
+  /// The scene the editor sent, as a live document — the same model the
+  /// editor holds, so what draws here is what it authored.
+  SceneDocument? _scene;
   var _selected = <String>{};
-  final _artboardKey = GlobalKey();
-  final _keys = <String, GlobalKey>{};
-
-  GlobalKey _key(String name) => _keys.putIfAbsent(name, GlobalKey.new);
+  var _rects = <String, SceneRect>{};
 
   /// Once per isolate: a re-mounted widget must not re-register.
   static var _registered = false;
+  static _SceneHostAppState? _instance;
 
   @override
   void initState() {
@@ -73,8 +75,6 @@ class _SceneHostAppState extends State<SceneHostApp> {
     _instance = this;
     if (!widget.bare) unawaited(_announce());
   }
-
-  static _SceneHostAppState? _instance;
 
   static Future<dev.ServiceExtensionResponse> _applyStatic(
     String method,
@@ -115,9 +115,9 @@ class _SceneHostAppState extends State<SceneHostApp> {
     var frame = Stopwatch()..start();
     setState(() {
       var decoded = jsonDecode(params['scene'] ?? '{}') as Map<String, dynamic>;
-      _scene = decoded['root'] as Map<String, dynamic>?;
-      // The editor's multi-selection rides as a list of names; a lone
-      // string is the pre-multi-select wire, still honoured.
+      // The wire is a picture: values already composed with the motion's fx,
+      // so the host draws what it is given rather than evaluating anything.
+      _scene = sceneFromWire(decoded['root'] as Map<String, dynamic>);
       _selected = switch (decoded['selected']) {
         List names => {for (var n in names) '$n'},
         String name => {name},
@@ -138,58 +138,33 @@ class _SceneHostAppState extends State<SceneHostApp> {
     }
     return dev.ServiceExtensionResponse.result(
       jsonEncode({
-        'rects': _sweep(),
+        'rects': {
+          for (var e in _rects.entries)
+            e.key: [e.value.left, e.value.top, e.value.width, e.value.height],
+        },
         'frameMs': frame.elapsedMicroseconds / 1000,
       }),
     );
   }
 
-  Map<String, List<double>> _sweep() {
-    var artboard =
-        _artboardKey.currentContext?.findRenderObject() as RenderBox?;
-    if (artboard == null) return {};
-    var rects = <String, List<double>>{};
-    void visit(Map<String, dynamic> node) {
-      var box =
-          _key('${node['name']}').currentContext?.findRenderObject()
-              as RenderBox?;
-      if (box != null && box.hasSize) {
-        var topLeft = box.localToGlobal(Offset.zero, ancestor: artboard);
-        rects['${node['name']}'] = [
-          topLeft.dx,
-          topLeft.dy,
-          box.size.width,
-          box.size.height,
-        ];
-      }
-      for (var child in (node['children'] as List? ?? const [])) {
-        visit(child as Map<String, dynamic>);
-      }
-    }
-
-    var scene = _scene;
-    if (scene != null) visit(scene);
-    return rects;
-  }
-
   @override
   Widget build(BuildContext context) {
-    var artboard = _scene == null
+    var scene = _scene;
+    var artboard = scene == null
         ? null
-        : SizedBox(
-            key: _artboardKey,
-            width: (_scene!['w'] as num?)?.toDouble() ?? 1024,
-            height: (_scene!['h'] as num?)?.toDouble() ?? 500,
-            child: _node(_scene!, root: true),
+        : SceneView(
+            scene,
+            externals: _externals,
+            selected: _selected,
+            onMeasured: (rects) => _rects = rects,
           );
+    var theme = ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C));
     if (widget.bare) {
       return MaterialApp(
         title: 'Scene host',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
-        // Material, not ColoredBox: without a Material ancestor every Text
-        // falls back to the debug style — the yellow double underline.
-        home: Material(
+        theme: theme,
+        home: ColoredBox(
           color: const Color(0xFF26282C),
           child: artboard == null
               ? const SizedBox()
@@ -201,11 +176,11 @@ class _SceneHostAppState extends State<SceneHostApp> {
       title: 'Scene host',
       debugShowCheckedModeBanner: false,
       // The app's own look — what the editor canvas inherits by construction.
-      theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
+      theme: theme,
       home: Scaffold(
         backgroundColor: const Color(0xFF26282C),
         body: Center(
-          child: _scene == null
+          child: scene == null
               ? const Text(
                   'scene host — waiting for the editor',
                   style: TextStyle(color: Colors.white54),
@@ -218,115 +193,4 @@ class _SceneHostAppState extends State<SceneHostApp> {
       ),
     );
   }
-
-  Widget _node(Map<String, dynamic> n, {bool root = false}) {
-    var name = '${n['name']}';
-    Widget? inner;
-    switch (n['kind']) {
-      case 'text':
-        inner = Text(
-          '${n['text']}',
-          style: TextStyle(
-            fontSize: (n['fontSize'] as num?)?.toDouble() ?? 16,
-            fontWeight: FontWeight.values[(n['weight'] as num?)?.toInt() ?? 3],
-            color: _color(n['color']) ?? const Color(0xFF1A1A1A),
-            height: 1.15,
-          ),
-        );
-      case 'shape':
-        inner = null;
-      case 'ext':
-        var build = _registry['${n['entry']}'];
-        var args = (n['args'] as Map?)?.cast<String, Object?>() ?? const {};
-        inner = build == null
-            ? Text(
-                'unknown: ${n['entry']}',
-                style: const TextStyle(color: Colors.red),
-              )
-            : build(args);
-      case 'frame' || null:
-        var children = <Widget>[
-          for (var c in (n['children'] as List? ?? const []))
-            _child(n, c as Map<String, dynamic>),
-        ];
-        inner = switch ('${n['layout']}') {
-          'row' => Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: _cross(n),
-            spacing: (n['gap'] as num?)?.toDouble() ?? 0,
-            children: children,
-          ),
-          'column' => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: _cross(n),
-            spacing: (n['gap'] as num?)?.toDouble() ?? 0,
-            children: children,
-          ),
-          _ => Stack(clipBehavior: Clip.none, children: children),
-        };
-    }
-
-    var fill = _color(n['fill']);
-    var corner = (n['corner'] as num?)?.toDouble() ?? 0;
-    var circle = n['kind'] == 'shape' && n['circle'] == true;
-    var padding = (n['padding'] as num?)?.toDouble() ?? 0;
-    var selected = !root && _selected.contains(name);
-    Widget result = Container(
-      key: _key(name),
-      width: (n['w'] as num?)?.toDouble(),
-      height: (n['h'] as num?)?.toDouble(),
-      padding: padding > 0
-          ? EdgeInsets.symmetric(horizontal: padding, vertical: padding * 0.6)
-          : null,
-      foregroundDecoration: selected
-          ? BoxDecoration(
-              border: Border.all(color: const Color(0xFF4A64D0), width: 1.5),
-            )
-          : null,
-      decoration: fill != null || corner > 0
-          ? BoxDecoration(
-              color: fill,
-              shape: circle ? BoxShape.circle : BoxShape.rectangle,
-              borderRadius: circle || corner == 0
-                  ? null
-                  : BorderRadius.circular(corner),
-            )
-          : null,
-      child: inner,
-    );
-    var opacity = ((n['opacity'] as num?)?.toDouble() ?? 1).clamp(0.0, 1.0);
-    if (opacity < 1) result = Opacity(opacity: opacity, child: result);
-    // The wire carries rendered values, and the imposed transforms ride as
-    // 'fx': [translateX, translateY, scale, rotate°], about the center —
-    // present only while a motion or effect moves them.
-    if (n['fx'] case List fx when fx.length == 4) {
-      double d(int i) => (fx[i] as num).toDouble();
-      var m = Matrix4.translationValues(d(0), d(1), 0);
-      if (d(3) != 0) m.rotateZ(d(3) * math.pi / 180);
-      if (d(2) != 1) m.multiply(Matrix4.diagonal3Values(d(2), d(2), 1));
-      result = Transform(
-        alignment: Alignment.center,
-        transform: m,
-        child: result,
-      );
-    }
-    return result;
-  }
-
-  Widget _child(Map<String, dynamic> parent, Map<String, dynamic> child) {
-    var view = _node(child);
-    if ('${parent['layout']}' == 'absolute') {
-      return Positioned(
-        left: (child['x'] as num?)?.toDouble() ?? 0,
-        top: (child['y'] as num?)?.toDouble() ?? 0,
-        child: view,
-      );
-    }
-    return view;
-  }
-
-  CrossAxisAlignment _cross(Map<String, dynamic> n) =>
-      CrossAxisAlignment.values[(n['crossAlign'] as num?)?.toInt() ?? 2];
-
-  Color? _color(Object? argb) => argb is num ? Color(argb.toInt()) : null;
 }
