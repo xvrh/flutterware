@@ -1,11 +1,15 @@
 // Disposable spike: an interactive scene canvas over the uniform-node model.
 // Tree panel + zoomable canvas (select, drag, resize) + inspector. Exists to
 // produce findings about the model, not to be shipped.
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'model.dart';
+import 'motion_model.dart';
+import 'motion_runtime.dart';
 import 'remote.dart';
 
 void main() {
@@ -33,20 +37,116 @@ class _CanvasToyAppState extends State<CanvasToyApp> {
         visualDensity: VisualDensity.compact,
       ),
       home: Scaffold(
-        body: AnimatedBuilder(
-          animation: doc,
-          builder: (context, _) => Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(width: 230, child: TreePanel(doc)),
-              const VerticalDivider(width: 1),
-              Expanded(child: CanvasArea(doc, status: link.status)),
-              const VerticalDivider(width: 1),
-              SizedBox(width: 290, child: InspectorPanel(doc)),
-            ],
-          ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MotionTransport(doc, coffeeIntroDraft()),
+            const Divider(height: 1),
+            Expanded(
+              child: AnimatedBuilder(
+                animation: doc,
+                builder: (context, _) => Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(width: 230, child: TreePanel(doc)),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: CanvasArea(doc, status: link.status)),
+                    const VerticalDivider(width: 1),
+                    SizedBox(width: 290, child: InspectorPanel(doc)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+/// Play controls for one motion over the toy's document: bind, play, pause,
+/// stop, scrub, rate. The player is the applicator — every frame it writes
+/// the fx plane and the coalesced flush repaints whatever is watching the
+/// document, the local mirror and the guest wire alike.
+class MotionTransport extends StatefulWidget {
+  const MotionTransport(this.doc, this.motion, {super.key});
+
+  final SceneDocument doc;
+  final MotionDocument motion;
+
+  @override
+  State<MotionTransport> createState() => _MotionTransportState();
+}
+
+class _MotionTransportState extends State<MotionTransport>
+    with SingleTickerProviderStateMixin {
+  late final _bound = BoundMotion.bind(widget.motion, widget.doc);
+  late final _player = MotionPlayer(_bound, vsync: this);
+  static const _rates = [0.5, 1.0, 2.0];
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Rebuilds ride the document's own flush: a playing motion notifies
+    // once per frame, which is exactly the scrubber's clock.
+    return AnimatedBuilder(
+      animation: widget.doc,
+      builder: (context, _) {
+        var playing = _player.status == MotionPlayerStatus.playing;
+        var total = _bound.duration.inMilliseconds;
+        var at = _player.position.inMilliseconds.clamp(0, total);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            children: [
+              IconButton(
+                iconSize: 18,
+                visualDensity: VisualDensity.compact,
+                icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+                tooltip: playing ? 'Pause' : 'Play',
+                onPressed: () =>
+                    setState(playing ? _player.pause : _player.play),
+              ),
+              IconButton(
+                iconSize: 18,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.stop),
+                tooltip: 'Stop (drops the fx, the scene is untouched)',
+                onPressed: () => setState(_player.stop),
+              ),
+              Expanded(
+                child: Slider(
+                  value: at.toDouble(),
+                  max: total.toDouble(),
+                  onChanged: (v) => setState(
+                    () => _player.seek(Duration(milliseconds: v.round())),
+                  ),
+                ),
+              ),
+              Text(
+                '${(at / 1000).toStringAsFixed(2)}s / '
+                '${(total / 1000).toStringAsFixed(2)}s',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              TextButton(
+                onPressed: () => setState(() {
+                  var i = _rates.indexOf(_player.rate);
+                  _player.rate = _rates[(i + 1) % _rates.length];
+                }),
+                child: Text(
+                  '${_player.rate}x',
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -419,9 +519,9 @@ class NodeView extends StatelessWidget {
         inner = Text(
           t.text,
           style: TextStyle(
-            fontSize: t.fontSize,
+            fontSize: t.fxRendered('fontSize') as double,
             fontWeight: t.weight,
-            color: t.color,
+            color: t.fxRendered('color') as Color,
             height: 1.15,
           ),
         );
@@ -452,20 +552,25 @@ class NodeView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: f.mainAlign,
             crossAxisAlignment: f.crossAlign,
-            spacing: f.gap,
+            spacing: f.fxRendered('gap') as double,
             children: children,
           ),
           NodeLayout.column => Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: f.mainAlign,
             crossAxisAlignment: f.crossAlign,
-            spacing: f.gap,
+            spacing: f.fxRendered('gap') as double,
             children: children,
           ),
         };
     }
 
     var shape = node is ShapeNode && (node as ShapeNode).circle;
+    // The mirror draws the RENDERED plane — base op fx — so a playing
+    // motion and an app effect are visible here exactly as in the guest.
+    var fill = node.hasFx('fill')
+        ? node.fxRendered('fill') as Color
+        : node.fill;
     Widget result = Container(
       key: node.key,
       width: node.width,
@@ -476,9 +581,9 @@ class NodeView extends StatelessWidget {
               vertical: (node as FrameNode).padding * 0.6,
             )
           : null,
-      decoration: node.fill != null || node.cornerRadius > 0
+      decoration: fill != null || node.cornerRadius > 0
           ? BoxDecoration(
-              color: node.fill,
+              color: fill,
               shape: shape ? BoxShape.circle : BoxShape.rectangle,
               borderRadius: shape || node.cornerRadius == 0
                   ? null
@@ -487,8 +592,23 @@ class NodeView extends StatelessWidget {
           : null,
       child: inner,
     );
-    if (node.opacity < 1) {
-      result = Opacity(opacity: node.opacity, child: result);
+    var opacity = (node.fxRendered('opacity') as double).clamp(0.0, 1.0);
+    if (opacity < 1) {
+      result = Opacity(opacity: opacity, child: result);
+    }
+    var tx = node.fxRendered('translateX') as double;
+    var ty = node.fxRendered('translateY') as double;
+    var scale = node.fxRendered('scale') as double;
+    var rotate = node.fxRendered('rotate') as double;
+    if (tx != 0 || ty != 0 || scale != 1 || rotate != 0) {
+      var m = Matrix4.translationValues(tx, ty, 0);
+      if (rotate != 0) m.rotateZ(rotate * math.pi / 180);
+      if (scale != 1) m.multiply(Matrix4.diagonal3Values(scale, scale, 1));
+      result = Transform(
+        alignment: Alignment.center,
+        transform: m,
+        child: result,
+      );
     }
     return result;
   }

@@ -14,6 +14,8 @@ import 'package:path/path.dart' as p;
 
 import 'canvas_toy/main.dart';
 import 'canvas_toy/model.dart';
+import 'canvas_toy/motion_file.dart';
+import 'canvas_toy/motion_model.dart';
 import 'canvas_toy/scene_file.dart';
 import 'src/embedder/embedded_engine.dart';
 import 'src/embedder/guest_texture.dart';
@@ -69,7 +71,10 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
   final status = ValueNotifier('guest: booting…');
   late final CatalogSession session;
   late final String _scenePath;
+  late final String _motionPath;
   var _fileNote = '';
+  var _sceneClassName = 'BannerScene';
+  MotionDocument? _motion;
 
   var _inflight = false;
   var _dirty = false;
@@ -83,7 +88,9 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
     var worktree = p.normalize(p.join(widget.appRoot, '..'));
     var projectRoot = p.join(worktree, 'examples', 'example');
     _scenePath = p.join(projectRoot, 'demo', 'banner.scene.dart');
+    _motionPath = p.join(projectRoot, 'demo', 'banner_intro.motion.dart');
     doc = _loadOrDraft();
+    _motion = _loadMotion();
     session = CatalogSession(
       appPackageRoot: widget.appRoot,
       flutterSdkRoot: widget.flutterSdkRoot,
@@ -116,6 +123,7 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
     var parsed = parseSceneFile(file.readAsStringSync());
     if (parsed.ok) {
       _fileNote = 'loaded ${p.basename(_scenePath)} (${parsed.className})';
+      _sceneClassName = parsed.className!;
       return parsed.doc!;
     }
     _fileNote =
@@ -125,6 +133,30 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
       print('scene refusal: $refusal');
     }
     return coffeeBannerDraft();
+  }
+
+  /// The motion beside the scene, through its own parse door — the pair is
+  /// read together (targets resolve against [doc]). No file, or a refused
+  /// one, falls back to the hard-coded draft intro so play always exists.
+  MotionDocument? _loadMotion() {
+    var file = File(_motionPath);
+    if (!file.existsSync()) return coffeeIntroDraft();
+    var parsed = parseMotionFile(
+      file.readAsStringSync(),
+      scene: doc,
+      sceneClassName: _sceneClassName,
+    );
+    if (parsed.ok) {
+      _fileNote += ' · ${p.basename(_motionPath)} (${parsed.className})';
+      return parsed.doc!;
+    }
+    _fileNote +=
+        ' · ${p.basename(_motionPath)}: ${parsed.refusals.length} '
+        'refusal(s) — using the draft intro';
+    for (var refusal in parsed.refusals) {
+      print('motion refusal: $refusal');
+    }
+    return coffeeIntroDraft();
   }
 
   void _save() {
@@ -269,6 +301,10 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
               ),
             ),
             const Divider(height: 1),
+            if (_motion case var motion?) ...[
+              MotionTransport(doc, motion),
+              const Divider(height: 1),
+            ],
             Expanded(
               child: AnimatedBuilder(
                 animation: doc,

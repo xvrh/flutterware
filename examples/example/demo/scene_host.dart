@@ -12,6 +12,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as dev;
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -287,8 +288,22 @@ class _SceneHostAppState extends State<SceneHostApp> {
           : null,
       child: inner,
     );
-    var opacity = (n['opacity'] as num?)?.toDouble() ?? 1;
+    var opacity = ((n['opacity'] as num?)?.toDouble() ?? 1).clamp(0.0, 1.0);
     if (opacity < 1) result = Opacity(opacity: opacity, child: result);
+    // The wire carries rendered values, and the imposed transforms ride as
+    // 'fx': [translateX, translateY, scale, rotate°], about the center —
+    // present only while a motion or effect moves them.
+    if (n['fx'] case List fx when fx.length == 4) {
+      double d(int i) => (fx[i] as num).toDouble();
+      var m = Matrix4.translationValues(d(0), d(1), 0);
+      if (d(3) != 0) m.rotateZ(d(3) * math.pi / 180);
+      if (d(2) != 1) m.multiply(Matrix4.diagonal3Values(d(2), d(2), 1));
+      result = Transform(
+        alignment: Alignment.center,
+        transform: m,
+        child: result,
+      );
+    }
     return result;
   }
 

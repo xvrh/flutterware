@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/canvas_toy/main.dart';
 import 'package:flutterware_app/canvas_toy/model.dart';
 import 'package:flutterware_app/canvas_toy/motion_file.dart';
 import 'package:flutterware_app/canvas_toy/motion_model.dart';
@@ -330,6 +331,120 @@ void main() {
       // Released on stop: now the second may drive.
       second.play();
       second.dispose();
+    });
+
+    testWidgets('the wire carries the rendered picture', (tester) async {
+      var scene = coffeeBannerDraft();
+      var bound = BoundMotion.bind(coffeeIntroDraft(), scene);
+      bound.apply(const Duration(milliseconds: 130));
+      var root = scene.toJson()['root'] as Map<String, dynamic>;
+      var copy = (root['children'] as List)[2] as Map<String, dynamic>;
+      var headline = (copy['children'] as List)[0] as Map<String, dynamic>;
+      expect(headline['opacity'], Curves.easeOut.transform(0.5));
+      var fx = headline['fx'] as List;
+      expect(fx[1], isNot(0)); // translateY mid-slide
+      expect(fx[2], 1); // scale untouched
+      var badge = (root['children'] as List)[3] as Map<String, dynamic>;
+      // badgePop sits behind At(400.ms): its window has not opened, so the
+      // arg holds its first key.
+      expect(badge['args'], containsPair('progress', 0.0));
+      bound.apply(const Duration(milliseconds: 550));
+      var later = scene.toJson()['root'] as Map<String, dynamic>;
+      var badge2 = (later['children'] as List)[3] as Map<String, dynamic>;
+      expect(badge2['args'], containsPair('progress', 0.5));
+      // Cancel: the wire returns to the authored picture, no fx field.
+      bound.clearFx();
+      var again = scene.toJson()['root'] as Map<String, dynamic>;
+      var headline2 =
+          ((((again['children'] as List)[2] as Map)['children'] as List)[0])
+              as Map<String, dynamic>;
+      expect(headline2['opacity'], 1.0);
+      expect(headline2.containsKey('fx'), isFalse);
+    });
+
+    testWidgets('the local mirror draws the rendered plane', (tester) async {
+      var scene = coffeeBannerDraft();
+      var headline = scene.nodeNamed('headline')!;
+      headline.writeFx('m', 'opacity', 0.25);
+      headline.writeFx('m', 'translateY', 12.0);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(width: 1024, height: 500, child: NodeView(scene.root)),
+        ),
+      );
+      var text = find.text('Fresh coffee, faster');
+      var fade = tester.widget<Opacity>(
+        find.ancestor(of: text, matching: find.byType(Opacity)).first,
+      );
+      expect(fade.opacity, 0.25);
+      var moved = tester.widget<Transform>(
+        find.ancestor(of: text, matching: find.byType(Transform)).first,
+      );
+      expect(moved.transform.getTranslation().y, 12.0);
+    });
+
+    testWidgets('the transport plays the pair end to end', (tester) async {
+      var scene = coffeeBannerDraft();
+      var headline = scene.nodeNamed('headline')!;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: MotionTransport(scene, coffeeIntroDraft())),
+        ),
+      );
+      await tester.tap(find.byTooltip('Play'));
+      await tester.pump(); // the ticker's first tick stamps its start time
+      await tester.pump(const Duration(milliseconds: 130));
+      expect(headline.fxRendered('opacity'), Curves.easeOut.transform(0.5));
+      await tester.tap(find.byTooltip('Pause'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(headline.fxRendered('opacity'), Curves.easeOut.transform(0.5));
+      await tester.tap(find.byIcon(Icons.stop));
+      await tester.pump();
+      expect(headline.fx, isEmpty);
+      expect(headline.fxRendered('opacity'), 1.0);
+    });
+
+    testWidgets('a parked scrub repaints the mirror with the parked frame', (
+      tester,
+    ) async {
+      // The full toy wiring: transport + AnimatedBuilder(doc) + NodeView —
+      // a slider seek AFTER completion must rebuild the mirror (the flush
+      // rides notifyListeners; without a listener the picture goes stale).
+      var scene = coffeeBannerDraft();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                MotionTransport(scene, coffeeIntroDraft()),
+                Expanded(
+                  child: AnimatedBuilder(
+                    animation: scene,
+                    builder: (context, _) =>
+                        FittedBox(child: NodeView(scene.root)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('Play'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2)); // runs to completion
+      await tester.pump(const Duration(milliseconds: 50));
+      var opacities = tester
+          .widgetList<Opacity>(find.byType(Opacity))
+          .map((o) => o.opacity);
+      expect(opacities, isNot(contains(0.0))); // end pose: identity fx
+
+      await tester.drag(find.byType(Slider), const Offset(-800, 0));
+      await tester.pump(); // the flush's post-frame notify
+      await tester.pump(); // the rebuild it schedules
+      opacities = tester
+          .widgetList<Opacity>(find.byType(Opacity))
+          .map((o) => o.opacity);
+      expect(opacities, contains(0.0)); // headline parked at t=0: invisible
     });
 
     testWidgets('a burst of fx writes is one notification', (tester) async {

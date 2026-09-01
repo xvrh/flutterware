@@ -99,6 +99,11 @@ sealed class SceneNode {
     if (fx.length != before) _doc?.fxTick();
   }
 
+  /// Whether any writer currently contributes to [prop] — the renderer asks
+  /// this where the authored value's absence means something (a null fill
+  /// draws no decoration; a composed fill draws one).
+  bool hasFx(String prop) => fx.keys.any((k) => k.$2 == prop);
+
   /// The composed value the renderer should draw: authored base folded with
   /// every contribution through the derived operator table — opacity and
   /// scale multiply, translations and rotation add, everything else
@@ -320,41 +325,59 @@ class SceneDocument extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The wire format the scene host renders from — data, never code.
+  /// The wire format the scene host renders from — data, never code. The
+  /// wire is the PICTURE, so it carries rendered values (base op fx): a
+  /// playing motion reaches the guest as a stream of these, one per flush.
   Map<String, dynamic> toJson() => {
     'root': _json(root),
     'selected': selected?.name,
   };
 
-  Map<String, dynamic> _json(SceneNode n) => {
-    'name': n.name,
-    'x': n.x,
-    'y': n.y,
-    'w': n.width,
-    'h': n.height,
-    'fill': n.fill?.toARGB32(),
-    'corner': n.cornerRadius,
-    'opacity': n.opacity,
-    ...switch (n) {
-      FrameNode f => {
-        'kind': 'frame',
-        'layout': f.layout.name,
-        'gap': f.gap,
-        'padding': f.padding,
-        'crossAlign': f.crossAlign.index,
-        'children': [for (var c in f.children) _json(c)],
+  Map<String, dynamic> _json(SceneNode n) {
+    var tx = n.fxRendered('translateX') as double;
+    var ty = n.fxRendered('translateY') as double;
+    var scale = n.fxRendered('scale') as double;
+    var rotate = n.fxRendered('rotate') as double;
+    var fill = n.hasFx('fill') ? n.fxRendered('fill') as Color : n.fill;
+    return {
+      'name': n.name,
+      'x': n.x,
+      'y': n.y,
+      'w': n.width,
+      'h': n.height,
+      'fill': fill?.toARGB32(),
+      'corner': n.cornerRadius,
+      'opacity': n.fxRendered('opacity'),
+      // The imposed transforms have no authored slots — identity is the
+      // base — so they ride the wire only when a writer moves them.
+      // [translateX, translateY, scale, rotate°], applied about the center.
+      if (tx != 0 || ty != 0 || scale != 1 || rotate != 0)
+        'fx': [tx, ty, scale, rotate],
+      ...switch (n) {
+        FrameNode f => {
+          'kind': 'frame',
+          'layout': f.layout.name,
+          'gap': f.fxRendered('gap'),
+          'padding': f.padding,
+          'crossAlign': f.crossAlign.index,
+          'children': [for (var c in f.children) _json(c)],
+        },
+        TextNode t => {
+          'kind': 'text',
+          'text': t.text,
+          'fontSize': t.fxRendered('fontSize'),
+          'weight': FontWeight.values.indexOf(t.weight),
+          'color': (t.fxRendered('color') as Color).toARGB32(),
+        },
+        ShapeNode s => {'kind': 'shape', 'circle': s.circle},
+        ExternalNode e => {
+          'kind': 'ext',
+          'entry': e.entry,
+          'args': e.renderedArgs,
+        },
       },
-      TextNode t => {
-        'kind': 'text',
-        'text': t.text,
-        'fontSize': t.fontSize,
-        'weight': FontWeight.values.indexOf(t.weight),
-        'color': t.color.toARGB32(),
-      },
-      ShapeNode s => {'kind': 'shape', 'circle': s.circle},
-      ExternalNode e => {'kind': 'ext', 'entry': e.entry, 'args': e.args},
-    },
-  };
+    };
+  }
 
   void select(SceneNode? node) {
     if (selected != node) {
