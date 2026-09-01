@@ -365,6 +365,114 @@ side at all. The map from probe M3 remains the mechanism for the one case
 outside this spelling: deep-copying a runtime-composed playable graph
 that references scene nodes directly.
 
+## Sketch 22 — the view is a reader; `motion:` is the autoplay shortcut
+
+The owner's question: is coupling the motion to `SceneView` the right
+call, versus instantiating the animation separately and playing it
+manually — or is standalone the default and `motion:` mere sugar?
+
+**Standalone is the architecture; `motion:` is exactly sugar.** The reason
+is already built: the fx plane lives *on the scene's nodes*, and fx writes
+ride the same dirty→flush pipeline as authored writes. So rendering is
+motion-blind — `SceneView(scene)` is complete, and a player is a
+freestanding object that writes fx and marks dirty:
+
+```dart
+final scene = BannerScene(title: t.banner.title);
+// The view knows nothing about motion:
+SceneView(scene);
+
+// Anyone, anywhere, animates it:
+final player = MotionPlayer(BannerIntro(scene));   // owns its Ticker
+player.play();                                     // the view just repaints
+// … caller disposes: player.dispose()
+
+// Event-fired fragments need no view cooperation:
+onTap: () => MotionPlayer(intro.tapPulse).play();
+
+// Drivers attach to the player, not the view:
+MotionPlayer(intro, drive: Drive.progress(scrollFraction));
+```
+
+What `SceneView(scene, motion: intro)` then *is*: construct a player,
+autoplay on mount, dispose on unmount — the lifecycle chore handled for
+the 90% case — plus it is the one place holding both halves of the pair,
+so the mount guard (sketch 19) lives there and in the export renderer.
+Nothing else is special about it; the sugar calls the same player.
+
+Consequences worth naming:
+
+- **Two views of one scene both show the animation** — fx is model state
+  (evaluated plane), not view state. That is the correct reading of "the
+  scene is live": a mirror, a picture-in-picture thumbnail, the editor's
+  canvas all agree for free.
+- **Several animators are just several fx writers** — a second player, an
+  `AnimationController` listener, a hover effect: the operator table
+  composes them; no privileged path through the view exists to fight over.
+- **One player per playable instance at a time** — two players ticking one
+  lane are a per-frame double-write, which the sink already detects
+  (sketch 18); the second `play()` on an already-driven playable refuses
+  with the teaching message.
+- The user-owned player has a user-owned lifecycle (dispose) — the honest
+  cost of standalone, and the thing the sugar exists to absorb.
+
+## Sketch 23 — timeline-wide operations: the ripple family, probed
+
+The owner's second ask: modify *all* keyframes of the timeline at once —
+introduce a pause at time x, displacing every key after it. This is video
+editing's **ripple edit**, and probe M6 ran it against the full playable
+graph. The probe's headline finding:
+
+```
+naive ripple (shift every key at/after x):    RIPPLE INVARIANT BROKEN
+pinned ripple (hold-keys at both gap edges):  RIPPLE INVARIANT HOLDS
+```
+
+**The invariant that defines a correct ripple:** for `t < x` output is
+unchanged; for old time `t ≥ x`, `new(t + d) == old(t)`. The naive
+shift-everything-after breaks it on *both* sides whenever `x` falls inside
+an interpolated segment — the segment stretches, changing the slope before
+the gap too (measured: hero 0.75 → 0.70 at t=150, well before the gap).
+The correct op is **pin, then shift**: sample the value at `x`, shift the
+later keys, and insert hold-keys `(x, v)` and `(x+d, v)` — the pause is
+those two pins, and for linear segments the pre-gap line is preserved
+*exactly* (a point on a line splits it into the same line). One honest
+limit: a **curved** segment cannot be split exactly — a Flutter `Curve` is
+a black-box function, not a subdividable Bézier — so a gap cutting a
+curved segment refuses with a teaching message (move the gap to a key
+boundary) rather than silently reshaping it.
+
+**The op travels the graph structurally** — combinator timing is timing:
+
+- `At`: gap before the window → the *offset* shifts; inside → recurse.
+- `Seq`: recurse into the child containing `x` only — later children
+  shift for free, because their starts derive from the grown duration.
+- `Speed(f)`: recurse with `x·f` and `d·f` — the global gap stays `d`.
+- `Repeat`: **refuses** — one global time falls inside every repetition
+  at once; the message says to ripple the repeated child instead.
+- Verified end-to-end: duration grows by exactly `d`, and every sampled
+  frame obeys the invariant through all of the above at once.
+
+**The API, three levels, all doors** (sort-preserving by construction,
+one undo entry each):
+
+```dart
+intro.headlineIn.opacity.insertGap(at: 300.ms, duration: 200.ms); // one track
+intro.headlineIn.insertGap(at: 300.ms, duration: 200.ms);         // one group
+intro.insertGap(at: 300.ms, duration: 200.ms);   // the whole timeline,
+                                                 // At-offsets included
+
+intro.removeGap(at: 300.ms, duration: 200.ms);   // inverse; a key inside
+                                                 // the removed range refuses, named
+intro.headlineIn.opacity.shift(after: 260.ms, by: 100.ms);        // plain shift
+intro.headlineIn.scale(from: 0.ms, to: 260.ms, factor: 1.5);      // stretch a range
+```
+
+`shift` and `scale` are the selection-sized siblings (the editor's
+drag-a-selection and stretch-handles); `scale` multiplies key times in the
+range and needs no pins when the range edges sit on keys — the editor's
+handles are the keys, so that is the normal case.
+
 ## The scoreboard, and what is for the owner to pick
 
 What the probes settled:
