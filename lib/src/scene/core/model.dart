@@ -269,8 +269,6 @@ class SceneDocument extends SceneListenable {
   /// The scene's declared parameters, in declaration order.
   final params = <SceneParamDecl>[];
 
-  SceneNode? selected;
-
   /// Instantiate: set every parameter-bound property whose parameter is
   /// named in [args]. This is what the export matrix does per language and
   /// what a caller's arguments do at mount — the model-level half of
@@ -325,9 +323,11 @@ class SceneDocument extends SceneListenable {
   /// The wire format the scene host renders from — data, never code. The
   /// wire is the PICTURE, so it carries rendered values (base op fx): a
   /// playing motion reaches the guest as a stream of these, one per flush.
-  Map<String, dynamic> toJson() => {
+  /// Selection is editor chrome riding along for hosts that outline it —
+  /// the editor's, never the document's.
+  Map<String, dynamic> toJson({Iterable<String> selected = const []}) => {
     'root': _json(root),
-    'selected': selected?.name,
+    'selected': [...selected],
   };
 
   Map<String, dynamic> _json(SceneNode n) {
@@ -374,13 +374,6 @@ class SceneDocument extends SceneListenable {
         },
       },
     };
-  }
-
-  void select(SceneNode? node) {
-    if (selected != node) {
-      selected = node;
-      notifyListeners();
-    }
   }
 
   Iterable<(SceneNode, int)> walk() sync* {
@@ -433,7 +426,6 @@ class SceneDocument extends SceneListenable {
     if (parent == null) return;
     edit(() {
       parent.children.remove(node);
-      if (selected == node) selected = null;
     });
   }
 
@@ -447,35 +439,6 @@ class SceneDocument extends SceneListenable {
       parent.children.removeAt(index);
       parent.children.insert(clamped, node);
     });
-  }
-
-  /// Nodes the canvas exposes to the pointer, bottom-to-top: top-level
-  /// children always, plus the children of the selected node's frame chain.
-  /// Selection determines hit-test structure — the click ladder is z-order.
-  Iterable<SceneNode> addressable() {
-    var seen = <SceneNode>{};
-    var out = <SceneNode>[];
-    void addAll(Iterable<SceneNode> nodes) {
-      for (var n in nodes) {
-        if (seen.add(n)) out.add(n);
-      }
-    }
-
-    addAll(root.children);
-    var sel = selected;
-    if (sel != null) {
-      var chain = <FrameNode>[];
-      var p = parentOf(sel);
-      while (p != null && p != root) {
-        chain.insert(0, p);
-        p = parentOf(p);
-      }
-      if (sel is FrameNode) chain.add(sel);
-      for (var f in chain) {
-        addAll(f.children);
-      }
-    }
-    return out;
   }
 
   /// Topmost direct child of [scope] containing the point (artboard coords).
@@ -502,4 +465,120 @@ class SceneDocument extends SceneListenable {
 
     return visit(root);
   }
+
+  /// The authored plane, captured: params and the node tree, deep-copied.
+  /// The fx plane is NOT part of a snapshot — it is evaluated state owned
+  /// by its writers, and restoring authored values must not cancel a
+  /// playing motion (the same law as Save never reading fx).
+  SceneSnapshot snapshot() =>
+      SceneSnapshot._([...params], deepCopyNode(root) as FrameNode);
+
+  /// Write [state] back into this document — the undo door's other half.
+  /// Nodes are REVIVED, not replaced: a live node with the snapshot's name
+  /// and kind gets the state copied into it and keeps its object identity,
+  /// so fx writers (an [Effect], a bound motion), widget keys and anything
+  /// else holding the node keep working across an undo. Only nodes the
+  /// snapshot has and the document lost come back as fresh copies.
+  void restore(SceneSnapshot state) {
+    edit(() {
+      params
+        ..clear()
+        ..addAll(state._params);
+      var live = {for (var (n, _) in walk()) n.name: n};
+      SceneNode revive(SceneNode snap) {
+        var into = live[snap.name];
+        if (into == null ||
+            into.runtimeType != snap.runtimeType ||
+            (into is ExternalNode &&
+                into.entry != (snap as ExternalNode).entry)) {
+          return deepCopyNode(snap);
+        }
+        switch ((into, snap)) {
+          case (FrameNode i, FrameNode s):
+            i
+              ..layout = s.layout
+              ..gap = s.gap
+              ..padding = s.padding
+              ..mainAlign = s.mainAlign
+              ..crossAlign = s.crossAlign
+              ..children.clear()
+              ..children.addAll([for (var c in s.children) revive(c)]);
+          case (TextNode i, TextNode s):
+            i
+              ..text = s.text
+              ..fontSize = s.fontSize
+              ..weight = s.weight
+              ..color = s.color;
+          case (ShapeNode i, ShapeNode s):
+            i.circle = s.circle;
+          case (ExternalNode i, ExternalNode s):
+            i.args
+              ..clear()
+              ..addAll(s.args);
+          default:
+            throw StateError('unreachable: kinds matched above');
+        }
+        into
+          ..x = snap.x
+          ..y = snap.y
+          ..width = snap.width
+          ..height = snap.height
+          ..fill = snap.fill
+          ..cornerRadius = snap.cornerRadius
+          ..opacity = snap.opacity
+          ..paramRefs.clear()
+          ..paramRefs.addAll(snap.paramRefs);
+        return into;
+      }
+
+      revive(state._root);
+    });
+  }
+}
+
+/// The authored half of a document at one moment. Opaque: made by
+/// [SceneDocument.snapshot], consumed by [SceneDocument.restore], reusable —
+/// restoring copies out of it, never hands its own nodes over.
+class SceneSnapshot {
+  SceneSnapshot._(this._params, this._root);
+
+  final List<SceneParamDecl> _params;
+  final FrameNode _root;
+}
+
+/// A deep copy of [node]'s authored plane — every authored property,
+/// paramRefs and children; never fx, measured geometry or the document
+/// pointer. [rename] maps every name in the subtree (a duplicate needs
+/// fresh names — names are field identity, unique per scene); a snapshot
+/// passes nothing and keeps them.
+SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
+  var name = rename == null ? node.name : rename(node.name);
+  var copy = switch (node) {
+    FrameNode f =>
+      FrameNode(name, layout: f.layout)
+        ..gap = f.gap
+        ..padding = f.padding
+        ..mainAlign = f.mainAlign
+        ..crossAlign = f.crossAlign
+        ..children.addAll([
+          for (var c in f.children) deepCopyNode(c, rename: rename),
+        ]),
+    TextNode t =>
+      TextNode(name, t.text)
+        ..fontSize = t.fontSize
+        ..weight = t.weight
+        ..color = t.color,
+    ShapeNode s => ShapeNode(name, circle: s.circle),
+    ExternalNode e => ExternalNode(name, e.entry, args: Map.of(e.args)),
+  };
+  copy
+    ..x = node.x
+    ..y = node.y
+    ..width = node.width
+    ..height = node.height
+    ..fill = node.fill
+    ..cornerRadius = node.cornerRadius
+    ..opacity = node.opacity
+    ..paramRefs.addAll(node.paramRefs);
+  return copy;
 }

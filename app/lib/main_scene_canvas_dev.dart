@@ -17,6 +17,7 @@ import 'package:flutterware/scene_authoring.dart';
 
 import 'canvas_toy/drafts.dart';
 import 'canvas_toy/main.dart';
+import 'src/scene/editor.dart';
 import 'src/embedder/embedded_engine.dart';
 import 'src/embedder/guest_texture.dart';
 import 'src/scene/motion_file.dart';
@@ -70,6 +71,7 @@ class SceneCanvasDevApp extends StatefulWidget {
 
 class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
   late final SceneDocument doc;
+  late final editor = SceneEditor(doc);
   final status = ValueNotifier('guest: booting…');
   late final CatalogSession session;
   late final String _scenePath;
@@ -103,6 +105,7 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
     )..addListener(_onSession);
     unawaited(session.start(width: 2048, height: 1000));
     doc.addListener(_push);
+    editor.addListener(_push);
     // Until the guest's extension is registered (entry selected, first build),
     // pushes fail; retry until the first one lands.
     _retry = Timer.periodic(const Duration(milliseconds: 500), (_) {
@@ -208,7 +211,9 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
       session
           .callGuestExtension(
             'ext.fw.scene.apply',
-            args: {'scene': jsonEncode(doc.toJson())},
+            args: {
+              'scene': jsonEncode(doc.toJson(selected: editor.selectionNames)),
+            },
           )
           .then((reply) {
             var rtt = clock.elapsedMicroseconds / 1000;
@@ -263,6 +268,7 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
   void dispose() {
     _retry?.cancel();
     doc.removeListener(_push);
+    editor.removeListener(_push);
     session.dispose();
     super.dispose();
   }
@@ -310,21 +316,34 @@ class _SceneCanvasDevAppState extends State<SceneCanvasDevApp> {
             ],
             Expanded(
               child: AnimatedBuilder(
-                animation: doc.listenable,
+                animation: Listenable.merge([
+                  doc.listenable,
+                  editor.listenable,
+                ]),
                 builder: (context, _) => Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(width: 230, child: TreePanel(doc)),
-                    const VerticalDivider(width: 1),
                     Expanded(
-                      child: CanvasArea(
-                        doc,
-                        status: status,
-                        canvasContent: _guestCanvas(),
+                      child: EditorShortcuts(
+                        editor,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(width: 230, child: TreePanel(editor)),
+                            const VerticalDivider(width: 1),
+                            Expanded(
+                              child: CanvasArea(
+                                editor,
+                                status: status,
+                                canvasContent: _guestCanvas(),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const VerticalDivider(width: 1),
-                    SizedBox(width: 290, child: InspectorPanel(doc)),
+                    SizedBox(width: 290, child: InspectorPanel(editor)),
                   ],
                 ),
               ),

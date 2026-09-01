@@ -1,0 +1,246 @@
+// The editor foundation under test: selection as a set of names, every
+// mutation a command door, the undo stack a journal — plus the focus
+// discipline in widgets (a Backspace in an inspector field must never
+// delete a node).
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/canvas_toy/drafts.dart';
+import 'package:flutterware_app/canvas_toy/main.dart';
+import 'package:flutterware_app/src/scene/editor.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('selection is a set of names', () {
+    test('select replaces, toggle flips, the root never selects', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      var doc = editor.doc;
+      editor.select(doc.nodeNamed('headline'));
+      editor.select(doc.nodeNamed('glow'));
+      expect(editor.selectionNames, ['glow']);
+      editor.select(doc.nodeNamed('headline'), toggle: true);
+      expect(editor.selectionNames, ['glow', 'headline']);
+      editor.select(doc.nodeNamed('glow'), toggle: true);
+      expect(editor.selectionNames, ['headline']);
+      editor.select(doc.root);
+      expect(editor.selectionNames, isEmpty);
+    });
+
+    test('dead names prune silently and primary is the last live one', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      var doc = editor.doc;
+      editor.setSelection(['glow', 'headline']);
+      expect(editor.primary!.name, 'headline');
+      expect(editor.single, isNull);
+      doc.delete(doc.nodeNamed('headline')!);
+      expect(editor.selectionNames, ['glow']);
+      expect(editor.single!.name, 'glow');
+    });
+
+    test('selectWithin takes top-level nodes overlapping the rect', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      var doc = editor.doc;
+      doc.nodeNamed('glow')!.measured = const SceneRect(600, 0, 480, 370);
+      doc.nodeNamed('copy')!.measured = const SceneRect(64, 120, 500, 250);
+      doc.nodeNamed('headline')!.measured = const SceneRect(64, 120, 490, 60);
+      editor.selectWithin(const SceneRect(0, 0, 400, 400));
+      // headline overlaps too, but it is not top-level — the marquee
+      // selects siblings of the artboard, not their insides.
+      expect(editor.selectionNames, ['copy']);
+      editor.selectWithin(const SceneRect(0, 0, 1024, 500));
+      expect(editor.selectionNames, ['glow', 'copy']);
+    });
+
+    test('addressable exposes the chains of every selected node', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      Iterable<String> names(Iterable<SceneNode> nodes) =>
+          nodes.map((n) => n.name);
+      expect(names(editor.addressable()), isNot(contains('headline')));
+      editor.setSelection(['copy', 'cta']);
+      expect(
+        names(editor.addressable()),
+        containsAll(['headline', 'subtitle', 'ctaLabel']),
+      );
+    });
+  });
+
+  group('the command door and its journal', () {
+    test('perform + undo + redo round-trip values and structure', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      var doc = editor.doc;
+      var headline = doc.nodeNamed('headline')! as TextNode;
+      editor.perform('Edit fontSize', () => headline.fontSize = 99);
+      editor.perform('Delete glow', () {
+        doc.root.children.remove(doc.nodeNamed('glow'));
+      });
+      expect(doc.nodeNamed('glow'), isNull);
+      editor.undo();
+      expect(doc.nodeNamed('glow'), isNotNull);
+      expect((doc.nodeNamed('headline')! as TextNode).fontSize, 99);
+      editor.undo();
+      expect((doc.nodeNamed('headline')! as TextNode).fontSize, 54);
+      editor.redo();
+      expect((doc.nodeNamed('headline')! as TextNode).fontSize, 99);
+      expect(doc.nodeNamed('glow'), isNotNull);
+      editor.redo();
+      expect(doc.nodeNamed('glow'), isNull);
+    });
+
+    test('a new door clears redo', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      var node = editor.doc.nodeNamed('glow')!;
+      editor.perform('a', () => node.x = 1);
+      editor.undo();
+      expect(editor.canRedo, true);
+      editor.perform('b', () => editor.doc.nodeNamed('glow')!.y = 2);
+      expect(editor.canRedo, false);
+    });
+
+    test('selection survives undo by name', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      editor.setSelection(['headline']);
+      editor.perform('Edit x', () => editor.doc.nodeNamed('headline')!.x = 40);
+      editor.undo();
+      expect(editor.primary!.name, 'headline');
+    });
+
+    test('a mergeKey burst is one undo entry', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      editor.setSelection(['glow']);
+      var before = editor.doc.nodeNamed('glow')!.x;
+      for (var i = 0; i < 5; i++) {
+        editor.nudgeSelection(1, 0, mergeKey: 'drag1');
+      }
+      editor.nudgeSelection(0, 1, mergeKey: 'drag2');
+      expect(editor.doc.nodeNamed('glow')!.x, before + 5);
+      editor.undo(); // drops the whole second gesture
+      editor.undo(); // drops the whole first gesture
+      expect(editor.doc.nodeNamed('glow')!.x, before);
+      expect(editor.canUndo, false);
+    });
+
+    test('undo restores the authored plane and leaves fx alone', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      var headline = editor.doc.nodeNamed('headline')!;
+      var effect = headline.effect()..opacity = 0.5;
+      editor.perform(
+        'Edit opacity',
+        () => editor.doc.nodeNamed('headline')!.opacity = 0.8,
+      );
+      editor.undo();
+      var restored = editor.doc.nodeNamed('headline')!;
+      // Restore REVIVES the same object — the writer's handle, the fx
+      // entry and anything else holding the node keep working.
+      expect(identical(restored, headline), true);
+      expect(restored.opacity, 1.0);
+      expect(effect.opacity, 0.5);
+      expect(headline.fxRendered('opacity'), 0.5);
+    });
+  });
+
+  group('editing verbs', () {
+    test('deleteSelection removes all selected, one undo brings all back', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      editor.setSelection(['glow', 'badge']);
+      editor.deleteSelection();
+      expect(editor.doc.nodeNamed('glow'), isNull);
+      expect(editor.doc.nodeNamed('badge'), isNull);
+      expect(editor.selectionNames, isEmpty);
+      editor.undo();
+      expect(editor.doc.nodeNamed('glow'), isNotNull);
+      expect(editor.doc.nodeNamed('badge'), isNotNull);
+    });
+
+    test('nudgeSelection moves absolute children only', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      // headline sits in the flex `copy` column; glow is absolute.
+      editor.setSelection(['glow', 'headline']);
+      var headlineX = editor.doc.nodeNamed('headline')!.x;
+      editor.nudgeSelection(5, 0);
+      expect(editor.doc.nodeNamed('glow')!.x, 605);
+      expect(editor.doc.nodeNamed('headline')!.x, headlineX);
+    });
+
+    test('duplicateSelection renames the whole subtree and selects it', () {
+      var editor = SceneEditor(coffeeBannerDraft());
+      editor.setSelection(['cta']);
+      editor.duplicateSelection();
+      var copy = editor.doc.nodeNamed('cta1');
+      expect(copy, isNotNull);
+      expect(copy!.children.single.name, 'ctaLabel1');
+      expect((copy.children.single as TextNode).text, 'Get the app');
+      expect(editor.selectionNames, ['cta1']);
+      editor.undo();
+      expect(editor.doc.nodeNamed('cta1'), isNull);
+    });
+  });
+
+  group('focus discipline in widgets', () {
+    Widget harness(SceneEditor editor, {Widget? beside}) => MaterialApp(
+      home: Scaffold(
+        body: Row(
+          children: [
+            Expanded(child: EditorShortcuts(editor, child: TreePanel(editor))),
+            if (beside != null) SizedBox(width: 200, child: beside),
+          ],
+        ),
+      ),
+    );
+
+    testWidgets('modifier-click in the tree toggles a multi-selection', (
+      tester,
+    ) async {
+      var editor = SceneEditor(coffeeBannerDraft());
+      await tester.pumpWidget(harness(editor));
+      await tester.tap(find.text('glow'));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.tap(find.text('badge'));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+      expect(editor.selectionNames, ['glow', 'badge']);
+    });
+
+    testWidgets('delete, arrows and undo bind in the editing scope', (
+      tester,
+    ) async {
+      var editor = SceneEditor(coffeeBannerDraft());
+      await tester.pumpWidget(harness(editor));
+      await tester.tap(find.text('glow'));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(editor.doc.nodeNamed('glow')!.x, 601);
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pump();
+      expect(editor.doc.nodeNamed('glow'), isNull);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.pump();
+      expect(editor.doc.nodeNamed('glow'), isNotNull);
+    });
+
+    testWidgets('a text field outside the scope keeps its keys', (
+      tester,
+    ) async {
+      var editor = SceneEditor(coffeeBannerDraft());
+      var nodes = editor.doc.walk().length;
+      await tester.pumpWidget(
+        harness(editor, beside: const TextField(autofocus: false)),
+      );
+      await tester.tap(find.text('glow'));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'abc');
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      // Backspace edits the text; the selected node stays.
+      await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+      await tester.pump();
+      expect(editor.doc.nodeNamed('glow'), isNotNull);
+      expect(editor.doc.walk().length, nodes);
+    });
+  });
+}

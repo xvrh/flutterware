@@ -54,7 +54,7 @@ class SceneHostApp extends StatefulWidget {
 
 class _SceneHostAppState extends State<SceneHostApp> {
   Map<String, dynamic>? _scene;
-  String? _selected;
+  var _selected = <String>{};
   final _artboardKey = GlobalKey();
   final _keys = <String, GlobalKey>{};
 
@@ -116,7 +116,13 @@ class _SceneHostAppState extends State<SceneHostApp> {
     setState(() {
       var decoded = jsonDecode(params['scene'] ?? '{}') as Map<String, dynamic>;
       _scene = decoded['root'] as Map<String, dynamic>?;
-      _selected = decoded['selected'] as String?;
+      // The editor's multi-selection rides as a list of names; a lone
+      // string is the pre-multi-select wire, still honoured.
+      _selected = switch (decoded['selected']) {
+        List names => {for (var n in names) '$n'},
+        String name => {name},
+        _ => const {},
+      };
     });
     // A hidden window pumps no ordinary frames; a forced frame paints even
     // when the compositor thinks nothing is visible — the drive layer's trick.
@@ -264,7 +270,7 @@ class _SceneHostAppState extends State<SceneHostApp> {
     var corner = (n['corner'] as num?)?.toDouble() ?? 0;
     var circle = n['kind'] == 'shape' && n['circle'] == true;
     var padding = (n['padding'] as num?)?.toDouble() ?? 0;
-    var selected = !root && name == _selected;
+    var selected = !root && _selected.contains(name);
     Widget result = Container(
       key: _key(name),
       width: (n['w'] as num?)?.toDouble(),

@@ -99,6 +99,12 @@ class SceneRect {
   bool contains(double x, double y) =>
       x >= left && x < right && y >= top && y < bottom;
 
+  bool overlaps(SceneRect other) =>
+      other.left < right &&
+      other.right > left &&
+      other.top < bottom &&
+      other.bottom > top;
+
   @override
   bool operator ==(Object other) =>
       other is SceneRect &&

@@ -16,6 +16,7 @@ void main() {
       'lib/scene_authoring.dart',
       'app/lib/src/scene/scene_file.dart',
       'app/lib/src/scene/motion_file.dart',
+      'app/lib/src/scene/editor.dart',
     ];
     var seen = <String>{};
     var queue = [...roots];

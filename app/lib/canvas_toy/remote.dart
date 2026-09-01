@@ -17,13 +17,24 @@ import 'package:vm_service/vm_service_io.dart';
 
 import 'package:flutterware/scene_authoring.dart';
 
+import '../src/scene/editor.dart';
+
 class RemoteSceneLink {
-  RemoteSceneLink(this.doc) {
+  RemoteSceneLink(this.doc, {this.editor}) {
     doc.addListener(_onDoc);
+    // Selection is editor chrome on the wire; its changes push too.
+    editor?.addListener(_onDoc);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
   }
 
   final SceneDocument doc;
+
+  /// When the link belongs to an editor, its selection rides the wire so a
+  /// remote host can outline it.
+  final SceneEditor? editor;
+
+  Map<String, dynamic> _wire() =>
+      doc.toJson(selected: editor?.selectionNames ?? const []);
   final status = ValueNotifier('guests: searching…');
 
   final _conns = <String, _Conn>{};
@@ -73,7 +84,7 @@ class RemoteSceneLink {
   }
 
   void _pushAll() {
-    var scene = jsonEncode(doc.toJson());
+    var scene = jsonEncode(_wire());
     _payloadBytes = scene.length;
     for (var conn in _conns.values) {
       conn.pending = scene;
@@ -84,7 +95,7 @@ class RemoteSceneLink {
   Future<void> _push(_Conn conn) async {
     var svc = conn.svc;
     if (svc == null || conn.inflight) return;
-    var scene = conn.pending ?? jsonEncode(doc.toJson());
+    var scene = conn.pending ?? jsonEncode(_wire());
     conn.pending = null;
     conn.inflight = true;
     var clock = Stopwatch()..start();
@@ -124,6 +135,7 @@ class RemoteSceneLink {
 
   void dispose() {
     doc.removeListener(_onDoc);
+    editor?.removeListener(_onDoc);
     _timer?.cancel();
   }
 }

@@ -6,9 +6,11 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
+import '../src/scene/editor.dart';
 import 'drafts.dart';
 import 'remote.dart';
 
@@ -31,7 +33,8 @@ class CanvasToyApp extends StatefulWidget {
 
 class _CanvasToyAppState extends State<CanvasToyApp> {
   final doc = coffeeBannerDraft();
-  late final link = RemoteSceneLink(doc);
+  late final editor = SceneEditor(doc);
+  late final link = RemoteSceneLink(doc, editor: editor);
 
   @override
   void initState() {
@@ -56,15 +59,34 @@ class _CanvasToyAppState extends State<CanvasToyApp> {
             const Divider(height: 1),
             Expanded(
               child: AnimatedBuilder(
-                animation: doc.listenable,
+                animation: Listenable.merge([
+                  doc.listenable,
+                  editor.listenable,
+                ]),
                 builder: (context, _) => Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(width: 230, child: TreePanel(doc)),
+                    // Tree and canvas share the editing focus scope; the
+                    // inspector stays OUTSIDE it, so its text fields keep
+                    // every key to themselves — a Backspace in a field must
+                    // never delete a node.
+                    Expanded(
+                      child: EditorShortcuts(
+                        editor,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(width: 230, child: TreePanel(editor)),
+                            const VerticalDivider(width: 1),
+                            Expanded(
+                              child: CanvasArea(editor, status: link.status),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     const VerticalDivider(width: 1),
-                    Expanded(child: CanvasArea(doc, status: link.status)),
-                    const VerticalDivider(width: 1),
-                    SizedBox(width: 290, child: InspectorPanel(doc)),
+                    SizedBox(width: 290, child: InspectorPanel(editor)),
                   ],
                 ),
               ),
@@ -74,6 +96,71 @@ class _CanvasToyAppState extends State<CanvasToyApp> {
       ),
     );
   }
+}
+
+/// The editing focus scope: keyboard verbs for whatever it wraps. A tap on
+/// the tree or the canvas lands focus here (see [focusEditor]), a tap in
+/// the inspector moves it away, and each binding acts on the shared
+/// [SceneEditor].
+class EditorShortcuts extends StatelessWidget {
+  const EditorShortcuts(this.editor, {super.key, required this.child});
+
+  final SceneEditor editor;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    var arrows = <ShortcutActivator, VoidCallback>{};
+    for (var (key, dx, dy) in [
+      (LogicalKeyboardKey.arrowLeft, -1.0, 0.0),
+      (LogicalKeyboardKey.arrowRight, 1.0, 0.0),
+      (LogicalKeyboardKey.arrowUp, 0.0, -1.0),
+      (LogicalKeyboardKey.arrowDown, 0.0, 1.0),
+    ]) {
+      // One gesture per key-repeat burst would be ideal; one entry per
+      // press is fine for the toy — merge under a single key so holding
+      // an arrow stays one undo entry.
+      arrows[SingleActivator(key)] = () =>
+          editor.nudgeSelection(dx, dy, mergeKey: 'nudge');
+      arrows[SingleActivator(key, shift: true)] = () =>
+          editor.nudgeSelection(dx * 10, dy * 10, mergeKey: 'nudge');
+    }
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): editor.undo,
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
+            editor.redo,
+        const SingleActivator(LogicalKeyboardKey.backspace):
+            editor.deleteSelection,
+        const SingleActivator(LogicalKeyboardKey.delete):
+            editor.deleteSelection,
+        const SingleActivator(LogicalKeyboardKey.escape): editor.clearSelection,
+        const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
+            editor.duplicateSelection,
+        const SingleActivator(LogicalKeyboardKey.keyA, meta: true): () => editor
+            .setSelection([for (var n in editor.doc.root.children) n.name]),
+        ...arrows,
+      },
+      child: Focus(autofocus: true, child: child),
+    );
+  }
+}
+
+/// Land keyboard focus on the editing scope — every tree and canvas tap
+/// calls this, so a click after typing in the inspector hands the keys
+/// back to the editor.
+void focusEditor(BuildContext context) => Focus.of(context).requestFocus();
+
+/// Whether the platform's multi-select modifier is down at this instant —
+/// how a tap knows to toggle instead of replace.
+bool get _toggleModifier {
+  var keys = HardwareKeyboard.instance.logicalKeysPressed;
+  return keys.contains(LogicalKeyboardKey.metaLeft) ||
+      keys.contains(LogicalKeyboardKey.metaRight) ||
+      keys.contains(LogicalKeyboardKey.controlLeft) ||
+      keys.contains(LogicalKeyboardKey.controlRight) ||
+      keys.contains(LogicalKeyboardKey.shiftLeft) ||
+      keys.contains(LogicalKeyboardKey.shiftRight);
 }
 
 /// Play controls for one motion over the toy's document: bind, play, pause,
@@ -174,9 +261,11 @@ class _MotionTransportState extends State<MotionTransport>
 // ---------------------------------------------------------------------------
 
 class TreePanel extends StatelessWidget {
-  const TreePanel(this.doc, {super.key});
+  const TreePanel(this.editor, {super.key});
 
-  final SceneDocument doc;
+  final SceneEditor editor;
+
+  SceneDocument get doc => editor.doc;
 
   @override
   Widget build(BuildContext context) {
@@ -215,23 +304,19 @@ class TreePanel extends StatelessWidget {
               IconButton(
                 tooltip: 'Move up',
                 icon: const Icon(Icons.arrow_upward, size: 16),
-                onPressed: _selectedIndex == null
-                    ? null
-                    : () => doc.reorder(doc.selected!, _selectedIndex! - 1),
+                onPressed: _selectedIndex == null ? null : () => _reorder(-1),
               ),
               IconButton(
                 tooltip: 'Move down',
                 icon: const Icon(Icons.arrow_downward, size: 16),
-                onPressed: _selectedIndex == null
-                    ? null
-                    : () => doc.reorder(doc.selected!, _selectedIndex! + 1),
+                onPressed: _selectedIndex == null ? null : () => _reorder(1),
               ),
               IconButton(
                 tooltip: 'Delete',
                 icon: const Icon(Icons.delete_outline, size: 16),
-                onPressed: doc.selected == null
+                onPressed: editor.selectedNodes.isEmpty
                     ? null
-                    : () => doc.delete(doc.selected!),
+                    : editor.deleteSelection,
               ),
             ],
           ),
@@ -242,9 +327,15 @@ class TreePanel extends StatelessWidget {
             children: [
               for (var (node, depth) in rows)
                 InkWell(
-                  onTap: () => doc.select(node == doc.root ? null : node),
+                  onTap: () {
+                    focusEditor(context);
+                    editor.select(
+                      node == doc.root ? null : node,
+                      toggle: _toggleModifier,
+                    );
+                  },
                   child: Container(
-                    color: doc.selected == node
+                    color: editor.isSelected(node)
                         ? Theme.of(context).colorScheme.primaryContainer
                         : null,
                     padding: EdgeInsets.only(
@@ -273,9 +364,22 @@ class TreePanel extends StatelessWidget {
   }
 
   int? get _selectedIndex {
-    var node = doc.selected;
+    var node = editor.single;
     if (node == null) return null;
     return doc.parentOf(node)?.children.indexOf(node);
+  }
+
+  void _reorder(int delta) {
+    var node = editor.single;
+    var index = _selectedIndex;
+    if (node == null || index == null) return;
+    editor.perform('Reorder ${node.name}', () {
+      var parent = doc.parentOf(node)!;
+      var clamped = (index + delta).clamp(0, parent.children.length - 1);
+      parent.children
+        ..removeAt(index)
+        ..insert(clamped, node);
+    });
   }
 
   /// Scale probe: each press adds a frame of 100 nodes (dots and tiny
@@ -306,17 +410,17 @@ class TreePanel extends StatelessWidget {
         ..y = row * 13.0;
       frame.children.add(node);
     }
-    doc.edit(() => doc.root.children.add(frame));
+    editor.perform('Add stress frame', () => doc.root.children.add(frame));
   }
 
   void _add(SceneNode node) {
-    var target = switch (doc.selected) {
+    var target = switch (editor.primary) {
       FrameNode f => f,
       SceneNode n => doc.parentOf(n) ?? doc.root,
       null => doc.root,
     };
-    doc.edit(() => target.children.add(node));
-    doc.select(node);
+    editor.perform('Add ${node.name}', () => target.children.add(node));
+    editor.select(node);
   }
 
   IconData _iconFor(SceneNode node) => switch (node) {
@@ -351,9 +455,9 @@ class _AddButton extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class CanvasArea extends StatefulWidget {
-  const CanvasArea(this.doc, {super.key, this.status, this.canvasContent});
+  const CanvasArea(this.editor, {super.key, this.status, this.canvasContent});
 
-  final SceneDocument doc;
+  final SceneEditor editor;
   final ValueListenable<String>? status;
 
   /// Replaces the local mirror ([NodeView] of the root) as the artboard's
@@ -371,7 +475,8 @@ class _CanvasAreaState extends State<CanvasArea> {
   var _fitted = false;
   Size _viewport = const Size(800, 600);
 
-  SceneDocument get doc => widget.doc;
+  SceneEditor get editor => widget.editor;
+  SceneDocument get doc => widget.editor.doc;
 
   @override
   Widget build(BuildContext context) {
@@ -475,26 +580,24 @@ class _CanvasAreaState extends State<CanvasArea> {
         children: [
           widget.canvasContent ?? NodeView(doc.root),
           AnimatedBuilder(
-            animation: doc.geometryEpoch.listenable,
-            builder: (context, _) => _HitLayer(doc),
+            animation: Listenable.merge([
+              doc.geometryEpoch.listenable,
+              editor.listenable,
+            ]),
+            builder: (context, _) => _HitLayer(editor),
           ),
           AnimatedBuilder(
-            animation: doc.geometryEpoch.listenable,
-            builder: (context, _) => Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(painter: _SelectionPainter(doc)),
-              ),
-            ),
-          ),
-          AnimatedBuilder(
-            animation: doc.geometryEpoch.listenable,
+            animation: Listenable.merge([
+              doc.geometryEpoch.listenable,
+              editor.listenable,
+            ]),
             builder: (context, _) {
-              var rect = doc.selected?.measured;
+              var rect = editor.single?.measured;
               if (rect == null) return const SizedBox();
               return Positioned(
                 left: rect.right - 6,
                 top: rect.bottom - 6,
-                child: _ResizeHandle(doc),
+                child: _ResizeHandle(editor),
               );
             },
           ),
@@ -645,12 +748,30 @@ class NodeView extends StatelessWidget {
 }
 
 /// One transparent hit target per addressable node, placed from its measured
-/// rect. Selection changes the addressable set, so the click ladder is plain
-/// z-order — no coordinate math anywhere in the editor.
-class _HitLayer extends StatelessWidget {
-  const _HitLayer(this.doc);
+/// rect, under the selection/hover/marquee paint. Selection changes the
+/// addressable set, so the click ladder is plain z-order — no coordinate
+/// math anywhere in the editor. Dragging empty canvas is the marquee: nodes
+/// whose measured rect intersects it become the selection, live.
+class _HitLayer extends StatefulWidget {
+  const _HitLayer(this.editor);
 
-  final SceneDocument doc;
+  final SceneEditor editor;
+
+  @override
+  State<_HitLayer> createState() => _HitLayerState();
+}
+
+class _HitLayerState extends State<_HitLayer> {
+  Offset? _marqueeStart;
+  Rect? _marquee;
+
+  SceneEditor get editor => widget.editor;
+
+  void _updateMarquee(Offset at) {
+    var rect = Rect.fromPoints(_marqueeStart!, at);
+    setState(() => _marquee = rect);
+    editor.selectWithin(rect.scene);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -658,23 +779,44 @@ class _HitLayer extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Below every node target: empty-canvas clicks deselect.
+          // Below every node target: empty-canvas clicks deselect, and an
+          // empty-canvas drag is the marquee.
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTapDown: (_) => doc.select(null),
+              onTapDown: (_) {
+                focusEditor(context);
+                editor.clearSelection();
+              },
+              onPanStart: (d) {
+                focusEditor(context);
+                _marqueeStart = d.localPosition;
+                _updateMarquee(d.localPosition);
+              },
+              onPanUpdate: (d) => _updateMarquee(d.localPosition),
+              onPanEnd: (_) => setState(() {
+                _marqueeStart = null;
+                _marquee = null;
+              }),
             ),
           ),
-          for (var node in doc.addressable())
+          for (var node in editor.addressable())
             if (node.measured != null)
               Positioned.fromRect(
                 rect: node.measured!.flutter,
                 child: _NodeTarget(
-                  doc,
+                  editor,
                   node,
                   key: ValueKey('node:${node.name}'),
                 ),
               ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _SelectionPainter(editor, marquee: _marquee),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -682,19 +824,24 @@ class _HitLayer extends StatelessWidget {
 }
 
 class _NodeTarget extends StatefulWidget {
-  const _NodeTarget(this.doc, this.node, {super.key});
+  const _NodeTarget(this.editor, this.node, {super.key});
 
-  final SceneDocument doc;
+  final SceneEditor editor;
   final SceneNode node;
 
   @override
   State<_NodeTarget> createState() => _NodeTargetState();
 }
 
+/// Distinguishes one drag gesture from the next, so a whole drag merges
+/// into ONE undo entry and the next drag starts a fresh one.
+var _dragSeq = 0;
+
 class _NodeTargetState extends State<_NodeTarget> {
   var _downLocal = Offset.zero;
 
-  SceneDocument get doc => widget.doc;
+  SceneEditor get editor => widget.editor;
+  SceneDocument get doc => widget.editor.doc;
   SceneNode get node => widget.node;
 
   // A drive-layer drag can be down → one large move → up: the pan recognizer
@@ -705,10 +852,8 @@ class _NodeTargetState extends State<_NodeTarget> {
     var parent = doc.parentOf(node);
     if (parent == null) return;
     if (parent.layout == NodeLayout.absolute) {
-      doc.edit(() {
-        node.x += delta.dx;
-        node.y += delta.dy;
-      });
+      // Dragging any selected node moves the whole selection.
+      editor.nudgeSelection(delta.dx, delta.dy, mergeKey: 'drag$_dragSeq');
     } else {
       // Flex parent: a drag is a reorder, not a move. Position in artboard
       // coords = target origin + local offset.
@@ -725,29 +870,46 @@ class _NodeTargetState extends State<_NodeTarget> {
             : rect.centerY;
         if (main > center) index++;
       }
-      doc.reorder(node, index);
+      var from = parent.children.indexOf(node);
+      if (from == index) return;
+      editor.perform('Reorder ${node.name}', mergeKey: 'drag$_dragSeq', () {
+        parent.children
+          ..removeAt(from)
+          ..insert(index, node);
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => doc.select(node),
-      onPanDown: (d) => _downLocal = d.localPosition,
-      onPanStart: (d) {
-        doc.select(node);
-        _apply(d.localPosition, d.localPosition - _downLocal);
+    return MouseRegion(
+      onEnter: (_) => editor.hover = node.name,
+      onExit: (_) {
+        if (editor.hover == node.name) editor.hover = null;
       },
-      onPanUpdate: (d) => _apply(d.localPosition, d.delta),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) {
+          focusEditor(context);
+          editor.select(node, toggle: _toggleModifier);
+        },
+        onPanDown: (d) => _downLocal = d.localPosition,
+        onPanStart: (d) {
+          focusEditor(context);
+          _dragSeq++;
+          if (!editor.isSelected(node)) editor.select(node);
+          _apply(d.localPosition, d.localPosition - _downLocal);
+        },
+        onPanUpdate: (d) => _apply(d.localPosition, d.delta),
+      ),
     );
   }
 }
 
 class _ResizeHandle extends StatefulWidget {
-  const _ResizeHandle(this.doc);
+  const _ResizeHandle(this.editor);
 
-  final SceneDocument doc;
+  final SceneEditor editor;
 
   @override
   State<_ResizeHandle> createState() => _ResizeHandleState();
@@ -757,26 +919,33 @@ class _ResizeHandleState extends State<_ResizeHandle> {
   var _downLocal = Offset.zero;
 
   void _apply(Offset delta) {
-    var node = widget.doc.selected;
+    var node = widget.editor.single;
     if (node == null) return;
-    widget.doc.edit(() {
-      var rect = node.measured;
-      node.width = ((node.width ?? rect?.width ?? 100) + delta.dx).clamp(
-        8,
-        4000,
-      );
-      node.height = ((node.height ?? rect?.height ?? 100) + delta.dy).clamp(
-        8,
-        4000,
-      );
-    });
+    widget.editor.perform(
+      'Resize ${node.name}',
+      mergeKey: 'resize$_dragSeq',
+      () {
+        var rect = node.measured;
+        node.width = ((node.width ?? rect?.width ?? 100) + delta.dx).clamp(
+          8,
+          4000,
+        );
+        node.height = ((node.height ?? rect?.height ?? 100) + delta.dy).clamp(
+          8,
+          4000,
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onPanDown: (d) => _downLocal = d.localPosition,
-      onPanStart: (d) => _apply(d.localPosition - _downLocal),
+      onPanStart: (d) {
+        _dragSeq++;
+        _apply(d.localPosition - _downLocal);
+      },
       onPanUpdate: (d) => _apply(d.delta),
       child: Container(
         width: 12,
@@ -791,19 +960,45 @@ class _ResizeHandleState extends State<_ResizeHandle> {
 }
 
 class _SelectionPainter extends CustomPainter {
-  _SelectionPainter(this.doc);
+  _SelectionPainter(this.editor, {this.marquee});
 
-  final SceneDocument doc;
+  final SceneEditor editor;
+  final Rect? marquee;
 
   @override
   void paint(Canvas canvas, Size size) {
-    var rect = doc.selected?.measured;
-    if (rect == null) return;
-    var paint = Paint()
+    var stroke = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..color = const Color(0xFF4A64D0);
-    canvas.drawRect(rect.flutter, paint);
+    // Hover first, under the selection strokes.
+    if (editor.hover case var name?
+        when !editor.selectedNodes.any((n) => n.name == name)) {
+      var rect = editor.doc.nodeNamed(name)?.measured;
+      if (rect != null) {
+        canvas.drawRect(
+          rect.flutter,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1
+            ..color = const Color(0x804A64D0),
+        );
+      }
+    }
+    for (var node in editor.selectedNodes) {
+      var rect = node.measured;
+      if (rect != null) canvas.drawRect(rect.flutter, stroke);
+    }
+    if (marquee case var rect?) {
+      canvas.drawRect(rect, Paint()..color = const Color(0x184A64D0));
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = const Color(0xB34A64D0),
+      );
+    }
   }
 
   @override
@@ -829,17 +1024,30 @@ const _palette = <SceneColor?>[
 ];
 
 class InspectorPanel extends StatelessWidget {
-  const InspectorPanel(this.doc, {super.key});
+  const InspectorPanel(this.editor, {super.key});
 
-  final SceneDocument doc;
+  final SceneEditor editor;
+
+  SceneDocument get doc => editor.doc;
+
+  /// Every inspector edit is a door; consecutive edits of one property on
+  /// one node merge into a single undo entry (live keystrokes, swatch
+  /// browsing).
+  void _door(String prop, void Function() fn) {
+    var name = (editor.primary ?? doc.root).name;
+    editor.perform('Edit $prop', mergeKey: 'inspect:$prop:$name', fn);
+  }
 
   @override
   Widget build(BuildContext context) {
-    var node = doc.selected ?? doc.root;
+    var node = editor.primary ?? doc.root;
     var parent = node == doc.root ? null : doc.parentOf(node);
     var inFlex = parent != null && parent.layout != NodeLayout.absolute;
 
     return ListView(
+      // Fresh field state per node: a reused NumField would commit the
+      // previous node's text onto the next one on focus loss.
+      key: ValueKey('inspector:${node.name}'),
       padding: const EdgeInsets.all(12),
       children: [
         Text(
@@ -862,7 +1070,7 @@ class InspectorPanel extends StatelessWidget {
                 'X',
                 node.x,
                 enabled: !inFlex && node != doc.root,
-                onChanged: (v) => doc.edit(() => node.x = v ?? 0),
+                onChanged: (v) => _door('x', () => node.x = v ?? 0),
               ),
             ),
             const SizedBox(width: 8),
@@ -871,7 +1079,7 @@ class InspectorPanel extends StatelessWidget {
                 'Y',
                 node.y,
                 enabled: !inFlex && node != doc.root,
-                onChanged: (v) => doc.edit(() => node.y = v ?? 0),
+                onChanged: (v) => _door('y', () => node.y = v ?? 0),
               ),
             ),
           ],
@@ -885,7 +1093,7 @@ class InspectorPanel extends StatelessWidget {
                 node.width,
                 nullable: true,
                 hint: 'hug',
-                onChanged: (v) => doc.edit(() => node.width = v),
+                onChanged: (v) => _door('width', () => node.width = v),
               ),
             ),
             const SizedBox(width: 8),
@@ -895,14 +1103,14 @@ class InspectorPanel extends StatelessWidget {
                 node.height,
                 nullable: true,
                 hint: 'hug',
-                onChanged: (v) => doc.edit(() => node.height = v),
+                onChanged: (v) => _door('height', () => node.height = v),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
         _label('Fill'),
-        _swatches(node.fill, (c) => doc.edit(() => node.fill = c)),
+        _swatches(node.fill, (c) => _door('fill', () => node.fill = c)),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -910,7 +1118,8 @@ class InspectorPanel extends StatelessWidget {
               child: NumField(
                 'Corner',
                 node.cornerRadius,
-                onChanged: (v) => doc.edit(() => node.cornerRadius = v ?? 0),
+                onChanged: (v) =>
+                    _door('corner', () => node.cornerRadius = v ?? 0),
               ),
             ),
             const SizedBox(width: 8),
@@ -919,7 +1128,7 @@ class InspectorPanel extends StatelessWidget {
                 'Opacity',
                 node.opacity,
                 onChanged: (v) =>
-                    doc.edit(() => node.opacity = (v ?? 1).clamp(0, 1)),
+                    _door('opacity', () => node.opacity = (v ?? 1).clamp(0, 1)),
               ),
             ),
           ],
@@ -944,7 +1153,7 @@ class InspectorPanel extends StatelessWidget {
         style: const TextStyle(fontSize: 12),
         maxLines: 3,
         minLines: 1,
-        onChanged: (v) => doc.edit(() => t.text = v),
+        onChanged: (v) => _door('text', () => t.text = v),
       ),
       const SizedBox(height: 8),
       Row(
@@ -953,7 +1162,7 @@ class InspectorPanel extends StatelessWidget {
             child: NumField(
               'Size',
               t.fontSize,
-              onChanged: (v) => doc.edit(() => t.fontSize = v ?? 14),
+              onChanged: (v) => _door('fontSize', () => t.fontSize = v ?? 14),
             ),
           ),
           const SizedBox(width: 8),
@@ -988,7 +1197,7 @@ class InspectorPanel extends StatelessWidget {
                 ),
               ],
               onChanged: (v) =>
-                  doc.edit(() => t.weight = v ?? SceneFontWeight.w400),
+                  _door('weight', () => t.weight = v ?? SceneFontWeight.w400),
             ),
           ),
         ],
@@ -997,7 +1206,8 @@ class InspectorPanel extends StatelessWidget {
       _label('Color'),
       _swatches(
         t.color,
-        (c) => doc.edit(() => t.color = c ?? const SceneColor(0xFF000000)),
+        (c) =>
+            _door('color', () => t.color = c ?? const SceneColor(0xFF000000)),
       ),
     ];
   }
@@ -1015,7 +1225,7 @@ class InspectorPanel extends StatelessWidget {
         // A layout-mode switch is a geometry transaction, not a flag flip:
         // entering Free bakes each child's measured position into authored
         // x/y; entering flex re-derives order from visual position.
-        onSelectionChanged: (s) => doc.edit(() {
+        onSelectionChanged: (s) => _door('layout', () {
           var next = s.first;
           var origin = f.measured;
           if (next == NodeLayout.absolute) {
@@ -1046,7 +1256,7 @@ class InspectorPanel extends StatelessWidget {
             child: NumField(
               'Gap',
               f.gap,
-              onChanged: (v) => doc.edit(() => f.gap = v ?? 0),
+              onChanged: (v) => _door('gap', () => f.gap = v ?? 0),
             ),
           ),
           const SizedBox(width: 8),
@@ -1054,7 +1264,7 @@ class InspectorPanel extends StatelessWidget {
             child: NumField(
               'Padding',
               f.padding,
-              onChanged: (v) => doc.edit(() => f.padding = v ?? 0),
+              onChanged: (v) => _door('padding', () => f.padding = v ?? 0),
             ),
           ),
         ],
@@ -1086,7 +1296,8 @@ class InspectorPanel extends StatelessWidget {
               child: Text('Stretch'),
             ),
           ],
-          onChanged: (v) => doc.edit(
+          onChanged: (v) => _door(
+            'crossAlign',
             () => f.crossAlign = v ?? SceneCrossAxisAlignment.center,
           ),
         ),
@@ -1103,7 +1314,7 @@ class InspectorPanel extends StatelessWidget {
           NumField(
             arg.key,
             number.toDouble(),
-            onChanged: (v) => doc.edit(() => e.args[arg.key] = v),
+            onChanged: (v) => _door('args', () => e.args[arg.key] = v),
           )
         else
           TextFormField(
@@ -1111,7 +1322,7 @@ class InspectorPanel extends StatelessWidget {
             initialValue: '${arg.value}',
             style: const TextStyle(fontSize: 12),
             decoration: InputDecoration(labelText: arg.key, isDense: true),
-            onChanged: (v) => doc.edit(() => e.args[arg.key] = v),
+            onChanged: (v) => _door('args', () => e.args[arg.key] = v),
           ),
         const SizedBox(height: 8),
       ],
@@ -1125,7 +1336,7 @@ class InspectorPanel extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         title: const Text('Circle', style: TextStyle(fontSize: 12)),
         value: s.circle,
-        onChanged: (v) => doc.edit(() => s.circle = v),
+        onChanged: (v) => _door('circle', () => s.circle = v),
       ),
     ];
   }
@@ -1222,14 +1433,17 @@ class _NumFieldState extends State<NumField> {
     return v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
   }
 
+  // Commits only a CHANGE: a focus-loss echo of the value already held
+  // must not open a door (it would spam the undo journal).
   void _commit() {
     var text = controller.text.trim();
     if (text.isEmpty) {
-      widget.onChanged(widget.nullable ? null : 0);
+      var v = widget.nullable ? null : 0.0;
+      if (widget.value != v) widget.onChanged(v);
       return;
     }
     var parsed = double.tryParse(text);
-    if (parsed != null) widget.onChanged(parsed);
+    if (parsed != null && parsed != widget.value) widget.onChanged(parsed);
   }
 
   @override
@@ -1248,7 +1462,7 @@ class _NumFieldState extends State<NumField> {
       // lands immediately. Blank (→ null/hug) waits for blur or submit.
       onChanged: (v) {
         var parsed = double.tryParse(v.trim());
-        if (parsed != null) widget.onChanged(parsed);
+        if (parsed != null && parsed != widget.value) widget.onChanged(parsed);
       },
       onSubmitted: (_) => _commit(),
     );
