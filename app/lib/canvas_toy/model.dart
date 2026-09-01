@@ -3,6 +3,7 @@
 // the same geometry slots — to feel where the Figma-shaped model fits Flutter
 // and where it fights it. Not a design; an instrument.
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 enum NodeLayout { absolute, row, column }
 
@@ -74,9 +75,101 @@ sealed class SceneNode {
   /// save only while the value still equals the parameter's default.
   final paramRefs = <String, String>{};
 
+  /// The evaluated plane: per-frame contributions composed OVER the
+  /// authored values above, keyed by (writer, property) in writer-stack
+  /// order — the order is normative (× does not bit-commute). Motion lanes
+  /// and app [Effect]s write here; Save never reads it; a cancelled writer
+  /// clears its own entries and the authored value was never touched.
+  final fx = <(Object, String), Object>{};
+
+  SceneDocument? _doc;
+
+  void writeFx(Object writer, String prop, Object value) {
+    fx[(writer, prop)] = value;
+    _doc?.fxTick();
+  }
+
+  void removeFx(Object writer, String prop) {
+    if (fx.remove((writer, prop)) != null) _doc?.fxTick();
+  }
+
+  void clearFxWriter(Object writer) {
+    var before = fx.length;
+    fx.removeWhere((k, _) => identical(k.$1, writer));
+    if (fx.length != before) _doc?.fxTick();
+  }
+
+  /// The composed value the renderer should draw: authored base folded with
+  /// every contribution through the derived operator table — opacity and
+  /// scale multiply, translations and rotation add, everything else
+  /// replaces in stack order.
+  Object fxRendered(String prop) {
+    var v = _fxBase(prop);
+    for (var entry in fx.entries) {
+      if (entry.key.$2 != prop) continue;
+      v = switch (prop) {
+        'opacity' || 'scale' => (v as double) * (entry.value as double),
+        'translateX' ||
+        'translateY' ||
+        'rotate' => (v as double) + (entry.value as double),
+        _ => entry.value,
+      };
+    }
+    return v;
+  }
+
+  Object _fxBase(String prop) => switch (prop) {
+    'opacity' => opacity,
+    'translateX' || 'translateY' || 'rotate' => 0.0,
+    'scale' => 1.0,
+    'fontSize' => (this as TextNode).fontSize,
+    'color' => (this as TextNode).color,
+    'gap' => (this as FrameNode).gap,
+    'fill' => fill ?? const Color(0x00000000),
+    _ => throw ArgumentError('no animatable property "$prop"'),
+  };
+
+  /// Mint an app-side fx writer. Handles are the only app surface — two
+  /// independent effects on one property compose instead of colliding, and
+  /// clearing one leaves the others (sketch 25).
+  Effect effect() => Effect._(this);
+
   String get typeName;
 
   List<SceneNode> get children => const [];
+}
+
+/// One app-side fx writer: cosmetic, composed, never saved. Setting a
+/// property to null removes that contribution; [clear] removes them all.
+class Effect {
+  Effect._(this._node);
+
+  final SceneNode _node;
+
+  // Each property reads back this writer's OWN contribution (null when it
+  // has none) — the composed result is the node's [SceneNode.fxRendered].
+  double? get opacity => _get('opacity');
+  set opacity(double? v) => _set('opacity', v);
+  double? get scale => _get('scale');
+  set scale(double? v) => _set('scale', v);
+  double? get translateX => _get('translateX');
+  set translateX(double? v) => _set('translateX', v);
+  double? get translateY => _get('translateY');
+  set translateY(double? v) => _set('translateY', v);
+  double? get rotate => _get('rotate');
+  set rotate(double? v) => _set('rotate', v);
+
+  double? _get(String prop) => _node.fx[(this, prop)] as double?;
+
+  void _set(String prop, double? v) {
+    if (v == null) {
+      _node.removeFx(this, prop);
+    } else {
+      _node.writeFx(this, prop, v);
+    }
+  }
+
+  void clear() => _node.clearFxWriter(this);
 }
 
 class FrameNode extends SceneNode {
@@ -126,14 +219,50 @@ class ExternalNode extends SceneNode {
   final String entry;
   final Map<String, Object?> args;
 
+  /// Authored args with fx contributions folded in (an ext arg's operator
+  /// is replace, in stack order) — what the guest should render.
+  Map<String, Object?> get renderedArgs {
+    var out = Map.of(args);
+    for (var entry in fx.entries) {
+      var prop = entry.key.$2;
+      if (prop.startsWith('args.')) out[prop.substring(5)] = entry.value;
+    }
+    return out;
+  }
+
   @override
   String get typeName => 'Ext';
 }
 
 class SceneDocument extends ChangeNotifier {
-  SceneDocument(this.root);
+  SceneDocument(this.root) {
+    _adopt();
+  }
 
   final FrameNode root;
+
+  /// Every node knows its document, so an fx write anywhere schedules the
+  /// one coalesced flush. Re-swept after each [edit] — structure may move.
+  void _adopt() {
+    for (var (node, _) in walk()) {
+      node._doc = this;
+    }
+  }
+
+  var _fxScheduled = false;
+
+  /// The probed frame-aligned flush (500 writes → 1 rebuild): coalesce all
+  /// fx writes of a frame into one notification, and make sure a frame is
+  /// coming — a hidden or idle window schedules none on its own.
+  void fxTick() {
+    if (_fxScheduled) return;
+    _fxScheduled = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _fxScheduled = false;
+      notifyListeners();
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
 
   /// The scene's declared parameters, in declaration order.
   final params = <SceneParamDecl>[];
@@ -187,6 +316,7 @@ class SceneDocument extends ChangeNotifier {
 
   void edit(void Function() fn) {
     fn();
+    _adopt();
     notifyListeners();
   }
 
