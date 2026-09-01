@@ -398,3 +398,61 @@ TimelineExpr _copyExpr(TimelineExpr e) => switch (e) {
   SpeedExpr s => SpeedExpr(s.factor, _copyExpr(s.child)),
   RepeatExpr r => RepeatExpr(r.times, _copyExpr(r.child)),
 };
+
+/// The timeline expression, laid out: where each placed group starts and how
+/// long the whole runs. What a timeline panel draws from, and what the
+/// runtime computes for itself when it binds — the same arithmetic, kept here
+/// so the picture and the playback cannot disagree.
+extension MotionTimelineLayout on MotionDocument {
+  /// How long [expr] runs, groups resolved against this document. A reference
+  /// to a group that does not exist runs for no time rather than refusing:
+  /// the timeline is edited live, and a dangling reference is a state the
+  /// editor passes through.
+  Duration durationOf(TimelineExpr expr) => switch (expr) {
+    GroupRef r => groupNamed(r.name)?.duration ?? Duration.zero,
+    ParExpr p => p.children.fold(
+      Duration.zero,
+      (m, c) => durationOf(c) > m ? durationOf(c) : m,
+    ),
+    SeqExpr s => s.children.fold(Duration.zero, (m, c) => m + durationOf(c)),
+    AtExpr a => a.offset + durationOf(a.child),
+    SpeedExpr s => Duration(
+      microseconds: (durationOf(s.child).inMicroseconds / s.factor).round(),
+    ),
+    RepeatExpr r => durationOf(r.child) * r.times,
+  };
+
+  Duration get duration => durationOf(timeline);
+
+  /// Where each placed group starts, by name. A group placed twice keeps its
+  /// first placement; a `speed` scales nothing here yet, so a group inside one
+  /// is drawn at its unscaled offset.
+  Map<String, Duration> get placements {
+    var out = <String, Duration>{};
+    void visit(TimelineExpr e, Duration at) {
+      switch (e) {
+        case GroupRef r:
+          out.putIfAbsent(r.name, () => at);
+        case ParExpr p:
+          for (var c in p.children) {
+            visit(c, at);
+          }
+        case SeqExpr s:
+          var t = at;
+          for (var c in s.children) {
+            visit(c, t);
+            t += durationOf(c);
+          }
+        case AtExpr a:
+          visit(a.child, at + a.offset);
+        case SpeedExpr s:
+          visit(s.child, at);
+        case RepeatExpr r:
+          visit(r.child, at);
+      }
+    }
+
+    visit(timeline, Duration.zero);
+    return out;
+  }
+}

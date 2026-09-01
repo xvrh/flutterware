@@ -13,6 +13,7 @@ import '../../previews/compiler_daemon_client.dart';
 import '../../scene/discovery.dart';
 import '../../scene/guest.dart';
 import '../../scene/ui/inspector.dart';
+import '../../scene/ui/shortcuts.dart';
 import '../../scene/workspace.dart';
 import '../native_plugin.dart';
 import 'no_packages.dart';

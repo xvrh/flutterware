@@ -6,12 +6,13 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../src/scene/editor.dart';
 import '../src/scene/ui/inspector.dart';
+import '../src/scene/ui/modifiers.dart';
+import '../src/scene/ui/shortcuts.dart';
 import 'drafts.dart';
 import 'remote.dart';
 
@@ -99,97 +100,6 @@ class _CanvasToyAppState extends State<CanvasToyApp> {
   }
 }
 
-/// The editing focus scope: keyboard verbs for whatever it wraps. Any
-/// press inside it takes the keyboard back, a press in the inspector
-/// (which is outside) leaves it, and each binding acts on the shared
-/// [SceneEditor].
-class EditorShortcuts extends StatefulWidget {
-  const EditorShortcuts(this.editor, {super.key, required this.child});
-
-  final SceneEditor editor;
-  final Widget child;
-
-  @override
-  State<EditorShortcuts> createState() => _EditorShortcutsState();
-}
-
-class _EditorShortcutsState extends State<EditorShortcuts> {
-  // The scope owns its node rather than letting call sites look one up:
-  // Focus.of() from a tree row finds whatever Focus happens to be nearest
-  // (a Scrollable brings its own), and focusing that does not necessarily
-  // take primary focus back from an inspector field — the keys then reach
-  // the field's own undo instead, which beeps once it is empty.
-  final _node = FocusNode(debugLabel: 'scene editor');
-
-  SceneEditor get editor => widget.editor;
-
-  @override
-  void dispose() {
-    _node.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    var arrows = <ShortcutActivator, VoidCallback>{};
-    for (var (key, dx, dy) in [
-      (LogicalKeyboardKey.arrowLeft, -1.0, 0.0),
-      (LogicalKeyboardKey.arrowRight, 1.0, 0.0),
-      (LogicalKeyboardKey.arrowUp, 0.0, -1.0),
-      (LogicalKeyboardKey.arrowDown, 0.0, 1.0),
-    ]) {
-      // One gesture per key-repeat burst would be ideal; one entry per
-      // press is fine for the toy — merge under a single key so holding
-      // an arrow stays one undo entry.
-      arrows[SingleActivator(key)] = () =>
-          editor.nudgeSelection(dx, dy, mergeKey: 'nudge');
-      arrows[SingleActivator(key, shift: true)] = () =>
-          editor.nudgeSelection(dx * 10, dy * 10, mergeKey: 'nudge');
-    }
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): editor.undo,
-        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
-            editor.redo,
-        const SingleActivator(LogicalKeyboardKey.backspace):
-            editor.deleteSelection,
-        const SingleActivator(LogicalKeyboardKey.delete):
-            editor.deleteSelection,
-        const SingleActivator(LogicalKeyboardKey.escape): editor.clearSelection,
-        const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
-            editor.duplicateSelection,
-        const SingleActivator(LogicalKeyboardKey.keyA, meta: true): () => editor
-            .setSelection([for (var n in editor.doc.root.children) n.name]),
-        ...arrows,
-      },
-      // Any press inside the scope hands the keyboard back, whoever had
-      // it: the scope holds no text fields, so there is nothing here that
-      // wants the keys for itself.
-      child: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => _node.requestFocus(),
-        child: Focus(focusNode: _node, autofocus: true, child: widget.child),
-      ),
-    );
-  }
-}
-
-/// Whether the platform's multi-select modifier is down at this instant —
-/// how a tap knows to toggle instead of replace.
-bool get _toggleModifier {
-  var keys = HardwareKeyboard.instance.logicalKeysPressed;
-  return keys.contains(LogicalKeyboardKey.metaLeft) ||
-      keys.contains(LogicalKeyboardKey.metaRight) ||
-      keys.contains(LogicalKeyboardKey.controlLeft) ||
-      keys.contains(LogicalKeyboardKey.controlRight) ||
-      keys.contains(LogicalKeyboardKey.shiftLeft) ||
-      keys.contains(LogicalKeyboardKey.shiftRight);
-}
-
-/// Play controls for one motion over the toy's document: bind, play, pause,
-/// stop, scrub, rate. The player is the applicator — every frame it writes
-/// the fx plane and the coalesced flush repaints whatever is watching the
-/// document, the local mirror and the guest wire alike.
 class MotionTransport extends StatefulWidget {
   const MotionTransport(this.doc, this.motion, {super.key});
 
@@ -353,7 +263,7 @@ class TreePanel extends StatelessWidget {
                   onTap: () {
                     editor.select(
                       node == doc.root ? null : node,
-                      toggle: _toggleModifier,
+                      toggle: toggleModifier,
                     );
                   },
                   child: Container(
@@ -903,7 +813,7 @@ class _NodeTargetState extends State<_NodeTarget> {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => editor.select(node, toggle: _toggleModifier),
+        onTapDown: (_) => editor.select(node, toggle: toggleModifier),
         onPanDown: (d) => _downLocal = d.localPosition,
         onPanStart: (d) {
           if (!editor.isSelected(node)) editor.select(node);

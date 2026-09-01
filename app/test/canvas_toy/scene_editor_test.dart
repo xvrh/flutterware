@@ -9,6 +9,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/canvas_toy/drafts.dart';
 import 'package:flutterware_app/canvas_toy/main.dart';
+import 'package:flutterware_app/src/scene/ui/shortcuts.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/ui/inspector.dart';
 
