@@ -1625,6 +1625,7 @@ class CatalogSession extends ChangeNotifier {
       var engine = _engine = EmbeddedEngine(
         appPackageRoot: appPackageRoot,
         flutterSdkRoot: flutterSdkRoot,
+        workingDirectory: projectRoot,
         // Keyed by session, so a second panel — or an agent taking a
         // screenshot — does not bind over this guest's socket.
         name: ready.sessionId,

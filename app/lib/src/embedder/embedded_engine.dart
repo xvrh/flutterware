@@ -27,6 +27,7 @@ class EmbeddedEngine extends ChangeNotifier {
     required this.appPackageRoot,
     required this.flutterSdkRoot,
     this.buildGuest,
+    this.workingDirectory,
     this.name = 'gui',
   });
 
@@ -48,6 +49,16 @@ class EmbeddedEngine extends ChangeNotifier {
 
   /// Absolute path to the Flutter SDK checkout root.
   final String flutterSdkRoot;
+
+  /// The directory the guest process runs in, or null to inherit this one's.
+  ///
+  /// A preview reading a fixture at a relative path resolves it here, so the
+  /// catalog passes the project's package root: that is where `flutter test`
+  /// and the tester lane already run, and the same demo has to open the same
+  /// file in both. Inherited, the guest would run wherever the GUI does — for
+  /// a built binary that is the `app/` directory, and nothing of the project
+  /// is there.
+  final String? workingDirectory;
 
   static const _channel = MethodChannel('flutterware/embedder_texture');
 
@@ -125,13 +136,12 @@ class EmbeddedEngine extends ChangeNotifier {
         0,
       );
 
-      _guest = await Process.start(build.hostPath, [
-        build.assetsDir,
-        build.icuData,
-        socketPath,
-        '$width',
-        '$height',
-      ], mode: ProcessStartMode.normal);
+      _guest = await Process.start(
+        build.hostPath,
+        [build.assetsDir, build.icuData, socketPath, '$width', '$height'],
+        workingDirectory: workingDirectory,
+        mode: ProcessStartMode.normal,
+      );
       _guest!.stdout
           .transform(const SystemEncoding().decoder)
           .transform(const LineSplitter())
