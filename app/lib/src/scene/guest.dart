@@ -60,8 +60,17 @@ class SceneGuest {
   /// including over whatever the session picked for itself while booting,
   /// which is how a rebooted session came up showing the catalog's first
   /// entry under the scene panel.
+  /// The engine last seen: a new one is a host that has forgotten the scene.
+  Object? _engine;
+
   void _onSession() {
     if (session.phase != CatalogSessionPhase.ready) return;
+    if (!identical(session.engine, _engine)) {
+      _engine = session.engine;
+      // A guest that restarted or reloaded holds no scene until it is sent
+      // one, and nothing else sends it before the next edit.
+      if (_everApplied) _push();
+    }
     for (var entry in session.entries) {
       if (entry.symbol == sceneHostEntrySymbol) {
         if (session.wantedEntryId != entry.id) session.wantedEntryId = entry.id;

@@ -15,6 +15,7 @@ import 'package:flutterware/scene_authoring.dart';
 import '../../scene/discovery.dart';
 import '../../scene/editor.dart';
 import '../../scene/guest.dart';
+import '../../scene/scene_file.dart';
 import '../../scene/playback.dart';
 import '../../scene/ui/workspace_view.dart';
 import '../../scene/workspace.dart';
@@ -24,6 +25,8 @@ import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/loading_state.dart';
 import '../../ui/panel_header.dart';
+import '../../ui/picker.dart';
+import '../../ui/popover.dart';
 import '../../ui/tappable.dart';
 import '../native_plugin.dart';
 import 'no_packages.dart';
@@ -92,18 +95,15 @@ class _ScenePanelState extends State<_ScenePanel>
   SceneGuest? _guest;
   String _note = '';
 
-  /// One playback per file that has a motion, made the first time that file
-  /// is the active one — the nested scene entered later gets its own.
+  /// One playback per motion opened, by file and name — a playback owns a
+  /// ticker, so it is made once and kept.
   final _playbacks = <String, ScenePlayback>{};
 
-  ScenePlayback? _playbackFor(SceneFile file) {
-    var motion = file.motions.keys.firstOrNull;
-    if (motion == null) return null;
-    return _playbacks.putIfAbsent(
-      file.path,
-      () => ScenePlayback(file.editor, motion, vsync: this),
-    );
-  }
+  ScenePlayback _playbackFor(SceneFile file, String motion) =>
+      _playbacks.putIfAbsent(
+        '${file.path}#$motion',
+        () => ScenePlayback(file.editor, motion, vsync: this),
+      );
 
   void _disposePlaybacks() {
     for (var playback in _playbacks.values) {
@@ -182,6 +182,42 @@ class _ScenePanelState extends State<_ScenePanel>
       _note = '';
     });
   }
+
+  /// Writes an empty scene — one root frame of the size asked for — as
+  /// `<snake_name>.scene.dart` in the package's scene directory, and opens
+  /// it. The emitter writes it, so a file made here is canonical from its
+  /// first byte.
+  void _createScene(
+    String package,
+    String className,
+    double width,
+    double height,
+  ) {
+    var root = FrameNode('root')
+      ..width = width
+      ..height = height
+      ..fill = const SceneColor(0xFFFFFFFF);
+    var source = emitSceneFile(SceneDocument(root), className: className);
+    var dir = p.join(
+      widget.plugin.host.worktree.path,
+      package,
+      _core.directoryFor(package),
+    );
+    var path = p.join(dir, '${_snake(className)}.scene.dart');
+    if (File(path).existsSync()) {
+      setState(() => _note = '${p.basename(path)} already exists');
+      return;
+    }
+    Directory(dir).createSync(recursive: true);
+    File(path).writeAsStringSync(source);
+    _core.rescan(package);
+    _core.track(package);
+    _open(SceneEntry(path: path, className: className, age: DateTime.now()));
+  }
+
+  static String _snake(String className) => className
+      .replaceAllMapped(RegExp('([a-z0-9])([A-Z])'), (m) => '${m[1]}_${m[2]}')
+      .toLowerCase();
 
   /// A nested scene is another scene file of the same package, found by the
   /// class it declares. Opened fresh here; the workspace keeps the one copy
@@ -283,6 +319,11 @@ class _ScenePanelState extends State<_ScenePanel>
           'Scenes',
           subtitle: ['$package/${_core.directoryFor(package)}'],
           badge: scenes.isEmpty ? null : CountBadge(scenes.length),
+          trailing: _NewSceneButton(
+            taken: {for (var s in scenes) s.className},
+            onCreate: (className, width, height) =>
+                _createScene(package, className, width, height),
+          ),
         ),
         if (_note.isNotEmpty)
           Padding(
@@ -382,7 +423,8 @@ class _ScenePanelState extends State<_ScenePanel>
           child: SceneWorkspaceView(
             key: ValueKey(workspace.active.path),
             editor,
-            playback: _playbackFor(workspace.active),
+            playbackFor: (motion) => _playbackFor(workspace.active, motion),
+            sceneClassName: workspace.active.className,
             content: _guestCanvas(),
             status: _guest?.status,
             onEnterNested: (node) => setState(() {
@@ -549,6 +591,121 @@ class _Header extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "New scene": a name and an artboard size, in a popover off the header.
+class _NewSceneButton extends StatefulWidget {
+  const _NewSceneButton({required this.taken, required this.onCreate});
+
+  final Set<String> taken;
+  final void Function(String className, double width, double height) onCreate;
+
+  @override
+  State<_NewSceneButton> createState() => _NewSceneButtonState();
+}
+
+class _NewSceneButtonState extends State<_NewSceneButton> {
+  final _name = TextEditingController();
+  var _size = _sizes.first;
+
+  static const _sizes = [
+    (label: 'Banner 1024 × 500', width: 1024.0, height: 500.0),
+    (label: 'Square 1080 × 1080', width: 1080.0, height: 1080.0),
+    (label: 'Phone 390 × 844', width: 390.0, height: 844.0),
+    (label: 'Badge 200 × 64', width: 200.0, height: 64.0),
+  ];
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  String? get _refusal {
+    var name = _name.text.trim();
+    if (name.isEmpty) return null;
+    if (!RegExp(r'^[A-Z][A-Za-z0-9]*$').hasMatch(name)) {
+      return 'A class name: capital first, letters and digits';
+    }
+    if (widget.taken.contains(name)) return 'There is a $name already';
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) => Popover(
+    anchor: (context, controller) => FwActionButton(
+      label: 'New scene',
+      tooltip: 'A scene file with an empty artboard',
+      onPressed: () async => controller.open(),
+    ),
+    side: PopoverSide.bottom,
+    align: PopoverAlign.end,
+    content: (context, controller) => _form(context, controller),
+  );
+
+  Widget _form(BuildContext context, PopoverController controller) {
+    var colors = context.colors;
+    return Container(
+      width: 280,
+      padding: const EdgeInsets.all(FwSpacing.lg),
+      decoration: BoxDecoration(
+        color: colors.panel,
+        border: Border.all(color: colors.line),
+        borderRadius: BorderRadius.circular(context.radii.radius),
+        boxShadow: context.elevation.sm,
+      ),
+      child: StatefulBuilder(
+        builder: (context, rebuild) {
+          var refusal = _refusal;
+          var name = _name.text.trim();
+          void create() {
+            if (name.isEmpty || refusal != null) return;
+            controller.close();
+            widget.onCreate(name, _size.width, _size.height);
+            _name.clear();
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: FwSpacing.md,
+            children: [
+              Text('New scene', style: context.type.bodyStrong),
+              TextField(
+                controller: _name,
+                autofocus: true,
+                decoration: const InputDecoration(hintText: 'PromoBadge'),
+                onChanged: (_) => rebuild(() {}),
+                onSubmitted: (_) => create(),
+              ),
+              if (refusal != null)
+                Text(
+                  refusal,
+                  style: context.type.caption.copyWith(color: colors.red),
+                ),
+              FwPicker<int>(
+                choices: [
+                  for (var (i, size) in _sizes.indexed)
+                    FwChoice(value: i, label: size.label),
+                ],
+                selected: _sizes.indexOf(_size),
+                onChanged: (i) => rebuild(() => _size = _sizes[i]),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FwActionButton(
+                  label: 'Create',
+                  primary: true,
+                  onPressed: name.isEmpty || refusal != null
+                      ? null
+                      : () async => create(),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

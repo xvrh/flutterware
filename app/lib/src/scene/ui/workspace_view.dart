@@ -4,6 +4,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
+import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../playback.dart';
 import 'canvas.dart';
@@ -20,15 +21,19 @@ import 'tree_panel.dart';
 /// the lanes — a timeline row *is* a scene node — so nothing that shows the
 /// nodes should leave when the keys arrive.
 ///
+/// The scene is static first: the timeline appears only once a motion is
+/// opened from the strip under the canvas, and a scene may have several.
+///
 /// Tree and canvas share the editing focus scope; the timeline has its own
 /// (an arrow means something else to a key); the inspector sits outside both,
 /// so its fields keep every keystroke.
-class SceneWorkspaceView extends StatelessWidget {
+class SceneWorkspaceView extends StatefulWidget {
   const SceneWorkspaceView(
     this.editor, {
     super.key,
     required this.content,
-    this.playback,
+    required this.playbackFor,
+    this.sceneClassName,
     this.status,
     this.onEnterNested,
     this.canvasTrailing = const [],
@@ -39,9 +44,12 @@ class SceneWorkspaceView extends StatelessWidget {
   /// The renderer, sized to the artboard — see [SceneCanvas.content].
   final Widget content;
 
-  /// The motion being edited, or null for a scene with none: then there is
-  /// no timeline, and the canvas takes the height.
-  final ScenePlayback? playback;
+  /// The playback for one of the editor's motions, by name — made once and
+  /// kept by the host, because a playback owns a ticker.
+  final ScenePlayback Function(String motion) playbackFor;
+
+  /// What a new motion animates; null hides "New motion".
+  final String? sceneClassName;
 
   final ValueListenable<String>? status;
 
@@ -53,6 +61,16 @@ class SceneWorkspaceView extends StatelessWidget {
 
   static const treeWidth = 230.0;
   static const inspectorWidth = 290.0;
+
+  @override
+  State<SceneWorkspaceView> createState() => _SceneWorkspaceViewState();
+}
+
+class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
+  /// The timeline folded away while a motion stays open — the chevron.
+  var _folded = false;
+
+  SceneEditor get editor => widget.editor;
 
   @override
   Widget build(BuildContext context) {
@@ -67,32 +85,58 @@ class SceneWorkspaceView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
-                  width: treeWidth,
-                  child: SceneTreePanel(editor, onEnterNested: onEnterNested),
+                  width: SceneWorkspaceView.treeWidth,
+                  child: SceneTreePanel(
+                    editor,
+                    onEnterNested: widget.onEnterNested,
+                  ),
                 ),
                 Container(width: 1, color: line),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: SceneCanvas(
-                          editor,
-                          content: content,
-                          status: status,
-                          onEnterNested: onEnterNested,
-                          trailing: canvasTrailing,
-                        ),
-                      ),
-                      if (playback case var playback?) ...[
-                        Container(height: 1, color: line),
-                        Expanded(
-                          flex: 2,
-                          child: SceneTimeline(editor, playback),
-                        ),
-                      ],
-                    ],
+                  child: AnimatedBuilder(
+                    animation: editor.listenable,
+                    builder: (context, _) {
+                      var active = editor.activeMotion;
+                      var open = active != null && !_folded;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: SceneCanvas(
+                              editor,
+                              content: widget.content,
+                              status: widget.status,
+                              onEnterNested: widget.onEnterNested,
+                              trailing: widget.canvasTrailing,
+                            ),
+                          ),
+                          Container(height: 1, color: line),
+                          _MotionStrip(
+                            editor: editor,
+                            sceneClassName: widget.sceneClassName,
+                            folded: _folded,
+                            onFold: active == null
+                                ? null
+                                : () => setState(() => _folded = !_folded),
+                            onPick: (name) {
+                              editor.activeMotion = name;
+                              setState(() => _folded = false);
+                            },
+                          ),
+                          if (open) ...[
+                            Container(height: 1, color: line),
+                            Expanded(
+                              flex: 2,
+                              child: SceneTimeline(
+                                editor,
+                                widget.playbackFor(active),
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],
@@ -101,7 +145,7 @@ class SceneWorkspaceView extends StatelessWidget {
         ),
         Container(width: 1, color: line),
         SizedBox(
-          width: inspectorWidth,
+          width: SceneWorkspaceView.inspectorWidth,
           // The inspector shows whatever is selected now; the other panels
           // subscribe for themselves, this one is stateless over the editor.
           child: AnimatedBuilder(
@@ -113,6 +157,115 @@ class SceneWorkspaceView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The scene's motions, as a strip under the canvas: pick one to open its
+/// timeline, make a new one, fold the timeline away. The static editor is
+/// the resting state; this is the door to animation.
+class _MotionStrip extends StatelessWidget {
+  const _MotionStrip({
+    required this.editor,
+    required this.sceneClassName,
+    required this.folded,
+    required this.onFold,
+    required this.onPick,
+  });
+
+  final SceneEditor editor;
+  final String? sceneClassName;
+  final bool folded;
+  final VoidCallback? onFold;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var type = context.type;
+    var active = editor.activeMotion;
+    var names = editor.motions.keys.toList();
+    return Container(
+      height: 32,
+      color: colors.panel,
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+      child: Row(
+        spacing: FwSpacing.sm,
+        children: [
+          Tooltip(
+            message: active == null
+                ? 'Open a motion to see its timeline'
+                : folded
+                ? 'Show the timeline'
+                : 'Hide the timeline',
+            child: Tappable(
+              onTap: onFold,
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+              child: Padding(
+                padding: const EdgeInsets.all(FwSpacing.xs),
+                child: Icon(
+                  active == null || folded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  size: FwIconSize.md,
+                  color: onFold == null ? colors.mut3 : colors.ink,
+                ),
+              ),
+            ),
+          ),
+          Text('Motions', style: type.sectionLabel),
+          if (names.isEmpty)
+            Text('none yet', style: type.caption.copyWith(color: colors.mut2)),
+          for (var name in names)
+            Tappable(
+              onTap: () => onPick(name),
+              borderRadius: BorderRadius.circular(context.radii.pill),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: FwSpacing.md,
+                  vertical: FwSpacing.xxs,
+                ),
+                decoration: BoxDecoration(
+                  color: name == active ? colors.accentSoft : null,
+                  border: Border.all(
+                    color: name == active ? colors.accent : colors.line,
+                  ),
+                  borderRadius: BorderRadius.circular(context.radii.pill),
+                ),
+                child: Text(
+                  name,
+                  style: type.caption.copyWith(
+                    color: name == active ? colors.accentDark : colors.ink,
+                  ),
+                ),
+              ),
+            ),
+          if (sceneClassName case var className?)
+            Tooltip(
+              message: 'A new, empty motion on this scene',
+              child: Tappable(
+                onTap: () => onPick(editor.addMotion(className)),
+                borderRadius: BorderRadius.circular(context.radii.pill),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FwSpacing.sm,
+                    vertical: FwSpacing.xxs,
+                  ),
+                  child: Row(
+                    spacing: FwSpacing.xxs,
+                    children: [
+                      Icon(Icons.add, size: FwIconSize.xs, color: colors.mut),
+                      Text(
+                        'New motion',
+                        style: type.caption.copyWith(color: colors.mut),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

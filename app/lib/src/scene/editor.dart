@@ -16,11 +16,21 @@ import 'package:flutterware/scene_authoring.dart';
 /// and a layout edit undo through the same journal, because they are one
 /// document.
 class _JournalEntry {
-  _JournalEntry(this.label, this.scene, this.motions, this.mergeKey);
+  _JournalEntry(
+    this.label,
+    this.scene,
+    this.motions,
+    this.motionClasses,
+    this.mergeKey,
+  );
 
   final String label;
   final SceneSnapshot scene;
   final Map<String, MotionSnapshot> motions;
+
+  /// Which scene class each motion animates, so a motion undone out of
+  /// existence can be redone into it.
+  final Map<String, String> motionClasses;
   final String? mergeKey;
 }
 
@@ -62,6 +72,49 @@ class SceneEditor extends SceneListenable {
   /// The motions of the file, by class name — the same document as the
   /// scene, so they share this editor's selection, doors and journal.
   final Map<String, MotionDocument> motions;
+
+  /// The motion the timeline is open on, or null: the scene is static first,
+  /// and a motion is something you open.
+  String? get activeMotion =>
+      motions.containsKey(_activeMotion) ? _activeMotion : null;
+  String? _activeMotion;
+
+  set activeMotion(String? name) {
+    if (_activeMotion == name) return;
+    _activeMotion = name;
+    clearKeySelection();
+    notifyListeners();
+  }
+
+  /// A new, empty motion on this scene, named after [sceneClassName] unless
+  /// [name] says otherwise, opened as the active one. Its class name is a
+  /// Dart identifier in the file, so it is checked as one.
+  String addMotion(String sceneClassName, {String? name}) {
+    var chosen = name ?? _freeMotionName(sceneClassName);
+    if (!isValidNodeName(chosen) || motions.containsKey(chosen)) {
+      throw ArgumentError('"$chosen" is not a free motion name');
+    }
+    perform('New motion $chosen', () {
+      motions[chosen] = MotionDocument(sceneClassName: sceneClassName);
+    });
+    activeMotion = chosen;
+    return chosen;
+  }
+
+  void removeMotion(String name) {
+    if (!motions.containsKey(name)) return;
+    perform('Delete motion $name', () => motions.remove(name));
+    if (_activeMotion == name) activeMotion = null;
+  }
+
+  String _freeMotionName(String sceneClassName) {
+    var base = '${sceneClassName}Motion';
+    var candidate = base;
+    for (var i = 2; motions.containsKey(candidate); i++) {
+      candidate = '$base$i';
+    }
+    return candidate;
+  }
 
   // -------------------------------------------------------------------------
   // Selection — a set of node names, in selection order.
@@ -473,7 +526,13 @@ class SceneEditor extends SceneListenable {
     _openMerge = mergeKey;
     if (!merge) {
       _undo.add(
-        _JournalEntry(label, doc.snapshot(), _motionSnapshots(), mergeKey),
+        _JournalEntry(
+          label,
+          doc.snapshot(),
+          _motionSnapshots(),
+          _motionClasses(),
+          mergeKey,
+        ),
       );
       if (_undo.length > _journalCap) _undo.removeAt(0);
       _redo.clear();
@@ -496,7 +555,13 @@ class SceneEditor extends SceneListenable {
     if (_undo.isEmpty) return;
     var entry = _undo.removeLast();
     _redo.add(
-      _JournalEntry(entry.label, doc.snapshot(), _motionSnapshots(), null),
+      _JournalEntry(
+        entry.label,
+        doc.snapshot(),
+        _motionSnapshots(),
+        _motionClasses(),
+        null,
+      ),
     );
     _restore(entry);
     notifyListeners();
@@ -506,7 +571,13 @@ class SceneEditor extends SceneListenable {
     if (_redo.isEmpty) return;
     var entry = _redo.removeLast();
     _undo.add(
-      _JournalEntry(entry.label, doc.snapshot(), _motionSnapshots(), null),
+      _JournalEntry(
+        entry.label,
+        doc.snapshot(),
+        _motionSnapshots(),
+        _motionClasses(),
+        null,
+      ),
     );
     _restore(entry);
     notifyListeners();
@@ -516,11 +587,26 @@ class SceneEditor extends SceneListenable {
     for (var e in motions.entries) e.key: e.value.snapshot(),
   };
 
+  Map<String, String> _motionClasses() => {
+    for (var e in motions.entries) e.key: e.value.sceneClassName,
+  };
+
   void _restore(_JournalEntry entry) {
     _openMerge = null;
     doc.restore(entry.scene);
+    // The set of motions is part of the state: one added since is dropped,
+    // one removed since comes back — revived into a fresh document, since
+    // the old object is gone with whoever held it.
+    motions.removeWhere((name, _) => !entry.motions.containsKey(name));
     for (var e in entry.motions.entries) {
-      motions[e.key]?.restore(e.value);
+      var existing = motions[e.key];
+      if (existing != null) {
+        existing.restore(e.value);
+      } else {
+        motions[e.key] = MotionDocument(
+          sceneClassName: entry.motionClasses[e.key]!,
+        )..restore(e.value);
+      }
     }
     _revision++;
   }

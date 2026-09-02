@@ -24,7 +24,8 @@ import 'command_palette.dart' show wrapInAppTheme;
 @Preview(name: 'Workspace', group: 'Scene', wrapper: wrapInAppTheme)
 Widget workspace() => const _Workspace();
 
-@Preview(name: 'Workspace, no motion', group: 'Scene', wrapper: wrapInAppTheme)
+/// The resting state: no motion open, the timeline strip alone.
+@Preview(name: 'Workspace, static', group: 'Scene', wrapper: wrapInAppTheme)
 Widget workspaceStill() => const _Workspace(motion: false);
 
 class _Workspace extends StatefulWidget {
@@ -42,27 +43,36 @@ class _WorkspaceState extends State<_Workspace> with TickerProviderStateMixin {
     _doc,
     motions: widget.motion ? {'BannerIntro': coffeeIntroDraft()} : const {},
   );
-  late final ScenePlayback? _playback = widget.motion
-      ? ScenePlayback(_editor, 'BannerIntro', vsync: this)
-      : null;
+  final _playbacks = <String, ScenePlayback>{};
+
+  ScenePlayback _playbackFor(String motion) => _playbacks.putIfAbsent(
+    motion,
+    () => ScenePlayback(_editor, motion, vsync: this),
+  );
 
   @override
   void initState() {
     super.initState();
     _editor.select(_doc.nodeNamed('headline'));
-    _playback?.seek(const Duration(milliseconds: 420));
+    if (widget.motion) {
+      _editor.activeMotion = 'BannerIntro';
+      _playbackFor('BannerIntro').seek(const Duration(milliseconds: 420));
+    }
   }
 
   @override
   void dispose() {
-    _playback?.dispose();
+    for (var playback in _playbacks.values) {
+      playback.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => SceneWorkspaceView(
     _editor,
-    playback: _playback,
+    playbackFor: _playbackFor,
+    sceneClassName: 'BannerScene',
     content: SceneView(
       _doc,
       externals: _externals,
