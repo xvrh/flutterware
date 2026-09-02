@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
+import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
+import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../playback.dart';
@@ -217,25 +219,36 @@ class _MotionStrip extends StatelessWidget {
           if (names.isEmpty)
             Text('none yet', style: type.caption.copyWith(color: colors.mut2)),
           for (var name in names)
-            Tappable(
-              onTap: () => onPick(name),
-              borderRadius: BorderRadius.circular(context.radii.pill),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: FwSpacing.md,
-                  vertical: FwSpacing.xxs,
-                ),
-                decoration: BoxDecoration(
-                  color: name == active ? colors.accentSoft : null,
-                  border: Border.all(
-                    color: name == active ? colors.accent : colors.line,
+            GestureDetector(
+              onSecondaryTapUp: (d) =>
+                  showContextMenu(context, d.globalPosition, [
+                    MenuItem(
+                      'Delete $name',
+                      icon: Icons.close,
+                      danger: true,
+                      onSelected: () => editor.removeMotion(name),
+                    ),
+                  ]),
+              child: Tappable(
+                onTap: () => onPick(name),
+                borderRadius: BorderRadius.circular(context.radii.pill),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FwSpacing.md,
+                    vertical: FwSpacing.xxs,
                   ),
-                  borderRadius: BorderRadius.circular(context.radii.pill),
-                ),
-                child: Text(
-                  name,
-                  style: type.caption.copyWith(
-                    color: name == active ? colors.accentDark : colors.ink,
+                  decoration: BoxDecoration(
+                    color: name == active ? colors.accentSoft : null,
+                    border: Border.all(
+                      color: name == active ? colors.accent : colors.line,
+                    ),
+                    borderRadius: BorderRadius.circular(context.radii.pill),
+                  ),
+                  child: Text(
+                    name,
+                    style: type.caption.copyWith(
+                      color: name == active ? colors.accentDark : colors.ink,
+                    ),
                   ),
                 ),
               ),

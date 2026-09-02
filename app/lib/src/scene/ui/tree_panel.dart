@@ -157,12 +157,16 @@ class _Toolbar extends StatelessWidget {
 
   void _addText() => _add(TextNode(doc.uniqueName('text'), 'Text'));
 
+  /// Where an added node goes: the selected frame, else beside the selected
+  /// node, else the root.
+  FrameNode _target() => switch (editor.primary) {
+    FrameNode f => f,
+    SceneNode n => doc.parentOf(n) ?? doc.root,
+    null => doc.root,
+  };
+
   void _add(SceneNode node) {
-    var target = switch (editor.primary) {
-      FrameNode f => f,
-      SceneNode n => doc.parentOf(n) ?? doc.root,
-      null => doc.root,
-    };
+    var target = _target();
     editor.perform('Add ${node.name}', () => target.children.add(node));
     editor.select(node);
   }
@@ -184,7 +188,9 @@ class _Toolbar extends StatelessWidget {
           FwSplitButton(
             label: 'Add',
             icon: Icons.add,
-            tooltip: 'Add a text under the selection',
+            tooltip:
+                'Add a text under ${_target().name} — or draw one on the '
+                'canvas with the F, T and S tools',
             onPressed: _addText,
             menuTooltip: 'Add something else',
             entries: [

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutterware/scene.dart';
@@ -121,6 +122,28 @@ class _SceneCanvasState extends State<SceneCanvas> {
         spacing: FwSpacing.md,
         children: [
           AnimatedBuilder(
+            animation: editor.listenable,
+            builder: (context, _) => Row(
+              spacing: FwSpacing.xxs,
+              children: [
+                for (var (tool, icon, label, key) in const [
+                  (SceneTool.select, Icons.near_me_outlined, 'Select', 'V'),
+                  (SceneTool.frame, Icons.crop_square, 'Frame', 'F'),
+                  (SceneTool.text, Icons.text_fields, 'Text', 'T'),
+                  (SceneTool.shape, Icons.circle_outlined, 'Shape', 'S'),
+                ])
+                  _Tool(
+                    icon: icon,
+                    label: label,
+                    shortcut: key,
+                    active: editor.tool == tool,
+                    onTap: () => editor.tool = tool,
+                  ),
+              ],
+            ),
+          ),
+          Container(width: 1, height: 16, color: colors.line),
+          AnimatedBuilder(
             animation: doc.listenable,
             builder: (context, _) => Text(
               '${_artboardWidth.round()} × ${_artboardHeight.round()}',
@@ -227,6 +250,47 @@ class _Verb extends StatelessWidget {
   );
 }
 
+/// One of the canvas tools: a glyph, lit when it is the current one.
+class _Tool extends StatelessWidget {
+  const _Tool({
+    required this.icon,
+    required this.label,
+    required this.shortcut,
+    required this.active,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String shortcut;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    return Tooltip(
+      message: '$label ($shortcut)',
+      child: Tappable(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Container(
+          padding: const EdgeInsets.all(FwSpacing.xs),
+          decoration: BoxDecoration(
+            color: active ? colors.accentSoft : null,
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          ),
+          child: Icon(
+            icon,
+            size: FwIconSize.md,
+            color: active ? colors.accentDark : colors.ink,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Everything the mouse can do to the artboard, as transparent widgets over
 /// the renderer: a marquee on the empty ground, a target per addressable
 /// node, and the selection painted on top.
@@ -245,12 +309,43 @@ class _HitLayerState extends State<_HitLayer> {
   Rect? _marquee;
 
   SceneEditor get editor => widget.editor;
+  SceneDocument get doc => widget.editor.doc;
 
+  bool get _drawing => editor.tool != SceneTool.select;
+
+  /// The drag rectangle: a marquee under the select tool, the box of the
+  /// node being drawn under the others.
   void _updateMarquee(Offset at) {
     var rect = Rect.fromPoints(_marqueeStart!, at);
     setState(() => _marquee = rect);
-    editor.selectWithin(rect.scene);
+    if (!_drawing) editor.selectWithin(rect.scene);
   }
+
+  /// A press with a drawing tool: a drag drew a box, a click a default one.
+  void _finishDrawing(Rect? rect, Offset at) {
+    var tool = editor.tool;
+    var box = rect != null && rect.width > 4 && rect.height > 4
+        ? rect
+        : Rect.fromLTWH(at.dx, at.dy, 120, 80);
+    var node = switch (tool) {
+      SceneTool.frame =>
+        FrameNode(doc.uniqueName('frame'))
+          ..width = _half(box.width)
+          ..height = _half(box.height),
+      SceneTool.shape =>
+        ShapeNode(doc.uniqueName('shape'))
+          ..width = _half(box.width)
+          ..height = _half(box.height)
+          ..fill = const SceneColor(0xFF888888),
+      SceneTool.text => TextNode(doc.uniqueName('text'), 'Text'),
+      SceneTool.select => null,
+    };
+    if (node == null) return;
+    // A text is placed, not drawn: it hugs its words.
+    editor.insertNode(node, x: box.left, y: box.top);
+  }
+
+  static double _half(double v) => (v * 2).round() / 2;
 
   @override
   Widget build(BuildContext context) {
@@ -260,31 +355,52 @@ class _HitLayerState extends State<_HitLayer> {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (_) => editor.clearSelection(),
-              onPanStart: (d) {
-                _marqueeStart = d.localPosition;
-                _updateMarquee(d.localPosition);
-              },
-              onPanUpdate: (d) => _updateMarquee(d.localPosition),
-              onPanEnd: (_) => setState(() {
-                _marqueeStart = null;
-                _marquee = null;
-              }),
+            child: MouseRegion(
+              cursor: _drawing ? SystemMouseCursors.precise : MouseCursor.defer,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                // A drawn box starts where the mouse went down, not where the
+                // recognizer made up its mind: a quick drag would otherwise
+                // offset every frame by the slop.
+                dragStartBehavior: DragStartBehavior.down,
+                onTapDown: (d) {
+                  if (_drawing) {
+                    _finishDrawing(null, d.localPosition);
+                  } else {
+                    editor.clearSelection();
+                  }
+                },
+                onPanStart: (d) {
+                  _marqueeStart = d.localPosition;
+                  _updateMarquee(d.localPosition);
+                },
+                onPanUpdate: (d) => _updateMarquee(d.localPosition),
+                onPanEnd: (d) {
+                  var rect = _marquee;
+                  var start = _marqueeStart;
+                  setState(() {
+                    _marqueeStart = null;
+                    _marquee = null;
+                  });
+                  if (_drawing && start != null) _finishDrawing(rect, start);
+                },
+              ),
             ),
           ),
-          for (var node in editor.addressable())
-            if (node.measured != null)
-              Positioned.fromRect(
-                rect: node.measured!.flutter,
-                child: _NodeTarget(
-                  editor,
-                  node,
-                  key: ValueKey('node:${node.name}'),
-                  onEnterNested: widget.onEnterNested,
+          // While drawing, the nodes do not take the press: a frame drawn
+          // over a headline must not drag the headline.
+          if (!_drawing)
+            for (var node in editor.addressable())
+              if (node.measured != null)
+                Positioned.fromRect(
+                  rect: node.measured!.flutter,
+                  child: _NodeTarget(
+                    editor,
+                    node,
+                    key: ValueKey('node:${node.name}'),
+                    onEnterNested: widget.onEnterNested,
+                  ),
                 ),
-              ),
           Positioned.fill(
             child: IgnorePointer(
               child: CustomPaint(

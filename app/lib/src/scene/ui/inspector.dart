@@ -13,6 +13,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
+import '../../ui/action_button.dart';
 import '../../ui/picker.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
@@ -483,6 +484,15 @@ class SceneInspector extends StatelessWidget {
               style: context.type.caption.copyWith(color: colors.mut2),
             ),
           ),
+        const SizedBox(height: FwSpacing.xl),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FwActionButton(
+            label: refs.length == 1 ? 'Delete' : 'Delete ${refs.length} keys',
+            tooltip: 'Also Backspace, with the timeline focused',
+            onPressed: () async => editor.deleteKeys(),
+          ),
+        ),
       ],
     );
   }

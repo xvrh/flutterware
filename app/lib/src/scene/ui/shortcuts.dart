@@ -55,7 +55,21 @@ class _EditorShortcutsState extends State<EditorShortcuts> {
             editor.deleteSelection,
         const SingleActivator(LogicalKeyboardKey.delete):
             editor.deleteSelection,
-        const SingleActivator(LogicalKeyboardKey.escape): editor.clearSelection,
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          editor.tool = SceneTool.select;
+          editor.clearSelection();
+        },
+        // The drawing tools, as the letter each is known by in every editor
+        // of this kind. Plain letters are safe here: the inspector's fields
+        // sit outside this scope.
+        const SingleActivator(LogicalKeyboardKey.keyV): () =>
+            editor.tool = SceneTool.select,
+        const SingleActivator(LogicalKeyboardKey.keyF): () =>
+            editor.tool = SceneTool.frame,
+        const SingleActivator(LogicalKeyboardKey.keyT): () =>
+            editor.tool = SceneTool.text,
+        const SingleActivator(LogicalKeyboardKey.keyS): () =>
+            editor.tool = SceneTool.shape,
         const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
             editor.duplicateSelection,
         const SingleActivator(LogicalKeyboardKey.keyA, meta: true): () => editor

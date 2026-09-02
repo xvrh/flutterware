@@ -63,6 +63,10 @@ class MotionKeyRef {
   String toString() => '$motion.$group.$prop#$keyId';
 }
 
+/// What a press on the canvas does: pick, or draw one of the node kinds.
+/// Drawing returns to [select] once the node exists.
+enum SceneTool { select, frame, text, shape }
+
 class SceneEditor extends SceneListenable {
   SceneEditor(this.doc, {Map<String, MotionDocument> motions = const {}})
     : motions = {...motions};
@@ -189,6 +193,54 @@ class SceneEditor extends SceneListenable {
     _selection.clear();
     notifyListeners();
   }
+
+  /// The canvas tool. Not journaled: choosing a tool changes nothing in the
+  /// document.
+  SceneTool get tool => _tool;
+  SceneTool _tool = SceneTool.select;
+
+  set tool(SceneTool value) {
+    if (_tool == value) return;
+    _tool = value;
+    notifyListeners();
+  }
+
+  /// The deepest frame whose measured box holds [point] (artboard space),
+  /// the root when none does — where a node drawn at [point] belongs.
+  FrameNode frameAt(double x, double y) {
+    var best = doc.root;
+    for (var (node, _) in doc.walk()) {
+      if (node is! FrameNode || node == doc.root) continue;
+      var rect = node.measured;
+      if (rect == null) continue;
+      if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+        continue;
+      }
+      // Deeper wins: the walk is pre-order, so a child comes after its
+      // parent and replaces it.
+      best = node;
+    }
+    return best;
+  }
+
+  /// Puts [node] where it was drawn: under the frame at that point, at a
+  /// position relative to it when the frame lays out freely, appended when
+  /// the frame is a row or a column (position is order there). Selected
+  /// afterwards, and the tool goes back to select.
+  void insertNode(SceneNode node, {required double x, required double y}) {
+    var parent = frameAt(x, y);
+    if (parent.layout == NodeLayout.absolute) {
+      var origin = parent.measured;
+      node
+        ..x = _half(x - (origin?.left ?? 0))
+        ..y = _half(y - (origin?.top ?? 0));
+    }
+    perform('Add ${node.name}', () => parent.children.add(node));
+    select(node);
+    tool = SceneTool.select;
+  }
+
+  static double _half(double v) => (v * 2).round() / 2;
 
   String? _hover;
 
@@ -426,6 +478,59 @@ class SceneEditor extends SceneListenable {
     } on ArgumentError {
       return kind == TrackKind.color ? const SceneColor(0xFF000000) : 0.0;
     }
+  }
+
+  /// Removes [groupName] from [motion] and from its timeline, keys and all.
+  void deleteGroup(String motion, String groupName) {
+    var m = motions[motion];
+    var group = m?.groupNamed(groupName);
+    if (m == null || group == null) return;
+    perform('Delete $groupName', () {
+      m.groups.remove(group);
+      m.timeline = _without(m.timeline, groupName);
+    });
+    clearKeySelection();
+  }
+
+  /// Removes one track of a group; the group stays, even empty, since it is
+  /// the node's place on the timeline.
+  void deleteTrack(String motion, String groupName, String prop) {
+    var group = motions[motion]?.groupNamed(groupName);
+    if (group == null) return;
+    perform('Delete ${_propLabel(prop)}', () {
+      if (prop.startsWith('args.')) {
+        group.args.remove(prop.substring(5));
+      } else {
+        group.tracks.remove(prop);
+      }
+    });
+    clearKeySelection();
+  }
+
+  static String _propLabel(String prop) =>
+      prop.startsWith('args.') ? prop.substring(5) : prop;
+
+  /// [expr] with every reference to [name] gone, and any combinator left
+  /// empty by that collapsed.
+  static TimelineExpr _without(TimelineExpr expr, String name) {
+    TimelineExpr? strip(TimelineExpr e) => switch (e) {
+      GroupRef r => r.name == name ? null : r,
+      ParExpr p => ParExpr([for (var c in p.children) ?strip(c)]),
+      SeqExpr s => SeqExpr([for (var c in s.children) ?strip(c)]),
+      AtExpr a => switch (strip(a.child)) {
+        null => null,
+        var child => AtExpr(a.offset, child),
+      },
+      SpeedExpr s => switch (strip(s.child)) {
+        null => null,
+        var child => SpeedExpr(s.factor, child),
+      },
+      RepeatExpr r => switch (strip(r.child)) {
+        null => null,
+        var child => RepeatExpr(r.times, child),
+      },
+    };
+    return strip(expr) ?? ParExpr([]);
   }
 
   void setKeyValue(MotionKeyRef ref, Object value, {String? mergeKey}) {

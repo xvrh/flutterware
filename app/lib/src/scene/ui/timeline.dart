@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
+import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/split_button.dart';
@@ -328,112 +329,128 @@ class _GroupRowState extends State<_GroupRow> {
         : animatableProps(node).where((p) => !tracked.contains(p.name));
     var hovered = editor.hover == group.target;
     var selected = node != null && editor.isSelected(node);
-    return SizedBox(
-      height: _GroupRow.height,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: widget.gutterWidth,
-            child: MouseRegion(
-              onEnter: (_) => editor.hover = group.target,
-              onExit: (_) {
-                if (editor.hover == group.target) editor.hover = null;
-              },
-              child: Tappable(
-                onTap: () => editor.select(node, toggle: toggleModifier),
-                child: Container(
-                  color: selected ? colors.accentSoft : null,
-                  padding: const EdgeInsets.only(
-                    left: FwSpacing.lg,
-                    right: FwSpacing.xs,
-                  ),
-                  child: Row(
-                    spacing: FwSpacing.sm,
-                    children: [
-                      Expanded(
-                        child: Text.rich(
-                          TextSpan(
-                            text: group.target,
-                            style: context.type.body.copyWith(
-                              color: hovered || selected
-                                  ? colors.accentDark
-                                  : colors.ink,
-                            ),
-                            children: [
-                              TextSpan(
-                                text: '  ${group.name}',
-                                style: context.type.caption.copyWith(
-                                  color: colors.mut3,
-                                ),
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onSecondaryTapUp: (d) => showContextMenu(context, d.globalPosition, [
+        MenuItem(
+          'Delete ${group.name}',
+          icon: Icons.close,
+          danger: true,
+          onSelected: () =>
+              editor.deleteGroup(widget.playback.motionName, group.name),
+        ),
+      ]),
+      child: SizedBox(
+        height: _GroupRow.height,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: widget.gutterWidth,
+              child: MouseRegion(
+                onEnter: (_) => editor.hover = group.target,
+                onExit: (_) {
+                  if (editor.hover == group.target) editor.hover = null;
+                },
+                child: Tappable(
+                  onTap: () => editor.select(node, toggle: toggleModifier),
+                  child: Container(
+                    color: selected ? colors.accentSoft : null,
+                    padding: const EdgeInsets.only(
+                      left: FwSpacing.lg,
+                      right: FwSpacing.xs,
+                    ),
+                    child: Row(
+                      spacing: FwSpacing.sm,
+                      children: [
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              text: group.target,
+                              style: context.type.body.copyWith(
+                                color: hovered || selected
+                                    ? colors.accentDark
+                                    : colors.ink,
                               ),
-                            ],
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ),
-                      if (offered.isNotEmpty)
-                        Tooltip(
-                          message:
-                              'Animate another property, keyed at the playhead',
-                          child: FwSplitButton.icon(
-                            icon: Icons.add,
-                            menuTooltip: 'Properties',
-                            entries: [
-                              for (var spec in offered)
-                                MenuItem(
-                                  spec.name.startsWith('args.')
-                                      ? spec.name.substring(5)
-                                      : spec.name,
-                                  onSelected: () => widget.onAddKey(spec.name),
+                              children: [
+                                TextSpan(
+                                  text: '  ${group.name}',
+                                  style: context.type.caption.copyWith(
+                                    color: colors.mut3,
+                                  ),
                                 ),
-                            ],
+                              ],
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
-                    ],
+                        if (offered.isNotEmpty)
+                          Tooltip(
+                            message: 'Animate another property, keyed at the playhead',
+                            child: FwSplitButton.icon(
+                              icon: Icons.add,
+                              menuTooltip: 'Properties',
+                              entries: [
+                                for (var spec in offered)
+                                  MenuItem(
+                                    spec.name.startsWith('args.')
+                                        ? spec.name.substring(5)
+                                        : spec.name,
+                                    onSelected: () =>
+                                        widget.onAddKey(spec.name),
+                                  ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          Container(width: 1, color: colors.line),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                var width = math.max(1.0, constraints.maxWidth);
-                return MouseRegion(
-                  cursor: SystemMouseCursors.grab,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    dragStartBehavior: DragStartBehavior.down,
-                    onHorizontalDragDown: (d) => _down(d.localPosition, width),
-                    onHorizontalDragUpdate: (d) => _update(d.delta.dx, width),
-                    onHorizontalDragEnd: (_) => _end(),
-                    onHorizontalDragCancel: _end,
-                    child: CustomPaint(
-                      painter: _SpanPainter(
-                        start:
-                            widget.lanes.at.inMilliseconds /
-                            widget.total *
-                            width,
-                        end:
-                            (widget.lanes.at + group.duration).inMilliseconds /
-                            widget.total *
-                            width,
-                        playhead: widget.playback.t * width,
-                        fill: selected ? colors.accentSoft2 : colors.accentSoft,
-                        edge: colors.accent,
-                        line: colors.line,
-                        playheadColor: colors.red,
+            Container(width: 1, color: colors.line),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  var width = math.max(1.0, constraints.maxWidth);
+                  return MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      dragStartBehavior: DragStartBehavior.down,
+                      onHorizontalDragDown: (d) =>
+                          _down(d.localPosition, width),
+                      onHorizontalDragUpdate: (d) => _update(d.delta.dx, width),
+                      onHorizontalDragEnd: (_) => _end(),
+                      onHorizontalDragCancel: _end,
+                      child: CustomPaint(
+                        painter: _SpanPainter(
+                          start:
+                              widget.lanes.at.inMilliseconds /
+                              widget.total *
+                              width,
+                          end:
+                              (widget.lanes.at + group.duration)
+                                  .inMilliseconds /
+                              widget.total *
+                              width,
+                          playhead: widget.playback.t * width,
+                          fill: selected
+                              ? colors.accentSoft2
+                              : colors.accentSoft,
+                          edge: colors.accent,
+                          line: colors.line,
+                          playheadColor: colors.red,
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -733,6 +750,49 @@ class _KeyStripState extends State<_KeyStrip> {
     );
   }
 
+  /// Right-click: on a key, the key's verbs; anywhere on the lane, the
+  /// track's and the group's.
+  void _contextMenu(BuildContext context, TapUpDetails d, double width) {
+    var key = _hit(d.localPosition, width);
+    var motion = widget.playback.motionName;
+    if (key != null) {
+      var ref = _ref(key);
+      if (!editor.isKeySelected(ref)) editor.selectKey(ref);
+    }
+    var selected = editor.selectedKeys.length;
+    showContextMenu(context, d.globalPosition, [
+      if (key != null) ...[
+        MenuItem(
+          selected > 1 ? 'Delete $selected keys' : 'Delete key',
+          icon: Icons.close,
+          shortcut: '⌫',
+          danger: true,
+          onSelected: editor.deleteKeys,
+        ),
+        const MenuDivider(),
+      ],
+      MenuItem(
+        'Add key here',
+        icon: Icons.add,
+        onSelected: () {
+          _doubleTapAt = d.localPosition;
+          _addKeyAt(width);
+        },
+      ),
+      MenuItem(
+        'Delete ${lane.label} track',
+        danger: true,
+        onSelected: () =>
+            editor.deleteTrack(motion, lane.group.name, lane.prop),
+      ),
+      MenuItem(
+        'Delete ${lane.group.name}',
+        danger: true,
+        onSelected: () => editor.deleteGroup(motion, lane.group.name),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
@@ -755,6 +815,7 @@ class _KeyStripState extends State<_KeyStrip> {
           // A double-click on the lane is a new key there.
           onDoubleTapDown: (d) => _doubleTapAt = d.localPosition,
           onDoubleTap: () => _addKeyAt(width),
+          onSecondaryTapUp: (d) => _contextMenu(context, d, width),
           child: CustomPaint(
             painter: _KeyPainter(
               xs: [for (var k in lane.track.keys) _x(k, width)],
