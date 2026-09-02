@@ -243,3 +243,20 @@ What is *not* open, because earlier decisions imply it:
   (the nesting research law), so entering a nested scene switches the
   whole workspace, with a breadcrumb back — and a parent may animate only
   the nested scene's declared parameters plus the imposed props.
+
+## Built 2026-09-02: nesting
+
+A nested scene is a node kind — `Scene(PromoBadge, x: …, args: {'label': …})`
+in the grammar, `SceneRefNode` in the core — holding the child's class name
+and overrides for its declared parameters. Only number and colour parameters
+animate (`args.<param>` tracks, like an `Ext`'s args); a string has no
+in-between values. The instance is runtime state like `measured`: the
+workspace resolves the class name to a file of the same package
+(`resolveNested`), instantiates a copy with the args applied, and re-resolves
+on the way back out of a drill-in so the parent draws the child as it is
+now. The wire flattens the instance under the ref's box with internal names
+prefixed, so the host needs no resolver and no internal ever collides with a
+parent name. Enter is a double-click on the node in the tree or on the
+canvas; the workspace view remounts per file so the canvas refits, the guest
+follows the active file, and Save writes every dirty file the workspace
+holds.

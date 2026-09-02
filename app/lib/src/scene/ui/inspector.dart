@@ -123,6 +123,7 @@ class SceneInspector extends StatelessWidget {
           FrameNode f => _frameProps(context, f),
           ShapeNode s => _shapeProps(context, s),
           ExternalNode e => _extProps(context, e),
+          SceneRefNode r => _sceneProps(context, r),
         },
       ],
     );
@@ -392,6 +393,61 @@ class SceneInspector extends StatelessWidget {
         ),
     ],
   ];
+
+  /// The child's declared parameters, each at its override or its default.
+  /// A parameter the child does not declare cannot be set here — the args
+  /// map is the child's contract, not a free bag.
+  List<Widget> _sceneProps(BuildContext context, SceneRefNode r) {
+    var inst = r.instance;
+    return [
+      _label(context, 'Scene'),
+      Text(r.sceneClassName, style: context.type.body),
+      if (inst == null)
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          child: Text(
+            'No scene file by that name in this package',
+            style: context.type.caption.copyWith(color: context.colors.red),
+          ),
+        ),
+      const SizedBox(height: FwSpacing.md),
+      for (var p in inst?.params ?? const <SceneParamDecl>[]) ...[
+        switch (p.kind) {
+          SceneParamKind.number => _number(
+            'args.${p.name}',
+            p.name,
+            ((r.args[p.name] ?? p.defaultValue) as num).toDouble(),
+            const SceneNumberShape(perPixel: 1, decimals: 2),
+            apply: (v) => r.args[p.name] = v,
+          ),
+          SceneParamKind.string => Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            child: TextFormField(
+              key: ValueKey('${r.name}:${p.name}'),
+              initialValue: '${r.args[p.name] ?? p.defaultValue}',
+              decoration: InputDecoration(labelText: p.name, isDense: true),
+              onChanged: (v) => _door('args', () => r.args[p.name] = v),
+            ),
+          ),
+          SceneParamKind.color => Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: FwSpacing.sm,
+              children: [
+                _label(context, p.name),
+                _swatches(
+                  context,
+                  (r.args[p.name] ?? p.defaultValue) as SceneColor?,
+                  (c) => _door('args', () => r.args[p.name] = c),
+                ),
+              ],
+            ),
+          ),
+        },
+      ],
+    ];
+  }
 
   Widget _swatches(
     BuildContext context,

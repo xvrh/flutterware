@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutterware/scene.dart';
+import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
 import '../editor.dart';
@@ -28,6 +30,8 @@ class SceneWorkspaceView extends StatelessWidget {
     required this.content,
     this.playback,
     this.status,
+    this.onEnterNested,
+    this.canvasTrailing = const [],
   });
 
   final SceneEditor editor;
@@ -40,6 +44,12 @@ class SceneWorkspaceView extends StatelessWidget {
   final ScenePlayback? playback;
 
   final ValueListenable<String>? status;
+
+  /// Drill into a nested scene — the workspace's `enter`, when there is one.
+  final ValueChanged<SceneNode>? onEnterNested;
+
+  /// Controls the host wants on the canvas bar's right — a guest reload.
+  final List<Widget> canvasTrailing;
 
   static const treeWidth = 230.0;
   static const inspectorWidth = 290.0;
@@ -56,7 +66,10 @@ class SceneWorkspaceView extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SizedBox(width: treeWidth, child: SceneTreePanel(editor)),
+                SizedBox(
+                  width: treeWidth,
+                  child: SceneTreePanel(editor, onEnterNested: onEnterNested),
+                ),
                 Container(width: 1, color: line),
                 Expanded(
                   child: Column(
@@ -68,6 +81,8 @@ class SceneWorkspaceView extends StatelessWidget {
                           editor,
                           content: content,
                           status: status,
+                          onEnterNested: onEnterNested,
+                          trailing: canvasTrailing,
                         ),
                       ),
                       if (playback case var playback?) ...[
@@ -85,7 +100,18 @@ class SceneWorkspaceView extends StatelessWidget {
           ),
         ),
         Container(width: 1, color: line),
-        SizedBox(width: inspectorWidth, child: SceneInspector(editor)),
+        SizedBox(
+          width: inspectorWidth,
+          // The inspector shows whatever is selected now; the other panels
+          // subscribe for themselves, this one is stateless over the editor.
+          child: AnimatedBuilder(
+            animation: Listenable.merge([
+              editor.listenable,
+              editor.doc.listenable,
+            ]),
+            builder: (context, _) => SceneInspector(editor),
+          ),
+        ),
       ],
     );
   }

@@ -14,9 +14,18 @@ import 'modifiers.dart';
 /// as a set. Hovering a row hovers the node on the canvas and the other way
 /// round, because both are the same `SceneEditor.hover`.
 class SceneTreePanel extends StatefulWidget {
-  const SceneTreePanel(this.editor, {super.key, this.toolbar = true});
+  const SceneTreePanel(
+    this.editor, {
+    super.key,
+    this.toolbar = true,
+    this.onEnterNested,
+  });
 
   final SceneEditor editor;
+
+  /// Double-clicking a nested scene drills into it; null leaves the row a
+  /// plain row.
+  final ValueChanged<SceneNode>? onEnterNested;
 
   /// Whether to show the add/delete strip above the rows. Off where the
   /// arrangement puts those verbs somewhere else.
@@ -63,44 +72,62 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
                     onExit: (_) {
                       if (editor.hover == node.name) editor.hover = null;
                     },
-                    child: FwTreeRow(
-                      depth: depth,
-                      density: TreeRowDensity.dense,
-                      selected: editor.isSelected(node),
-                      open: node is FrameNode && node.children.isNotEmpty
-                          ? !_folded.contains(node.name)
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onDoubleTap:
+                          node is SceneRefNode && widget.onEnterNested != null
+                          ? () => widget.onEnterNested!(node)
                           : null,
-                      onToggleFold: () => setState(() {
-                        if (!_folded.remove(node.name)) _folded.add(node.name);
-                      }),
-                      leading: Icon(
-                        _iconFor(node),
-                        size: FwIconSize.sm,
-                        color: editor.isSelected(node)
-                            ? colors.accentDark
-                            : colors.mut,
-                      ),
-                      label: Text(
-                        node.name,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.type.body.copyWith(
-                          color: editor.hover == node.name
+                      child: FwTreeRow(
+                        depth: depth,
+                        density: TreeRowDensity.dense,
+                        selected: editor.isSelected(node),
+                        open: node is FrameNode && node.children.isNotEmpty
+                            ? !_folded.contains(node.name)
+                            : null,
+                        onToggleFold: () => setState(() {
+                          if (!_folded.remove(node.name)) {
+                            _folded.add(node.name);
+                          }
+                        }),
+                        leading: Icon(
+                          _iconFor(node),
+                          size: FwIconSize.sm,
+                          color: editor.isSelected(node)
                               ? colors.accentDark
-                              : colors.ink,
+                              : colors.mut,
                         ),
-                      ),
-                      trailing: [
-                        if (node is ExternalNode)
-                          Text(
-                            node.entry,
-                            style: context.type.caption.copyWith(
-                              color: colors.mut2,
-                            ),
+                        label: Text(
+                          node.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.type.body.copyWith(
+                            color: editor.hover == node.name
+                                ? colors.accentDark
+                                : colors.ink,
                           ),
-                      ],
-                      onTap: () => editor.select(
-                        node == doc.root ? null : node,
-                        toggle: toggleModifier,
+                        ),
+                        trailing: [
+                          if (node is ExternalNode)
+                            Text(
+                              node.entry,
+                              style: context.type.caption.copyWith(
+                                color: colors.mut2,
+                              ),
+                            ),
+                          if (node is SceneRefNode)
+                            Text(
+                              node.sceneClassName,
+                              style: context.type.caption.copyWith(
+                                color: node.instance == null
+                                    ? colors.red
+                                    : colors.mut2,
+                              ),
+                            ),
+                        ],
+                        onTap: () => editor.select(
+                          node == doc.root ? null : node,
+                          toggle: toggleModifier,
+                        ),
                       ),
                     ),
                   ),
@@ -117,6 +144,7 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
     TextNode() => Icons.text_fields,
     ShapeNode() => Icons.circle_outlined,
     ExternalNode() => Icons.extension_outlined,
+    SceneRefNode() => Icons.layers_outlined,
   };
 }
 

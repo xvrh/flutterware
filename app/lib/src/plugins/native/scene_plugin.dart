@@ -9,6 +9,9 @@ import '../../embedder/embedded_engine.dart';
 import '../../embedder/guest_texture.dart';
 import '../../previews/catalog_session.dart';
 import '../../previews/compiler_daemon_client.dart';
+
+import 'package:flutterware/scene_authoring.dart';
+
 import '../../scene/discovery.dart';
 import '../../scene/editor.dart';
 import '../../scene/guest.dart';
@@ -128,8 +131,10 @@ class _ScenePanelState extends State<_ScenePanel>
   void didUpdateWidget(_ScenePanel old) {
     super.didUpdateWidget(old);
     if (old.plugin == widget.plugin) return;
-    var file = _workspace?.active;
     var package = _package;
+    // The new core has computed nothing; the old one's scan is gone with it.
+    if (package != null) _core.track(package);
+    var file = _workspace?.active;
     if (file == null || package == null) return;
     _guest?.dispose();
     _guest = SceneGuest(widget.plugin.sessionFor(package), file.editor);
@@ -172,7 +177,7 @@ class _ScenePanelState extends State<_ScenePanel>
     var file = opened.file!;
     setState(() {
       _guest?.dispose();
-      _workspace = SceneWorkspace(file);
+      _workspace = SceneWorkspace(file, resolveNested: _resolveNested);
       _guest = SceneGuest(widget.plugin.sessionFor(_package!), file.editor);
       _note =
           'open · ${file.className}'
@@ -180,15 +185,68 @@ class _ScenePanelState extends State<_ScenePanel>
     });
   }
 
+  /// A nested scene is another scene file of the same package, found by the
+  /// class it declares. Opened fresh here; the workspace keeps the one copy
+  /// it already holds, so edits inside a child are not lost to a re-resolve.
+  SceneFile? _resolveNested(SceneNode node) {
+    if (node is! SceneRefNode) return null;
+    var package = _package;
+    if (package == null) return null;
+    for (var entry in _core.scenesFor(package) ?? const <SceneEntry>[]) {
+      if (entry.className != node.sceneClassName) continue;
+      var opened = SceneFile.open(
+        entry.path,
+        File(entry.path).readAsStringSync(),
+      );
+      if (!opened.ok) {
+        setState(() {
+          _note =
+              '${entry.fileName}: ${opened.refusals.length} refusal(s) — '
+              '${opened.refusals.first}';
+        });
+        return null;
+      }
+      return opened.file;
+    }
+    return null;
+  }
+
+  /// The guest draws the active file — the one the breadcrumb ends on. A
+  /// drill-in or a step back swaps which editor it pushes, and the artboard
+  /// size with it.
+  void _syncGuest() {
+    var workspace = _workspace;
+    var package = _package;
+    if (workspace == null || package == null) return;
+    if (_guest?.editor == workspace.editor) return;
+    _guest?.dispose();
+    _guest = SceneGuest(widget.plugin.sessionFor(package), workspace.editor);
+    _resized = null;
+  }
+
+  /// Writes every dirty file the workspace holds — the one on screen and any
+  /// nested scene edited on the way here — so a drill-in never leaves work
+  /// behind in a file the breadcrumb no longer shows.
   void _save() {
-    var file = _workspace!.active;
-    var refusals = file.save(
-      (path, source) => File(path).writeAsStringSync(source),
-    );
+    var workspace = _workspace!;
+    var saved = <String>[];
+    var refused = <String>[];
+    for (var file in workspace.dirtyFiles.toList()) {
+      var refusals = file.save(
+        (path, source) => File(path).writeAsStringSync(source),
+      );
+      if (refusals.isEmpty) {
+        saved.add(p.basename(file.path));
+      } else {
+        refused.add('${p.basename(file.path)}: ${refusals.first}');
+      }
+    }
     setState(() {
-      _note = refusals.isEmpty
-          ? 'saved ${p.basename(file.path)} · ${file.scene.walk().length} nodes'
-          : 'not saved — emit refused its own output (${refusals.first})';
+      _note = refused.isNotEmpty
+          ? 'not saved — emit refused its own output (${refused.join('; ')})'
+          : saved.isEmpty
+          ? 'nothing to save'
+          : 'saved ${saved.join(', ')}';
     });
   }
 
@@ -315,16 +373,47 @@ class _ScenePanelState extends State<_ScenePanel>
           workspace: workspace,
           note: _note,
           onBack: () => setState(_close),
-          onCrumb: (index) => setState(() => workspace.goTo(index)),
+          onCrumb: (index) => setState(() {
+            workspace.goTo(index);
+            _syncGuest();
+          }),
           onSave: _save,
         ),
         Container(height: 1, color: context.colors.line),
         Expanded(
           child: SceneWorkspaceView(
+            key: ValueKey(workspace.active.path),
             editor,
             playback: _playbackFor(workspace.active),
             content: _guestCanvas(),
             status: _guest?.status,
+            onEnterNested: (node) => setState(() {
+              workspace.enter(node);
+              _syncGuest();
+            }),
+            canvasTrailing: [
+              // The guest is another process on the catalog daemon's
+              // kernel: a change to the app's widgets, or to SceneView
+              // itself, reaches it through a reload and nothing else.
+              Tooltip(
+                message: 'Hot reload the guest',
+                child: Tappable(
+                  onTap: () =>
+                      widget.plugin.sessionFor(_package!).reload().ignore(),
+                  borderRadius: BorderRadius.circular(
+                    context.radii.radiusSmall,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(FwSpacing.xs),
+                    child: Icon(
+                      Icons.refresh,
+                      size: FwIconSize.md,
+                      color: context.colors.ink,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -443,9 +532,11 @@ class _Header extends StatelessWidget {
           ],
           const Gap(FwSpacing.xs),
           FwActionButton(
-            label: workspace.active.isDirty ? 'Save •' : 'Save',
-            primary: workspace.active.isDirty,
-            tooltip: 'Write the scene file (⌘S)',
+            label: workspace.anyDirty ? 'Save •' : 'Save',
+            primary: workspace.anyDirty,
+            tooltip: workspace.dirtyFiles.length > 1
+                ? 'Write ${workspace.dirtyFiles.length} scene files (⌘S)'
+                : 'Write the scene file (⌘S)',
             onPressed: () async => onSave(),
           ),
           Expanded(

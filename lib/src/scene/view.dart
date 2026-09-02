@@ -148,12 +148,25 @@ class _SceneViewState extends State<SceneView> {
       // Text falls back to the debug style — the yellow double underline.
       child: Material(
         color: root.fill?.flutter ?? const Color(0x00000000),
+        // The root's corner lives here with its fill, since its decoration
+        // is skipped below — a nested scene's root is often a pill.
+        borderRadius: root.cornerRadius == 0
+            ? null
+            : BorderRadius.circular(root.cornerRadius),
+        clipBehavior: root.cornerRadius == 0 ? Clip.none : Clip.antiAlias,
         child: _node(context, root, root: true),
       ),
     );
   }
 
-  Widget _node(BuildContext context, SceneNode n, {bool root = false}) {
+  /// [prefix] namespaces the keys of a nested instance's nodes under the
+  /// ref that holds them: two scenes both have a `root`.
+  Widget _node(
+    BuildContext context,
+    SceneNode n, {
+    bool root = false,
+    String prefix = '',
+  }) {
     Widget? inner;
     switch (n) {
       case TextNode t:
@@ -176,8 +189,18 @@ class _SceneViewState extends State<SceneView> {
             // layout one.
             ? _MissingExternal(e.entry)
             : build(context, e.renderedArgs);
+      case SceneRefNode r:
+        var inst = r.instance;
+        if (inst == null) {
+          inner = _MissingScene(r.sceneClassName);
+        } else {
+          r.syncInstance();
+          inner = _node(context, inst.root, prefix: '$prefix${r.name}/');
+        }
       case FrameNode f:
-        var children = [for (var c in f.children) _child(context, f, c)];
+        var children = [
+          for (var c in f.children) _child(context, f, c, prefix),
+        ];
         var gap = f.fxRendered('gap') as double;
         inner = switch (f.layout) {
           NodeLayout.absolute => Stack(
@@ -205,7 +228,7 @@ class _SceneViewState extends State<SceneView> {
     var fill = n.hasFx('fill') ? n.fxRendered('fill') as SceneColor : n.fill;
     var padding = n is FrameNode ? n.padding : 0.0;
     Widget result = Container(
-      key: _key(n.name),
+      key: _key('$prefix${n.name}'),
       width: n.width,
       height: n.height,
       padding: padding > 0
@@ -252,13 +275,38 @@ class _SceneViewState extends State<SceneView> {
     return result;
   }
 
-  Widget _child(BuildContext context, FrameNode parent, SceneNode child) {
-    var view = _node(context, child);
+  Widget _child(
+    BuildContext context,
+    FrameNode parent,
+    SceneNode child,
+    String prefix,
+  ) {
+    var view = _node(context, child, prefix: prefix);
     if (parent.layout == NodeLayout.absolute) {
       return Positioned(left: child.x, top: child.y, child: view);
     }
     return view;
   }
+}
+
+class _MissingScene extends StatelessWidget {
+  const _MissingScene(this.sceneClassName);
+
+  final String sceneClassName;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    alignment: Alignment.center,
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      border: Border.all(color: const Color(0xFFCC3333)),
+    ),
+    child: Text(
+      'no scene "$sceneClassName" here',
+      textAlign: TextAlign.center,
+      style: const TextStyle(fontSize: 10, color: Color(0xFFCC3333)),
+    ),
+  );
 }
 
 class _MissingExternal extends StatelessWidget {

@@ -214,6 +214,15 @@ List<ScenePropSpec> animatableProps(SceneNode node) => [
     ],
     ShapeNode() => const [ScenePropSpec('fill', TrackKind.color)],
     ExternalNode() => const <ScenePropSpec>[],
+    // The child's declared parameters, once somebody resolved it — a string
+    // parameter has no in-between values and does not animate.
+    SceneRefNode r => [
+      for (var p in r.instance?.params ?? const <SceneParamDecl>[])
+        if (p.kind == SceneParamKind.number)
+          ScenePropSpec('args.${p.name}', TrackKind.number)
+        else if (p.kind == SceneParamKind.color)
+          ScenePropSpec('args.${p.name}', TrackKind.color),
+    ],
   },
 ];
 

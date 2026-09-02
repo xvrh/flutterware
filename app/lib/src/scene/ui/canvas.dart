@@ -24,9 +24,13 @@ class SceneCanvas extends StatefulWidget {
     required this.content,
     this.status,
     this.trailing = const [],
+    this.onEnterNested,
   });
 
   final SceneEditor editor;
+
+  /// Double-clicking a nested scene's box drills into it.
+  final ValueChanged<SceneNode>? onEnterNested;
 
   /// The picture, sized to the artboard.
   final Widget content;
@@ -181,7 +185,8 @@ class _SceneCanvasState extends State<SceneCanvas> {
             widget.content,
             AnimatedBuilder(
               animation: geometry,
-              builder: (context, _) => _HitLayer(editor),
+              builder: (context, _) =>
+                  _HitLayer(editor, onEnterNested: widget.onEnterNested),
             ),
             AnimatedBuilder(
               animation: geometry,
@@ -226,9 +231,10 @@ class _Verb extends StatelessWidget {
 /// the renderer: a marquee on the empty ground, a target per addressable
 /// node, and the selection painted on top.
 class _HitLayer extends StatefulWidget {
-  const _HitLayer(this.editor);
+  const _HitLayer(this.editor, {this.onEnterNested});
 
   final SceneEditor editor;
+  final ValueChanged<SceneNode>? onEnterNested;
 
   @override
   State<_HitLayer> createState() => _HitLayerState();
@@ -276,6 +282,7 @@ class _HitLayerState extends State<_HitLayer> {
                   editor,
                   node,
                   key: ValueKey('node:${node.name}'),
+                  onEnterNested: widget.onEnterNested,
                 ),
               ),
           Positioned.fill(
@@ -296,10 +303,11 @@ class _HitLayerState extends State<_HitLayer> {
 }
 
 class _NodeTarget extends StatefulWidget {
-  const _NodeTarget(this.editor, this.node, {super.key});
+  const _NodeTarget(this.editor, this.node, {super.key, this.onEnterNested});
 
   final SceneEditor editor;
   final SceneNode node;
+  final ValueChanged<SceneNode>? onEnterNested;
 
   @override
   State<_NodeTarget> createState() => _NodeTargetState();
@@ -353,6 +361,9 @@ class _NodeTargetState extends State<_NodeTarget> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (_) => editor.select(node, toggle: toggleModifier),
+        onDoubleTap: node is SceneRefNode && widget.onEnterNested != null
+            ? () => widget.onEnterNested!(node)
+            : null,
         onPanDown: (d) => _downLocal = d.localPosition,
         onPanStart: (d) {
           if (!editor.isSelected(node)) editor.select(node);

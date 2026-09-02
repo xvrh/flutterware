@@ -103,7 +103,9 @@ typedef NestedSceneResolver = SceneFile? Function(SceneNode node);
 class SceneWorkspace extends SceneListenable {
   SceneWorkspace(SceneFile root, {this.resolveNested})
     : _stack = [SceneCrumb(root, null)],
-      _opened = {root.path: root};
+      _opened = {root.path: root} {
+    resolveInstances(root);
+  }
 
   final List<SceneCrumb> _stack;
 
@@ -135,34 +137,59 @@ class SceneWorkspace extends SceneListenable {
 
   bool get anyDirty => dirtyFiles.isNotEmpty;
 
-  /// Drill into the scene [node] stands for. Refuses loudly rather than
-  /// silently doing nothing: a node that is not a nested scene, or one whose
-  /// file cannot be resolved, is a bug in the caller, not a user error.
+  /// The file a node stands for, through the resolver — and if that file is
+  /// already open here, the open one, so edits made inside it are what the
+  /// parent draws and what a second visit finds.
+  SceneFile? _fileFor(SceneNode node) {
+    var file = resolveNested?.call(node);
+    if (file == null) return null;
+    return _opened.putIfAbsent(file.path, () => file);
+  }
+
+  /// Instantiates every nested scene [file] references, from the files as
+  /// they are now. Called on open, and again on the way back out of a nested
+  /// scene, because that is when the child may have changed.
+  void resolveInstances(SceneFile file) {
+    if (resolveNested == null) return;
+    var changed = false;
+    for (var (node, _) in file.scene.walk()) {
+      if (node is! SceneRefNode) continue;
+      var child = _fileFor(node);
+      node.instance = child == null
+          ? null
+          : instantiateScene(child.scene, node.args);
+      changed = true;
+    }
+    if (changed) file.scene.edit(() {});
+  }
+
+  /// Drills into the scene [node] stands for. The surface switches to that
+  /// file; a crumb remembers the way back.
   void enter(SceneNode node) {
-    var resolve = resolveNested;
-    if (resolve == null) {
+    if (resolveNested == null) {
       throw StateError(
         'this workspace cannot enter nested scenes — it was built without a '
         'resolver, so nothing can say which file "${node.name}" stands for',
       );
     }
-    var file = resolve(node);
+    var file = _fileFor(node);
     if (file == null) {
       throw ArgumentError(
         '"${node.name}" is not a nested scene — only a node standing for '
         'another scene file can be entered',
       );
     }
-    _opened.putIfAbsent(file.path, () => file);
     _stack.add(SceneCrumb(file, node.name));
+    resolveInstances(file);
     notifyListeners();
   }
 
-  /// Leave the current scene, selecting the node you came in through so the
-  /// parent picks up where you left it. No-op at the root.
+  /// Back one level; the node entered through is selected on the way out,
+  /// and its instance redrawn from the child as it is now.
   void exit() {
     if (_stack.length < 2) return;
     var leaving = _stack.removeLast();
+    resolveInstances(active);
     var via = leaving.viaNode;
     if (via != null) {
       var node = active.scene.nodeNamed(via);
@@ -171,11 +198,11 @@ class SceneWorkspace extends SceneListenable {
     notifyListeners();
   }
 
-  /// Jump to a crumb — the breadcrumb's own click, which pops everything
-  /// deeper in one step.
+  /// Back to crumb [index]; the last crumb is where you already are.
   void goTo(int index) {
     if (index < 0 || index >= _stack.length - 1) return;
     _stack.removeRange(index + 1, _stack.length);
+    resolveInstances(active);
     notifyListeners();
   }
 }

@@ -237,6 +237,66 @@ class ExternalNode extends SceneNode {
   String get typeName => 'Ext';
 }
 
+/// An instance of another scene, by class name, with that scene's
+/// parameters overridden by [args].
+///
+/// The instance's internals are not addressable from here — the nesting
+/// law: the parent sees one box, the child is edited in its own file. What
+/// the parent may animate is the imposed vocabulary on the box plus the
+/// child's declared parameters, as `args.<param>` tracks.
+///
+/// [instance] is runtime state, like `measured`: whoever can find files —
+/// the workspace — resolves the class name and instantiates the child with
+/// [args]; nothing serializes it, and a node nobody resolved draws as a
+/// placeholder naming what it wanted.
+class SceneRefNode extends SceneNode {
+  SceneRefNode(super.name, this.sceneClassName, {Map<String, Object?>? args})
+    : args = args ?? {};
+
+  final String sceneClassName;
+  final Map<String, Object?> args;
+
+  SceneDocument? instance;
+
+  /// The authored args with the motion's `args.*` writes on top.
+  Map<String, Object?> get renderedArgs {
+    var out = Map.of(args);
+    for (var entry in fx.entries) {
+      var prop = entry.key.$2;
+      if (prop.startsWith('args.')) out[prop.substring(5)] = entry.value;
+    }
+    return out;
+  }
+
+  /// Puts the rendered args onto the instance — every declared parameter,
+  /// so one the motion stopped writing falls back to its default rather
+  /// than staying wherever the last frame left it.
+  void syncInstance() {
+    var inst = instance;
+    if (inst == null) return;
+    inst.applyArgs({
+      for (var p in inst.params) p.name: p.defaultValue,
+      ...renderedArgs,
+    });
+  }
+
+  @override
+  String get typeName => 'Scene';
+}
+
+/// A fresh copy of [template] with [args] applied to its parameters — what a
+/// [SceneRefNode.instance] is. The copy keeps the template's parameter
+/// declarations and `paramRefs`, so it can take new args later.
+SceneDocument instantiateScene(
+  SceneDocument template,
+  Map<String, Object?> args,
+) {
+  var doc = SceneDocument(deepCopyNode(template.root) as FrameNode)
+    ..params.addAll(template.params);
+  doc.applyArgs(args);
+  return doc;
+}
+
 class SceneDocument extends SceneListenable {
   SceneDocument(this.root) {
     _adopt();
@@ -360,6 +420,7 @@ class SceneDocument extends SceneListenable {
           'layout': f.layout.name,
           'gap': f.fxRendered('gap'),
           'padding': f.padding,
+          'mainAlign': f.mainAlign.index,
           'crossAlign': f.crossAlign.index,
           'children': [for (var c in f.children) _json(c)],
         },
@@ -376,7 +437,51 @@ class SceneDocument extends SceneListenable {
           'entry': e.entry,
           'args': e.renderedArgs,
         },
+        SceneRefNode r => _refWire(r),
       },
+    };
+  }
+
+  /// The instance's own picture, flattened under the ref node's box: the
+  /// host draws frames and needs no resolver. Internal names are prefixed
+  /// with the ref's, so a measured rect never lands on a parent node by
+  /// coincidence — and never lands at all, since only parent names are
+  /// looked up.
+  Map<String, dynamic> _refWire(SceneRefNode r) {
+    var inst = r.instance;
+    if (inst == null) {
+      return {'kind': 'frame', 'layout': 'absolute', 'children': const []};
+    }
+    r.syncInstance();
+    var picture = inst._json(inst.root);
+    Map<String, dynamic> prefixed(Map<String, dynamic> json) => {
+      ...json,
+      'name': '${r.name}/${json['name']}',
+      if (json['children'] case List children)
+        'children': [
+          for (var c in children) prefixed(c as Map<String, dynamic>),
+        ],
+    };
+    var children = (picture['children'] as List? ?? const [])
+        .map((c) => prefixed(c as Map<String, dynamic>))
+        .toList();
+    // The box is the ref's; the child's root supplies what the ref leaves
+    // to hug (size) or inherit (fill, corner). Opacities multiply.
+    return {
+      'kind': 'frame',
+      'layout': picture['layout'],
+      'gap': picture['gap'],
+      'padding': picture['padding'],
+      'mainAlign': picture['mainAlign'],
+      'crossAlign': picture['crossAlign'],
+      'children': children,
+      'w': r.width ?? picture['w'],
+      'h': r.height ?? picture['h'],
+      if (r.fill == null && !r.hasFx('fill')) 'fill': picture['fill'],
+      if (r.cornerRadius == 0) 'corner': picture['corner'],
+      'opacity':
+          (r.fxRendered('opacity') as double) *
+          ((picture['opacity'] as num?)?.toDouble() ?? 1),
     };
   }
 
@@ -494,7 +599,9 @@ class SceneDocument extends SceneListenable {
         if (into == null ||
             into.runtimeType != snap.runtimeType ||
             (into is ExternalNode &&
-                into.entry != (snap as ExternalNode).entry)) {
+                into.entry != (snap as ExternalNode).entry) ||
+            (into is SceneRefNode &&
+                into.sceneClassName != (snap as SceneRefNode).sceneClassName)) {
           return deepCopyNode(snap);
         }
         switch ((into, snap)) {
@@ -516,6 +623,10 @@ class SceneDocument extends SceneListenable {
           case (ShapeNode i, ShapeNode s):
             i.circle = s.circle;
           case (ExternalNode i, ExternalNode s):
+            i.args
+              ..clear()
+              ..addAll(s.args);
+          case (SceneRefNode i, SceneRefNode s):
             i.args
               ..clear()
               ..addAll(s.args);
@@ -574,6 +685,13 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
         ..color = t.color,
     ShapeNode s => ShapeNode(name, circle: s.circle),
     ExternalNode e => ExternalNode(name, e.entry, args: Map.of(e.args)),
+    // The instance is copied too, so the copy draws at once; each copy owns
+    // its own, because args are applied by mutating it.
+    SceneRefNode r =>
+      SceneRefNode(name, r.sceneClassName, args: Map.of(r.args))
+        ..instance = r.instance == null
+            ? null
+            : instantiateScene(r.instance!, r.args),
   };
   copy
     ..x = node.x

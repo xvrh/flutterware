@@ -105,6 +105,10 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
       'entry': e.entry,
       'args': {...e.args},
     },
+    SceneRefNode r => {
+      'scene': r.sceneClassName,
+      'args': {...r.args},
+    },
   },
 };
 
@@ -139,6 +143,11 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
     'Ext' => ExternalNode(
       name,
       json['entry']! as String,
+      args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
+    ),
+    'Scene' => SceneRefNode(
+      name,
+      json['scene']! as String,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
     ),
     _ => throw ArgumentError('unknown node kind "${json['kind']}"'),
@@ -348,6 +357,8 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
         )
         ..gap = number('gap') ?? 8
         ..padding = number('padding') ?? 0
+        ..mainAlign = SceneMainAxisAlignment
+            .values[(json['mainAlign'] as num?)?.toInt() ?? 0]
         ..crossAlign = SceneCrossAxisAlignment
             .values[(json['crossAlign'] as num?)?.toInt() ?? 2]
         ..children.addAll([

@@ -17,10 +17,11 @@
 //     — THE FIELD NAME IS THE NODE'S IDENTITY (unique by Dart's own rules,
 //     shared namespace with the parameters), and one field must be `root`,
 //     a Frame
-//   - a node is a constructor invocation: Frame, Text, Shape or Ext, with
-//     named arguments from that node's fixed vocabulary; Text takes its
+//   - a node is a constructor invocation: Frame, Text, Shape, Ext or Scene,
+//     with named arguments from that node's fixed vocabulary; Text takes its
 //     content as one positional string, Ext takes its registration entry as
-//     one positional identifier
+//     one positional identifier, Scene takes another scene file's class
+//     name the same way (its `args:` override that scene's parameters)
 //   - `children: [ … ]` lists nodes BY FIELD NAME — every node is declared
 //     as its own field and placed exactly once (forward references are fine;
 //     `late` is what makes sibling references legal Dart)
@@ -254,6 +255,18 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
         );
       }
       out.write('Ext(${props.join(', ')})');
+    case SceneRefNode r:
+      if (!isValidNodeName(r.sceneClassName)) {
+        throw ArgumentError('"${r.sceneClassName}" is not a scene class name');
+      }
+      props.add(r.sceneClassName);
+      common();
+      if (r.args.isNotEmpty) {
+        props.add(
+          'args: {${[for (var entry in r.args.entries) '${_str(entry.key)}: ${_argValue(entry.value)}'].join(', ')}}',
+        );
+      }
+      out.write('Scene(${props.join(', ')})');
   }
 }
 
@@ -294,6 +307,8 @@ String _argValue(Object? v) => switch (v) {
   num n => n is double ? _num(n) : '$n',
   String s => _str(s),
   bool b => '$b',
+  // A colour argument is what a nested scene's colour parameter takes.
+  SceneColor c => _color(c),
   _ => _str('$v'),
 };
 
@@ -815,8 +830,23 @@ class _Parser {
         _refuseRest('Shape', named);
         _checkPositionals(positional, 0);
         return node;
-      case 'Ext':
-        var node = ExternalNode(name, _entryName(positional, args) ?? '');
+      case 'Ext' || 'Scene':
+        var target =
+            _entryName(
+              positional,
+              args,
+              kind == 'Ext'
+                  ? 'an Ext names its registration entry — Ext(DrinkBadge, …)'
+                  : 'a Scene names the scene class it instantiates — '
+                        'Scene(PromoBadge, …)',
+            ) ??
+            '';
+        var node = kind == 'Ext'
+            ? ExternalNode(name, target)
+            : SceneRefNode(name, target);
+        var nodeArgs = node is ExternalNode
+            ? node.args
+            : (node as SceneRefNode).args;
         _applyCommon(node, named);
         _take(named, 'args', (e) {
           if (e is! SetOrMapLiteral) {
@@ -834,17 +864,17 @@ class _Parser {
             }
             var key = _string(element.key);
             var value = _literal(element.value);
-            if (key != null) node.args[key] = value;
+            if (key != null) nodeArgs[key] = value;
           }
         });
-        _refuseRest('Ext', named);
+        _refuseRest(kind, named);
         _checkPositionals(positional, 1);
         return node;
       default:
         refuse(
           expr.offset,
           'unknown node',
-          '"$kind" is not a scene node — Frame, Text, Shape or Ext',
+          '"$kind" is not a scene node — Frame, Text, Shape, Ext or Scene',
         );
         return null;
     }
@@ -912,13 +942,13 @@ class _Parser {
   /// An Ext's entry is spelled as an identifier — `Ext(DrinkBadge)` — the
   /// typed reference to a registration. A quoted spelling is accepted and
   /// converges to the identifier on the next emit.
-  String? _entryName(List<Expression> positional, ArgumentList args) {
+  String? _entryName(
+    List<Expression> positional,
+    ArgumentList args,
+    String missing,
+  ) {
     if (positional.isEmpty) {
-      refuse(
-        args.offset,
-        'missing argument',
-        'an Ext names its registration entry — Ext(DrinkBadge, …)',
-      );
+      refuse(args.offset, 'missing argument', missing);
       return null;
     }
     var e = positional[0];
@@ -1073,8 +1103,13 @@ class _Parser {
       DoubleLiteral(:var value) => negate ? -value : value,
       BooleanLiteral(:var value) => value,
       SimpleStringLiteral(:var value) => value,
+      _ when _invocation(inner)?.$1 == 'Color' => _colorOf(inner),
       _ => () {
-        refuse(e.offset, _kind(e), 'expected a number, string or bool literal');
+        refuse(
+          e.offset,
+          _kind(e),
+          'expected a number, string, bool or Color(0x…) literal',
+        );
         return null;
       }(),
     };

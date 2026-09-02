@@ -74,11 +74,17 @@ class BannerScene {
     height: 44,
     args: {'label': 'Order now'},
   );
+  late final promo = Scene(
+    PromoBadge,
+    x: 64,
+    y: 48,
+    args: {'label': 'Now open'},
+  );
   late final root = Frame(
     width: 1024,
     height: 500,
     fill: Color(0xFF2B1B12),
-    children: [glow, cup, copy, badge, loading, order],
+    children: [glow, cup, copy, badge, loading, order, promo],
   );
 }
 
