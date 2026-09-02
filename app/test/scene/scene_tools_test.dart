@@ -193,7 +193,9 @@ void main() {
       await tester.tapAt(
         tester.getCenter(find.text('BannerIntro')),
         buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
       );
+      await tester.pump();
       await tester.pump();
       await tester.pump();
       await tester.tap(find.text('Rename BannerIntro…'));
@@ -227,6 +229,7 @@ void main() {
         tester.getCenter(find.text('BannerIntro')),
         buttons: kSecondaryButton,
       );
+      await tester.pump();
       await tester.pump();
       await tester.pump();
       await tester.tap(find.text('Delete BannerIntro'));

@@ -18,6 +18,7 @@ Future<void> showContextMenu(
   var overlay = Overlay.of(context, rootOverlay: true);
   var done = Completer<void>();
   var removed = false;
+  var opened = false;
   late OverlayEntry entry;
   entry = OverlayEntry(
     builder: (context) => Positioned(
@@ -26,9 +27,16 @@ Future<void> showContextMenu(
       child: Menu(
         entries: entries,
         builder: (context, controller) {
-          SchedulerBinding.instance.addPostFrameCallback((_) {
-            if (entry.mounted) controller.open();
-          });
+          // Once, not per build: opening rebuilds the anchor, and a second
+          // open() on an open RawMenuAnchor closes it first — which fired
+          // onClose, which removed the entry, and the menu showed for one
+          // frame.
+          if (!opened) {
+            opened = true;
+            SchedulerBinding.instance.addPostFrameCallback((_) {
+              if (entry.mounted) controller.open();
+            });
+          }
           return const SizedBox(width: 1, height: 1);
         },
         onClose: () {

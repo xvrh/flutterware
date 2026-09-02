@@ -9,7 +9,6 @@ import 'package:flutterware/scene_authoring.dart';
 import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
-import '../../ui/split_button.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../playback.dart';
@@ -550,22 +549,19 @@ class _GroupRowState extends State<_GroupRow> {
                             ),
                           ),
                         if (offered.isNotEmpty)
-                          Tooltip(
-                            message: 'Animate another property, keyed at the playhead',
-                            child: FwSplitButton.icon(
-                              icon: Icons.add,
-                              menuTooltip: 'Properties',
-                              entries: [
-                                for (var spec in offered)
-                                  MenuItem(
-                                    spec.name.startsWith('args.')
-                                        ? spec.name.substring(5)
-                                        : spec.name,
-                                    onSelected: () =>
-                                        widget.onAddKey(spec.name),
-                                  ),
-                              ],
-                            ),
+                          _AddPropertyButton(
+                            tooltip:
+                                'Animate another property of ${group.target} — '
+                                'a key at the playhead',
+                            entries: [
+                              for (var spec in offered)
+                                MenuItem(
+                                  spec.name.startsWith('args.')
+                                      ? spec.name.substring(5)
+                                      : spec.name,
+                                  onSelected: () => widget.onAddKey(spec.name),
+                                ),
+                            ],
                           ),
                       ],
                     ),
@@ -589,23 +585,27 @@ class _GroupRowState extends State<_GroupRow> {
                       onHorizontalDragUpdate: (d) => _update(d.delta.dx, width),
                       onHorizontalDragEnd: (_) => _end(),
                       onHorizontalDragCancel: _end,
-                      child: CustomPaint(
-                        painter: _SpanPainter(
-                          start: widget.scale.xOf(
-                            widget.lanes.at.inMilliseconds,
+                      // Clipped: zoomed in, a bar that starts off to the left
+                      // painted across the gutter and over the row's name.
+                      child: ClipRect(
+                        child: CustomPaint(
+                          painter: _SpanPainter(
+                            start: widget.scale.xOf(
+                              widget.lanes.at.inMilliseconds,
+                            ),
+                            end: widget.scale.xOf(
+                              (widget.lanes.at + group.duration).inMilliseconds,
+                            ),
+                            playhead: widget.scale.xOf(
+                              widget.playback.position.inMilliseconds,
+                            ),
+                            fill: selected
+                                ? colors.accentSoft2
+                                : colors.accentSoft,
+                            edge: colors.accent,
+                            line: colors.line,
+                            playheadColor: colors.red,
                           ),
-                          end: widget.scale.xOf(
-                            (widget.lanes.at + group.duration).inMilliseconds,
-                          ),
-                          playhead: widget.scale.xOf(
-                            widget.playback.position.inMilliseconds,
-                          ),
-                          fill: selected
-                              ? colors.accentSoft2
-                              : colors.accentSoft,
-                          edge: colors.accent,
-                          line: colors.line,
-                          playheadColor: colors.red,
                         ),
                       ),
                     ),
@@ -709,21 +709,17 @@ class _AnimateRow extends StatelessWidget {
                       style: context.type.body.copyWith(color: colors.mut),
                     ),
                   ),
-                  Tooltip(
-                    message: 'Animate ${node.name} — a key at the playhead',
-                    child: FwSplitButton.icon(
-                      icon: Icons.add,
-                      menuTooltip: 'Properties',
-                      entries: [
-                        for (var spec in animatableProps(node))
-                          MenuItem(
-                            spec.name.startsWith('args.')
-                                ? spec.name.substring(5)
-                                : spec.name,
-                            onSelected: () => onPick(spec.name),
-                          ),
-                      ],
-                    ),
+                  _AddPropertyButton(
+                    tooltip: 'Animate ${node.name} — a key at the playhead',
+                    entries: [
+                      for (var spec in animatableProps(node))
+                        MenuItem(
+                          spec.name.startsWith('args.')
+                              ? spec.name.substring(5)
+                              : spec.name,
+                          onSelected: () => onPick(spec.name),
+                        ),
+                    ],
                   ),
                 ],
               ),
@@ -982,23 +978,25 @@ class _KeyStripState extends State<_KeyStrip> {
           onDoubleTapDown: (d) => _doubleTapAt = d.localPosition,
           onDoubleTap: () => _addKeyAt(width),
           onSecondaryTapUp: (d) => _contextMenu(context, d, width),
-          child: CustomPaint(
-            painter: _KeyPainter(
-              xs: [for (var k in lane.track.keys) _x(k, width)],
-              selected: [
-                for (var k in lane.track.keys) editor.isKeySelected(_ref(k)),
-              ],
-              spanStart: widget.scale.xOf(lane.at.inMilliseconds),
-              spanEnd: widget.scale.xOf(
-                (lane.at + lane.track.duration).inMilliseconds,
+          child: ClipRect(
+            child: CustomPaint(
+              painter: _KeyPainter(
+                xs: [for (var k in lane.track.keys) _x(k, width)],
+                selected: [
+                  for (var k in lane.track.keys) editor.isKeySelected(_ref(k)),
+                ],
+                spanStart: widget.scale.xOf(lane.at.inMilliseconds),
+                spanEnd: widget.scale.xOf(
+                  (lane.at + lane.track.duration).inMilliseconds,
+                ),
+                playhead: widget.scale.xOf(
+                  widget.playback.position.inMilliseconds,
+                ),
+                line: colors.line,
+                key: colors.ink2,
+                accent: colors.accent,
+                playheadColor: colors.red,
               ),
-              playhead: widget.scale.xOf(
-                widget.playback.position.inMilliseconds,
-              ),
-              line: colors.line,
-              key: colors.ink2,
-              accent: colors.accent,
-              playheadColor: colors.red,
             ),
           ),
         );
@@ -1038,10 +1036,13 @@ class _KeyPainter extends CustomPainter {
       Offset(size.width, size.height - 0.5),
       Paint()..color = line,
     );
-    if (xs.isNotEmpty) {
+    // Between the first and the last key, where the value moves. Before the
+    // first key the track holds that key's value — drawn from the group's
+    // start, that read as a track that "starts without a key".
+    if (xs.length > 1) {
       canvas.drawLine(
-        Offset(spanStart, mid),
-        Offset(spanEnd, mid),
+        Offset(xs.reduce(math.min), mid),
+        Offset(xs.reduce(math.max), mid),
         Paint()
           ..color = key.withValues(alpha: 0.35)
           ..strokeWidth = 2,
@@ -1253,5 +1254,37 @@ class _TimelineShortcuts extends StatelessWidget {
           ),
     },
     child: child,
+  );
+}
+
+/// The `+` on a row: one button, and its menu is the properties that can
+/// take a key. Was a split button whose primary half had nothing to do and
+/// sat disabled beside a working chevron — the half people clicked.
+class _AddPropertyButton extends StatelessWidget {
+  const _AddPropertyButton({required this.tooltip, required this.entries});
+
+  final String tooltip;
+  final List<MenuEntry> entries;
+
+  @override
+  Widget build(BuildContext context) => Menu(
+    entries: entries,
+    builder: (context, controller) => Tooltip(
+      message: tooltip,
+      child: Tappable(
+        onTap: controller.toggle,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Padding(
+          padding: const EdgeInsets.all(FwSpacing.xxs),
+          child: Icon(
+            Icons.add,
+            size: FwIconSize.md,
+            color: controller.isOpen
+                ? context.colors.accent
+                : context.colors.mut,
+          ),
+        ),
+      ),
+    ),
   );
 }

@@ -91,6 +91,11 @@ class ScenePlayback extends ChangeNotifier {
   bool get isPlaying => _player.status == MotionPlayerStatus.playing;
   bool get isIdle => _player.status == MotionPlayerStatus.idle;
 
+  /// Whether the motion is on the picture — playing, paused, or parked
+  /// anywhere by a seek. What the stop button has to undo; a seek alone
+  /// changes no status, so status is not enough to know.
+  bool get isApplied => !isIdle || position > Duration.zero;
+
   double get rate => _player.rate;
   set rate(double value) {
     _player.rate = value;
