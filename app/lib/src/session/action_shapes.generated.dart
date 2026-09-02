@@ -5530,6 +5530,11 @@ final resultShapes = <String, ResultShape>{
       <String, Object?>{'name': 'version', 'type': 'int'},
       <String, Object?>{'name': 'ok', 'type': 'bool'},
       <String, Object?>{
+        'name': 'failed',
+        'type': 'List<Map<String, Object?>>',
+        'optional': true,
+      },
+      <String, Object?>{
         'name': 'axes',
         'type': 'Map<String, String>',
         'optional': true,

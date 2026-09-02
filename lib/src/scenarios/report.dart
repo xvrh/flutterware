@@ -170,12 +170,39 @@ class ScenarioRunResult
             ),
   ];
 
+  /// Every scenario that came back red, and every package that could not
+  /// run at all, as one flat list — what a script reads instead of walking
+  /// every package's every scenario to find the one that failed.
+  ///
+  /// Each entry names its `package` and, for a scenario, its `file`, its
+  /// `scenario` and the first line of its first `error`; a package that did
+  /// not run has only `package` and `error`. Derived, like [ok], and written
+  /// into `run.json` beside it for the same reason.
+  List<Map<String, Object?>> get failed => [
+    for (var package in packages) ...[
+      if (package.error case var error?)
+        {'package': package.path, 'error': _firstLine(error)},
+      for (var scenario in package.scenarios)
+        if (!scenario.ok)
+          {
+            'package': package.path,
+            'file': scenario.file,
+            'scenario': scenario.name,
+            if (scenario.errors.firstOrNull case var error?)
+              'error': _firstLine(error.error),
+          },
+    ],
+  ];
+
   @override
   Map<String, Object?> toJson() => {
     'version': version,
     // Derivable from the packages, and said anyway: `ok` is what a CI step
     // greps a report for, and what the action's exit code is read against.
     'ok': ok,
+    // The same reasoning one level down: a red run says *which* without
+    // making the reader walk the tree. Absent on a green one.
+    if (!ok) 'failed': failed,
     if (axes != null) 'axes': axes,
     if (clock != null) 'clock': clock!.toIso8601String(),
     'packages': packages,
@@ -1515,3 +1542,7 @@ String _slug(Map<String, String> axes) =>
     (axes.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
         .map((e) => '${e.key}=${e.value}')
         .join(',');
+
+/// The first line of an error — what a flat list of failures carries, since
+/// the whole message is on the outcome it summarises.
+String _firstLine(String error) => error.split('\n').first.trimRight();

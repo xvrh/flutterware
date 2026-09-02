@@ -1530,6 +1530,7 @@ Returns `ScenarioRunResult`:
 ```
 version: int
 ok: bool
+failed: List<Map<String, Object?>>?
 axes: Map<String, String>?   # The axis assignment the whole request ran under — `{device: iphone-se, language: fr}` — or null for the test defaults.
 clock: String?   # What `clock.now()` read at the start of every scenario in the run.
 packages: List<ScenarioRunPackage>
@@ -1610,7 +1611,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
-| `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it. A directory runs everything under it, which is the unit the folder profiles are declared in |
+| `file` | string | no | — | Run only this scenario file, package-relative — as `list` reports it. A directory runs everything under it, which is the unit the folder profiles are declared in. Several, comma-separated (or `--file` repeated), run in the order given in one process — the way to reproduce a failure that only happens after another file has run |
 | `scenario` | string | no | — | Run only this scenario, by name. Needs `file` too — names are unique per file, not per package. |
 | `output` | string | no | — | Where step artifacts are written, worktree-relative unless absolute; a fresh directory under the package's build/ when omitted. run.json lands in the same directory as the images it names. |
 | `baseline` | string | no | — | Which run to compare this one against for `drift`, as a directory holding a `run.json` — worktree-relative unless absolute. Omitted, the newest earlier run of the same point under the package's build/, which is 'whatever ran last in this directory' and so is not something CI can depend on: a gate that wants to catch a suite going non-deterministic names a stored base instead. A fanned-out run takes the matching point inside it — `<baseline>/<slug>` — and refuses where that point is missing rather than comparing one point against another, which shares no scenario and would answer `compared: 0` |
@@ -1672,7 +1673,7 @@ steps: List<String>   # The other captures of the same scenario, as bare file na
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package the run belongs to; the only one when there is one |
-| `step` | string | no | — | Which capture. Any leg of it as `run` reported it — the `tree` path, the `image` path, either works — or a plain index into the run. Omitted takes the failing step when exactly one scenario went red, which is the read that happens most. Naming a directory instead lists what is in it, so browsing costs a refusal rather than a guess. |
+| `step` | string | no | — | Which capture. Any leg of it as `run` reported it — the `tree` path, the `image` path, the `fw://` address — or a plain index into the run. Omitted takes the failing step when exactly one scenario went red, which is the read that happens most. Naming a directory instead lists what is in it, so browsing costs a refusal rather than a guess. |
 | `output` | string | no | — | The run to read, when `step` is an index or omitted. The newest completed run under the package when omitted — the one you just did, never a panel session, which writes captures but no run.json to count into. |
 | `lens` | choice | no | act | How much to hand back, as one word. `act` is the screen alone; `look` adds the archived picture; `design` adds every distinct text style; `raw` adds the whole tree and costs about 20,000 tokens. The same four words `run` uses. A flag you set explicitly always beats the lens. |
 | `screen` | boolean | no | true | The nested list of what is on the step — the default answer. `false` when you only want a query. |

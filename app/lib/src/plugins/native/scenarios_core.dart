@@ -733,12 +733,16 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'file',
               'File',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
                   'Run only this scenario file, package-relative — as `list` '
                   'reports it. A directory runs everything under it, which is '
-                  'the unit the folder profiles are declared in',
+                  'the unit the folder profiles are declared in. Several, '
+                  'comma-separated (or `--file` repeated), run in the order '
+                  'given in one process — the way to reproduce a failure '
+                  'that only happens after another file has run',
             ),
             const ActionParameter(
               'scenario',
@@ -825,6 +829,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'devices',
               'Devices',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -838,6 +843,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'languages',
               'Languages',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -847,6 +853,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'orientations',
               'Orientations',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -1124,8 +1131,8 @@ class ScenariosCore extends PluginCore {
               required: false,
               description:
                   'Which capture. Any leg of it as `run` reported it — the '
-                  '`tree` path, the `image` path, either works — or a plain '
-                  'index into the run. Omitted takes the failing step when '
+                  '`tree` path, the `image` path, the `fw://` address — or a '
+                  'plain index into the run. Omitted takes the failing step when '
                   'exactly one scenario went red, which is the read that '
                   'happens most. Naming a directory instead lists what is in '
                   'it, so browsing costs a refusal rather than a guess.',
@@ -1231,6 +1238,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'channel',
               'Channel',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -1333,6 +1341,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'file',
               'File',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -1417,6 +1426,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'devices',
               'Devices',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -1426,6 +1436,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'languages',
               'Languages',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description: 'The other half of the matrix — `en,fr,de`',
@@ -1542,6 +1553,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'devices',
               'Devices',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -1551,6 +1563,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'languages',
               'Languages',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -1560,6 +1573,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'orientations',
               'Orientations',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -1585,6 +1599,7 @@ class ScenariosCore extends PluginCore {
             const ActionParameter(
               'file',
               'File',
+              repeatable: true,
               kind: ActionParameterKind.string,
               required: false,
               description:
@@ -1890,6 +1905,30 @@ class ScenariosCore extends PluginCore {
 
     var treeFile = File('${picked.base}.tree.json');
     if (!treeFile.existsSync()) {
+      // The step a timed-out scenario never took: no picture and maybe no
+      // tree, but its failure is the diagnosis and its events are what the
+      // app printed on the way there — the read that step exists for.
+      if (_stepRecordFor(picked.base)?.$2 case var record?
+          when record.failure != null || record.hasEvents) {
+        var (:events, :eventsNote) = _eventsFor(picked, arguments);
+        var noScreen =
+            'This step has no screen: the scenario stopped before anything '
+            'could be photographed. Its failure says why, and `events: true` '
+            'is what the app did on the way there.';
+        return ScenarioReadResult(
+          step: _relative(picked.base),
+          lens: lens.name,
+          scenario: picked.scenario,
+          file: picked.file,
+          index: picked.index,
+          failure: picked.failure,
+          note: [noScreen, ?eventsNote].join(' '),
+          events: events,
+          eventCount: record.eventCount,
+          eventChannels: record.eventChannels,
+          steps: picked.siblings,
+        );
+      }
       throw ArgumentError.value(
         _relative(picked.base),
         'step',
@@ -2133,6 +2172,9 @@ class ScenariosCore extends PluginCore {
   /// which is what makes browsing cost a call rather than a guess.
   _PickedStep _pickStep(Map<String, Object?> arguments) {
     var raw = arguments['step']?.toString().trim();
+    if (raw != null && raw.startsWith('${Address.scheme}://')) {
+      return _pickAddressed(raw, arguments);
+    }
     if (raw != null && raw.isNotEmpty && int.tryParse(raw) == null) {
       var path = _absolute(raw);
       if (_baseOf(path) case var base?) return _describe(base);
@@ -2199,6 +2241,65 @@ class ScenariosCore extends PluginCore {
                 '${_listing(Directory(runDir))}'
           : '${failed.length} scenarios failed in that run, so "the failing '
                 'step" names more than one. ${_listing(Directory(runDir))}',
+    );
+  }
+
+  /// The step an `fw://` address names — the address `run` prints on every
+  /// step, accepted back as the step it is, so a step has one identity across
+  /// `run`, `read` and the GUI rather than a translation between them.
+  ///
+  /// Resolved against the run `output` names, or the package's newest: an
+  /// address says which scenario and which step, not which run, and the run
+  /// a reader has in hand is the one it just took the address from.
+  _PickedStep _pickAddressed(String raw, Map<String, Object?> arguments) {
+    var grammar =
+        'an address here names one step of one scenario — '
+        '`fw:///worktrees/<worktree>/${host.id}/<package>/<file>/<scenario>/<n>`, '
+        'as `run` reports it on every step.';
+    Address address;
+    try {
+      address = Address.parse(raw);
+    } on FormatException catch (error) {
+      throw ArgumentError.value(raw, 'step', '${error.message}. $grammar');
+    }
+    var place = address.plugin == host.id
+        ? scenarioPlace(address.segments)
+        : null;
+    if (place == null || place.scenario == null || place.step == null) {
+      throw ArgumentError.value(raw, 'step', grammar);
+    }
+    var runDir = _runDirectory({
+      ...arguments,
+      if (arguments['package'] == null) 'package': place.package,
+    });
+    var report = _reportIn(runDir);
+    if (report == null) {
+      throw ArgumentError.value(
+        _relative(runDir),
+        'output',
+        'no $scenarioRunReportFile in that directory, so there is no run to '
+            'find the addressed step in.',
+      );
+    }
+    var hits = [
+      for (var package in report.packages)
+        for (var outcome in package.scenarios)
+          if (outcome.file == place.file && outcome.name == place.scenario)
+            for (var step in outcome.steps)
+              if (step.index == place.step) (outcome, step),
+    ];
+    if (hits.length == 1) return _fromRecord(hits.single.$1, hits.single.$2);
+    throw ArgumentError.value(
+      raw,
+      'step',
+      hits.isEmpty
+          ? 'no step ${place.step} of `${place.scenario}` (${place.file}) in '
+                '${_relative(runDir)}. A matrix point lives in its own '
+                'directory — name it with `output`. ${_listing(Directory(runDir))}'
+          : 'step ${place.step} of `${place.scenario}` exists ${hits.length} '
+                'times in that run — two scenarios in one file share that '
+                'name — so name the capture itself. '
+                '${_listing(Directory(runDir))}',
     );
   }
 
@@ -2347,15 +2448,13 @@ class ScenariosCore extends PluginCore {
   (ScenarioRunOutcome, ScenarioRunStep)? _stepRecordFor(String base) {
     var report = _reportIn(p.dirname(p.dirname(p.dirname(base))));
     if (report == null) return null;
-    var wanted = '$base.tree.json';
     for (var package in report.packages) {
       for (var outcome in package.scenarios) {
         for (var step in outcome.steps) {
-          // A beat with no frame has no tree either, so it is never what a
-          // `.tree.json` path is asking about.
-          if (step.tree case var tree? when _absolute(tree) == wanted) {
-            return (outcome, step);
-          }
+          // By whichever leg the step has: a beat with no frame has no tree,
+          // and the step a timed-out scenario never took may have only its
+          // events — both are still the record a base names.
+          if (_baseOfStep(step) == base) return (outcome, step);
         }
       }
     }
@@ -2386,9 +2485,30 @@ class ScenariosCore extends PluginCore {
     );
   }
 
+  /// The stem every leg of [step] hangs off, from whichever leg it has — a
+  /// screen has a tree, a beat has none, and the step a timed-out scenario
+  /// never took may have only its events. Null when it has nothing on disk
+  /// at all.
+  String? _baseOfStep(ScenarioRunStep step) {
+    for (var leg in [step.tree, step.image, step.events, step.semantics]) {
+      if (leg == null) continue;
+      if (_baseOf(_absolute(leg)) case var base?) return base;
+    }
+    return null;
+  }
+
   _PickedStep _fromRecord(ScenarioRunOutcome outcome, ScenarioRunStep step) =>
       _PickedStep(
-        base: _baseOf(_absolute(step.tree!))!,
+        base:
+            _baseOfStep(step) ??
+            (throw ArgumentError.value(
+              step.index,
+              'step',
+              'step ${step.index} of `${outcome.name}` left nothing on disk to '
+                  'read — a beat with no frame, or a scenario that stopped '
+                  'before anything could be captured. Its failure and errors '
+                  'are in $scenarioRunReportFile.',
+            )),
         file: outcome.file,
         scenario: outcome.name,
         index: step.index,
@@ -2808,7 +2928,7 @@ class ScenariosCore extends PluginCore {
     if (scenarios == null) return null;
     if (scenario != null) return 1;
     if (file == null) return scenarios.length;
-    return scenarios.where((ref) => selectsFile(file, ref.file)).length;
+    return scenarios.where((ref) => anySelectsFile(file, ref.file)).length;
   }
 
   /// Runs scenarios in the runner's `flutter_tester`.
@@ -3151,9 +3271,20 @@ class ScenariosCore extends PluginCore {
           // A selector that matched nothing used to come back as an empty list
           // and exit 0 — a typo reading as a green run. The harness compiled
           // from disk just now, so a fresh scan is the honest list to offer
-          // back.
-          if (described.scenarios.isEmpty &&
-              (file != null || scenario != null || tag != null)) {
+          // back. Per selector when several were given: a typo in the second
+          // file must not run green on the strength of the first.
+          var missed = file == null
+              ? null
+              : fileSelectors(file)
+                    .where(
+                      (one) => !described.scenarios.any(
+                        (ran) => selectsFile(one, ran.file),
+                      ),
+                    )
+                    .firstOrNull;
+          if (missed != null ||
+              (described.scenarios.isEmpty &&
+                  (scenario != null || tag != null))) {
             results.add(
               ScenarioRunPackage(
                 path: path,
@@ -3161,7 +3292,7 @@ class ScenariosCore extends PluginCore {
                 axes: fannedOut ? assignment.toParams() : null,
                 error: await _selectorMiss(
                   path,
-                  file: file,
+                  file: missed ?? file,
                   scenario: scenario,
                   tag: tag,
                 ),
@@ -3547,7 +3678,7 @@ class ScenariosCore extends PluginCore {
           "`scenario('…', tags: ['$tag'], (s) async { … })`.";
     }
     var inFile = result.scenarios
-        .where((ref) => selectsFile(file!, ref.file))
+        .where((ref) => anySelectsFile(file!, ref.file))
         .toList();
     if (scenario != null && inFile.isNotEmpty) {
       return 'No scenario "$scenario" in $file. It declares: '

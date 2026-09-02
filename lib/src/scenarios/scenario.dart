@@ -31,6 +31,7 @@ import 'real_work.dart';
 import 'run_args.dart';
 import 'run_listener.dart';
 import 'settle.dart';
+import 'stall.dart';
 import 'shots.dart';
 import 'staging.dart';
 import 'target.dart';
@@ -91,7 +92,7 @@ void scenario(
   String description,
   Future<void> Function(ScenarioTester s) body, {
   Shots? shots,
-  Settle settle = Settle.standard,
+  Settle? settle,
   bool? skip,
   Timeout? timeout,
   Object? tags,
@@ -105,6 +106,9 @@ void scenario(
   // here for the same reason, and beaten by anything this scenario said for
   // itself. Nobody having spoken is `auto`, which is what it always was.
   var policy = shots ?? scenarioAmbientShots ?? Shots.auto;
+  // The folder's settle policy, read here for the reason the shots policy
+  // is. Nobody having spoken is the bounded default.
+  var settling = settle ?? scenarioAmbientSettle ?? Settle.standard;
   // The folder's keyboard policy, captured as this scenario is declared for
   // the reason the shots policy is: a matrix declares one body once per
   // assignment, and each declaration keeps what it was made under. On unless
@@ -165,7 +169,7 @@ void scenario(
           description,
           body,
           policy,
-          settle,
+          settling,
           assignment,
           source,
           keyboard,
@@ -416,6 +420,9 @@ Future<void> _runScenario(
   // still in flight would have this one waiting out its whole allowance on
   // work that is not its own.
   resetAnnouncedWork();
+  // And what a deadline would quote: the previous scenario's unanswered
+  // sends and last verb are its own.
+  resetStallFacts();
   // The iOS caret blinks through an `AnimationController`, not a timer, so on
   // an iOS-staged device every screen with a focused field is asking for a
   // frame forever, and no settle policy can tell that from a spinner.
@@ -522,6 +529,9 @@ Future<void> _runScenario(
         keyboard,
         network,
       );
+      // Reachable from outside the body while the body runs, for the one
+      // reader that needs it there: the harness's deadline.
+      scenarioFlushHeld = s._flushPending;
       try {
         await body(s);
         s._flushPending();
@@ -1740,6 +1750,15 @@ class ScenarioTester {
     bool settled;
     bool landed;
     T result;
+    // Which verb the body is inside, and from which line of the scenario —
+    // the one thing a deadline can still say once the body is suspended on
+    // a future nothing will complete. Cleared as the verb returns, and kept
+    // as the last one, so a body that then awaits something of its own is
+    // placed "after `s.tap`" rather than nowhere.
+    var inFlight = verb == null
+        ? null
+        : ScenarioVerbInFlight(verb, target, StackTrace.current);
+    scenarioVerbInFlight = inFlight;
     try {
       // The frame the transition starts from, banked before the verb acts —
       // otherwise a movie of a tap opens on the frame after the tap and the
@@ -1750,7 +1769,9 @@ class ScenarioTester {
       // announced itself as they go — otherwise fake time runs the transition
       // out in a few real milliseconds and every frame of the movie behind the
       // step is a hole — and the landing below spends what is left.
-      var budget = RealWorkBudget();
+      // No ceiling on tracked work here: the scenario's own deadline is the
+      // ceiling, and its message names what was still pending.
+      var budget = RealWorkBudget(trackedWait: null);
       settled = await policy.apply(
         tester,
         record: _recorder,
@@ -1775,12 +1796,22 @@ class ScenarioTester {
         record: _recorder,
         beforePump: _keyboard.step,
       );
+      // After the landing and not before it: a strict policy is red about
+      // a screen that *stays* animating, and a decode still on its way is
+      // not that. The throw takes the ordinary failure path below, so the
+      // failed step carries the frame that was still moving.
+      if (policy.failsWhenUnsettled && !settled) {
+        throw stillAnimating(policy, verb: verb, target: target);
+      }
     } catch (error) {
       // The verb that broke captures its own frame; `scenario`'s catch is the
       // backstop for everything else. Both go through the same once-per-error
       // guard, so an error travelling up the stack yields one failed step.
       await _captureFailure(error, verb: verb, target: target);
       rethrow;
+    } finally {
+      if (inFlight != null) scenarioLastVerb = inFlight;
+      scenarioVerbInFlight = null;
     }
     _framesAtLastStep = _frames;
     await _afterStep(

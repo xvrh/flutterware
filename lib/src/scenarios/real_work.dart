@@ -1,6 +1,7 @@
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../real_work/tracker.dart';
 import 'asset_bundle.dart';
 import 'motion.dart';
 import 'settle.dart';
@@ -62,16 +63,20 @@ const _waitingTurn = Duration(milliseconds: 1);
 /// future are the same shape.
 ///
 /// Some of that work announces itself, and the announced half is not
-/// guesswork. Two counters say a decode is in flight without anyone taking a
+/// guesswork. Three counters say work is in flight without anyone taking a
 /// turn to find out: `ImageCache.pendingImageCount`, which every
 /// `ImageProvider` passes through — `Image.asset`, `Image.memory`,
-/// `Image.network`, an `AssetImage` — and [ScenarioAssetBundle.readsInFlight],
+/// `Image.network`, an `AssetImage` — [ScenarioAssetBundle.readsInFlight],
 /// which is every asset the app reads through the scenario's own bundle, so
-/// `SvgPicture.asset` and `Lottie.asset` are in it too. While either is
-/// non-zero this **waits**, in real milliseconds, until it is not. That is the
-/// deterministic half: the wait ends when the work ends, on a fast machine and
-/// a slow one alike, and a 780×609 PNG does not need a bigger number than an
-/// 8×8 one — it needs the same condition, held for longer.
+/// `SvgPicture.asset` and `Lottie.asset` are in it too — and [RealWork.pending],
+/// which is whatever the app itself handed to `RealWork.track`: a model
+/// import, an isolate, a database open. While any is non-zero this **waits**,
+/// in real milliseconds, until it is not. That is the deterministic half: the
+/// wait ends when the work ends, on a fast machine and a slow one alike, and a
+/// 780×609 PNG does not need a bigger number than an 8×8 one — it needs the
+/// same condition, held for longer. The first two are bounded by
+/// [realWorkWait]; a tracked future is the app's own promise and is waited
+/// for as long as it takes, up to the scenario's deadline.
 ///
 /// What is left over is guessed at, and a turn is the only detector there
 /// is. A `FutureBuilder` on a real future announces nothing, so this takes a
@@ -140,7 +145,10 @@ Future<({bool settled, bool landed})> landRealWork(
     // but without the last of them the movie ends on a frame the still does
     // not match, which is the hole this whole file exists to close.
     record?.capture(tester);
-    return (settled: false, landed: true);
+    // Read again rather than repeated: the turns above may have drawn the
+    // frame the policy was waiting on — a spinner whose future landed — and
+    // a strict policy would otherwise fail a screen that is now quiet.
+    return (settled: !tester.binding.hasScheduledFrame, landed: true);
   }
   var guesses = 0;
   while (true) {
@@ -153,7 +161,9 @@ Future<({bool settled, bool landed})> landRealWork(
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       guesses++;
     }
-    if (!tester.binding.hasScheduledFrame) continue;
+    // A frame the landing drew itself counts too: it is the same progress,
+    // and the policy below is where the recorder sees it.
+    if (!tester.binding.hasScheduledFrame && !budget.takeDrewFrame()) continue;
     // A frame is progress, so the next link starts from a full budget rather
     // than from whatever this one had left.
     guesses = 0;
@@ -177,19 +187,72 @@ Future<({bool settled, bool landed})> landRealWork(
 /// after it; per *run* and one wedged read would spend the ceiling on the step
 /// that started it and leave nothing for the rest of the scenario.
 class RealWorkBudget {
+  /// [trackedWait] is how long tracked work — what the app handed to
+  /// `RealWork.track` — may be waited for, out of a purse of its own; null
+  /// is as long as it takes. A scenario passes null: a tracked future is the
+  /// app's own promise, and a broken one runs into the scenario's deadline,
+  /// whose message names it — a better answer than `landed: false` in a
+  /// report nobody reads. A lane with no deadline above it keeps the
+  /// default: the previews harness has nothing that would ever name a
+  /// future that never completes, and ten minutes per entry is not an
+  /// answer.
+  RealWorkBudget({this.trackedWait = realWorkWait});
+
+  final Duration? trackedWait;
+
   /// Running only across the awaits below, so what it holds is time this step
   /// spent *waiting* and nothing else — a step whose settle takes a second
   /// between two landings has spent none of its allowance.
   final _spent = Stopwatch();
 
+  /// Its own purse, so a two-second model import does not spend the second
+  /// the image decodes it kicks off afterwards were going to need.
+  final _trackedSpent = Stopwatch();
+
+  var _drewFrame = false;
+
+  /// Whether [land] drew a frame since this was last asked — the frame a
+  /// tracked continuation scheduled, pumped so the next link could start.
+  /// `landRealWork` reads it as the progress it is: with nothing scheduled
+  /// afterwards it would otherwise look like a quiet tree, and the policy
+  /// that records the loaded frame would never be re-applied.
+  bool takeDrewFrame() {
+    var drew = _drewFrame;
+    _drewFrame = false;
+    return drew;
+  }
+
   /// Waits, on the real clock, while anything announced is still in flight.
   ///
   /// Returns false only when the allowance ran out with something still
   /// pending — which is what puts `landed: false` on the step. Returns
-  /// immediately, and free, when nothing is in flight: two integer reads is
-  /// the whole cost on the path almost every frame of almost every step takes.
+  /// immediately, and free, when nothing is in flight: three integer reads
+  /// is the whole cost on the path almost every frame of almost every step
+  /// takes.
   Future<bool> land(WidgetTester tester, ScenarioAssetBundle? assets) async {
     while (_announced(assets)) {
+      if (RealWork.pending > 0) {
+        if (trackedWait case var ceiling?
+            when _trackedSpent.elapsed >= ceiling) {
+          return false;
+        }
+        _trackedSpent.start();
+        try {
+          await tester.runAsync(() => Future<void>.delayed(_waitingTurn));
+        } finally {
+          _trackedSpent.stop();
+        }
+        // A tracked load usually arrives in links — a read completes, the
+        // continuation runs `setState` or awaits a frame, and the next read
+        // starts after it — and only a pump draws the frame between them.
+        // Only when one is asked for: `runAsync` has already flushed the
+        // microtasks, and a pump with nothing scheduled adds nothing.
+        if (tester.binding.hasScheduledFrame) {
+          _drewFrame = true;
+          await tester.pump();
+        }
+        continue;
+      }
       if (_spent.elapsed >= realWorkWait) return false;
       _spent.start();
       try {
@@ -202,11 +265,13 @@ class RealWorkBudget {
   }
 }
 
-/// Work the framework or the scenario's own bundle has already said is in
-/// flight — the half of real-loop work that does not have to be guessed at.
+/// Work the framework, the scenario's own bundle or the app itself has
+/// already said is in flight — the half of real-loop work that does not have
+/// to be guessed at.
 bool _announced(ScenarioAssetBundle? assets) =>
     PaintingBinding.instance.imageCache.pendingImageCount > 0 ||
-    (assets?.readsInFlight ?? 0) > 0;
+    (assets?.readsInFlight ?? 0) > 0 ||
+    RealWork.pending > 0;
 
 /// Drops what a previous test body left the image cache holding, so the next
 /// one starts with [_announced] describing **it**.
@@ -243,4 +308,8 @@ void resetAnnouncedWork() {
   // `clear` leaves the live set alone, and a live entry is a handle on the
   // previous body's decoded pixels — held by a tree that no longer exists.
   cache.clearLiveImages();
+  // The app's own announcements are the same kind of leak: a load the
+  // previous body started and never finished would otherwise be waited on
+  // by this one, up to its deadline.
+  resetTrackedRealWork();
 }

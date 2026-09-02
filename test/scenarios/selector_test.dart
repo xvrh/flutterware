@@ -67,4 +67,26 @@ void main() {
       isFalse,
     );
   });
+  test('several selectors pick the union, in the order given', () {
+    expect(fileSelectors('a_test.dart, b/ ,,c_test.dart'), [
+      'a_test.dart',
+      'b/',
+      'c_test.dart',
+    ]);
+    expect(
+      anySelectsFile('test/a_test.dart,test/b', 'test/b/x_test.dart'),
+      isTrue,
+    );
+    expect(
+      anySelectsFile('test/a_test.dart,test/b', 'test/a_test.dart'),
+      isTrue,
+    );
+    expect(
+      anySelectsFile('test/a_test.dart,test/b', 'test/c_test.dart'),
+      isFalse,
+    );
+    // The predicate itself takes one selector, so a caller can say which of
+    // several matched nothing.
+    expect(selectsFile('test/a_test.dart,test/b', 'test/a_test.dart'), isFalse);
+  });
 }

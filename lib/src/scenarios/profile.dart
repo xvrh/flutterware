@@ -7,6 +7,7 @@ import '../devices.dart';
 import '../translations/index.dart';
 import 'fonts.dart';
 import 'network.dart';
+import 'settle.dart';
 import 'shots.dart';
 
 /// What a folder of scenarios is *for* — the devices and languages worth
@@ -178,6 +179,7 @@ Future<void> runScenarios(
   Shots? shots,
   bool keyboard = true,
   ScenarioNetwork? network,
+  Settle? settle,
 }) async {
   // Under the flutterware runner this is called to *ask* what the folder is
   // for, not to declare anything: the harness reads the profile here and
@@ -195,6 +197,7 @@ Future<void> runScenarios(
     scenarioProbedShots = shots;
     scenarioProbedKeyboard = keyboard;
     scenarioProbedNetwork = network;
+    scenarioProbedSettle = settle;
     return;
   }
 
@@ -213,6 +216,7 @@ Future<void> runScenarios(
   scenarioAmbientShots = shots;
   scenarioAmbientKeyboard = keyboard;
   scenarioAmbientNetwork = network;
+  scenarioAmbientSettle = settle;
   try {
     for (var assignment in assignments) {
       scenarioAmbientAssignment = assignment;
@@ -228,6 +232,7 @@ Future<void> runScenarios(
     scenarioAmbientShots = null;
     scenarioAmbientKeyboard = null;
     scenarioAmbientNetwork = null;
+    scenarioAmbientSettle = null;
   }
 }
 
@@ -258,6 +263,18 @@ ScenarioNetwork? scenarioAmbientNetwork;
 
 /// What the last probed config said its http requests reach.
 ScenarioNetwork? scenarioProbedNetwork;
+
+/// The settle policy the folder being declared right now asked for, or null
+/// where it asked for nothing — which is [Settle.standard].
+///
+/// Read by `scenario()` **as it declares**, like [scenarioAmbientShots] and for
+/// the same reason. A folder is the altitude a policy like [Settle.strict]
+/// wants: "a spinner in a picture is a bug here" is a fact about a suite, and
+/// a scenario that names its own `settle:` still wins.
+Settle? scenarioAmbientSettle;
+
+/// What the last probed config said about settling.
+Settle? scenarioProbedSettle;
 
 /// The shots policy the folder being declared right now asked for, or null
 /// where it asked for nothing.

@@ -1042,10 +1042,24 @@ void main() {
         var hung = scenarios.single;
         expect(hung['name'], 'Never returns');
         expect(hung['ok'], isFalse);
-        expect(
-          '${(hung['errors']! as List).first}',
-          contains('did not finish within 2s'),
-        );
+        var error = '${((hung['errors']! as List).first as Map)['error']}';
+        expect(error, contains('did not finish within 2s'));
+        // The diagnosis: where the body was, and which mechanism. This body
+        // went past its last verb into a bare `tester.runAsync`, so it is
+        // placed after that verb; and nothing is queued in the fake zone,
+        // because the future it awaits was never going to complete anything.
+        expect(error, contains('between verbs: `s.pumpWidget SizedBox`'));
+        expect(error, contains('hanging_test.dart:'));
+        expect(error, contains('Nothing is queued in the fake zone'));
+        // The step it never took, taken for it: failed, no picture, and the
+        // print on the way there as its event — the evidence a stuck step
+        // used to lose.
+        var steps = (hung['steps']! as List).cast<Map<String, dynamic>>();
+        expect(steps, hasLength(2));
+        var last = steps.last;
+        expect(last['failure'], error);
+        expect(last['image'], isNull);
+        expect(last['eventTitles'], contains('about to hang'));
         // Declared after it, and deliberately never reached.
         expect(
           scenarios.map((s) => s['name']),
@@ -1559,6 +1573,7 @@ void main() {
     timeout: const Timeout(Duration(seconds: 2)),
     (s) async {
       await s.pumpWidget(const SizedBox.shrink());
+      print('about to hang');
       // Real async that no pump — and no clock — will ever complete.
       await s.tester.runAsync(() => Completer<void>().future);
     },
