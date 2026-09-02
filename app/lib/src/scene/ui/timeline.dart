@@ -23,8 +23,7 @@ import 'transport.dart';
 /// [MotionKeyRef] the editor can select, nudge and delete as a set. A drag
 /// goes through `nudgeKeys` with a merge key, so it is one undo entry
 /// however far it went, and the sort door keeps the track ordered while it
-/// moves. Groups the timeline does not place are a library beneath the
-/// lanes; placing one is one command.
+/// moves.
 class SceneTimeline extends StatefulWidget {
   const SceneTimeline(
     this.editor,
@@ -69,8 +68,9 @@ class _SceneTimelineState extends State<SceneTimeline> {
     var placements = motion.placements;
     var out = <_GroupLanes>[];
     for (var group in motion.groups) {
-      var at = placements[group.name];
-      if (at == null) continue;
+      // A group the timeline expression does not place — legal in a
+      // hand-edited file — is shown at zero; dragging its bar places it.
+      var at = placements[group.name] ?? Duration.zero;
       out.add(
         _GroupLanes(group, at, [
           for (var MapEntry(key: prop, value: track) in group.tracks.entries)
@@ -106,24 +106,6 @@ class _SceneTimelineState extends State<SceneTimeline> {
     _keyAtPlayhead(group, prop);
   }
 
-  Iterable<AnimateGroup> _unplaced() {
-    var placed = motion.placements.keys.toSet();
-    return motion.groups.where((g) => !placed.contains(g.name));
-  }
-
-  void _place(AnimateGroup group) {
-    var at = playback.position;
-    editor.perform('Place ${group.name}', () {
-      var ref = GroupRef(group.name);
-      var child = at == Duration.zero ? ref : AtExpr(at, ref);
-      motion.timeline = switch (motion.timeline) {
-        ParExpr p => ParExpr([...p.children, child]),
-        var other => ParExpr([other, child]),
-      };
-    });
-    playback.rebind();
-  }
-
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
@@ -139,7 +121,6 @@ class _SceneTimelineState extends State<SceneTimeline> {
         ]),
         builder: (context, _) {
           var groups = _groups();
-          var unplaced = _unplaced().toList();
           var total = math.max(1, playback.duration.inMilliseconds);
           var selected = editor.primary;
           var selectedName = selected?.name;
@@ -190,7 +171,7 @@ class _SceneTimelineState extends State<SceneTimeline> {
               ),
               Container(height: 1, color: colors.line),
               Expanded(
-                child: groups.isEmpty && unplaced.isEmpty && selected == null
+                child: groups.isEmpty && selected == null
                     ? Center(
                         child: Text(
                           'Nothing animates yet — select a node to animate it',
@@ -227,12 +208,6 @@ class _SceneTimelineState extends State<SceneTimeline> {
                               gutterWidth: widget.gutterWidth,
                               onPick: (prop) =>
                                   _animateSelected(selected, prop),
-                            ),
-                          if (unplaced.isNotEmpty)
-                            _Library(
-                              groups: unplaced,
-                              gutterWidth: widget.gutterWidth,
-                              onPlace: _place,
                             ),
                         ],
                       ),
@@ -875,77 +850,6 @@ class _KeyPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_KeyPainter old) => true;
-}
-
-/// Groups the timeline does not place yet. Placing one puts it on the
-/// playhead.
-class _Library extends StatelessWidget {
-  const _Library({
-    required this.groups,
-    required this.gutterWidth,
-    required this.onPlace,
-  });
-
-  final List<AnimateGroup> groups;
-  final double gutterWidth;
-  final ValueChanged<AnimateGroup> onPlace;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        FwSpacing.lg,
-        FwSpacing.lg,
-        FwSpacing.lg,
-        FwSpacing.md,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: FwSpacing.sm,
-        children: [
-          Text('LIBRARY', style: context.type.sectionLabel),
-          Wrap(
-            spacing: FwSpacing.xs,
-            runSpacing: FwSpacing.xs,
-            children: [
-              for (var group in groups)
-                Tooltip(
-                  message: 'Place ${group.name} at the playhead',
-                  child: Tappable(
-                    onTap: () => onPlace(group),
-                    borderRadius: BorderRadius.circular(context.radii.pill),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: FwSpacing.md,
-                        vertical: FwSpacing.xxs,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: colors.line),
-                        borderRadius: BorderRadius.circular(context.radii.pill),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        spacing: FwSpacing.xs,
-                        children: [
-                          Text(group.name, style: context.type.caption),
-                          Text(
-                            '· ${group.target}',
-                            style: context.type.caption.copyWith(
-                              color: colors.mut2,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Ticks at a step that keeps about eight labels on screen whatever the

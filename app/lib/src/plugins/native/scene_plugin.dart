@@ -179,9 +179,7 @@ class _ScenePanelState extends State<_ScenePanel>
       _guest?.dispose();
       _workspace = SceneWorkspace(file, resolveNested: _resolveNested);
       _guest = SceneGuest(widget.plugin.sessionFor(_package!), file.editor);
-      _note =
-          'open · ${file.className}'
-          '${file.motions.isEmpty ? '' : ' · ${file.motions.keys.join(', ')}'}';
+      _note = '';
     });
   }
 

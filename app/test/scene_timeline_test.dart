@@ -166,21 +166,36 @@ void main() {
     await tester.pump(kDoubleTapTimeout);
   });
 
-  testWidgets('the library places a group at the playhead', (tester) async {
-    await pump(tester);
-    expect(motion.placements.containsKey('tapPulse'), isFalse);
-    var playback = tester.state<_HostState>(find.byType(_Host)).playback;
-    playback.seek(const Duration(milliseconds: 500));
-    await tester.pump();
-    await tester.tap(find.text('tapPulse'));
-    await tester.pump();
-    expect(motion.placements['tapPulse'], const Duration(milliseconds: 500));
-    expect(find.text('LIBRARY'), findsNothing);
-    expect(editor.undoLabel, 'Place tapPulse');
-    // The lanes carry a double-tap recognizer, which arms a timer after any
-    // tap; a test that ends with it pending is refused by the framework.
-    await tester.pump(kDoubleTapTimeout);
-  });
+  testWidgets(
+    'a group the timeline never placed shows at zero; a drag places it',
+    (tester) async {
+      await pump(tester);
+      expect(motion.placements.containsKey('tapPulse'), isFalse);
+      expect(
+        find.text('cta  tapPulse', findRichText: true),
+        findsOneWidget,
+        reason: 'a row like any other',
+      );
+      expect(find.text('LIBRARY'), findsNothing);
+      // tapPulse is the fourth group in document order: ruler, then
+      // headlineIn (1 + 2 lanes), glowMood (1 + 1), badgePop (1 + 2) before it.
+      var y = 29 + 26 * 8 + 13.0;
+      var gesture = await tester.startGesture(
+        Offset(xOf(const Duration(milliseconds: 100)), y),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      for (var i = 0; i < 5; i++) {
+        await gesture.moveBy(const Offset(stripWidth / totalMs * 20, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pump();
+      expect(motion.placements['tapPulse']!.inMilliseconds, closeTo(100, 3));
+      expect(editor.undoLabel, 'Move tapPulse');
+      await tester.pump(kDoubleTapTimeout);
+    },
+  );
 }
 
 class _Host extends StatefulWidget {

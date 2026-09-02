@@ -116,6 +116,14 @@ void main() {
     );
   });
 
+  test('moving a group the timeline never placed places it', () {
+    expect(motion.placements.containsKey('tapPulse'), isFalse);
+    editor.moveGroup(m, 'tapPulse', const Duration(milliseconds: 500));
+    expect(motion.placements['tapPulse'], const Duration(milliseconds: 500));
+    editor.undo();
+    expect(motion.placements.containsKey('tapPulse'), isFalse);
+  });
+
   testWidgets('playback rebinds when the motion grows a group', (tester) async {
     late ScenePlayback playback;
     await tester.pumpWidget(_Host(editor, (p) => playback = p));

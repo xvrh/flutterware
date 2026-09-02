@@ -237,8 +237,13 @@ What is *not* open, because earlier decisions imply it:
 
 - **Timeline rows are scene nodes.** An `AnimateGroup` targets a node by
   field name; the gutter is the node tree filtered to animated ones.
-- **Unplaced groups are library assets**, so they need a home beside the
-  timeline, not on the playhead.
+- ~~**Unplaced groups are library assets**, so they need a home beside the
+  timeline, not on the playhead.~~ Reversed 2026-09-02, looking at it: the
+  "library" strip explained nothing to its first reader. In the editor every
+  group is on the timeline — a declared-but-unplaced group (legal in a
+  hand-edited file) shows at zero and is placed by dragging its bar. A per-node
+  animation that is not part of this clip is a second *motion*, which the
+  scene-first workspace gives a home.
 - **Nesting is a drill-in.** An instance's internals are not addressable
   (the nesting research law), so entering a nested scene switches the
   whole workspace, with a breadcrumb back — and a parent may animate only

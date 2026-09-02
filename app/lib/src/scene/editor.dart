@@ -428,7 +428,7 @@ class SceneEditor extends SceneListenable {
       _ => [timeline],
     };
     var index = children.indexWhere(isRef);
-    if (index < 0) {
+    if (index < 0 && m.placements.containsKey(groupName)) {
       throw ArgumentError(
         '"$groupName" is not placed directly on the timeline — a group inside '
         'a Seq or a Speed starts where its neighbours put it',
@@ -436,7 +436,12 @@ class SceneEditor extends SceneListenable {
     }
     perform('Move $groupName', mergeKey: mergeKey, () {
       var next = [...children];
-      next[index] = place(next[index]);
+      // A declared group the timeline never placed joins it here.
+      if (index < 0) {
+        next.add(place(GroupRef(groupName)));
+      } else {
+        next[index] = place(next[index]);
+      }
       m.timeline = ParExpr(next);
     });
   }
