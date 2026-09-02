@@ -20,7 +20,9 @@ import 'package:test_api/src/backend/test.dart';
 import '../bytes.dart';
 import '../flutter_gpu_diagnosis.dart';
 import '../devices.dart';
+import '../drive/resolve.dart' show visibleTextsOf;
 import '../inspect/guest_inspect.dart';
+import '../real_work/tracker.dart';
 import 'async_watchdog.dart';
 import '../app_events/events.dart';
 import 'fonts.dart';
@@ -29,6 +31,8 @@ import 'network.dart';
 import 'notification.dart';
 import 'profile.dart';
 import 'selector.dart';
+import 'settle.dart';
+import 'stall.dart';
 import 'report.dart';
 import 'run_args.dart';
 import 'scenario.dart';
@@ -170,6 +174,7 @@ Future<void> _runHarness(
     shots: folderShots,
     keyboards: folderKeyboards,
     networks: folderNetworks,
+    settles: folderSettles,
   ) = await _probeFolders(
     configs,
   );
@@ -207,6 +212,7 @@ Future<void> _runHarness(
         shots: folderShots,
         keyboards: folderKeyboards,
         networks: folderNetworks,
+        settles: folderSettles,
         // The host resolved a device id to geometry, or said it had nobody's
         // choice to resolve — in which case the folder's profile speaks and
         // the geometry that did arrive is only the host's fallback.
@@ -287,6 +293,22 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
       ),
     );
     var result = super.send(channel, message);
+    // What a deadline can quote: which sends the body never saw answered,
+    // and from where in the app. Plugin traffic and asset reads only — the
+    // framework's own chatter is nobody's deadlock, and a stack per message
+    // is not free. A reply that arrives while the body is suspended is a
+    // fake microtask nobody runs, so from the body's side it stays pending,
+    // which is exactly what the diagnosis wants to list. A send with no
+    // reply at all — a mock answering null, fire-and-forget — is not
+    // recorded: nothing was ever going to answer it, and sixty-four of
+    // those would push the send that actually wedged out of the list.
+    if (result != null && (!system || channel == 'flutter/assets')) {
+      var token = recordPendingSend(_sendTitle(channel, call, message));
+      result.then(
+        (_) => sendAnswered(token),
+        onError: (Object _) => sendAnswered(token),
+      );
+    }
     if (system) return result;
     // Replies are recorded only when they say something went wrong. A
     // successful envelope in a widget test is either empty or a mock's canned
@@ -329,6 +351,20 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
       ),
     );
     return result;
+  }
+
+  /// `flutter/assets assets/model.glb` — an asset read is the key, utf-8,
+  /// and the key is the whole diagnosis. Anything else is the channel and
+  /// the method.
+  String _sendTitle(String channel, MethodCall? call, ByteData? message) {
+    if (channel == 'flutter/assets' && message != null) {
+      try {
+        return '$channel ${utf8.decode(message.buffer.asUint8List(message.offsetInBytes, message.lengthInBytes))}';
+      } on FormatException {
+        // Not a key after all; fall through to the size.
+      }
+    }
+    return call == null ? channel : '$channel ${call.method}';
   }
 
   /// The two codecs the framework and its plugins actually use, in the order
@@ -380,6 +416,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
   Map<String, Shots> shots = const {},
   Map<String, bool> keyboards = const {},
   Map<String, ScenarioNetwork> networks = const {},
+  Map<String, Settle> settles = const {},
 }) {
   var declarer = Declarer();
   var scenarios = <String, Set<String>>{};
@@ -401,6 +438,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
         scenarioAmbientShots = _nearest(entry.key, shots);
         scenarioAmbientKeyboard = _nearest(entry.key, keyboards);
         scenarioAmbientNetwork = _nearest(entry.key, networks);
+        scenarioAmbientSettle = _nearest(entry.key, settles);
         try {
           entry.value();
         } finally {
@@ -409,6 +447,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
           scenarioAmbientShots = null;
           scenarioAmbientKeyboard = null;
           scenarioAmbientNetwork = null;
+          scenarioAmbientSettle = null;
         }
         scenarios[entry.key] = sink.toSet();
       });
@@ -429,6 +468,7 @@ Future<
     Map<String, Shots> shots,
     Map<String, bool> keyboards,
     Map<String, ScenarioNetwork> networks,
+    Map<String, Settle> settles,
   })
 >
 _probeFolders(
@@ -438,12 +478,14 @@ _probeFolders(
   var shots = <String, Shots>{};
   var keyboards = <String, bool>{};
   var networks = <String, ScenarioNetwork>{};
+  var settles = <String, Settle>{};
   for (var MapEntry(key: directory, value: config) in configs.entries) {
     scenarioProbing = true;
     scenarioProbedProfile = null;
     scenarioProbedShots = null;
     scenarioProbedKeyboard = null;
     scenarioProbedNetwork = null;
+    scenarioProbedSettle = null;
     try {
       await config(() {});
       if (scenarioProbedProfile case var profile?) {
@@ -458,6 +500,9 @@ _probeFolders(
       if (scenarioProbedNetwork case var reach?) {
         networks[directory] = reach;
       }
+      if (scenarioProbedSettle case var policy?) {
+        settles[directory] = policy;
+      }
     } catch (error, stack) {
       stderr.writeln('[harness] $directory config: $error\n$stack');
     } finally {
@@ -466,6 +511,7 @@ _probeFolders(
       scenarioProbedShots = null;
       scenarioProbedKeyboard = null;
       scenarioProbedNetwork = null;
+      scenarioProbedSettle = null;
     }
   }
   return (
@@ -473,6 +519,7 @@ _probeFolders(
     shots: shots,
     keyboards: keyboards,
     networks: networks,
+    settles: settles,
   );
 }
 
@@ -682,26 +729,38 @@ Future<Map<String, Object?>> _run(
   Map<String, Shots> shots = const {},
   Map<String, bool> keyboards = const {},
   Map<String, ScenarioNetwork> networks = const {},
+  Map<String, Settle> settles = const {},
   String? device,
   bool deviceUnspecified = false,
   bool narrowestDevice = false,
   ScreenOrientation? orientation,
 }) async {
+  // Several selectors run in the order they were given — `--file=a,b` is
+  // "a, then b" in one process, which is what a bisect across two files
+  // needs: a future one file leaves behind in its fake zone only bites the
+  // file that runs after it.
   var mains = file == null
       ? scenarioMains
       : {
-          for (var entry in scenarioMains.entries)
-            if (selectsFile(file, entry.key)) entry.key: entry.value,
+          for (var selector in fileSelectors(file))
+            for (var entry in scenarioMains.entries)
+              if (selectsFile(selector, entry.key)) entry.key: entry.value,
         };
   var declared = _declare(
     mains,
     shots: shots,
     keyboards: keyboards,
     networks: networks,
+    settles: settles,
   );
   var root = declared.root;
 
   var outcomes = <Map<String, Object?>>[];
+  // What ran before the scenario running now, in this process — the name a
+  // deadline quotes when the body is waiting on a future nothing here will
+  // complete, since the usual owner of such a future is the previous body's
+  // fake zone.
+  String? previousName;
   // Emptied rather than read cumulatively: a warm guest serves many requests,
   // and a mode one of them ran under is not a fact about the next.
   scenarioNetworkModesRun.clear();
@@ -874,7 +933,9 @@ Future<Map<String, Object?>> _run(
             device: framedDevice,
             inspector: inspector,
             outDir: outDir,
+            previous: previousName,
           );
+          previousName = name;
           outcomes.add(outcome);
           // A scenario that timed out is still running in there, holding the
           // binding — the next one would fail on its leftovers and blame
@@ -1044,6 +1105,7 @@ Future<Map<String, Object?>> _runOne(
   required GuestInspector inspector,
   required String outDir,
   String? device,
+  String? previous,
 }) async {
   var steps = <ScenarioRunStep>[];
   var directory = Directory(
@@ -1215,9 +1277,14 @@ Future<Map<String, Object?>> _runOne(
     // name it, and the app acted again in the meantime. Non-null because the
     // reader is installed beside the listener above, for every screen the
     // listener can be handed.
-    var screen = capture.screen!;
-    var read = screen.tree;
-    File('$base.tree.json').writeAsStringSync(jsonEncode(read.toJson()));
+    // Null on the one capture nobody photographed: the step a timed-out
+    // scenario never took, invented by the harness with whatever the tree
+    // would still answer — which may be nothing.
+    var screen = capture.screen;
+    var read = screen?.tree;
+    if (read != null) {
+      File('$base.tree.json').writeAsStringSync(jsonEncode(read.toJson()));
+    }
     var digest = _digest(capture.bytes!);
     // Only a verb that acts can be told it acted for nothing, and a failure's
     // capture already says everything. The flag is a fact, not a verdict — a
@@ -1244,8 +1311,8 @@ Future<Map<String, Object?>> _runOne(
     // keys this screen shows and where. Flattened out of the same read as the
     // tree — an export asking "which screens show this key" should not
     // have to parse every node of every step to find out.
-    var keys = read.translationKeys();
-    var unkeyed = read.unkeyedText();
+    var keys = read?.translationKeys() ?? const [];
+    var unkeyed = read?.unkeyedText() ?? const [];
     if (keys.isNotEmpty || unkeyed.isNotEmpty || capture.overflowErrors > 0) {
       File('$base.keys.json').writeAsStringSync(
         jsonEncode({
@@ -1263,7 +1330,7 @@ Future<Map<String, Object?>> _runOne(
     // And the fourth: what a screen reader gets. Absent rather than empty
     // when there is no semantics tree to read — which under `testWidgets`'s
     // default handle is never, but a capture must not invent a screen.
-    var semantics = screen.semantics;
+    var semantics = screen?.semantics;
     if (semantics != null) {
       File('$base.semantics.json').writeAsStringSync(jsonEncode(semantics));
     }
@@ -1302,7 +1369,7 @@ Future<Map<String, Object?>> _runOne(
       format: capture.format,
       width: capture.width,
       height: capture.height,
-      tree: '$base.tree.json',
+      tree: read == null ? null : '$base.tree.json',
       // Written for overflow counts too: flexOverflows is a screen-level
       // fact of a max-length probe, and it rides the artifact the probe
       // reader already opens.
@@ -1431,7 +1498,7 @@ Future<Map<String, Object?>> _runOne(
   // `scenario(timeout: Timeout(…))`, and `Timeout.none` to opt out entirely.
   var deadline = live.test.metadata.timeout.apply(_defaultScenarioTimeout);
   var watch = Stopwatch()..start();
-  var timedOut = false;
+  String? timedOut;
   // Anything the previous scenario's watchdog left is that scenario's, and it
   // may not be quoted at this one.
   scenarioAsyncStall = null;
@@ -1439,7 +1506,12 @@ Future<Map<String, Object?>> _runOne(
     var running = live.run();
     await (deadline == null ? running : running.timeout(deadline));
   } on TimeoutException {
-    timedOut = true;
+    // The body is suspended somewhere past the last capture, and what the
+    // app printed and did on the way there is the evidence. So the step it
+    // never took is taken for it — failed, the diagnosis as its failure,
+    // those events on it, no picture — which is the one case where inventing
+    // a step is right: the flow really did reach a place nothing photographed.
+    timedOut = _captureTimeout(steps, deadline: deadline!, previous: previous);
   } finally {
     await records.cancel();
     await messages.cancel();
@@ -1451,10 +1523,11 @@ Future<Map<String, Object?>> _runOne(
     reportTestException = priorReporter;
     scenarioRunListener = null;
     scenarioScreenReader = null;
+    scenarioFlushHeld = null;
   }
 
   var errors = [
-    if (timedOut) ScenarioRunError(error: _timedOutMessage(deadline!)),
+    if (timedOut case var message?) ScenarioRunError(error: message),
     ...failures,
     for (var error in live.errors)
       ScenarioRunError(
@@ -1462,7 +1535,8 @@ Future<Map<String, Object?>> _runOne(
         stack: '${error.stackTrace}',
       ),
   ];
-  var passed = !timedOut && live.state.result.isPassing && errors.isEmpty;
+  var passed =
+      timedOut == null && live.state.result.isPassing && errors.isEmpty;
   // Every key every catalog was asked for on the way through this
   // scenario, and what it answered — **including the keys whose value never
   // reached a glyph.** The steps say where a key was *seen*; only this says
@@ -1490,8 +1564,90 @@ Future<Map<String, Object?>> _runOne(
     ...outcome.toJson(),
     // Read by the host, not by a reader: the body is still running in there,
     // so this harness is spent and the next run needs a fresh one.
-    if (timedOut) 'timedOut': true,
+    if (timedOut != null) 'timedOut': true,
   };
+}
+
+/// Hands the listener the step a timed-out scenario never took, and returns
+/// the diagnosis it carries as its failure.
+///
+/// What the diagnosis is made of is on `stall.dart`. Read here, at the
+/// deadline, while the body is still suspended and the facts still stand:
+/// the fake zone's queue, the verb in flight, the sends nobody answered. The
+/// tree is read too, when it will be read — the body is suspended between
+/// frames, so it usually will — which is what puts `find` and the texts on
+/// the failed step.
+String _captureTimeout(
+  List<ScenarioRunStep> steps, {
+  required Duration deadline,
+  String? previous,
+}) {
+  // The capture the body was still holding — the automatic step waiting to
+  // see whether the next verb names it — comes first, so the last picture
+  // the scenario took is a step, and the invented one follows it.
+  try {
+    scenarioFlushHeld?.call();
+  } catch (_) {
+    // A held capture that will not write is a picture lost, not a run.
+  }
+  var (events, dropped) = appEventBuffer?.drain() ?? (const <AppEvent>[], 0);
+  int? microtasks;
+  try {
+    microtasks = TestWidgetsFlutterBinding.instance.microtaskCount;
+  } catch (_) {
+    // Readable only while a test is in progress, which a timed-out one is —
+    // but the binding asserts rather than answers if it is not.
+  }
+  var inFlight = scenarioVerbInFlight;
+  var where = inFlight ?? scenarioLastVerb;
+  var message = stallDiagnosis(
+    deadline: deadline,
+    watchdog: scenarioAsyncStall,
+    microtasks: microtasks,
+    inFlight: inFlight,
+    lastVerb: scenarioLastVerb,
+    sends: pendingSends,
+    tracked: RealWork.pendingWork,
+    pendingImages: PaintingBinding.instance.imageCache.pendingImageCount,
+    previousScenario: previous,
+    eventsOnFailedStep: events.isNotEmpty,
+  );
+  ScenarioScreenRead? screen;
+  var texts = const <String>[];
+  try {
+    screen = scenarioScreenReader?.call();
+    texts = visibleTextsOf(
+      LiveWidgetController(TestWidgetsFlutterBinding.instance),
+    );
+  } catch (_) {
+    // A tree that will not be read mid-suspension is a step without one.
+  }
+  var index = steps.length + 1;
+  var pendingImages = PaintingBinding.instance.imageCache.pendingImageCount;
+  scenarioRunListener?.call(
+    ScenarioStepCapture(
+      index: index,
+      position: '#$index',
+      parent: steps.lastOrNull?.index,
+      branch: null,
+      name: null,
+      tags: const [],
+      format: 'none',
+      bytes: Uint8List(0),
+      screen: screen,
+      texts: texts,
+      verb: where?.verb,
+      target: where?.target,
+      events: events,
+      eventsDropped: dropped,
+      // Neither is a claim this step can make: nothing waited for the app
+      // to go quiet, and whatever was announced never arrived.
+      settled: false,
+      landed: pendingImages == 0 && RealWork.pending == 0,
+      failure: message,
+    ),
+  );
+  return message;
 }
 
 /// How long one scenario may take before the run gives up on it.
@@ -1507,18 +1663,6 @@ Future<Map<String, Object?>> _runOne(
 /// A scenario that genuinely needs longer — a long matrix, a capture-heavy
 /// flow at 3× — says `scenario(timeout: …)`, which the message below offers.
 const _defaultScenarioTimeout = Duration(seconds: 30);
-
-String _timedOutMessage(Duration deadline) {
-  var why =
-      scenarioAsyncStall ??
-      'something is waiting on a real future no pump can complete: an '
-          '`s.runAsync` that never returns, or a platform channel with nobody '
-          'on the other end.';
-  return 'the scenario did not finish within ${deadline.inSeconds}s. A '
-      'scenario runs under fake time, so this is not slowness — $why The '
-      'steps it captured before it stopped are on disk. Give it longer, or '
-      'opt out, with `scenario(timeout: …)`.';
-}
 
 /// `NAME_MAX` — 255 bytes on APFS, ext4 and NTFS alike, and per path
 /// *component* rather than per path.

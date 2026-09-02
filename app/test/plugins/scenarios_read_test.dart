@@ -187,6 +187,92 @@ void main() {
     ], reason: 'names beside `step`, not the same directory five times');
   });
 
+  test('a failing step with no tree still answers with its failure', () async {
+    // The step a timed-out scenario never took: no picture, no tree, just
+    // the diagnosis and what the app printed on the way there.
+    var runDir = writeRun(stamp: '100', ok: false, steps: 1);
+    var stepsDir = p.join(runDir, 'checkout_test.dart', 'Checkout');
+    var base = p.join(stepsDir, '2-failed');
+    File('$base.events.json').writeAsStringSync(
+      jsonEncode([
+        {'channel': 'print', 'title': 'about to hang'},
+      ]),
+    );
+    var report = File(p.join(runDir, scenarioRunReportFile));
+    var json = (jsonDecode(report.readAsStringSync()) as Map)
+        .cast<String, Object?>();
+    var scenario =
+        (((json['packages']! as List).first as Map)['scenarios'] as List).first
+            as Map;
+    (scenario['steps'] as List).add({
+      'index': 2,
+      'position': '#2',
+      'parent': 1,
+      'auto': true,
+      'format': 'none',
+      'texts': <String>[],
+      'events': p.relative('$base.events.json', from: worktree.path),
+      'eventCount': 1,
+      'eventChannels': {'print': 1},
+      'eventTitles': ['about to hang'],
+      'settled': false,
+      'failure': 'the scenario did not finish within 30s.',
+    });
+    scenario['stepCount'] = 2;
+    report.writeAsStringSync(jsonEncode(json));
+
+    var result = await read({'events': 'true'});
+
+    expect(result.index, 2);
+    expect(result.failure, contains('did not finish'));
+    expect(result.screen, isNull);
+    expect(result.note, contains('no screen'));
+    expect(result.events!.single.title, 'about to hang');
+  });
+
+  test('the address run prints on a step names that step', () async {
+    writeRun(stamp: '100', ok: true);
+
+    var result = await read({
+      'step':
+          'fw:///worktrees/wt/flutterware.scenarios/./test/checkout_test.dart'
+          '/Checkout/2',
+    });
+
+    expect(result.index, 2);
+    expect(result.scenario, 'Checkout');
+    expect(result.screen!.toJson().toString(), contains('Total: 2'));
+  });
+
+  test('an address naming a step the run does not have is refused', () async {
+    writeRun(stamp: '100', ok: true);
+
+    await expectLater(
+      read({
+        'step':
+            'fw:///worktrees/wt/flutterware.scenarios/./test/checkout_test.dart'
+            '/Checkout/9',
+      }),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          allOf(contains('no step 9'), contains('Checkout')),
+        ),
+      ),
+    );
+    await expectLater(
+      read({'step': 'fw:///worktrees/wt/flutterware.scenarios/.'}),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => '${e.message}',
+          'message',
+          contains('names one step of one scenario'),
+        ),
+      ),
+    );
+  });
+
   test('the newest run is the one read', () async {
     writeRun(stamp: '100', ok: false);
     writeRun(stamp: '200', ok: false, steps: 2);

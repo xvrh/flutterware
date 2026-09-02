@@ -307,6 +307,39 @@ void main() {
       expect(result().toJson()['version'], scenarioRunReportVersion);
     });
 
+    test('a red run lists what failed, flat, and a green one does not', () {
+      var red = result();
+      expect(red.failed, [
+        {'package': 'app', 'file': 'f', 'scenario': 's', 'error': 'boom'},
+      ]);
+      expect(red.toJson()['failed'], red.failed);
+
+      var unrunnable = ScenarioRunResult(
+        packages: [
+          ScenarioRunPackage(
+            path: 'lib',
+            output: '/abs/out',
+            error: 'the harness did not compile\n  lib/x.dart:1: oops',
+          ),
+        ],
+      );
+      expect(unrunnable.failed, [
+        {'package': 'lib', 'error': 'the harness did not compile'},
+      ]);
+
+      var green = ScenarioRunResult(
+        packages: [
+          ScenarioRunPackage(
+            path: 'app',
+            output: '/abs/out',
+            scenarios: [ScenarioRunOutcome(file: 'f', name: 's', ok: true)],
+          ),
+        ],
+      );
+      expect(green.failed, isEmpty);
+      expect(green.toJson().containsKey('failed'), isFalse);
+    });
+
     test('encodes whole through jsonEncode, nested objects and all', () {
       // The literals hand nested objects to `jsonEncode`'s `toEncodable`, as
       // the plugin contract documents — this is the round trip every writer

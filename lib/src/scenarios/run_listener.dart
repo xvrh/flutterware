@@ -228,6 +228,13 @@ class ScenarioScreenRead {
   final Map<String, Object?>? semantics;
 }
 
+/// Hands over whatever capture the running scenario is still holding — the
+/// automatic step waiting to see whether the next verb names it. Set by the
+/// scenario as its tester is made, read by the harness at a deadline: a body
+/// that hangs never reaches the verb that would have flushed it, and the
+/// last picture it took would otherwise go with it.
+void Function()? scenarioFlushHeld;
+
 /// Set by the flutterware harness beside [scenarioRunListener]: reads the
 /// screen a capture is photographing, at the moment it is photographed.
 ///

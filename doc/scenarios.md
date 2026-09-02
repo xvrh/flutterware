@@ -112,6 +112,21 @@ pass), no capture. It is what a suite ported from raw widget tests maps a
 legacy `pumpAndSettle()` onto, and the wait to reach for after work you
 pumped through `s.tester` yourself.
 
+`Settle.strict` is the default made red: the same five seconds, the same
+landing of real work afterwards, and a screen *still* asking for frames when
+both are done fails the step instead of recording a flag. Reach for it where a
+spinner in a picture is a bug — `settled: false` is a number in a report, and
+a scenario whose assertion finds its widget passes with a spinner in every
+frame for as long as nobody reads that number. Say it once for a folder:
+
+```dart
+Future<void> testExecutable(FutureOr<void> Function() testMain) =>
+    runScenarios(testMain, settle: Settle.strict);
+```
+
+A scenario's own `settle:` still wins, and so does a verb's — `settle:
+Settle.standard` on the one `tap` whose picture is meant to show the spinner.
+
 ### A post-frame callback nothing schedules a frame for
 
 `WidgetsBinding.instance.addPostFrameCallback` does not request a frame — it
@@ -154,6 +169,50 @@ leaves a frame scheduled and the stranded callback catches a ride on it, while
 every verb here settles to a quiet tree, so there is never a ride going. Put a
 `pumpAndSettle()` before the registration in a raw widget test and it stops
 firing there too.
+
+### Work on the real event loop
+
+A settle follows frames, and work that resolves on the *real* event loop — an
+asset read, a decode on an engine thread, a file, an isolate — schedules none
+while it is in flight. Every verb lands what it can see for itself: a pending
+`ImageProvider`, an asset read through `s.assets`, and a dozen guessed turns
+of the real loop for the rest, which is enough for an SVG and nowhere near
+enough for a 6 MB model import. For the rest, the app says so:
+
+```dart
+import 'package:flutterware/real_work.dart';
+
+@override
+void initState() {
+  super.initState();
+  _model = RealWork.track(_loadModel(), label: 'scene model');
+}
+```
+
+`RealWork.track` hands the future straight back; outside a scenario it costs a
+set insert and a listener on the future, nothing more. Inside one, every verb that follows waits — real milliseconds, a
+pump between turns so the continuations run and the `setState` at the end is
+drawn — until it has completed, then photographs. A tracked future that never
+completes runs into the scenario's deadline, whose message names the label.
+
+Without it, the shape by hand is poll-and-pump, and the pump is the whole
+point:
+
+```dart
+while (!scene.ready) {
+  await s.tester.runAsync(() => Future<void>.delayed(Duration(milliseconds: 1)));
+  await s.tester.pump();
+}
+```
+
+What does **not** work is awaiting the app's future bare, or inside
+`s.runAsync`. A future made under fake time completes through a fake
+microtask, and only a pump runs those; the body suspended on that future is
+the one thing that could have pumped. Bare, that is thirty seconds of nothing
+and then a deadline; inside `s.runAsync`, no pump can run at all and the
+watchdog names it after eight. `s.runAsync` is for work that needs the real
+clock and nothing else — a database, a socket — never for a future the app
+already created.
 
 ## Shots
 
@@ -345,7 +404,8 @@ Not inside `s.runAsync`. A model load reads several assets and waits on frames,
 and no pump can run while `runAsync` is open — so it waits for something only a
 pump could deliver, and the scenario sits there. The `runAsync` watchdog names
 this after eight real seconds rather than letting it look like slowness, but
-the shape above never gets there.
+the shape above never gets there. A load too big for the guessed turns is
+announced with `RealWork.track` — see *Work on the real event loop* above.
 
 ## Running them
 
@@ -374,7 +434,33 @@ shape, every step of every scenario. The reply the action hands back
 summarises — by default only each failure's frame rides along (`steps=`
 chooses) — so a script that counts steps reads `stepCount`, or the file. A
 relative `--output` resolves against the worktree root, and `run.json` lands
-in the same directory as the images it names.
+in the same directory as the images it names. A red run carries a flat
+`failed` list at the top — package, file, scenario, first line of the error
+— so a script finds the red one without walking every package.
+
+Several files run in one process, in the order given — `--file=a,b` or
+`--file=a --file=b` — which is how to reproduce a failure that only happens
+after another file has run: a future one scenario leaves in its fake zone only
+bites the scenario after it. Each selector must match something; a typo in
+the second is refused, not run green on the strength of the first.
+
+What the app printed rides the steps: `print` and `debugPrint` are events on
+the `print` channel, `package:logging` records on `log`, platform traffic on
+`platform` — on the step that followed them, in the `eventTitles` digest and
+whole in `scenarios read --events` (`--channel=print` for just the prints).
+`dart:developer`'s `log` goes to the VM's logging stream and nowhere else,
+here as under `flutter test`. A scenario that runs out its deadline ends on a
+**failed step** it never took: no picture, the events since the last capture,
+and a diagnosis as its failure — which verb the body was inside and the line
+that called it, whether a completion is queued behind a pump nothing runs
+(hand it to `RealWork.track`) or nothing is queued at all (a future from an
+earlier scenario's fake zone, or real-time work; the previous scenario is
+named), and which platform messages went out and were never seen answered,
+with the app frames that sent them.
+
+`scenarios read` takes a step by any leg `run` reported — the `tree` path, the
+`image` path, or the `fw://` address every step carries — so a step has one
+identity across `run`, `read` and the GUI.
 
 `scenario(skip: true)` is honoured the way `flutter test` honours it: the
 body never runs, the run stays green, and the outcome says `skipped` instead

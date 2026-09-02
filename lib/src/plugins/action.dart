@@ -106,11 +106,18 @@ class ActionParameter {
     this.defaultValue,
     this.options = const [],
     this.optionsFrom,
+    this.repeatable = false,
   });
 
   /// Stable within the action — the key in the argument map, and the flag name
   /// `fw` exposes.
   final String id;
+
+  /// Whether the parameter takes several values, comma-separated — which is
+  /// what lets `fw` accept the flag more than once and join them. A flag
+  /// repeated for any other parameter is refused rather than silently
+  /// taking the last one, or worse, the join.
+  final bool repeatable;
 
   final String label;
   final ActionParameterKind kind;
@@ -142,6 +149,7 @@ class ActionParameter {
     if (defaultValue != null) 'default': defaultValue,
     if (options.isNotEmpty) 'options': [for (var o in options) o.toJson()],
     if (optionsFrom != null) 'optionsFrom': optionsFrom,
+    if (repeatable) 'repeatable': true,
   };
 
   static ActionParameter fromJson(Map<String, Object?> json) => ActionParameter(
@@ -156,6 +164,7 @@ class ActionParameter {
         ActionOption.fromJson((o as Map).cast<String, Object?>()),
     ],
     optionsFrom: json['optionsFrom'] as String?,
+    repeatable: json['repeatable'] == true,
   );
 }
 

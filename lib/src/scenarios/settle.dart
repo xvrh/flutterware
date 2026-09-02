@@ -1,5 +1,7 @@
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../real_work/tracker.dart';
 import 'motion.dart';
 
 /// The interval `pumpAndSettle` itself advances the clock by, kept the same so
@@ -48,9 +50,30 @@ sealed class Settle {
   /// time.
   static const standard = Settle.upTo(Duration(seconds: 5));
 
+  /// [standard], and red where it would have shrugged: the same five seconds
+  /// and the same landing of real work afterwards, but a screen still asking
+  /// for frames when both are done **fails the step** instead of recording
+  /// `settled: false` and moving on.
+  ///
+  /// The default's tolerance is for the loading spinner every app opens on;
+  /// this is for the suite where a spinner in a picture is a bug. `settled:
+  /// false` is a number in a report, and a scenario whose assertion finds the
+  /// widget it wanted passes with a spinner in every frame for as long as
+  /// nobody reads that number. The failure this throws captures the frame it
+  /// gave up on, so the picture of the spinner is the first thing on the
+  /// failed step.
+  ///
+  /// Not [full]: that is `pumpAndSettle`'s own loop, which throws before any
+  /// real work has been given the chance to land and spends ten fake minutes
+  /// deciding to. Set it per scenario (`scenario('…', settle: Settle.strict)`)
+  /// or per folder (`runScenarios(testMain, settle: Settle.strict)`).
+  static const strict = Settle.upTo(Duration(seconds: 5), strict: true);
+
   /// Pump while the app keeps asking for frames, stopping at the first frame
   /// it does not — or when [budget] of the fake clock is spent, whichever
-  /// comes first. Running out is not a failure — it is recorded on the step.
+  /// comes first. Running out is not a failure — it is recorded on the step —
+  /// unless [strict], which makes it one after the step's real work has been
+  /// landed. See [Settle.strict].
   ///
   /// The budget is a ceiling, not a wait. Frames are the only thing this
   /// loop follows, and work waiting on a timer schedules none: a screen whose
@@ -60,7 +83,7 @@ sealed class Settle {
   /// disposed under it. That is `pumpAndSettle`'s contract too, and a caller
   /// that means to wait for a timer has to say so: [Settle.elapse], or a
   /// [Settle.frames] count that covers it.
-  const factory Settle.upTo(Duration budget) = _Budgeted;
+  const factory Settle.upTo(Duration budget, {bool strict}) = _Budgeted;
 
   /// Spend all of [budget] on the fake clock, whatever the frame loop is
   /// doing — the policy for work that waits on a timer rather than on frames.
@@ -119,6 +142,15 @@ sealed class Settle {
   /// up are the same fact about frames and opposite facts about the scenario.
   bool get waits => true;
 
+  /// Whether a step this policy leaves unsettled is a failed step — true
+  /// for [Settle.strict] and any `upTo(…, strict: true)`.
+  ///
+  /// Read by the verb *after* the real work has landed, never by [apply]: the
+  /// policy itself only ever reports, so a policy applied by hand keeps
+  /// meaning what it says, and the landing gets its chance to finish what the
+  /// frames were waiting on before anything is called red.
+  bool get failsWhenUnsettled => false;
+
   /// Applies the policy. False when the app was still scheduling frames when
   /// the policy gave up — the step is captured either way.
   ///
@@ -145,9 +177,13 @@ sealed class Settle {
 }
 
 class _Budgeted extends Settle {
-  const _Budgeted(this.budget);
+  const _Budgeted(this.budget, {bool strict = false})
+    : failsWhenUnsettled = strict;
 
   final Duration budget;
+
+  @override
+  final bool failsWhenUnsettled;
 
   @override
   Future<bool> apply(
@@ -277,3 +313,55 @@ class _Full extends Settle {
     return true;
   }
 }
+
+/// What a [Settle.strict] step throws when the screen is still asking for
+/// frames after the budget and the landing of real work — the failure that
+/// replaces `settled: false` in the report.
+///
+/// Thrown by the verb, after `landRealWork`, and caught by the same path every
+/// other failure takes: the step is captured with this as its failure, so the
+/// picture of whatever kept animating is on the failed step.
+class ScenarioStillAnimating implements Exception {
+  ScenarioStillAnimating(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// The sentence a strict step fails with, built where the facts are: which
+/// verb, what policy, and whatever announced work is still to land — which is
+/// the difference between "a spinner" and "a load the step did not wait for".
+ScenarioStillAnimating stillAnimating(
+  Settle policy, {
+  String? verb,
+  String? target,
+}) {
+  var did = [?verb, ?target].join(' ').trim();
+  var budget = switch (policy) {
+    _Budgeted(:var budget) => ' after ${_readable(budget)} of fake time',
+    _ => '',
+  };
+  var pendingImages = PaintingBinding.instance.imageCache.pendingImageCount;
+  var tracked = RealWork.pendingWork;
+  var still = [
+    if (pendingImages > 0)
+      '$pendingImages image decode${pendingImages == 1 ? '' : 's'} pending',
+    if (tracked.isNotEmpty)
+      'tracked real work pending: ${tracked.map((w) => '`$w`').join(', ')}',
+  ];
+  return ScenarioStillAnimating(
+    '${did.isEmpty ? 'the step' : '`$did`'} left the screen still '
+    "animating: a frame was still scheduled$budget and after the step's "
+    'real work had landed. `Settle.strict` makes that a failure where '
+    '`Settle.standard` records `settled: false` and moves on. '
+    '${still.isEmpty ? 'Nothing announced is still in flight, so what keeps asking for frames is on the captured step — a spinner, a looping animation, a caret in a focused field on an iOS device.' : 'Still in flight: ${still.join('; ')}.'} '
+    'If the animation is the point of this picture, say so on the verb: '
+    '`settle: Settle.standard`, or `Settle.frames(n)` for a fixed way in.',
+  );
+}
+
+String _readable(Duration budget) => budget.inSeconds > 0
+    ? '${budget.inSeconds}s'
+    : '${budget.inMilliseconds}ms';

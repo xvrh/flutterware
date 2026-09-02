@@ -1569,6 +1569,8 @@ class FwCli {
         );
       } on SessionException catch (e) {
         return fail('$e');
+      } on FormatException catch (e) {
+        return fail(e.message);
       }
 
       var result = await job.done;
@@ -1642,14 +1644,34 @@ class FwCli {
     List<ActionParameter> declared = const [],
   }) {
     var kinds = {for (var parameter in declared) parameter.id: parameter.kind};
+    var repeatable = {
+      for (var parameter in declared)
+        if (parameter.repeatable) parameter.id,
+    };
     var parsed = <String, Object?>{};
+    // A flag given twice is both values, comma-joined, for a parameter that
+    // reads a comma-separated list — `--file=a --file=b` is `--file=a,b`.
+    // For any other it is refused: last-wins made the second silently
+    // discard the first, and joining would hand `--output=a --output=b` to
+    // the action as a directory called `a,b`.
+    void put(String key, String value) {
+      parsed[key] = switch (parsed[key]) {
+        String earlier when repeatable.contains(key) => '$earlier,$value',
+        String earlier => throw FormatException(
+          '--$key given twice ("$earlier" and "$value") and it takes one '
+          'value. Say it once.',
+        ),
+        _ => value,
+      };
+    }
+
     for (var i = 0; i < arguments.length; i++) {
       var argument = arguments[i];
       if (!argument.startsWith('--')) continue;
       var body = argument.substring(2);
       var equals = body.indexOf('=');
       if (equals >= 0) {
-        parsed[body.substring(0, equals)] = body.substring(equals + 1);
+        put(body.substring(0, equals), body.substring(equals + 1));
         continue;
       }
       var next = i + 1 < arguments.length ? arguments[i + 1] : null;
@@ -1659,7 +1681,7 @@ class FwCli {
         parsed[body] = true;
         continue;
       }
-      parsed[body] = next;
+      put(body, next);
       i++;
     }
     return parsed;
