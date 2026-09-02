@@ -74,8 +74,16 @@ class SceneWorkspaceView extends StatefulWidget {
 }
 
 class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
-  /// The timeline folded away while a motion stays open — the chevron.
-  var _folded = false;
+  /// Leaves the open motion: playback stops (the scene shows as authored),
+  /// recording ends, no chip is active. The chevron; there is no folding a
+  /// motion away while it stays on the picture — static first.
+  void _closeMotion() {
+    var active = editor.activeMotion;
+    if (active == null) return;
+    widget.playbackFor(active).stop();
+    editor.autoKey = false;
+    editor.activeMotion = null;
+  }
 
   SceneEditor get editor => widget.editor;
 
@@ -104,7 +112,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                     animation: editor.listenable,
                     builder: (context, _) {
                       var active = editor.activeMotion;
-                      var open = active != null && !_folded;
+                      var open = active != null;
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -123,14 +131,8 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                           _MotionStrip(
                             editor: editor,
                             sceneClassName: widget.sceneClassName,
-                            folded: _folded,
-                            onFold: active == null
-                                ? null
-                                : () => setState(() => _folded = !_folded),
-                            onPick: (name) {
-                              editor.activeMotion = name;
-                              setState(() => _folded = false);
-                            },
+                            onClose: active == null ? null : _closeMotion,
+                            onPick: (name) => editor.activeMotion = name,
                           ),
                           if (open) ...[
                             Container(height: 1, color: line),
@@ -176,15 +178,15 @@ class _MotionStrip extends StatefulWidget {
   const _MotionStrip({
     required this.editor,
     required this.sceneClassName,
-    required this.folded,
-    required this.onFold,
+    required this.onClose,
     required this.onPick,
   });
 
   final SceneEditor editor;
   final String? sceneClassName;
-  final bool folded;
-  final VoidCallback? onFold;
+
+  /// Closes the open motion; null when none is.
+  final VoidCallback? onClose;
   final ValueChanged<String> onPick;
 
   @override
@@ -215,8 +217,7 @@ class _MotionStripState extends State<_MotionStrip> {
     var active = editor.activeMotion;
     var names = editor.motions.keys.toList();
     var sceneClassName = widget.sceneClassName;
-    var folded = widget.folded;
-    var onFold = widget.onFold;
+    var onClose = widget.onClose;
     var onPick = widget.onPick;
     return Container(
       height: 32,
@@ -228,20 +229,18 @@ class _MotionStripState extends State<_MotionStrip> {
           Tooltip(
             message: active == null
                 ? 'Open a motion to see its timeline'
-                : folded
-                ? 'Show the timeline'
-                : 'Hide the timeline',
+                : 'Close the motion — the scene as authored',
             child: Tappable(
-              onTap: onFold,
+              onTap: onClose,
               borderRadius: BorderRadius.circular(context.radii.radiusSmall),
               child: Padding(
                 padding: const EdgeInsets.all(FwSpacing.xs),
                 child: Icon(
-                  active == null || folded
+                  active == null
                       ? Icons.keyboard_arrow_up
                       : Icons.keyboard_arrow_down,
                   size: FwIconSize.md,
-                  color: onFold == null ? colors.mut3 : colors.ink,
+                  color: onClose == null ? colors.mut3 : colors.ink,
                 ),
               ),
             ),

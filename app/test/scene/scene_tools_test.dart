@@ -184,6 +184,38 @@ void main() {
       await tester.pump(kDoubleTapTimeout);
     });
 
+    testWidgets('Escape closes a context menu and focus goes back', (
+      tester,
+    ) async {
+      await pump(tester);
+      editor.activeMotion = 'BannerIntro';
+      await tester.pump();
+      // The timeline holds focus, as it does after any click on it.
+      await tester.tapAt(tester.getCenter(find.byType(SceneTimeline)));
+      await tester.pump();
+      var before = FocusManager.instance.primaryFocus;
+      await tester.tapAt(
+        tester.getCenter(find.text('BannerIntro')),
+        buttons: kSecondaryButton,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Rename BannerIntro…'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Rename BannerIntro…'), findsNothing);
+      expect(
+        editor.activeMotion,
+        'BannerIntro',
+        reason: "Escape was the menu's",
+      );
+      expect(FocusManager.instance.primaryFocus, before);
+      await tester.pump(kDoubleTapTimeout);
+    });
+
     testWidgets('right-click on a motion chip renames the motion', (
       tester,
     ) async {

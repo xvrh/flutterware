@@ -169,14 +169,17 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('Hide the timeline'));
+    // Collapsing the panel is leaving the motion: the scene is static again,
+    // recording is off, no chip is active.
+    editor.autoKey = true;
+    await tester.tap(
+      find.byTooltip('Close the motion — the scene as authored'),
+    );
     await tester.pump();
     expect(find.byType(SceneTimeline), findsNothing);
-    expect(
-      editor.activeMotion,
-      'BannerSceneMotion',
-      reason: 'folded, not closed',
-    );
+    expect(editor.activeMotion, isNull, reason: 'closed, not folded');
+    expect(editor.autoKey, isFalse);
+    expect(find.byTooltip('Open a motion to see its timeline'), findsOneWidget);
   });
 }
 
