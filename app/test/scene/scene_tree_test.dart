@@ -177,6 +177,26 @@ void main() {
       await tester.pump(kDoubleTapTimeout);
     });
 
+    testWidgets('the field has the keyboard at once, and Enter commits', (
+      tester,
+    ) async {
+      await pump(tester);
+      await tester.tap(find.text('glow'));
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.tap(find.text('glow'));
+      await tester.pump();
+      await tester.pump();
+      var field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.focusNode!.hasFocus, isTrue, reason: 'no click needed');
+      // The name is selected whole, so typing replaces it.
+      expect(field.controller!.selection.extentOffset, 'glow'.length);
+      await tester.enterText(find.byType(TextField), 'halo');
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(editor.doc.nodeNamed('halo'), isNotNull);
+      expect(find.byType(TextField), findsNothing);
+    });
+
     testWidgets('a taken name is refused in the field', (tester) async {
       await pump(tester);
       await tester.tap(find.text('glow'));

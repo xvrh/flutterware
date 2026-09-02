@@ -44,6 +44,10 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
   String? _renameError;
   final _renameField = TextEditingController();
 
+  /// The rename field's own focus. `autofocus` would be dropped: a scope
+  /// that already has a focused node — the editor's — ignores it.
+  final _renameFocus = FocusNode(debugLabel: 'rename');
+
   /// The row a drag is over and where on it, for the indicator.
   (String, _Drop)? _dropAt;
 
@@ -59,6 +63,7 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
   @override
   void dispose() {
     _renameField.dispose();
+    _renameFocus.dispose();
     super.dispose();
   }
 
@@ -85,6 +90,9 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
           baseOffset: 0,
           extentOffset: node.name.length,
         );
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _renaming == node.name) _renameFocus.requestFocus();
     });
   }
 
@@ -192,22 +200,32 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
       onToggleFold: () => setState(() {
         if (!_folded.remove(node.name)) _folded.add(node.name);
       }),
-      leading: Icon(
-        _iconFor(node),
-        size: FwIconSize.sm,
-        color: selected ? colors.accentDark : colors.mut,
+      // The chevron takes the row's leading slot on a branch, so the type
+      // icon lives in the label: a frame with children keeps its icon, and
+      // reads as the same kind of thing as a frame without.
+      label: Row(
+        spacing: FwSpacing.sm,
+        children: [
+          Icon(
+            _iconFor(node),
+            size: FwIconSize.sm,
+            color: selected ? colors.accentDark : colors.mut,
+          ),
+          Expanded(
+            child: renaming
+                ? _renameEditor(context, node)
+                : Text(
+                    node.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.body.copyWith(
+                      color: hovered ? colors.accentDark : colors.ink,
+                    ),
+                  ),
+          ),
+        ],
       ),
-      label: renaming
-          ? _renameEditor(context, node)
-          : Text(
-              node.name,
-              overflow: TextOverflow.ellipsis,
-              style: context.type.body.copyWith(
-                color: hovered ? colors.accentDark : colors.ink,
-              ),
-            ),
       trailing: [
-        if (_swatchOf(node) case var swatch?)
+        for (var swatch in _swatchesOf(node))
           Container(
             width: 10,
             height: 10,
@@ -365,32 +383,32 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
   /// Each row's box, for the drop indicator's arithmetic.
   final _rowBoxes = <String, RenderBox>{};
 
+  /// The name, editable, drawn where the label was and at its size — no
+  /// border, no padding — so starting a rename moves nothing on the row.
+  /// A refusal appears under it, which is the one time the row grows.
   Widget _renameEditor(BuildContext context, SceneNode node) {
     var colors = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          height: 24,
-          child: CallbackShortcuts(
-            bindings: {
-              const SingleActivator(LogicalKeyboardKey.escape): _cancelRename,
-            },
-            child: TextField(
-              controller: _renameField,
-              autofocus: true,
-              style: context.type.body,
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: FwSpacing.sm,
-                  vertical: FwSpacing.xxs,
-                ),
-              ),
-              onSubmitted: (_) => _commitRename(node),
-              onTapOutside: (_) => _commitRename(node),
-            ),
+        // Enter as a key, not only as the platform's submit action: on the
+        // desktop the action does not always arrive, and Enter must commit.
+        CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.escape): _cancelRename,
+            const SingleActivator(LogicalKeyboardKey.enter): () =>
+                _commitRename(node),
+            const SingleActivator(LogicalKeyboardKey.numpadEnter): () =>
+                _commitRename(node),
+          },
+          child: TextField(
+            controller: _renameField,
+            focusNode: _renameFocus,
+            style: context.type.body,
+            decoration: const InputDecoration.collapsed(hintText: null),
+            onSubmitted: (_) => _commitRename(node),
+            onTapOutside: (_) => _commitRename(node),
           ),
         ),
         if (_renameError case var error?)
@@ -399,10 +417,11 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
     );
   }
 
-  static SceneColor? _swatchOf(SceneNode node) => switch (node) {
-    TextNode t => t.color,
-    _ => node.fill,
-  };
+  /// What the node paints: its fill, and for a text its colour after it.
+  static List<SceneColor> _swatchesOf(SceneNode node) => [
+    ?node.fill,
+    if (node is TextNode) node.color,
+  ];
 
   static IconData _iconFor(SceneNode node) => switch (node) {
     FrameNode() => Icons.crop_square,
