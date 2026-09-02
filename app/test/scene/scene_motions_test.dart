@@ -31,6 +31,56 @@ void main() {
     );
   });
 
+  test('renaming a motion keeps its place, its content and the active one', () {
+    var editor = SceneEditor(
+      coffeeBannerDraft(),
+      motions: {'BannerIntro': coffeeIntroDraft()},
+    );
+    var second = editor.addMotion('BannerScene');
+    editor.activeMotion = 'BannerIntro';
+    var intro = editor.motions['BannerIntro']!;
+    editor.renameMotion('BannerIntro', 'BannerReveal');
+    expect(editor.motions.keys.toList(), ['BannerReveal', second]);
+    expect(identical(editor.motions['BannerReveal'], intro), isTrue);
+    expect(editor.activeMotion, 'BannerReveal');
+    expect(
+      () => editor.renameMotion('BannerReveal', second),
+      throwsArgumentError,
+    );
+    expect(
+      () => editor.renameMotion('BannerReveal', 'not valid'),
+      throwsArgumentError,
+    );
+    editor.undo();
+    expect(editor.motions.keys.toList(), ['BannerIntro', second]);
+    expect(editor.motions['BannerIntro']!.groups, isNotEmpty);
+    editor.redo();
+    expect(editor.motions.keys.toList(), ['BannerReveal', second]);
+  });
+
+  test('renaming a group rewrites the timeline that places it', () {
+    var motion = coffeeIntroDraft();
+    var editor = SceneEditor(
+      coffeeBannerDraft(),
+      motions: {'BannerIntro': motion},
+    );
+    var before = motion.placements;
+    editor.renameGroup('BannerIntro', 'headlineIn', 'headlineRise');
+    expect(motion.groupNamed('headlineIn'), isNull);
+    expect(motion.groupNamed('headlineRise')!.target, 'headline');
+    var after = motion.placements;
+    expect(after['headlineRise'], before['headlineIn']);
+    expect(after.containsKey('headlineIn'), isFalse);
+    expect(after.length, before.length, reason: 'no reference lost');
+    expect(
+      () => editor.renameGroup('BannerIntro', 'headlineRise', 'badgePop'),
+      throwsArgumentError,
+    );
+    editor.undo();
+    expect(motion.groupNamed('headlineIn'), isNotNull);
+    expect(motion.placements['headlineIn'], before['headlineIn']);
+  });
+
   test('adding and removing motions is undoable as a set', () {
     var editor = SceneEditor(
       coffeeBannerDraft(),

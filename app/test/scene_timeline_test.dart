@@ -6,6 +6,7 @@ import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/playback.dart';
+import 'package:flutterware_app/src/scene/ui/inline_name.dart';
 import 'package:flutterware_app/src/scene/ui/timeline.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -43,6 +44,52 @@ void main() {
 
   MotionTrack track(String group, String prop) =>
       motion.groupNamed(group)!.tracks[prop]!;
+
+  testWidgets('right-click on a group row renames the group', (tester) async {
+    await pump(tester);
+    var before = motion.placements['headlineIn'];
+    await tester.tapAt(Offset(gutter / 2, yOfGroup), buttons: kSecondaryButton);
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Rename headlineIn…'));
+    await tester.pump();
+    await tester.pump();
+    var field = find.descendant(
+      of: find.byType(InlineNameField),
+      matching: find.byType(TextField),
+    );
+    expect(field, findsOneWidget);
+    await tester.enterText(field, 'headlineRise');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    expect(find.byType(InlineNameField), findsNothing);
+    expect(motion.groupNamed('headlineIn'), isNull);
+    expect(motion.placements['headlineRise'], before);
+    expect(find.byKey(const ValueKey('group:headlineRise')), findsOneWidget);
+    await tester.pump(kDoubleTapTimeout);
+  });
+
+  testWidgets('a trackpad scroll over the ruler is not a seek', (tester) async {
+    await pump(tester);
+    var playback = tester.state<_HostState>(find.byType(_Host)).playback;
+    var at = Offset(xOf(const Duration(milliseconds: 1000)), 14);
+    // Two fingers moving across the ruler: to a drag recognizer that takes
+    // every device this is a horizontal drag, and the playhead jumped to
+    // wherever the fingers were.
+    var fingers = await tester.createGesture(kind: PointerDeviceKind.trackpad);
+    await fingers.panZoomStart(at);
+    await tester.pump();
+    await fingers.panZoomUpdate(at, pan: const Offset(-40, 0));
+    await tester.pump();
+    await fingers.panZoomEnd();
+    await tester.pump();
+    expect(playback.position, Duration.zero);
+
+    // The mouse still seeks.
+    await tester.dragFrom(at, const Offset(40, 0));
+    await tester.pump();
+    expect(playback.position, greaterThan(Duration.zero));
+  });
 
   testWidgets('a tap on a key selects it, elsewhere seeks', (tester) async {
     await pump(tester);
@@ -209,9 +256,14 @@ void main() {
       await pump(tester);
       expect(motion.placements.containsKey('tapPulse'), isFalse);
       expect(
-        find.text('cta  tapPulse', findRichText: true),
+        find.byKey(const ValueKey('group:tapPulse')),
         findsOneWidget,
         reason: 'a row like any other',
+      );
+      expect(
+        find.text('cta  tapPulse', findRichText: true),
+        findsNothing,
+        reason: 'the only group of a node does not say its name',
       );
       expect(find.text('LIBRARY'), findsNothing);
       // tapPulse is the fourth group in document order: ruler, then

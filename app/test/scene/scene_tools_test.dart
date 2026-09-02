@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
+import 'package:flutterware_app/src/scene/ui/inline_name.dart';
 import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/measure.dart';
 import 'package:flutterware_app/src/scene/playback.dart';
@@ -181,6 +182,41 @@ void main() {
       await tester.pump();
       expect(opacity.keys, hasLength(1));
       await tester.pump(kDoubleTapTimeout);
+    });
+
+    testWidgets('right-click on a motion chip renames the motion', (
+      tester,
+    ) async {
+      await pump(tester);
+      editor.activeMotion = 'BannerIntro';
+      await tester.pump();
+      await tester.tapAt(
+        tester.getCenter(find.text('BannerIntro')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.text('Rename BannerIntro…'));
+      await tester.pump();
+      await tester.pump();
+      var field = find.descendant(
+        of: find.byType(InlineNameField),
+        matching: find.byType(TextField),
+      );
+      expect(field, findsOneWidget);
+      // A name that cannot be a class stays in the field, with the reason.
+      await tester.enterText(field, 'not valid');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(find.textContaining('not a valid name'), findsOneWidget);
+      expect(editor.motions.keys, ['BannerIntro']);
+      await tester.enterText(field, 'BannerReveal');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(find.byType(InlineNameField), findsNothing);
+      expect(editor.motions.keys, ['BannerReveal']);
+      expect(editor.activeMotion, 'BannerReveal');
+      expect(find.text('BannerReveal'), findsOneWidget);
     });
 
     testWidgets('right-click on a motion chip deletes the motion', (

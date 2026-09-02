@@ -100,11 +100,22 @@ class _ScenePanelState extends State<_ScenePanel>
   /// ticker, so it is made once and kept.
   final _playbacks = <String, ScenePlayback>{};
 
-  ScenePlayback _playbackFor(SceneFile file, String motion) =>
-      _playbacks.putIfAbsent(
-        '${file.path}#$motion',
-        () => ScenePlayback(file.editor, motion, vsync: this),
-      );
+  ScenePlayback _playbackFor(SceneFile file, String motion) {
+    // A motion deleted or renamed leaves a playback bound to a name the
+    // editor no longer has; it is dropped the next time any motion of the
+    // file is asked for, so a rename back does not revive a stale binding.
+    _playbacks.removeWhere((key, playback) {
+      var stale =
+          key.startsWith('${file.path}#') &&
+          !file.editor.motions.containsKey(playback.motionName);
+      if (stale) playback.dispose();
+      return stale;
+    });
+    return _playbacks.putIfAbsent(
+      '${file.path}#$motion',
+      () => ScenePlayback(file.editor, motion, vsync: this),
+    );
+  }
 
   void _disposePlaybacks() {
     for (var playback in _playbacks.values) {

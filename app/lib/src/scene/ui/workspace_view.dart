@@ -10,6 +10,7 @@ import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../playback.dart';
 import 'canvas.dart';
+import 'inline_name.dart';
 import 'inspector.dart';
 import 'shortcuts.dart';
 import 'timeline.dart';
@@ -171,7 +172,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
 /// The scene's motions, as a strip under the canvas: pick one to open its
 /// timeline, make a new one, fold the timeline away. The static editor is
 /// the resting state; this is the door to animation.
-class _MotionStrip extends StatelessWidget {
+class _MotionStrip extends StatefulWidget {
   const _MotionStrip({
     required this.editor,
     required this.sceneClassName,
@@ -187,11 +188,36 @@ class _MotionStrip extends StatelessWidget {
   final ValueChanged<String> onPick;
 
   @override
+  State<_MotionStrip> createState() => _MotionStripState();
+}
+
+class _MotionStripState extends State<_MotionStrip> {
+  /// The chip being renamed, by its current name.
+  String? _renaming;
+
+  SceneEditor get editor => widget.editor;
+
+  String? _rename(String name, String wanted) {
+    if (_renaming != name) return null;
+    try {
+      editor.renameMotion(name, wanted);
+      setState(() => _renaming = null);
+      return null;
+    } on ArgumentError catch (e) {
+      return e.message as String?;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     var colors = context.colors;
     var type = context.type;
     var active = editor.activeMotion;
     var names = editor.motions.keys.toList();
+    var sceneClassName = widget.sceneClassName;
+    var folded = widget.folded;
+    var onFold = widget.onFold;
+    var onPick = widget.onPick;
     return Container(
       height: 32,
       color: colors.panel,
@@ -228,6 +254,11 @@ class _MotionStrip extends StatelessWidget {
               onSecondaryTapUp: (d) =>
                   showContextMenu(context, d.globalPosition, [
                     MenuItem(
+                      'Rename $name…',
+                      icon: Icons.edit_outlined,
+                      onSelected: () => setState(() => _renaming = name),
+                    ),
+                    MenuItem(
                       'Delete $name',
                       icon: Icons.close,
                       danger: true,
@@ -235,7 +266,7 @@ class _MotionStrip extends StatelessWidget {
                     ),
                   ]),
               child: Tappable(
-                onTap: () => onPick(name),
+                onTap: _renaming == name ? null : () => onPick(name),
                 borderRadius: BorderRadius.circular(context.radii.pill),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -249,12 +280,25 @@ class _MotionStrip extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(context.radii.pill),
                   ),
-                  child: Text(
-                    name,
-                    style: type.caption.copyWith(
-                      color: name == active ? colors.accentDark : colors.ink,
-                    ),
-                  ),
+                  child: _renaming == name
+                      ? SizedBox(
+                          width: 160,
+                          child: InlineNameField(
+                            initial: name,
+                            dense: true,
+                            style: type.caption,
+                            onCommit: (wanted) => _rename(name, wanted),
+                            onCancel: () => setState(() => _renaming = null),
+                          ),
+                        )
+                      : Text(
+                          name,
+                          style: type.caption.copyWith(
+                            color: name == active
+                                ? colors.accentDark
+                                : colors.ink,
+                          ),
+                        ),
                 ),
               ),
             ),

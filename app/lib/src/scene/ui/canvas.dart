@@ -9,6 +9,7 @@ import '../../ui/design/design.dart';
 import '../../ui/stage.dart';
 import '../../ui/tappable.dart';
 import '../../ui/zoomable_canvas.dart';
+import 'pointer.dart';
 import '../editor.dart';
 import 'modifiers.dart';
 
@@ -345,12 +346,6 @@ class _Tool extends StatelessWidget {
 /// pan or a pinch of the canvas and must reach the viewer under these
 /// widgets untouched; a recognizer that accepted it turned every scroll over
 /// a node into a drag of that node, and over its handle into a resize.
-const _editingDevices = {
-  PointerDeviceKind.mouse,
-  PointerDeviceKind.touch,
-  PointerDeviceKind.stylus,
-};
-
 /// Everything the mouse can do to the artboard, as transparent widgets over
 /// the renderer: a marquee on the empty ground, a target per addressable
 /// node, and the selection painted on top.
@@ -419,7 +414,7 @@ class _HitLayerState extends State<_HitLayer> {
               cursor: _drawing ? SystemMouseCursors.precise : MouseCursor.defer,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                supportedDevices: _editingDevices,
+                supportedDevices: editingDevices,
                 // A drawn box starts where the mouse went down, not where the
                 // recognizer made up its mind: a quick drag would otherwise
                 // offset every frame by the slop.
@@ -537,7 +532,7 @@ class _NodeTargetState extends State<_NodeTarget> {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        supportedDevices: _editingDevices,
+        supportedDevices: editingDevices,
         onTapDown: (_) => editor.select(node, toggle: toggleModifier),
         onDoubleTap: node is SceneRefNode && widget.onEnterNested != null
             ? () => widget.onEnterNested!(node)
@@ -589,7 +584,7 @@ class _ResizeHandleState extends State<_ResizeHandle> {
     return MouseRegion(
       cursor: SystemMouseCursors.resizeDownRight,
       child: GestureDetector(
-        supportedDevices: _editingDevices,
+        supportedDevices: editingDevices,
         onPanDown: (d) => _downLocal = d.localPosition,
         onPanStart: (d) => _apply(d.localPosition - _downLocal),
         onPanUpdate: (d) => _apply(d.delta),

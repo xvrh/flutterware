@@ -13,7 +13,9 @@ import '../../ui/split_button.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../playback.dart';
+import 'inline_name.dart';
 import 'modifiers.dart';
+import 'pointer.dart';
 import 'shortcuts.dart';
 import 'transport.dart';
 
@@ -297,6 +299,15 @@ class _SceneTimelineState extends State<SceneTimeline> {
                                   _GroupRow(
                                     key: ValueKey('group:${g.group.name}'),
                                     lanes: g,
+                                    showName:
+                                        groups
+                                            .where(
+                                              (o) =>
+                                                  o.group.target ==
+                                                  g.group.target,
+                                            )
+                                            .length >
+                                        1,
                                     editor: editor,
                                     playback: playback,
                                     scale: scale,
@@ -374,6 +385,7 @@ class _GroupRow extends StatefulWidget {
     required this.scale,
     required this.gutterWidth,
     required this.onAddKey,
+    required this.showName,
   });
 
   final _GroupLanes lanes;
@@ -382,6 +394,13 @@ class _GroupRow extends StatefulWidget {
   final TimeScale scale;
   final double gutterWidth;
   final ValueChanged<String> onAddKey;
+
+  /// Whether the row says the group's name after the node's. The name is
+  /// the group's field in the motion class — `headlineIn` — and reads as
+  /// noise beside `headline` until the node has a second group in this
+  /// motion, when it is what tells the two rows apart. The menu always says
+  /// it.
+  final bool showName;
 
   static const height = 26.0;
 
@@ -392,6 +411,18 @@ class _GroupRow extends StatefulWidget {
 class _GroupRowState extends State<_GroupRow> {
   var _carried = 0.0;
   var _dragging = false;
+  var _renaming = false;
+
+  String? _rename(String wanted) {
+    if (!_renaming) return null;
+    try {
+      editor.renameGroup(widget.playback.motionName, group.name, wanted);
+      setState(() => _renaming = false);
+      return null;
+    } on ArgumentError catch (e) {
+      return e.message as String?;
+    }
+  }
 
   AnimateGroup get group => widget.lanes.group;
   SceneEditor get editor => widget.editor;
@@ -450,6 +481,11 @@ class _GroupRowState extends State<_GroupRow> {
       behavior: HitTestBehavior.translucent,
       onSecondaryTapUp: (d) => showContextMenu(context, d.globalPosition, [
         MenuItem(
+          'Rename ${group.name}…',
+          icon: Icons.edit_outlined,
+          onSelected: () => setState(() => _renaming = true),
+        ),
+        MenuItem(
           'Delete ${group.name}',
           icon: Icons.close,
           danger: true,
@@ -480,28 +516,39 @@ class _GroupRowState extends State<_GroupRow> {
                     child: Row(
                       spacing: FwSpacing.sm,
                       children: [
-                        Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              text: group.target,
-                              style: context.type.body.copyWith(
-                                color: hovered || selected
-                                    ? colors.accentDark
-                                    : colors.ink,
-                              ),
-                              children: [
-                                TextSpan(
-                                  text: '  ${group.name}',
-                                  style: context.type.caption.copyWith(
-                                    color: colors.mut3,
-                                  ),
-                                ),
-                              ],
+                        if (_renaming)
+                          Expanded(
+                            child: InlineNameField(
+                              initial: group.name,
+                              dense: true,
+                              onCommit: _rename,
+                              onCancel: () => setState(() => _renaming = false),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
+                          )
+                        else
+                          Expanded(
+                            child: Text.rich(
+                              TextSpan(
+                                text: group.target,
+                                style: context.type.body.copyWith(
+                                  color: hovered || selected
+                                      ? colors.accentDark
+                                      : colors.ink,
+                                ),
+                                children: [
+                                  if (widget.showName)
+                                    TextSpan(
+                                      text: '  ${group.name}',
+                                      style: context.type.caption.copyWith(
+                                        color: colors.mut3,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
                           ),
-                        ),
                         if (offered.isNotEmpty)
                           Tooltip(
                             message: 'Animate another property, keyed at the playhead',
@@ -534,6 +581,7 @@ class _GroupRowState extends State<_GroupRow> {
                   return MouseRegion(
                     cursor: SystemMouseCursors.grab,
                     child: GestureDetector(
+                      supportedDevices: editingDevices,
                       behavior: HitTestBehavior.opaque,
                       dragStartBehavior: DragStartBehavior.down,
                       onHorizontalDragDown: (d) =>
@@ -920,6 +968,7 @@ class _KeyStripState extends State<_KeyStrip> {
         // drag that never moved, and two recognizers both answering the
         // press toggled a shift-click twice.
         return GestureDetector(
+          supportedDevices: editingDevices,
           behavior: HitTestBehavior.opaque,
           // From the down point: the double-tap recognizer beside this one
           // holds the arena for its slop, and a drag that started counting
@@ -1079,6 +1128,7 @@ class _Ruler extends StatelessWidget {
         return MouseRegion(
           cursor: SystemMouseCursors.resizeLeftRight,
           child: GestureDetector(
+            supportedDevices: editingDevices,
             behavior: HitTestBehavior.opaque,
             onTapDown: (d) => seek(d.localPosition),
             onHorizontalDragDown: (d) => seek(d.localPosition),

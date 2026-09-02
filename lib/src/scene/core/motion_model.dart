@@ -72,7 +72,10 @@ class MotionTrack {
 class AnimateGroup {
   AnimateGroup(this.name, this.target);
 
-  final String name;
+  /// The group's name — the field it is in the motion class, which is what
+  /// the timeline refers to it by. Mutable so the editor can rename it; the
+  /// editor rewrites the timeline's references in the same edit.
+  String name;
 
   /// The node this group animates, by name; follows a rename.
   String target;

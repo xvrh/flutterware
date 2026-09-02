@@ -111,6 +111,80 @@ class SceneEditor extends SceneListenable {
     if (_activeMotion == name) activeMotion = null;
   }
 
+  /// Renames a motion — the class it is in the file. The active motion
+  /// follows; a playback bound under the old name is the owner's to drop.
+  void renameMotion(String name, String wanted) {
+    wanted = wanted.trim();
+    var m = motions[name];
+    if (m == null || wanted == name) return;
+    if (!isValidNodeName(wanted)) {
+      throw ArgumentError(
+        '"$wanted" is not a valid name — letters and digits, '
+        'starting with a letter',
+      );
+    }
+    if (motions.containsKey(wanted)) {
+      throw ArgumentError('"$wanted" is already taken');
+    }
+    perform('Rename motion $name', () {
+      // Rebuilt rather than removed and re-added: the map's order is the
+      // strip's order, and a rename must not move the chip.
+      var renamed = {
+        for (var e in motions.entries)
+          (e.key == name ? wanted : e.key): e.value,
+      };
+      motions
+        ..clear()
+        ..addAll(renamed);
+    });
+    if (_activeMotion == name) {
+      _activeMotion = wanted;
+      notifyListeners();
+    }
+  }
+
+  /// Renames a group of [motion] — the field it is in the motion class —
+  /// and every reference the timeline holds to it, in one edit.
+  void renameGroup(String motion, String name, String wanted) {
+    wanted = wanted.trim();
+    var m = motions[motion];
+    var group = m?.groupNamed(name);
+    if (m == null || group == null || wanted == name) return;
+    if (!isValidNodeName(wanted)) {
+      throw ArgumentError(
+        '"$wanted" is not a valid name — letters, digits, '
+        'starting with a lowercase letter',
+      );
+    }
+    if (m.groupNamed(wanted) != null) {
+      throw ArgumentError('"$wanted" is already taken');
+    }
+    // A key selection names its group; simpler to drop it than to follow.
+    clearKeySelection();
+    perform('Rename $name', () {
+      group.name = wanted;
+      m.timeline = _mapRefs(
+        m.timeline,
+        (r) => r.name == name ? GroupRef(wanted) : r,
+      );
+    });
+  }
+
+  static TimelineExpr _mapRefs(
+    TimelineExpr expr,
+    TimelineExpr Function(GroupRef ref) map,
+  ) {
+    TimelineExpr walk(TimelineExpr e) => switch (e) {
+      GroupRef r => map(r),
+      ParExpr p => ParExpr([for (var c in p.children) walk(c)]),
+      SeqExpr s => SeqExpr([for (var c in s.children) walk(c)]),
+      AtExpr a => AtExpr(a.offset, walk(a.child)),
+      SpeedExpr s => SpeedExpr(s.factor, walk(s.child)),
+      RepeatExpr r => RepeatExpr(r.times, walk(r.child)),
+    };
+    return walk(expr);
+  }
+
   String _freeMotionName(String sceneClassName) {
     var base = '${sceneClassName}Motion';
     var candidate = base;
@@ -868,17 +942,23 @@ class SceneEditor extends SceneListenable {
     // The set of motions is part of the state: one added since is dropped,
     // one removed since comes back — revived into a fresh document, since
     // the old object is gone with whoever held it.
-    motions.removeWhere((name, _) => !entry.motions.containsKey(name));
+    // Rebuilt in the snapshot's order, which is the strip's: a motion
+    // revived by undo goes back where it was, not to the end.
+    var restored = <String, MotionDocument>{};
     for (var e in entry.motions.entries) {
       var existing = motions[e.key];
       if (existing != null) {
         existing.restore(e.value);
+        restored[e.key] = existing;
       } else {
-        motions[e.key] = MotionDocument(
+        restored[e.key] = MotionDocument(
           sceneClassName: entry.motionClasses[e.key]!,
         )..restore(e.value);
       }
     }
+    motions
+      ..clear()
+      ..addAll(restored);
     _revision++;
   }
 

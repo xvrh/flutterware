@@ -43,6 +43,10 @@ class ScenePlayback extends ChangeNotifier {
   };
 
   void _onEdit() {
+    // The motion was deleted or renamed out from under this playback; the
+    // owner drops it on its next look, and until then there is nothing here
+    // to apply.
+    if (!editor.motions.containsKey(motionName)) return;
     var shape = _shapeOf();
     if (shape != _shape) {
       _shape = shape;

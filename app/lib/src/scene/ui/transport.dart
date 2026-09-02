@@ -35,7 +35,9 @@ class SceneTransport extends StatelessWidget {
           ),
           _Button(
             icon: Icons.stop,
-            tooltip: 'Stop — drops the fx, the scene is untouched',
+            tooltip:
+                'Stop — back to the start, and the scene as authored, '
+                'with no motion applied',
             onTap: playback.isIdle ? null : playback.stop,
           ),
           Tooltip(
