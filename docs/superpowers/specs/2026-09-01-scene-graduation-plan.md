@@ -265,3 +265,26 @@ parent name. Enter is a double-click on the node in the tree or on the
 canvas; the workspace view remounts per file so the canvas refits, the guest
 follows the active file, and Save writes every dirty file the workspace
 holds.
+
+## Reviewed 2026-09-02: the scene is static first
+
+Looking at the built editor, the owner's first reading was that it is an
+animation tool that happens to have a canvas. It is the other way round: a
+scene is a static composition first, and animation is one feature of it — a
+scene may have several motions. What changed:
+
+- The timeline is not open by default. A **motion strip** under the canvas
+  lists the scene's motions; picking one opens its timeline, a chevron folds
+  it, "New motion" makes an empty one. `SceneEditor.activeMotion` is the
+  editor state for it (null at rest), and the journal snapshots the *set* of
+  motions so a new motion undoes.
+- The "library" strip is gone (see decision above).
+- The panel's status line says only what just happened.
+- **New scene** in the listing: a class name and an artboard preset, written
+  by the emitter, rescanned and opened.
+
+Still to do from the same review: delete affordances on keys and groups
+(inspector button, right-click menus); insertion tools on the canvas — draw a
+frame, place a text where you click — since a static editor's first verbs are
+those, and the `Add` menu today drops a node under the selection without
+saying where.
