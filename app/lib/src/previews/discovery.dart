@@ -291,8 +291,19 @@ class CatalogScanner {
     List<ScanDiagnostic> diagnostics,
     Map<String, String> multiPreviews,
   ) {
-    var unit = parseString(content: source, throwIfDiagnostics: false).unit;
+    var parsed = parseString(content: source, throwIfDiagnostics: false);
+    var unit = parsed.unit;
     var path = p.split(p.relative(file.path, from: projectRoot)).join('/');
+    // From the first annotation to the closing brace, so an edit to the
+    // annotation and an edit to the body both land inside it. Not from the
+    // node's own offset, which is its doc comment when it has one — a
+    // rewritten sentence above an entry is not an edit to the entry.
+    (int, int) spanOf(AnnotatedNode node) => (
+      parsed.lineInfo
+          .getLocation(node.metadata.firstOrNull?.offset ?? node.offset)
+          .lineNumber,
+      parsed.lineInfo.getLocation(node.end).lineNumber,
+    );
 
     for (var declaration in unit.declarations) {
       if (declaration is ClassDeclaration &&
@@ -321,6 +332,7 @@ class CatalogScanner {
               annotation,
               declaration.functionExpression.parameters,
               ordinal,
+              spanOf(declaration),
             );
           }
 
@@ -342,6 +354,7 @@ class CatalogScanner {
                     annotation,
                     parameters,
                     ordinal,
+                    spanOf(member),
                   );
                 }
               case MethodDeclaration(
@@ -358,6 +371,7 @@ class CatalogScanner {
                     annotation,
                     parameters,
                     ordinal,
+                    spanOf(member),
                   );
                 }
               default:
@@ -385,6 +399,7 @@ class CatalogScanner {
     Annotation annotation,
     FormalParameterList? parameters,
     int ordinal,
+    (int, int) span,
   ) {
     // `@Preview`'s own rule: the target must be callable with no arguments.
     var required =
@@ -427,6 +442,8 @@ class CatalogScanner {
         declaredId: _literalString(annotation, 'id'),
         group: _literalString(annotation, 'group'),
         ordinal: ordinal,
+        line: span.$1,
+        endLine: span.$2,
       ),
     );
   }

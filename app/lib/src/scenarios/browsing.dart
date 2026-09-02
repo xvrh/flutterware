@@ -43,6 +43,16 @@ class ScenarioBrowsing extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether the tree shows only what this branch changed. Off shows
+  /// everything, with the changed rows tinted.
+  bool get changedOnly => _changedOnly;
+  var _changedOnly = false;
+  set changedOnly(bool value) {
+    if (value == _changedOnly) return;
+    _changedOnly = value;
+    notifyListeners();
+  }
+
   /// Whether [foldIfCrowded] has anything left to decide — the cheap guard
   /// for a caller that would otherwise walk its whole tree twice on every
   /// build to ask a question already answered.

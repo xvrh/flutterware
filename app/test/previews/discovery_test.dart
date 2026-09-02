@@ -1,11 +1,13 @@
 import 'dart:io';
 
 import 'package:flutterware/channels.dart';
+import 'package:flutterware_app/src/previews/catalog_entry.dart';
 import 'package:flutterware_app/src/previews/discovery.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 void main() {
+  group('declaration spans', _spans);
   late Directory root;
 
   setUp(() => root = Directory.systemTemp.createTempSync('fw_discovery_test'));
@@ -611,5 +613,41 @@ Widget tile() => const Placeholder();
         contains('resolve to the same id "same"'),
       );
     });
+  });
+}
+
+void _spans() {
+  late Directory root;
+
+  setUp(() => root = Directory.systemTemp.createTempSync('fw_discovery_span'));
+  tearDown(() => root.deleteSync(recursive: true));
+
+  test('an entry records the lines its declaration spans', () {
+    var file = File(p.join(root.path, 'demo', 'tile.dart'));
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync("""
+import 'package:flutter/widgets.dart';
+
+/// A sentence above the entry, which is not the entry.
+@Preview(name: 'One')
+Widget one() => const Placeholder();
+
+class Tiles {
+  @Preview(name: 'Two')
+  static Widget two() {
+    return const Placeholder();
+  }
+}
+""");
+    var entries = CatalogScanner(projectRoot: root.path).scan().entries;
+    var one = entries.singleWhere((e) => e.symbol == 'one');
+    var two = entries.singleWhere((e) => e.symbol == 'Tiles.two');
+    // From the annotation line to the closing line, inclusive — the doc
+    // comment above stays outside.
+    expect((one.line, one.endLine), (4, 5));
+    expect((two.line, two.endLine), (8, 11));
+    // The span survives the JSON round trip the daemon protocol takes.
+    var back = CatalogEntry.fromJson(two.toJson());
+    expect((back.line, back.endLine), (8, 11));
   });
 }

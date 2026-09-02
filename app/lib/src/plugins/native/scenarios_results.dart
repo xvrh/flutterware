@@ -20,6 +20,8 @@ export 'package:flutterware/src/scenarios/report.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/app_events/events.dart';
 
+import '../../delta/branch_delta.dart';
+
 part 'scenarios_results.g.dart';
 
 /// `list` — every scenario of every requested package, from the syntactic
@@ -51,9 +53,14 @@ class ScenarioListPackage {
     this.diagnostics = const [],
     this.error,
     this.authoring,
+    this.branch,
   });
 
   final String path;
+
+  /// What this branch changed among [scenarios], against which base. Absent
+  /// when no base resolved, nothing changed, or the delta has not been read.
+  final BranchChangeSummary? branch;
 
   /// The scanned directory, relative to the package.
   final String directory;
@@ -87,9 +94,14 @@ class ScenarioListEntry {
     required this.name,
     required this.file,
     required this.line,
+    this.change,
   });
 
   final String name;
+
+  /// How this branch touched the scenario — `added`, `edited` or `reached`,
+  /// with a sentence — or absent when it did not. See `EntryChangeKind`.
+  final EntryChange? change;
 
   /// Package-relative source file.
   final String file;

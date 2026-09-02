@@ -190,6 +190,16 @@ class CatalogBrowsing extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether the tree shows only what this branch changed. Off shows
+  /// everything, with the changed rows tinted.
+  bool get changedOnly => _changedOnly;
+  var _changedOnly = false;
+  set changedOnly(bool value) {
+    if (value == _changedOnly) return;
+    _changedOnly = value;
+    notifyListeners();
+  }
+
   /// What part of the catalog the sheet is showing — a directory, or one file
   /// — or null for the whole index. See `CatalogPlace.directory`.
   ///

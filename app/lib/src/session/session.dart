@@ -14,6 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../comparison/compare_command.dart';
 import '../constants.dart';
+import '../delta/branch_delta_controller.dart';
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/assets_core.dart';
@@ -70,7 +71,23 @@ class Session {
       previews.compareRunner = (arguments) =>
           runCompareAction(session: this, arguments: arguments);
     }
+    // What the branch changed is one fact about the worktree, read once for
+    // the two trees that paint from it. Same hook: the cores cannot see each
+    // other, and neither should own what both read.
+    branchDelta = BranchDeltaController(
+      worktreePath: root,
+      packages: [for (var package in workspace.declared) package.path],
+    );
+    if (previews is PreviewsCore) previews.branchDelta = branchDelta;
+    if (coreById(scenariosPluginId) case ScenariosCore scenarios) {
+      scenarios.branchDelta = branchDelta;
+    }
   }
+
+  /// The worktree's delta against its base — see [BranchDeltaController].
+  /// Owned here, installed on the cores that paint from it, refreshed by the
+  /// shell when git moves.
+  late final BranchDeltaController branchDelta;
 
   /// Builds a session over pieces the caller has already resolved.
   ///
@@ -583,6 +600,7 @@ class Session {
     for (var core in cores) {
       core.dispose();
     }
+    branchDelta.dispose();
     if (_ownsWorkspace) workspace.dispose();
   }
 }

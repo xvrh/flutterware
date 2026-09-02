@@ -1503,9 +1503,11 @@ Returns `ScenarioListResult`:
 ```
 packages: List<ScenarioListPackage>
   path: String
+  branch: BranchChangeSummary?   # What this branch changed among [scenarios], against which base.
   directory: String   # The scanned directory, relative to the package.
   scenarios: List<ScenarioListEntry>
     name: String
+    change: EntryChange?   # How this branch touched the scenario — `added`, `edited` or `reached`, with a sentence — or absent when it did not.
     file: String   # Package-relative source file.
     line: int
   diagnostics: List<String>   # What the scan noticed but could not act on — non-literal names, duplicates.
@@ -2289,9 +2291,11 @@ Returns `CatalogEntriesResult`:
 ```
 packages: List<CatalogPackageEntries>
   path: String   # Package path as declared in `tool/flutterware.dart`.
+  branch: BranchChangeSummary?   # What this branch changed among [entries], against which base.
   directory: String   # Where this package's demos were looked for, relative to the package.
   entries: List<CatalogEntrySummary>
     id: String   # What `screenshot --entry` and `describe --entry` take.
+    change: EntryChange?   # How this branch touched the entry — `added`, `edited` or `reached`, with a sentence — or absent when it did not.
     name: String
     address: String   # The `Address`, rendered — hand it back to `screenshot`, or later `show`.
     group: String?   # One tree level between the directory and the leaf, when the entry declares or derives one.

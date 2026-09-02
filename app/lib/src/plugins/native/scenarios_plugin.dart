@@ -10,6 +10,8 @@ import '../../address/address_scope.dart';
 import '../../launcher_icon/model/scan.dart' show representativeIconPath;
 import '../../previews/devices.dart';
 import '../../previews/web_server.dart';
+import '../../delta/branch_delta.dart';
+import '../../delta/change_marks.dart';
 import '../../scenarios/web_export_dialog.dart';
 import '../../scenarios/artifacts.dart';
 import '../../scenarios/artifacts_io.dart';
@@ -451,7 +453,16 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
   void initState() {
     super.initState();
     browsing.addListener(_onBrowsing);
+    // The tint is read from the delta, which is re-read while a tree that
+    // paints from it is on screen — and again on coming back to the window,
+    // which on desktop is the alt-tab back from the editor.
+    core.branchDelta?.attach();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => unawaited(core.branchDelta?.refreshIfStale()),
+    );
   }
+
+  late final AppLifecycleListener _lifecycle;
 
   @override
   void didUpdateWidget(_ScenarioListPane old) {
@@ -462,12 +473,18 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       old.browsing.removeListener(_onBrowsing);
       browsing.addListener(_onBrowsing);
     }
+    if (!identical(old.core, core)) {
+      old.core.branchDelta?.detach();
+      core.branchDelta?.attach();
+    }
   }
 
   void _onBrowsing() => setState(() {});
 
   @override
   void dispose() {
+    _lifecycle.dispose();
+    core.branchDelta?.detach();
     browsing.removeListener(_onBrowsing);
     _query.dispose();
     super.dispose();
@@ -513,6 +530,11 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
           _FilterField(
             controller: _query,
             onChanged: (_) => setState(() {}),
+            leading: ChangedOnlyButton(
+              changes: core.entryChangesFor(package),
+              on: browsing.changedOnly,
+              onChanged: (value) => browsing.changedOnly = value,
+            ),
             // One button for both directions: with nothing folded away the
             // only useful thing it can do is fold, and after that, unfold.
             trailing: IconButton(
@@ -580,8 +602,22 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
     }
 
     var query = _query.text.trim();
+    var changes = core.entryChangesFor(package);
+    // The changed-only restriction first, then the text filter over what is
+    // left. Off — or with nothing to restrict to, since the toggle disables
+    // itself then — the tree is the whole one.
+    // Two different questions, kept apart: narrowing is a browsing mode that
+    // leaves folding to the person browsing, filtering is a typed query
+    // whose answer is held open for as long as it is typed.
+    var narrowing = browsing.changedOnly && changes != null && !changes.isEmpty;
+    var narrowed = narrowing
+        ? restrictScenarioTree(
+            whole,
+            (ref) => changes[ScenariosCore.scenarioChangeKey(ref)] != null,
+          )
+        : whole;
     var filtering = query.isNotEmpty;
-    var tree = filterScenarioTree(whole, query);
+    var tree = filterScenarioTree(narrowed, query);
 
     // Whatever is selected is *made* visible, once, when it arrives — a
     // selection routinely lands from outside the tree (the address bar, a
@@ -602,7 +638,11 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
       return Padding(
         padding: const EdgeInsets.all(FwSpacing.lg),
         child: Text(
-          'No scenario matches “$query”.',
+          filtering
+              ? narrowing
+                    ? 'No scenario this branch changed matches “$query”.'
+                    : 'No scenario matches “$query”.'
+              : 'No scenario here changed on this branch.',
           style: context.type.caption.copyWith(color: context.colors.mut3),
         ),
       );
@@ -622,6 +662,12 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
                 depth: depth,
                 open: open,
                 onTap: filtering ? null : () => browsing.toggle(node.id),
+                changedBelow: open
+                    ? null
+                    : strongestChange(changes, [
+                        for (var ref in scenarioRefsBelow(node))
+                          ScenariosCore.scenarioChangeKey(ref),
+                      ]),
               ),
             );
             if (open) walk(node.children, depth + 1);
@@ -631,6 +677,7 @@ class _ScenarioListPaneState extends State<_ScenarioListPane> {
                 ref,
                 depth: depth,
                 matched: node.marks,
+                change: changes?[ScenariosCore.scenarioChangeKey(ref)],
                 selected:
                     widget.selected.file == ref.file &&
                     widget.selected.scenario == ref.name,
@@ -685,11 +732,16 @@ class _BranchRow extends StatelessWidget {
     required this.depth,
     required this.open,
     required this.onTap,
+    this.changedBelow,
   });
 
   final ScenarioBranchNode node;
   final int depth;
   final bool open;
+
+  /// The strongest change folded away under this row, or null. Only asked
+  /// for while closed: open, the rows themselves say it.
+  final EntryChangeKind? changedBelow;
 
   /// Null while filtering: a filtered tree is held open, so the tap has
   /// nothing honest to do.
@@ -726,6 +778,10 @@ class _BranchRow extends StatelessWidget {
                   ),
                 ),
               ),
+              if (changedBelow case var kind?) ...[
+                const Gap(FwSpacing.xs),
+                ChangeDot(kind),
+              ],
               if (!open) ...[
                 const Gap(FwSpacing.xs),
                 Text(
@@ -877,11 +933,15 @@ class _FilterField extends StatelessWidget {
   const _FilterField({
     required this.controller,
     required this.onChanged,
+    this.leading,
     this.trailing,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+
+  /// A control before the fold toggle — the changed-only one.
+  final Widget? leading;
 
   /// A control that belongs on the filter's row — the fold-all toggle.
   final Widget? trailing;
@@ -931,13 +991,13 @@ class _FilterField extends StatelessWidget {
         FwSpacing.md,
         FwSpacing.md,
       ),
-      child: trailing == null
+      child: leading == null && trailing == null
           ? field
           : Row(
               children: [
                 Expanded(child: field),
-                const Gap(FwSpacing.xs),
-                trailing!,
+                if (leading case var it?) ...[const Gap(FwSpacing.xs), it],
+                if (trailing case var it?) ...[const Gap(FwSpacing.xs), it],
               ],
             ),
     );
@@ -951,11 +1011,15 @@ class _ScenarioRow extends StatelessWidget {
     required this.onTap,
     this.depth = 0,
     this.matched = const [],
+    this.change,
   });
 
   final ScenarioRef ref;
   final bool selected;
   final VoidCallback onTap;
+
+  /// How the branch touched this scenario, or null. Tints the name.
+  final EntryChange? change;
 
   /// How deep the row sits in the tree — always below its file's branch.
   final int depth;
@@ -968,7 +1032,8 @@ class _ScenarioRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Tappable.builder(
+    var ink = changeInk(context, change?.kind);
+    var row = Tappable.builder(
       onTap: onTap,
       builder: (context, hovered) => Container(
         color: selected
@@ -991,13 +1056,23 @@ class _ScenarioRow extends StatelessWidget {
                 ref.name,
                 matched: matched,
                 style: context.type.body.copyWith(
-                  color: selected ? colors.ink : colors.mut,
+                  color: ink ?? (selected ? colors.ink : colors.mut),
                 ),
               ),
             ),
+            if (change?.kind == EntryChangeKind.reached) ...[
+              const Gap(FwSpacing.xs),
+              const ChangeDot(EntryChangeKind.reached),
+            ],
           ],
         ),
       ),
+    );
+    if (change == null) return row;
+    return Tooltip(
+      message: change!.why,
+      waitDuration: const Duration(milliseconds: 500),
+      child: row,
     );
   }
 }

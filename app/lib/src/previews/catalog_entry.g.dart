@@ -19,6 +19,8 @@ CatalogEntry _$CatalogEntryFromJson(Map<String, dynamic> json) => CatalogEntry(
           ?.map((e) => KnobDescriptor.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const [],
+  line: (json['line'] as num?)?.toInt() ?? 0,
+  endLine: (json['endLine'] as num?)?.toInt() ?? 0,
 );
 
 Map<String, dynamic> _$CatalogEntryToJson(CatalogEntry instance) =>
@@ -31,4 +33,6 @@ Map<String, dynamic> _$CatalogEntryToJson(CatalogEntry instance) =>
       'group': instance.group,
       'declaredId': instance.declaredId,
       'ordinal': instance.ordinal,
+      'line': instance.line,
+      'endLine': instance.endLine,
     };

@@ -19,6 +19,8 @@ class CatalogEntry {
     this.declaredId,
     this.ordinal = 0,
     this.knobs = const [],
+    this.line = 0,
+    this.endLine = 0,
   });
 
   factory CatalogEntry.fromJson(Map<String, dynamic> json) =>
@@ -73,6 +75,15 @@ class CatalogEntry {
   /// Which annotation on the declaration this is, in source order.
   final int ordinal;
 
+  /// The lines the annotated declaration spans, 1-based and inclusive, from
+  /// its first annotation to its closing brace. Zero when unknown — an entry
+  /// built by hand in a test, or read from a daemon older than this field.
+  ///
+  /// A file holds twenty entries and a branch's diff touches one of them:
+  /// this is what tells the tree which. See `entry_change.dart`.
+  final int line;
+  final int endLine;
+
   /// The same entry, filed under [group].
   ///
   /// Every field is carried, and [knobs] is why this comment exists: it used to
@@ -89,6 +100,8 @@ class CatalogEntry {
     declaredId: declaredId,
     ordinal: ordinal,
     knobs: knobs,
+    line: line,
+    endLine: endLine,
   );
 
   Map<String, dynamic> toJson() => _$CatalogEntryToJson(this);

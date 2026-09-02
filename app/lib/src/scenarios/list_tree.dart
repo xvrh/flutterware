@@ -139,6 +139,47 @@ ScenarioListNode? _filter(ScenarioListNode node, String needle) {
   }
 }
 
+/// Keeps the scenarios [keep] answers true for, and the branches leading to
+/// them — the "changed on this branch" filter, which composes with the text
+/// one.
+List<ScenarioListNode> restrictScenarioTree(
+  List<ScenarioListNode> nodes,
+  bool Function(ScenarioRef ref) keep,
+) => [for (var node in nodes) ?_restrict(node, keep)];
+
+ScenarioListNode? _restrict(
+  ScenarioListNode node,
+  bool Function(ScenarioRef ref) keep,
+) {
+  switch (node) {
+    case ScenarioLeafNode(:var ref):
+      return keep(ref) ? node : null;
+    case ScenarioBranchNode():
+      var kept = [for (var child in node.children) ?_restrict(child, keep)];
+      return kept.isEmpty
+          ? null
+          : ScenarioBranchNode(
+              id: node.id,
+              label: node.label,
+              file: node.file,
+              children: kept,
+            );
+  }
+}
+
+/// Every scenario under [node], at any depth — what a folded row is asked
+/// about.
+Iterable<ScenarioRef> scenarioRefsBelow(ScenarioBranchNode node) sync* {
+  for (var child in node.children) {
+    switch (child) {
+      case ScenarioLeafNode(:var ref):
+        yield ref;
+      case ScenarioBranchNode():
+        yield* scenarioRefsBelow(child);
+    }
+  }
+}
+
 /// Every branch id in the tree, at any depth — what "collapse all" has to
 /// name.
 Set<String> allScenarioBranches(List<ScenarioListNode> nodes) => {

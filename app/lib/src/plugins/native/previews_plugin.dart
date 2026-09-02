@@ -405,6 +405,9 @@ class _CatalogPanelState extends State<_CatalogPanel> {
         // something to compile — see [_startSessionIfReady], which is also
         // called from `build` because the scan usually lands after this.
         widget.plugin.core.track(package);
+        // The tint is read from the delta, which is re-read while a tree
+        // that paints from it is on screen.
+        widget.plugin.core.branchDelta?.attach();
         _startSessionIfReady(package);
       }
     }
@@ -526,7 +529,10 @@ class _CatalogPanelState extends State<_CatalogPanel> {
   void _release() {
     _hasFollowed = false;
     _followed = null;
-    if (_package case var previous?) _plugin?.core.untrack(previous);
+    if (_package case var previous?) {
+      _plugin?.core.untrack(previous);
+      _plugin?.core.branchDelta?.detach();
+    }
     _session?.removeListener(_settled);
     _session = null;
     _package = null;
@@ -695,6 +701,9 @@ class _CatalogPanelState extends State<_CatalogPanel> {
                 key: ObjectKey(session),
                 session: session,
                 thumbnails: widget.plugin.thumbnailsFor(path),
+                entryChanges: widget.plugin.core.entryChangesFor(path),
+                onLookAgain: () =>
+                    unawaited(widget.plugin.core.branchDelta?.refreshIfStale()),
                 // Outlives the key above, and that is the whole reason it is
                 // here: a package switch is a session switch, so everything
                 // below remounts, and a magnification held down there would go

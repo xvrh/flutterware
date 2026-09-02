@@ -43,6 +43,8 @@ import 'stage_ground.dart';
 import 'stage_zoom.dart';
 import 'zoom_control.dart';
 import 'thumbnails.dart';
+import '../delta/branch_delta.dart';
+import '../delta/change_marks.dart';
 import 'catalog_tree.dart';
 import 'inspect_panel.dart';
 
@@ -70,9 +72,20 @@ class CatalogView extends StatefulWidget {
     required this.session,
     this.thumbnails,
     this.zoom,
+    this.entryChanges,
+    this.onLookAgain,
   });
 
   final CatalogSession session;
+
+  /// How the branch touched each entry, for the tree's tint and its
+  /// changed-only filter. Null until the delta lands, and for a session with
+  /// no core behind it — the standalone catalog — where nothing is tinted.
+  final EntryChanges? entryChanges;
+
+  /// Called when the panel looks again at the disk — on mount, on the window
+  /// regaining focus — so what the tint is read from can be asked to as well.
+  final VoidCallback? onLookAgain;
 
   /// The stage's pan and zoom, when something above wants it to outlive this
   /// widget.
@@ -279,6 +292,7 @@ class _CatalogViewState extends State<CatalogView> {
   /// Cheap by construction: the daemon answers `unchanged` when nothing on disk
   /// moved, so this fires as often as it likes without touching the guest.
   void _reloadIfChanged() {
+    widget.onLookAgain?.call();
     if (mounted) unawaited(_session.reloadIfChanged());
   }
 
@@ -395,6 +409,7 @@ class _CatalogViewState extends State<CatalogView> {
                 width: 260,
                 child: _EntryList(
                   session: _session,
+                  changes: widget.entryChanges,
                   thumbnails: widget.thumbnails,
                   onGoTo: (scope) => _goTo(context, _session, scope),
                 ),
@@ -1799,10 +1814,14 @@ class _EntryList extends StatefulWidget {
     required this.session,
     required this.thumbnails,
     required this.onGoTo,
+    this.changes,
   });
 
   final CatalogSession session;
   final PreviewThumbnails? thumbnails;
+
+  /// What the branch changed, for the tint — see [CatalogView.entryChanges].
+  final EntryChanges? changes;
 
   /// Show this much of the catalog — a folder's path, or null for all of it.
   final void Function(String? scope) onGoTo;
@@ -1874,7 +1893,18 @@ class _EntryListState extends State<_EntryList> {
     if (browsing.needsFoldDecision) {
       browsing.foldIfCrowded(catalogTreeRows(whole), allBranches(whole));
     }
-    var tree = filterCatalogTree(whole, browsing.filter);
+    var changes = widget.changes;
+    // The changed-only restriction first, then the text filter over what is
+    // left. Off — or with nothing to restrict to, since the toggle disables
+    // itself then — the tree is the whole one.
+    // Two different questions, kept apart: narrowing is a browsing mode that
+    // leaves folding to the person browsing, filtering is a typed query
+    // whose answer is held open for as long as it is typed.
+    var narrowing = browsing.changedOnly && changes != null && !changes.isEmpty;
+    var narrowed = narrowing
+        ? restrictCatalogTree(whole, changes.ids.toSet())
+        : whole;
+    var tree = filterCatalogTree(narrowed, browsing.filter);
     var filtering = browsing.filter.trim().isNotEmpty;
     // Whatever is selected is *made* visible, once, when it arrives — rather
     // than held open for as long as it is selected, which is what made the
@@ -1898,6 +1928,7 @@ class _EntryListState extends State<_EntryList> {
                 entry: entry,
                 depth: depth,
                 broken: session.compileErrorFor(entry),
+                change: changes?[entry.id],
                 selected: entry.id == session.selected?.id,
                 highlight: browsing.filter.trim(),
                 // **Live before the guest is.** The list now arrives off the
@@ -1937,6 +1968,12 @@ class _EntryListState extends State<_EntryList> {
                 depth: depth,
                 open: open,
                 highlight: browsing.filter.trim(),
+                changedBelow: open
+                    ? null
+                    : strongestChange(
+                        changes,
+                        node.entries.map((entry) => entry.id),
+                      ),
                 // Marked when the pane beside it is this folder — never while
                 // a demo is up, where the row worth marking is the entry's.
                 showing:
@@ -1988,13 +2025,19 @@ class _EntryListState extends State<_EntryList> {
               entry: entry,
               anchor: at,
               thumbnail: thumbnails.of(entry),
+              change: widget.changes?[entry.id],
             ),
           );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _FilterField(session: session, browsing: browsing, tree: tree),
+            _FilterField(
+              session: session,
+              browsing: browsing,
+              tree: tree,
+              changes: changes,
+            ),
             const Divider(height: 1),
             // **The way out, and the only row that never scrolls away.** It is
             // above the list rather than the first thing in it because an
@@ -2016,7 +2059,11 @@ class _EntryListState extends State<_EntryList> {
             const Divider(height: 1),
             Expanded(
               child: rows.isEmpty
-                  ? _nothingToList(session, filtering: filtering)
+                  ? _nothingToList(
+                      session,
+                      filtering: filtering,
+                      narrowing: narrowing,
+                    )
                   : ListView(
                       padding: const EdgeInsets.symmetric(
                         vertical: FwSpacing.xs,
@@ -2207,12 +2254,25 @@ class _Landing extends StatelessWidget {
 /// its first frame; one that was not — the standalone entry point, the motion
 /// panel — is still waiting on the daemon, and used to spend that waiting
 /// saying nobody had written a demo.
-Widget _nothingToList(CatalogSession session, {required bool filtering}) {
+Widget _nothingToList(
+  CatalogSession session, {
+  required bool filtering,
+  bool narrowing = false,
+}) {
   if (filtering) {
-    return const EmptyState(
+    return EmptyState(
       icon: Icons.search_off_outlined,
       title: 'Nothing matches',
-      message: 'No demo in this package has a name like that.',
+      message: narrowing
+          ? 'No demo this branch changed has a name like that.'
+          : 'No demo in this package has a name like that.',
+    );
+  }
+  if (narrowing) {
+    return const EmptyState(
+      icon: Icons.difference_outlined,
+      title: 'Nothing changed here',
+      message: 'No demo in this package changed on this branch.',
     );
   }
   if (session.phase == CatalogSessionPhase.starting) {
@@ -2294,11 +2354,16 @@ class _BranchRow extends StatelessWidget {
     required this.showing,
     required this.onTap,
     required this.onToggleFold,
+    this.changedBelow,
   });
 
   final CatalogBranch branch;
   final int depth;
   final bool open;
+
+  /// The strongest change folded away under this row, or null. Only asked
+  /// for while closed: open, the rows themselves say it.
+  final EntryChangeKind? changedBelow;
 
   /// Whether this folder is what the pane beside the tree is showing.
   final bool showing;
@@ -2341,6 +2406,10 @@ class _BranchRow extends StatelessWidget {
         ),
       ),
       trailing: [
+        if (changedBelow case var kind?) ...[
+          const Gap(FwSpacing.xs),
+          ChangeDot(kind),
+        ],
         if (!open) ...[
           const Gap(FwSpacing.xs),
           Text(
@@ -2363,10 +2432,15 @@ class _LeafRow extends StatelessWidget {
     required this.onTap,
     required this.describe,
     required this.onHover,
+    this.change,
   });
 
   final CatalogEntry entry;
   final int depth;
+
+  /// How the branch touched this entry, or null. Tints the name — a broken
+  /// entry's red still wins, since it is the thing to act on.
+  final EntryChange? change;
 
   /// What the filter is showing this row for, marked in the name.
   final String highlight;
@@ -2388,7 +2462,9 @@ class _LeafRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var color = broken != null ? colors.red : colors.ink;
+    var color = broken != null
+        ? colors.red
+        : changeInk(context, change?.kind) ?? colors.ink;
     return MouseRegion(
       // Its own box, read here rather than tracked: this fires once when the
       // pointer arrives, and a row that reported its rectangle on every build
@@ -2404,7 +2480,15 @@ class _LeafRow extends StatelessWidget {
       child: Tooltip(
         // One line per entry leaves no room for the file, and the file is often
         // what you remember it by. Empty is a tooltip that never shows.
-        message: describe ? '${entry.path} · ${entry.symbol}' : '',
+        // The change sentence rides along with the file: when the popover
+        // is doing the describing it carries the sentence too, so the row
+        // never grows a second surface for it.
+        message: describe
+            ? [
+                '${entry.path} · ${entry.symbol}',
+                if (change case var it?) it.why,
+              ].join('\n')
+            : '',
         waitDuration: const Duration(milliseconds: 600),
         child: InkWell(
           onTap: onTap,
@@ -2428,6 +2512,10 @@ class _LeafRow extends StatelessWidget {
                       style: context.type.bodySmall.copyWith(color: color),
                     ),
                   ),
+                  if (change?.kind == EntryChangeKind.reached) ...[
+                    const Gap(FwSpacing.xs),
+                    const ChangeDot(EntryChangeKind.reached),
+                  ],
                   if (broken != null) ...[
                     const Gap(FwSpacing.xs),
                     Icon(
@@ -2504,7 +2592,11 @@ class _FilterField extends StatefulWidget {
     required this.session,
     required this.browsing,
     required this.tree,
+    this.changes,
   });
+
+  /// What the branch changed, for the changed-only toggle.
+  final EntryChanges? changes;
 
   /// Only for the hover-preview switch, which has to be able to put back what
   /// a peek replaced when it is turned off.
@@ -2656,6 +2748,11 @@ class _FilterFieldState extends State<_FilterField> {
             ),
           ),
           const Gap(FwSpacing.xs),
+          ChangedOnlyButton(
+            changes: widget.changes,
+            on: widget.browsing.changedOnly,
+            onChanged: (value) => widget.browsing.changedOnly = value,
+          ),
           IconButton(
             icon: Icon(
               widget.browsing.previewOnHover
