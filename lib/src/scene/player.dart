@@ -29,6 +29,11 @@ class MotionPlayer {
   /// Tempo lives here, never in the file. Takes effect from the next tick.
   double rate = 1;
 
+  /// Told every position the player lands on — a seek, a tick — for a
+  /// listener that has to know *where* an edit happens, not only that the
+  /// picture changed.
+  void Function(Duration position)? onPosition;
+
   Duration get position => _position;
 
   void play() {
@@ -47,11 +52,13 @@ class MotionPlayer {
   }
 
   /// Pure: always legal, any direction, any state. Does not start a clock.
+  /// Parks at [t] — anywhere from zero on, including past the end, where
+  /// the picture is the end pose: an editor needs the playhead beyond the
+  /// last key to put the next one there.
   void seek(Duration t) {
-    _position = t < Duration.zero
-        ? Duration.zero
-        : (t > playable.duration ? playable.duration : t);
+    _position = t < Duration.zero ? Duration.zero : t;
     playable.apply(_position);
+    onPosition?.call(_position);
   }
 
   /// Cancel: the fx drops, the base was never touched.
@@ -78,8 +85,10 @@ class MotionPlayer {
       _ticker.stop();
       playable.releaseDriver(this);
       status = MotionPlayerStatus.completed;
+      onPosition?.call(_position);
       return;
     }
     playable.apply(_position);
+    onPosition?.call(_position);
   }
 }

@@ -194,6 +194,77 @@ class SceneEditor extends SceneListenable {
     notifyListeners();
   }
 
+  /// Recording: while on, an edit made with a motion open becomes a key on
+  /// that property at the playhead instead of a change to the node's own
+  /// value — what "set the playhead, move things" means in every animation
+  /// tool. Not journaled: a mode, not a change.
+  bool get autoKey => _autoKey;
+  bool _autoKey = false;
+
+  set autoKey(bool value) {
+    if (_autoKey == value) return;
+    _autoKey = value;
+    notifyListeners();
+  }
+
+  /// Where the open motion's playhead is, as the playback last reported it.
+  /// A plain field: it moves sixty times a second while playing, and
+  /// nothing rebuilds on it.
+  Duration playhead = Duration.zero;
+
+  /// Whether an edit to [prop] of [node] would record a key right now.
+  bool records(SceneNode node, String prop) =>
+      autoKey && activeMotion != null && propSpecFor(node, prop) != null;
+
+  /// What [prop] of [node] is worth at the playhead while recording: the
+  /// key already there, if one is, else what the motion shows. The key
+  /// first, because a drag records one on every sample and the picture
+  /// catches up only when the motion is applied again.
+  Object _recorded(SceneNode node, String prop) {
+    var motion = activeMotion;
+    if (motion != null) {
+      for (var group in groupsTargeting(motion, node)) {
+        var at =
+            playhead -
+            (motions[motion]!.placements[group.name] ?? Duration.zero);
+        var track = trackOf(motion, group.name, prop);
+        if (track == null) continue;
+        for (var key in track.keys) {
+          if ((key.at - at).inMilliseconds.abs() < 1) return key.value;
+        }
+      }
+    }
+    return node.fxRendered(prop);
+  }
+
+  /// Records [value] as a key on [prop] of [node] at the playhead, in the
+  /// node's first group of the open motion — made and placed at zero when
+  /// it has none. False when recording does not apply, so the caller edits
+  /// the node's value instead.
+  bool recordKey(
+    SceneNode node,
+    String prop,
+    Object value, {
+    String? mergeKey,
+  }) {
+    if (!records(node, prop)) return false;
+    var motion = activeMotion!;
+    var group =
+        groupsTargeting(motion, node).firstOrNull ?? addGroup(motion, node);
+    var at =
+        playhead - (motions[motion]!.placements[group.name] ?? Duration.zero);
+    addKey(
+      motion,
+      group.name,
+      prop,
+      at < Duration.zero ? Duration.zero : at,
+      value: value,
+      mergeKey: mergeKey,
+      select: false,
+    );
+    return true;
+  }
+
   /// The canvas tool. Not journaled: choosing a tool changes nothing in the
   /// document.
   SceneTool get tool => _tool;
@@ -481,6 +552,8 @@ class SceneEditor extends SceneListenable {
     String prop,
     Duration at, {
     Object? value,
+    String? mergeKey,
+    bool select = true,
   }) {
     var group = motions[motion]!.groupNamed(groupName)!;
     var node = doc.nodeNamed(group.target)!;
@@ -493,26 +566,34 @@ class SceneEditor extends SceneListenable {
             ? existing.evaluate(at)
             : _currentValue(node, prop, kind));
     late MotionKey key;
-    perform('Add key', () {
-      var track = existing;
-      if (track == null) {
-        track = MotionTrack(kind);
-        if (prop.startsWith('args.')) {
-          group.args[prop.substring(5)] = track;
-        } else {
-          group.tracks[prop] = track;
+    perform(
+      mergeKey == null ? 'Add key' : 'Record key',
+      mergeKey: mergeKey,
+      () {
+        var track = existing;
+        if (track == null) {
+          track = MotionTrack(kind);
+          if (prop.startsWith('args.')) {
+            group.args[prop.substring(5)] = track;
+          } else {
+            group.tracks[prop] = track;
+          }
         }
-      }
-      var near = track.keys.where((k) => (k.at - at).inMilliseconds.abs() < 1);
-      if (near.isNotEmpty) {
-        key = near.first..value = seed;
-      } else {
-        key = MotionKey(at: at, value: seed);
-        track.insertKey(key);
-      }
-    });
+        var near = track.keys.where(
+          (k) => (k.at - at).inMilliseconds.abs() < 1,
+        );
+        if (near.isNotEmpty) {
+          key = near.first..value = seed;
+        } else {
+          key = MotionKey(at: at, value: seed);
+          track.insertKey(key);
+        }
+      },
+    );
     var ref = MotionKeyRef(motion, groupName, prop, key.id);
-    selectKey(ref);
+    // Selecting the key drops the node selection, which a recording edit
+    // is in the middle of using — a drag keeps its nodes.
+    if (select) selectKey(ref);
     return ref;
   }
 
@@ -826,6 +907,19 @@ class SceneEditor extends SceneListenable {
   /// Move every selected node under an absolute parent by (dx, dy). One
   /// gesture is one entry: pass the gesture's [mergeKey].
   void nudgeSelection(double dx, double dy, {String? mergeKey}) {
+    // Recording: the node stays where it is authored and *travels* — the
+    // move becomes translate keys, from wherever the motion has it now.
+    if (autoKey && activeMotion != null) {
+      var nodes = selectedNodes.toList();
+      if (nodes.isEmpty) return;
+      for (var node in nodes) {
+        var tx = _recorded(node, 'translateX') as double;
+        var ty = _recorded(node, 'translateY') as double;
+        recordKey(node, 'translateX', _half(tx + dx), mergeKey: mergeKey);
+        recordKey(node, 'translateY', _half(ty + dy), mergeKey: mergeKey);
+      }
+      return;
+    }
     var nodes = [
       for (var node in selectedNodes)
         if (doc.parentOf(node)?.layout == NodeLayout.absolute) node,

@@ -44,9 +44,14 @@ class ScenePlayback extends ChangeNotifier {
 
   void _onEdit() {
     var shape = _shapeOf();
-    if (shape == _shape) return;
-    _shape = shape;
-    rebind();
+    if (shape != _shape) {
+      _shape = shape;
+      rebind();
+      return;
+    }
+    // A key's value changed under a parked playhead: the picture is stale
+    // until the motion is applied again. Playing re-applies every tick.
+    if (!isPlaying) _player.seek(_player.position);
   }
 
   final SceneEditor editor;
@@ -60,7 +65,9 @@ class ScenePlayback extends ChangeNotifier {
 
   void _bind() {
     _bound = BoundMotion.bind(motion, editor.doc);
-    _player = MotionPlayer(_bound, vsync: vsync);
+    _player = MotionPlayer(_bound, vsync: vsync)
+      ..onPosition = (at) => editor.playhead = at;
+    editor.playhead = _player.position;
   }
 
   /// Rebinds after the motion's shape changed — a group placed or removed.
@@ -86,10 +93,13 @@ class ScenePlayback extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 0..1 along the motion; 0 for a motion of no length.
+  /// 0..1 along the motion; 0 for a motion of no length, past 1 beyond it.
   double get t => duration == Duration.zero
       ? 0
       : position.inMicroseconds / duration.inMicroseconds;
+
+  bool get autoKey => editor.autoKey;
+  set autoKey(bool value) => editor.autoKey = value;
 
   void play() {
     _player.play();

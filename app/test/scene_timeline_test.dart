@@ -124,7 +124,37 @@ void main() {
     expect(spanFor(0), 1000);
     expect(spanFor(1800), 2500, reason: '1.25× rounded up to the 500ms step');
     expect(spanFor(60), 1000);
-    expect(spanFor(10000), 14000, reason: "12500 up to the 2s step");
+    expect(spanFor(10000), 14000, reason: '12500 up to the 2s step');
+  });
+
+  testWidgets('⌘-scroll zooms the strip about the pointer; scroll moves it', (
+    tester,
+  ) async {
+    await pump(tester);
+    var opacity = track('headlineIn', 'opacity');
+    var keyX = xOf(opacity.keys[1].at);
+    var origin = xOf(Duration.zero);
+    // Zoom in about the origin: the key moves right, the origin stays.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendEventToBinding(
+      PointerScrollEvent(
+        position: Offset(origin, yOfLane(0)),
+        scrollDelta: const Offset(0, -400),
+      ),
+    );
+    await tester.pump();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    // The key's diamond sits where a tap selects it: hit-test the new place.
+    var zoomed = origin + (keyX - origin) * 1.5;
+    await tester.tapAt(Offset(zoomed, yOfLane(0)));
+    await tester.pump();
+    expect(editor.selectedKeys, isEmpty, reason: 'the key is further right');
+    // Find it: the strip is zoomed by exp(400 * 0.0016) ≈ 1.9.
+    var factor = 1.896;
+    await tester.tapAt(Offset(origin + (keyX - origin) * factor, yOfLane(0)));
+    await tester.pump();
+    expect(editor.selectedKeys, hasLength(1));
+    await tester.pump(kDoubleTapTimeout);
   });
 
   testWidgets('a double-click on a lane adds a key there, selected', (

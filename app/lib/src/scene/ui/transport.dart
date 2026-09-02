@@ -38,6 +38,23 @@ class SceneTransport extends StatelessWidget {
             tooltip: 'Stop — drops the fx, the scene is untouched',
             onTap: playback.isIdle ? null : playback.stop,
           ),
+          Tooltip(
+            message: playback.autoKey
+                ? 'Recording: an edit at the playhead becomes a key'
+                : 'Record: make edits at the playhead into keys',
+            child: Tappable(
+              onTap: () => playback.autoKey = !playback.autoKey,
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+              child: Padding(
+                padding: const EdgeInsets.all(FwSpacing.xs),
+                child: Icon(
+                  Icons.fiber_manual_record,
+                  size: FwIconSize.md,
+                  color: playback.autoKey ? colors.red : colors.mut3,
+                ),
+              ),
+            ),
+          ),
           const Gap(FwSpacing.xs),
           Text(
             '${_seconds(at)} / ${_seconds(total)}s',

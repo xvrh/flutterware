@@ -53,6 +53,17 @@ class SceneInspector extends StatelessWidget {
     editor.perform('Edit $prop', mergeKey: 'inspect:$prop:$name', fn);
   }
 
+  /// An edit to an animatable property: a key at the playhead while
+  /// recording, the node's own value otherwise.
+  void _set(String prop, Object value, void Function() apply) {
+    var node = editor.primary ?? doc.root;
+    var name = node.name;
+    if (editor.recordKey(node, prop, value, mergeKey: 'record:$prop:$name')) {
+      return;
+    }
+    _door(prop, apply);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (editor.selectedKeys.isNotEmpty) return _keys(context);
@@ -101,7 +112,10 @@ class SceneInspector extends StatelessWidget {
         _swatches(
           context,
           node.fill,
-          (c) => _door('fill', () => node.fill = c),
+          // No fill is not a colour a key can hold: that one edits the node.
+          (c) => c == null
+              ? _door('fill', () => node.fill = null)
+              : _set('fill', c, () => node.fill = c),
         ),
         const SizedBox(height: FwSpacing.md),
         _row([
@@ -150,9 +164,9 @@ class SceneInspector extends StatelessWidget {
         label: label,
         value: value,
         shape: shape,
-        onChanged: (v) => _door(prop, () => apply(v)),
+        onChanged: (v) => _set(prop, v, () => apply(v)),
         onCommit: (v) {
-          _door(prop, () => apply(v));
+          _set(prop, v, () => apply(v));
           editor.endMerge();
         },
       ),
@@ -281,11 +295,10 @@ class SceneInspector extends StatelessWidget {
       ),
     ]),
     _label(context, 'Color'),
-    _swatches(
-      context,
-      t.color,
-      (c) => _door('color', () => t.color = c ?? const SceneColor(0xFF000000)),
-    ),
+    _swatches(context, t.color, (c) {
+      var color = c ?? const SceneColor(0xFF000000);
+      _set('color', color, () => t.color = color);
+    }),
   ];
 
   List<Widget> _frameProps(BuildContext context, FrameNode f) => [

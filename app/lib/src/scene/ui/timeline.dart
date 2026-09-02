@@ -35,6 +35,19 @@ int spanFor(int durationMs) {
   return ((wanted + step - 1) ~/ step) * step;
 }
 
+/// How the strip maps time to pixels: so many pixels per millisecond, from
+/// an offset. Fit is the span over the width; ⌘-scroll zooms about the
+/// pointer and a horizontal scroll moves along.
+class TimeScale {
+  const TimeScale({required this.pxPerMs, required this.offsetMs});
+
+  final double pxPerMs;
+  final double offsetMs;
+
+  double xOf(num ms) => (ms - offsetMs) * pxPerMs;
+  double msAt(double x) => x / pxPerMs + offsetMs;
+}
+
 class SceneTimeline extends StatefulWidget {
   const SceneTimeline(
     this.editor,
@@ -58,6 +71,77 @@ class SceneTimeline extends StatefulWidget {
 
 class _SceneTimelineState extends State<SceneTimeline> {
   final _focus = FocusNode(debugLabel: 'scene timeline');
+
+  /// Pixels per millisecond, or null while the strip fits the whole span.
+  double? _pxPerMs;
+  double _offsetMs = 0;
+
+  /// The strip's width as last laid out, and the span it would fit.
+  double _stripWidth = 1;
+  int _span = 1000;
+
+  TimeScale get _scale =>
+      TimeScale(pxPerMs: _pxPerMs ?? _stripWidth / _span, offsetMs: _offsetMs);
+
+  /// Zooms by [factor] about [x] on the strip, clamped between fit and ten
+  /// pixels a millisecond, and keeps the whole span reachable.
+  void _zoom(double factor, double x) {
+    var fit = _stripWidth / _span;
+    var current = _pxPerMs ?? fit;
+    var next = (current * factor).clamp(fit, 10.0);
+    if (next == current) return;
+    var msUnder = _scale.msAt(x);
+    setState(() {
+      _pxPerMs = next == fit ? null : next;
+      _offsetMs = _clampOffset(msUnder - x / next, next);
+    });
+  }
+
+  void _scroll(double dx) {
+    var next = _clampOffset(_offsetMs - dx / _scale.pxPerMs, _scale.pxPerMs);
+    if (next != _offsetMs) setState(() => _offsetMs = next);
+  }
+
+  double _clampOffset(double ms, double pxPerMs) {
+    var visible = _stripWidth / pxPerMs;
+    return ms.clamp(0.0, math.max(0.0, _span - visible)).toDouble();
+  }
+
+  /// Where a trackpad gesture last was, so its cumulative pan reads as a
+  /// delta.
+  Offset _panSeen = Offset.zero;
+
+  bool get _zoomKey =>
+      HardwareKeyboard.instance.isMetaPressed ||
+      HardwareKeyboard.instance.isControlPressed;
+
+  double _stripX(Offset local) => local.dx - widget.gutterWidth - 1;
+
+  void _onSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    if (_zoomKey) {
+      _zoom(
+        math.exp(-event.scrollDelta.dy * 0.0016),
+        _stripX(event.localPosition),
+      );
+    } else if (event.scrollDelta.dx != 0) {
+      _scroll(-event.scrollDelta.dx);
+    }
+  }
+
+  void _onPanZoomStart(PointerPanZoomStartEvent event) =>
+      _panSeen = Offset.zero;
+
+  void _onPanZoom(PointerPanZoomUpdateEvent event) {
+    var delta = event.pan - _panSeen;
+    _panSeen = event.pan;
+    if (event.scale != 1.0) return; // a pinch: the canvas's, not the strip's
+    if (_zoomKey) {
+      _zoom(math.exp(delta.dy * 0.004), _stripX(event.localPosition));
+    } else if (delta.dx.abs() > delta.dy.abs()) {
+      _scroll(delta.dx);
+    }
+  }
 
   SceneEditor get editor => widget.editor;
   ScenePlayback get playback => widget.playback;
@@ -132,100 +216,120 @@ class _SceneTimelineState extends State<SceneTimeline> {
         ]),
         builder: (context, _) {
           var groups = _groups();
-          var total = spanFor(playback.duration.inMilliseconds);
+          _span = spanFor(playback.duration.inMilliseconds);
           var selected = editor.primary;
           var selectedName = selected?.name;
           var selectedHasGroup = groups.any(
             (g) => g.group.target == selectedName,
           );
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                height: 28,
-                child: Row(
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              _stripWidth = math.max(
+                1.0,
+                constraints.maxWidth - widget.gutterWidth - 1,
+              );
+              var scale = _scale;
+              return Listener(
+                onPointerSignal: _onSignal,
+                onPointerPanZoomStart: _onPanZoomStart,
+                onPointerPanZoomUpdate: _onPanZoom,
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     SizedBox(
-                      width: widget.gutterWidth,
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: FwSpacing.xs),
-                        child: widget.transport
-                            ? Align(
-                                alignment: Alignment.centerLeft,
-                                child: SceneTransport(playback, compact: true),
-                              )
-                            : Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: FwSpacing.md,
-                                ),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(
-                                    playback.motionName,
-                                    style: context.type.bodyStrong,
-                                  ),
-                                ),
+                      height: 28,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: widget.gutterWidth,
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                left: FwSpacing.xs,
                               ),
+                              child: widget.transport
+                                  ? Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: SceneTransport(
+                                        playback,
+                                        compact: true,
+                                      ),
+                                    )
+                                  : Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: FwSpacing.md,
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          playback.motionName,
+                                          style: context.type.bodyStrong,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          _gutterEdge(colors),
+                          Expanded(
+                            child: _Ruler(
+                              scale: scale,
+                              playheadMs: playback.position.inMilliseconds,
+                              onSeek: (ms) => playback.seek(
+                                Duration(milliseconds: ms.round()),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    _gutterEdge(colors),
+                    Container(height: 1, color: colors.line),
                     Expanded(
-                      child: _Ruler(
-                        duration: total,
-                        t: playback.position.inMilliseconds / total,
-                        onSeek: (u) => playback.seek(
-                          Duration(milliseconds: (u * total).round()),
-                        ),
-                      ),
+                      child: groups.isEmpty && selected == null
+                          ? Center(
+                              child: Text(
+                                'Nothing animates yet — select a node to animate it',
+                                style: context.type.bodyMuted,
+                              ),
+                            )
+                          : ListView(
+                              children: [
+                                for (var g in groups) ...[
+                                  _GroupRow(
+                                    key: ValueKey('group:${g.group.name}'),
+                                    lanes: g,
+                                    editor: editor,
+                                    playback: playback,
+                                    scale: scale,
+                                    gutterWidth: widget.gutterWidth,
+                                    onAddKey: (prop) =>
+                                        _keyAtPlayhead(g.group, prop),
+                                  ),
+                                  for (var lane in g.lanes)
+                                    _LaneRow(
+                                      key: ValueKey(
+                                        'lane:${g.group.name}/${lane.prop}',
+                                      ),
+                                      lane: lane,
+                                      editor: editor,
+                                      playback: playback,
+                                      scale: scale,
+                                      gutterWidth: widget.gutterWidth,
+                                    ),
+                                ],
+                                if (selected != null && !selectedHasGroup)
+                                  _AnimateRow(
+                                    node: selected,
+                                    gutterWidth: widget.gutterWidth,
+                                    onPick: (prop) =>
+                                        _animateSelected(selected, prop),
+                                  ),
+                              ],
+                            ),
                     ),
                   ],
                 ),
-              ),
-              Container(height: 1, color: colors.line),
-              Expanded(
-                child: groups.isEmpty && selected == null
-                    ? Center(
-                        child: Text(
-                          'Nothing animates yet — select a node to animate it',
-                          style: context.type.bodyMuted,
-                        ),
-                      )
-                    : ListView(
-                        children: [
-                          for (var g in groups) ...[
-                            _GroupRow(
-                              key: ValueKey('group:${g.group.name}'),
-                              lanes: g,
-                              editor: editor,
-                              playback: playback,
-                              total: total,
-                              gutterWidth: widget.gutterWidth,
-                              onAddKey: (prop) => _keyAtPlayhead(g.group, prop),
-                            ),
-                            for (var lane in g.lanes)
-                              _LaneRow(
-                                key: ValueKey(
-                                  'lane:${g.group.name}/${lane.prop}',
-                                ),
-                                lane: lane,
-                                editor: editor,
-                                playback: playback,
-                                total: total,
-                                gutterWidth: widget.gutterWidth,
-                              ),
-                          ],
-                          if (selected != null && !selectedHasGroup)
-                            _AnimateRow(
-                              node: selected,
-                              gutterWidth: widget.gutterWidth,
-                              onPick: (prop) =>
-                                  _animateSelected(selected, prop),
-                            ),
-                        ],
-                      ),
-              ),
-            ],
+              );
+            },
           );
         },
       ),
@@ -267,7 +371,7 @@ class _GroupRow extends StatefulWidget {
     required this.lanes,
     required this.editor,
     required this.playback,
-    required this.total,
+    required this.scale,
     required this.gutterWidth,
     required this.onAddKey,
   });
@@ -275,7 +379,7 @@ class _GroupRow extends StatefulWidget {
   final _GroupLanes lanes;
   final SceneEditor editor;
   final ScenePlayback playback;
-  final int total;
+  final TimeScale scale;
   final double gutterWidth;
   final ValueChanged<String> onAddKey;
 
@@ -293,14 +397,13 @@ class _GroupRowState extends State<_GroupRow> {
   SceneEditor get editor => widget.editor;
 
   void _down(Offset local, double width) {
-    var start = widget.lanes.at.inMilliseconds / widget.total * width;
-    var end =
-        (widget.lanes.at + group.duration).inMilliseconds /
-        widget.total *
-        width;
+    var start = widget.scale.xOf(widget.lanes.at.inMilliseconds);
+    var end = widget.scale.xOf(
+      (widget.lanes.at + group.duration).inMilliseconds,
+    );
     if (local.dx < start - 4 || local.dx > end + 4) {
       widget.playback.seek(
-        Duration(milliseconds: (local.dx / width * widget.total).round()),
+        Duration(milliseconds: widget.scale.msAt(local.dx).round()),
       );
       return;
     }
@@ -311,7 +414,7 @@ class _GroupRowState extends State<_GroupRow> {
 
   void _update(double dx, double width) {
     if (!_dragging) return;
-    _carried += dx * widget.total / math.max(1.0, width);
+    _carried += dx / widget.scale.pxPerMs;
     var whole = _carried.truncate();
     if (whole == 0) return;
     _carried -= whole;
@@ -440,19 +543,15 @@ class _GroupRowState extends State<_GroupRow> {
                       onHorizontalDragCancel: _end,
                       child: CustomPaint(
                         painter: _SpanPainter(
-                          start:
-                              widget.lanes.at.inMilliseconds /
-                              widget.total *
-                              width,
-                          end:
-                              (widget.lanes.at + group.duration)
-                                  .inMilliseconds /
-                              widget.total *
-                              width,
-                          playhead:
-                              widget.playback.position.inMilliseconds /
-                              widget.total *
-                              width,
+                          start: widget.scale.xOf(
+                            widget.lanes.at.inMilliseconds,
+                          ),
+                          end: widget.scale.xOf(
+                            (widget.lanes.at + group.duration).inMilliseconds,
+                          ),
+                          playhead: widget.scale.xOf(
+                            widget.playback.position.inMilliseconds,
+                          ),
                           fill: selected
                               ? colors.accentSoft2
                               : colors.accentSoft,
@@ -602,14 +701,14 @@ class _LaneRow extends StatelessWidget {
     required this.lane,
     required this.editor,
     required this.playback,
-    required this.total,
+    required this.scale,
     required this.gutterWidth,
   });
 
   final _Lane lane;
   final SceneEditor editor;
   final ScenePlayback playback;
-  final int total;
+  final TimeScale scale;
   final double gutterWidth;
 
   static const height = 26.0;
@@ -658,7 +757,7 @@ class _LaneRow extends StatelessWidget {
               lane: lane,
               editor: editor,
               playback: playback,
-              total: total,
+              scale: scale,
             ),
           ),
         ],
@@ -673,13 +772,13 @@ class _KeyStrip extends StatefulWidget {
     required this.lane,
     required this.editor,
     required this.playback,
-    required this.total,
+    required this.scale,
   });
 
   final _Lane lane;
   final SceneEditor editor;
   final ScenePlayback playback;
-  final int total;
+  final TimeScale scale;
 
   @override
   State<_KeyStrip> createState() => _KeyStripState();
@@ -702,7 +801,7 @@ class _KeyStripState extends State<_KeyStrip> {
   );
 
   double _x(MotionKey key, double width) =>
-      (lane.at + key.at).inMilliseconds / widget.total * width;
+      widget.scale.xOf((lane.at + key.at).inMilliseconds);
 
   MotionKey? _hit(Offset local, double width) {
     MotionKey? best;
@@ -722,7 +821,7 @@ class _KeyStripState extends State<_KeyStrip> {
     if (key == null) {
       editor.clearKeySelection();
       widget.playback.seek(
-        Duration(milliseconds: (local.dx / width * widget.total).round()),
+        Duration(milliseconds: widget.scale.msAt(local.dx).round()),
       );
       return;
     }
@@ -738,7 +837,7 @@ class _KeyStripState extends State<_KeyStrip> {
 
   void _update(double dx, double width) {
     if (!_dragging) return;
-    _carried += dx * widget.total / math.max(1.0, width);
+    _carried += dx / widget.scale.pxPerMs;
     var whole = _carried.truncate();
     if (whole == 0) return;
     _carried -= whole;
@@ -759,8 +858,7 @@ class _KeyStripState extends State<_KeyStrip> {
     var local = _doubleTapAt;
     if (local == null) return;
     var t =
-        Duration(milliseconds: (local.dx / width * widget.total).round()) -
-        lane.at;
+        Duration(milliseconds: widget.scale.msAt(local.dx).round()) - lane.at;
     editor.addKey(
       widget.playback.motionName,
       lane.group.name,
@@ -841,15 +939,13 @@ class _KeyStripState extends State<_KeyStrip> {
               selected: [
                 for (var k in lane.track.keys) editor.isKeySelected(_ref(k)),
               ],
-              spanStart: lane.at.inMilliseconds / widget.total * width,
-              spanEnd:
-                  (lane.at + lane.track.duration).inMilliseconds /
-                  widget.total *
-                  width,
-              playhead:
-                  widget.playback.position.inMilliseconds /
-                  widget.total *
-                  width,
+              spanStart: widget.scale.xOf(lane.at.inMilliseconds),
+              spanEnd: widget.scale.xOf(
+                (lane.at + lane.track.duration).inMilliseconds,
+              ),
+              playhead: widget.scale.xOf(
+                widget.playback.position.inMilliseconds,
+              ),
               line: colors.line,
               key: colors.ink2,
               accent: colors.accent,
@@ -936,12 +1032,17 @@ class _KeyPainter extends CustomPainter {
 }
 
 /// Ticks at a step that keeps about eight labels on screen whatever the
-/// length, and the playhead's head. Drag anywhere to scrub.
+/// zoom, and the playhead's head. Drag anywhere to scrub — past the end
+/// too, which is where the next key goes.
 class _Ruler extends StatelessWidget {
-  const _Ruler({required this.duration, required this.t, required this.onSeek});
+  const _Ruler({
+    required this.scale,
+    required this.playheadMs,
+    required this.onSeek,
+  });
 
-  final int duration;
-  final double t;
+  final TimeScale scale;
+  final int playheadMs;
   final ValueChanged<double> onSeek;
 
   static int step(int duration) {
@@ -965,11 +1066,13 @@ class _Ruler extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var every = step(duration);
     return LayoutBuilder(
       builder: (context, constraints) {
         var width = math.max(1.0, constraints.maxWidth);
-        void seek(Offset local) => onSeek((local.dx / width).clamp(0.0, 1.0));
+        var visibleMs = (width / scale.pxPerMs).round();
+        var every = step(visibleMs);
+        var first = (scale.offsetMs / every).ceil() * every;
+        void seek(Offset local) => onSeek(math.max(0, scale.msAt(local.dx)));
         return MouseRegion(
           cursor: SystemMouseCursors.resizeLeftRight,
           child: GestureDetector(
@@ -977,49 +1080,51 @@ class _Ruler extends StatelessWidget {
             onTapDown: (d) => seek(d.localPosition),
             onHorizontalDragDown: (d) => seek(d.localPosition),
             onHorizontalDragUpdate: (d) => seek(d.localPosition),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                for (var ms = 0; ms <= duration; ms += every)
-                  Positioned(
-                    left: ms / duration * width,
-                    top: 0,
-                    bottom: 0,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          width: 1,
-                          child: ColoredBox(color: context.colors.line),
-                        ),
-                        if (ms / duration < 0.92)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              left: FwSpacing.xs,
-                              top: FwSpacing.sm,
-                            ),
-                            child: Text(
-                              _label(ms),
-                              style: context.type.caption.copyWith(
-                                color: context.colors.mut2,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
+            child: ClipRect(
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  for (var ms = first; scale.xOf(ms) <= width; ms += every)
+                    Positioned(
+                      left: scale.xOf(ms),
+                      top: 0,
+                      bottom: 0,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            width: 1,
+                            child: ColoredBox(color: context.colors.line),
+                          ),
+                          if (scale.xOf(ms) < width - 40)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: FwSpacing.xs,
+                                top: FwSpacing.sm,
+                              ),
+                              child: Text(
+                                _label(ms),
+                                style: context.type.caption.copyWith(
+                                  color: context.colors.mut2,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
+                    ),
+                  Positioned(
+                    left: scale.xOf(playheadMs) - 4.5,
+                    top: 0,
+                    child: CustomPaint(
+                      size: const Size(9, 6),
+                      painter: _PlayheadHead(context.colors.red),
                     ),
                   ),
-                Positioned(
-                  left: t.clamp(0.0, 1.0) * width - 4.5,
-                  top: 0,
-                  child: CustomPaint(
-                    size: const Size(9, 6),
-                    painter: _PlayheadHead(context.colors.red),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
