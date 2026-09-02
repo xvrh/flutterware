@@ -1,5 +1,5 @@
-// Zooming the canvas: the guest renders more pixels rather than bigger ones,
-// and a trackpad gesture is the canvas's, never a node's.
+// Zooming the canvas: a trackpad gesture is the canvas's, never a node's,
+// and a host drawing a pane layer is told where the artboard is.
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -8,54 +8,18 @@ import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/measure.dart';
 import 'package:flutterware_app/src/scene/ui/canvas.dart';
-import 'package:flutterware_app/src/scene/zoom.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 void main() {
-  group('guest ratio', () {
-    test('below life-size the host ratio; above, more texels per point', () {
-      expect(
-        sceneGuestRatio(width: 1024, height: 500, hostRatio: 2, zoom: 0.5),
-        2,
-      );
-      expect(
-        sceneGuestRatio(width: 1024, height: 500, hostRatio: 2, zoom: 3),
-        6,
-      );
-    });
-
-    test('snapped so the texture is a whole number of texels wide', () {
-      var ratio = sceneGuestRatio(
-        width: 1024,
-        height: 500,
-        hostRatio: 2,
-        zoom: 1.37,
-      );
-      expect((1024 * ratio) % 1, closeTo(0, 1e-9));
-      expect(ratio, closeTo(2.74, 0.002));
-    });
-
-    test('capped by the pixel budget, never refused', () {
-      var ratio = sceneGuestRatio(
-        width: 1024,
-        height: 500,
-        hostRatio: 2,
-        zoom: 40,
-      );
-      expect(1024 * ratio * 500 * ratio, lessThanOrEqualTo(64e6 * 1.001));
-      expect(ratio, greaterThan(2));
-    });
-  });
-
   group('on the canvas', () {
     late SceneEditor editor;
-    var zooms = <double>[];
+    var views = <Matrix4>[];
 
     Future<void> pump(WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      zooms = [];
+      views = [];
       editor = SceneEditor(coffeeBannerDraft());
       await tester.pumpWidget(
         MaterialApp(
@@ -63,7 +27,10 @@ void main() {
           home: Material(
             child: SceneCanvas(
               editor,
-              onZoom: zooms.add,
+              pane: (context, view, pane) {
+                views.add(view);
+                return const SizedBox();
+              },
               content: SceneView(
                 editor.doc,
                 onMeasured: (r) => applyMeasuredRects(editor.doc, r),
@@ -107,9 +74,12 @@ void main() {
       },
     );
 
-    testWidgets('a pinch zooms, and the zoom is reported', (tester) async {
+    testWidgets('a pinch zooms, and the pane layer is told the view', (
+      tester,
+    ) async {
       await pump(tester);
       var view = tester.getRect(find.byType(SceneView));
+      var before = views.last;
       var gesture = await tester.createGesture(
         kind: PointerDeviceKind.trackpad,
       );
@@ -119,11 +89,23 @@ void main() {
       await tester.pump();
       await gesture.panZoomEnd();
       await tester.pump();
-      expect(zooms, isNotEmpty);
-      expect(zooms.last, greaterThan(1.5));
       expect(
         tester.getRect(find.byType(SceneView)).width,
         greaterThan(view.width * 1.5),
+      );
+      var after = views.last;
+      expect(after.storage[0], greaterThan(before.storage[0] * 1.5));
+      // The matrix maps the artboard's origin onto the pane where the
+      // SceneView (inside the viewer, at the same place) is drawn.
+      var canvas = tester.getRect(find.byType(SceneCanvas));
+      var origin = MatrixUtils.transformPoint(after, Offset.zero);
+      var drawn =
+          tester.getRect(find.byType(SceneView)).topLeft - canvas.topLeft;
+      expect(origin.dx, closeTo(drawn.dx, 1));
+      expect(
+        origin.dy,
+        closeTo(drawn.dy - 32, 1),
+        reason: 'the toolbar sits above the pane',
       );
     });
 

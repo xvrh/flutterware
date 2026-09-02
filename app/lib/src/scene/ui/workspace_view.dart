@@ -33,19 +33,19 @@ class SceneWorkspaceView extends StatefulWidget {
   const SceneWorkspaceView(
     this.editor, {
     super.key,
-    required this.content,
+    this.content,
     required this.playbackFor,
     this.sceneClassName,
     this.status,
     this.onEnterNested,
     this.canvasTrailing = const [],
-    this.onZoom,
+    this.pane,
   });
 
   final SceneEditor editor;
 
   /// The renderer, sized to the artboard — see [SceneCanvas.content].
-  final Widget content;
+  final Widget? content;
 
   /// The playback for one of the editor's motions, by name — made once and
   /// kept by the host, because a playback owns a ticker.
@@ -62,8 +62,8 @@ class SceneWorkspaceView extends StatefulWidget {
   /// Controls the host wants on the canvas bar's right — a guest reload.
   final List<Widget> canvasTrailing;
 
-  /// The canvas scale as it changes — see [SceneCanvas.onZoom].
-  final ValueChanged<double>? onZoom;
+  /// A pane-sized picture under the artboard — see [SceneCanvas.pane].
+  final Widget Function(BuildContext context, Matrix4 view, Size pane)? pane;
 
   static const treeWidth = 230.0;
   static const inspectorWidth = 290.0;
@@ -115,7 +115,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                               status: widget.status,
                               onEnterNested: widget.onEnterNested,
                               trailing: widget.canvasTrailing,
-                              onZoom: widget.onZoom,
+                              pane: widget.pane,
                             ),
                           ),
                           Container(height: 1, color: line),

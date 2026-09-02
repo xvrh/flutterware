@@ -20,7 +20,6 @@ import '../../scene/scene_file.dart';
 import '../../scene/playback.dart';
 import '../../scene/ui/workspace_view.dart';
 import '../../scene/workspace.dart';
-import '../../scene/zoom.dart';
 import '../../ui/action_button.dart';
 import '../../ui/count_badge.dart';
 import '../../ui/design/design.dart';
@@ -143,7 +142,7 @@ class _ScenePanelState extends State<_ScenePanel>
     // The new engine started at the session's default size; forget the
     // old one's, or the artboard draws at half scale in a texture nobody
     // resized.
-    _rendered = null;
+    _paneRendered = null;
   }
 
   void _retrack() {
@@ -257,7 +256,7 @@ class _ScenePanelState extends State<_ScenePanel>
     if (_guest?.editor == workspace.editor) return;
     _guest?.dispose();
     _guest = SceneGuest(widget.plugin.sessionFor(package), workspace.editor);
-    _rendered = null;
+    _paneRendered = null;
   }
 
   /// Writes every dirty file the workspace holds — the one on screen and any
@@ -289,7 +288,6 @@ class _ScenePanelState extends State<_ScenePanel>
   @override
   void dispose() {
     _resizeSettle?.cancel();
-    _zoom.dispose();
     _disposePlaybacks();
     _guest?.dispose();
     super.dispose();
@@ -429,13 +427,12 @@ class _ScenePanelState extends State<_ScenePanel>
             editor,
             playbackFor: (motion) => _playbackFor(workspace.active, motion),
             sceneClassName: workspace.active.className,
-            content: _guestCanvas(),
             status: _guest?.status,
             onEnterNested: (node) => setState(() {
               workspace.enter(node);
               _syncGuest();
             }),
-            onZoom: (zoom) => _zoom.value = zoom,
+            pane: _guestPane,
             canvasTrailing: [
               // The guest is another process on the catalog daemon's
               // kernel: a change to the app's widgets, or to SceneView
@@ -471,74 +468,70 @@ class _ScenePanelState extends State<_ScenePanel>
 
   /// The artboard's picture is the guest's texture, sized to the artboard so
   /// editor coordinates and guest coordinates are one space.
-  /// The canvas scale, as the canvas reports it. The guest renders at this
-  /// times the host's ratio, so zooming in draws more pixels, not bigger
-  /// ones — the previews stage's answer, measured there to be the only one
-  /// that is sharp (`filterQuality` is a dead knob on an external texture).
-  final _zoom = ValueNotifier(1.0);
-
-  /// The trailing edge of a zoom: a pinch is a stream of scales, and a guest
-  /// resized on every one of them spends its frames on surfaces it never
-  /// shows.
+  /// The trailing edge of a pane resize: a window being dragged is a
+  /// stream of sizes, and a guest resized on every one of them spends its
+  /// frames on surfaces it never shows.
   Timer? _resizeSettle;
 
-  Widget _guestCanvas() {
-    var scene = _workspace!.active.scene;
-    var width = scene.root.width ?? 1024;
-    var height = scene.root.height ?? 500;
-    return SizedBox(
-      width: width,
-      height: height,
-      child: AnimatedBuilder(
-        animation: Listenable.merge([
-          widget.plugin.sessionFor(_package!),
-          _zoom,
-        ]),
-        builder: (context, _) {
-          var session = widget.plugin.sessionFor(_package!);
-          var engine = session.engine;
-          if (engine == null ||
-              engine.phase != EmbeddedEnginePhase.running ||
-              engine.textureId == null) {
-            return Container(
-              color: const Color(0xFF26282C),
-              alignment: Alignment.center,
-              child: Text(
-                session.phase == CatalogSessionPhase.error
-                    ? 'session error'
-                    : 'booting the guest… (${session.busyWith ?? 'starting'})',
-                style: const TextStyle(color: Colors.white54),
-              ),
-            );
-          }
-          var ratio = sceneGuestRatio(
-            width: width,
-            height: height,
-            hostRatio: MediaQuery.of(context).devicePixelRatio,
-            zoom: _zoom.value,
+  /// What the guest was last asked to render: the pane, in logical pixels.
+  Size? _paneRendered;
+
+  /// The guest's texture, the size of the pane, drawn under the artboard.
+  ///
+  /// The guest renders the artboard through [view] itself — a zoomed
+  /// artboard is rasterised at the zoom, so the picture is crisp at any
+  /// magnification and never costs more than the pane's pixels. The view
+  /// reaches it after the gesture settles; until the render lands, the
+  /// texture is drawn through the difference between the view it shows and
+  /// the view the canvas is at, so panning follows the pointer and the
+  /// picture snaps crisp at rest.
+  Widget _guestPane(BuildContext context, Matrix4 view, Size pane) {
+    var session = widget.plugin.sessionFor(_package!);
+    var guest = _guest;
+    return AnimatedBuilder(
+      animation: Listenable.merge([session, ?guest?.rendered]),
+      builder: (context, _) {
+        var engine = session.engine;
+        if (engine == null ||
+            engine.phase != EmbeddedEnginePhase.running ||
+            engine.textureId == null) {
+          return Center(
+            child: Text(
+              session.phase == CatalogSessionPhase.error
+                  ? 'session error'
+                  : 'booting the guest… (${session.busyWith ?? 'starting'})',
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            ),
           );
-          var wanted = (width, height, ratio);
-          if (_rendered != wanted) {
-            _rendered = wanted;
-            _resizeSettle?.cancel();
-            _resizeSettle = Timer(const Duration(milliseconds: 120), () {
-              _resizeSettle = null;
-              if (!mounted || _rendered != wanted) return;
-              engine.resize(
-                (width * ratio).round(),
-                (height * ratio).round(),
-                ratio,
-              );
-            });
-          }
-          return GuestTexture(textureId: engine.textureId!);
-        },
-      ),
+        }
+        var dpr = MediaQuery.of(context).devicePixelRatio;
+        if (_paneRendered != pane) {
+          _paneRendered = pane;
+          _resizeSettle?.cancel();
+          _resizeSettle = Timer(const Duration(milliseconds: 120), () {
+            _resizeSettle = null;
+            if (!mounted || _paneRendered != pane) return;
+            engine.resize(
+              (pane.width * dpr).round(),
+              (pane.height * dpr).round(),
+              dpr,
+            );
+          });
+        }
+        guest?.setView(view);
+        var shown = guest?.rendered.value ?? Matrix4.identity();
+        var delta = view.clone()..multiply(Matrix4.inverted(shown));
+        return Transform(
+          transform: delta,
+          child: SizedBox(
+            width: pane.width,
+            height: pane.height,
+            child: GuestTexture(textureId: engine.textureId!),
+          ),
+        );
+      },
     );
   }
-
-  /// What the guest was last asked to render: artboard size and ratio.
-  (double, double, double)? _rendered;
 }
 
 /// Back, the breadcrumb, Save, and what the panel last did.

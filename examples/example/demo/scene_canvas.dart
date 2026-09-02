@@ -8,7 +8,7 @@ import 'scene_host.dart';
 /// can boot it — the composited-canvas spike's guest half. Bare: the window
 /// is the artboard, and the mounting panel owns the pipe.
 @Preview(name: 'Scene canvas host')
-Widget sceneCanvasHost() => const SceneHostApp(bare: true);
+Widget sceneCanvasHost() => const SceneHostApp();
 
 /// The same scene, played from a file instead of a pipe — what an export
 /// walks. The path arrives as a knob, so one entry serves every scene this

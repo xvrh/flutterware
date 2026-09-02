@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:flutterware/scene_authoring.dart';
 
 import '../previews/catalog_session.dart';
@@ -47,6 +48,24 @@ class SceneGuest {
   /// What the toolbar shows: the round trip, or what went wrong.
   final status = ValueNotifier('guest: booting…');
 
+  /// The view the host was last told to draw through — artboard to pane,
+  /// as `[scale, tx, ty]`. What the texture on screen shows; a canvas that
+  /// has moved since draws the texture through the difference until the
+  /// next push lands.
+  final rendered = ValueNotifier(Matrix4.identity());
+
+  var _view = Matrix4.identity();
+  Timer? _viewSettle;
+
+  /// The canvas moved: tell the host after the gesture settles, so a pinch is
+  /// one render rather than sixty.
+  void setView(Matrix4 artboardToPane) {
+    if (_view == artboardToPane) return;
+    _view = artboardToPane.clone();
+    _viewSettle?.cancel();
+    _viewSettle = Timer(const Duration(milliseconds: 80), _push);
+  }
+
   var _inflight = false;
   var _dirty = false;
   var _everApplied = false;
@@ -74,6 +93,13 @@ class SceneGuest {
     for (var entry in session.entries) {
       if (entry.symbol == sceneHostEntrySymbol) {
         if (session.wantedEntryId != entry.id) session.wantedEntryId = entry.id;
+        // A host that does not compile is a guest showing its last good
+        // build, silently — the status line is where that has to be said.
+        if (session.compileErrorFor(entry) case var error?) {
+          status.value = 'guest: the host does not compile — $error';
+        } else if (session.lastSwitch?.error case var error?) {
+          status.value = 'guest: $error';
+        }
         return;
       }
     }
@@ -93,7 +119,9 @@ class SceneGuest {
       return;
     }
     _inflight = true;
+    _viewSettle?.cancel();
     var clock = Stopwatch()..start();
+    var view = _view.clone();
     unawaited(
       session
           .callGuestExtension(
@@ -102,17 +130,28 @@ class SceneGuest {
               'scene': jsonEncode(
                 editor.doc.toWire(selected: editor.selectionNames),
               ),
+              'view': jsonEncode([
+                view.storage[0],
+                view.storage[12],
+                view.storage[13],
+              ]),
             },
           )
           .then((reply) {
             var rtt = clock.elapsedMicroseconds / 1000;
             if (reply != null && reply['error'] == null) {
               _everApplied = true;
+              rendered.value = view;
               var frameMs = (reply['frameMs'] as num?)?.toDouble();
               _applyRects((reply['rects'] as Map?)?.cast<String, dynamic>());
+              // A host that answers without a window predates the view: it
+              // draws the artboard at its origin whatever the canvas does.
+              var stale = reply['window'] == null;
               status.value =
                   'guest ✓ ${rtt.toStringAsFixed(1)}ms rtt'
-                  ' · ${frameMs?.toStringAsFixed(1)}ms frame';
+                  ' · ${frameMs?.toStringAsFixed(1)}ms frame'
+                  ' · ×${view.storage[0].toStringAsFixed(2)}'
+                  '${stale ? ' · host predates the view' : ''}';
             } else if (reply != null) {
               status.value = 'guest: ${reply['error']}';
             }
@@ -154,6 +193,8 @@ class SceneGuest {
   }
 
   void dispose() {
+    _viewSettle?.cancel();
+    rendered.dispose();
     _retry?.cancel();
     editor.doc.removeListener(_push);
     editor.removeListener(_push);

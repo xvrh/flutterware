@@ -23,25 +23,27 @@ class SceneCanvas extends StatefulWidget {
   const SceneCanvas(
     this.editor, {
     super.key,
-    required this.content,
+    this.content,
+    this.pane,
     this.status,
     this.trailing = const [],
     this.onEnterNested,
-    this.onZoom,
   });
 
   final SceneEditor editor;
 
-  /// The canvas scale, whenever it changes — what a host renders the guest
-  /// at, so a magnified artboard is drawn with more pixels rather than
-  /// bigger ones.
-  final ValueChanged<double>? onZoom;
-
   /// Double-clicking a nested scene's box drills into it.
   final ValueChanged<SceneNode>? onEnterNested;
 
-  /// The picture, sized to the artboard.
-  final Widget content;
+  /// The picture, sized to the artboard and zoomed with it — a `SceneView`
+  /// rendered in this process. Magnified, it magnifies.
+  final Widget? content;
+
+  /// The picture as a layer the size of the pane, under the artboard, given
+  /// the artboard-to-pane matrix and the pane's size — for a guest that
+  /// renders through the view itself, so a magnified artboard is rasterised
+  /// at its magnification. Whichever of the two the host has; both is odd.
+  final Widget Function(BuildContext context, Matrix4 view, Size pane)? pane;
 
   /// What the renderer is doing, for the toolbar — the guest booting, a
   /// frame's cost.
@@ -69,24 +71,13 @@ class _SceneCanvasState extends State<SceneCanvas> {
   double get _artboardWidth => doc.root.width ?? 1024;
   double get _artboardHeight => doc.root.height ?? 500;
 
-  @override
-  void initState() {
-    super.initState();
-    _transform.addListener(_onTransform);
-  }
-
-  double _reportedZoom = 1;
-
-  void _onTransform() {
-    var zoom = _transform.value.getMaxScaleOnAxis();
-    if (zoom == _reportedZoom) return;
-    _reportedZoom = zoom;
-    widget.onZoom?.call(zoom);
-  }
+  /// Artboard to pane: the viewer's transform, with the artboard's margin
+  /// inside the viewer's child folded in.
+  Matrix4 get _artboardToPane =>
+      _transform.value.clone()..translateByDouble(_margin, _margin, 0, 1);
 
   @override
   void dispose() {
-    _transform.removeListener(_onTransform);
     _transform.dispose();
     super.dispose();
   }
@@ -112,16 +103,29 @@ class _SceneCanvasState extends State<SceneCanvas> {
                 }
                 // The studio's own pan-and-zoom surface: a two-finger scroll
                 // pans, a pinch zooms, ⌘-scroll zooms the browsers' way.
+                // A pane layer, when the host draws one, sits under the
+                // viewer and is told where the artboard is.
                 return ClipRect(
-                  child: ZoomableCanvas(
-                    transformationController: _transform,
-                    boundaryMargin: const EdgeInsets.all(3000),
-                    minScale: 0.1,
-                    maxScale: 8,
-                    child: Padding(
-                      padding: const EdgeInsets.all(_margin),
-                      child: _artboard(),
-                    ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (widget.pane case var pane?)
+                        AnimatedBuilder(
+                          animation: _transform,
+                          builder: (context, _) =>
+                              pane(context, _artboardToPane, _viewport),
+                        ),
+                      ZoomableCanvas(
+                        transformationController: _transform,
+                        boundaryMargin: const EdgeInsets.all(3000),
+                        minScale: 0.05,
+                        maxScale: 64,
+                        child: Padding(
+                          padding: const EdgeInsets.all(_margin),
+                          child: _artboard(),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               },
@@ -189,7 +193,7 @@ class _SceneCanvasState extends State<SceneCanvas> {
           AnimatedBuilder(
             animation: _transform,
             builder: (context, _) => Text(
-              '${(_transform.value.getMaxScaleOnAxis() * 100).round()}%',
+              '${(_transform.value.storage[0] * 100).round()}%',
               style: context.type.mono.copyWith(color: colors.mut2),
             ),
           ),
@@ -229,7 +233,7 @@ class _SceneCanvasState extends State<SceneCanvas> {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            widget.content,
+            ?widget.content,
             AnimatedBuilder(
               animation: geometry,
               builder: (context, _) =>
