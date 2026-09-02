@@ -8,6 +8,7 @@ import 'package:flutterware/scene_authoring.dart';
 import '../../ui/design/design.dart';
 import '../../ui/stage.dart';
 import '../../ui/tappable.dart';
+import '../../ui/zoomable_canvas.dart';
 import '../editor.dart';
 import 'modifiers.dart';
 
@@ -26,9 +27,15 @@ class SceneCanvas extends StatefulWidget {
     this.status,
     this.trailing = const [],
     this.onEnterNested,
+    this.onZoom,
   });
 
   final SceneEditor editor;
+
+  /// The canvas scale, whenever it changes — what a host renders the guest
+  /// at, so a magnified artboard is drawn with more pixels rather than
+  /// bigger ones.
+  final ValueChanged<double>? onZoom;
 
   /// Double-clicking a nested scene's box drills into it.
   final ValueChanged<SceneNode>? onEnterNested;
@@ -63,7 +70,23 @@ class _SceneCanvasState extends State<SceneCanvas> {
   double get _artboardHeight => doc.root.height ?? 500;
 
   @override
+  void initState() {
+    super.initState();
+    _transform.addListener(_onTransform);
+  }
+
+  double _reportedZoom = 1;
+
+  void _onTransform() {
+    var zoom = _transform.value.getMaxScaleOnAxis();
+    if (zoom == _reportedZoom) return;
+    _reportedZoom = zoom;
+    widget.onZoom?.call(zoom);
+  }
+
+  @override
   void dispose() {
+    _transform.removeListener(_onTransform);
     _transform.dispose();
     super.dispose();
   }
@@ -87,13 +110,14 @@ class _SceneCanvasState extends State<SceneCanvas> {
                     if (mounted) _fit();
                   });
                 }
+                // The studio's own pan-and-zoom surface: a two-finger scroll
+                // pans, a pinch zooms, ⌘-scroll zooms the browsers' way.
                 return ClipRect(
-                  child: InteractiveViewer(
+                  child: ZoomableCanvas(
                     transformationController: _transform,
-                    constrained: false,
                     boundaryMargin: const EdgeInsets.all(3000),
                     minScale: 0.1,
-                    maxScale: 4,
+                    maxScale: 8,
                     child: Padding(
                       padding: const EdgeInsets.all(_margin),
                       child: _artboard(),
@@ -291,6 +315,16 @@ class _Tool extends StatelessWidget {
   }
 }
 
+/// The devices whose press is an edit. A trackpad's two-finger gesture is a
+/// pan or a pinch of the canvas and must reach the viewer under these
+/// widgets untouched; a recognizer that accepted it turned every scroll over
+/// a node into a drag of that node, and over its handle into a resize.
+const _editingDevices = {
+  PointerDeviceKind.mouse,
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+};
+
 /// Everything the mouse can do to the artboard, as transparent widgets over
 /// the renderer: a marquee on the empty ground, a target per addressable
 /// node, and the selection painted on top.
@@ -359,6 +393,7 @@ class _HitLayerState extends State<_HitLayer> {
               cursor: _drawing ? SystemMouseCursors.precise : MouseCursor.defer,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                supportedDevices: _editingDevices,
                 // A drawn box starts where the mouse went down, not where the
                 // recognizer made up its mind: a quick drag would otherwise
                 // offset every frame by the slop.
@@ -476,6 +511,7 @@ class _NodeTargetState extends State<_NodeTarget> {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        supportedDevices: _editingDevices,
         onTapDown: (_) => editor.select(node, toggle: toggleModifier),
         onDoubleTap: node is SceneRefNode && widget.onEnterNested != null
             ? () => widget.onEnterNested!(node)
@@ -527,6 +563,7 @@ class _ResizeHandleState extends State<_ResizeHandle> {
     return MouseRegion(
       cursor: SystemMouseCursors.resizeDownRight,
       child: GestureDetector(
+        supportedDevices: _editingDevices,
         onPanDown: (d) => _downLocal = d.localPosition,
         onPanStart: (d) => _apply(d.localPosition - _downLocal),
         onPanUpdate: (d) => _apply(d.delta),

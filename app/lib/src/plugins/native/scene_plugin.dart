@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -19,6 +20,7 @@ import '../../scene/scene_file.dart';
 import '../../scene/playback.dart';
 import '../../scene/ui/workspace_view.dart';
 import '../../scene/workspace.dart';
+import '../../scene/zoom.dart';
 import '../../ui/action_button.dart';
 import '../../ui/count_badge.dart';
 import '../../ui/design/design.dart';
@@ -286,6 +288,8 @@ class _ScenePanelState extends State<_ScenePanel>
 
   @override
   void dispose() {
+    _resizeSettle?.cancel();
+    _zoom.dispose();
     _disposePlaybacks();
     _guest?.dispose();
     super.dispose();
@@ -431,6 +435,7 @@ class _ScenePanelState extends State<_ScenePanel>
               workspace.enter(node);
               _syncGuest();
             }),
+            onZoom: (zoom) => _zoom.value = zoom,
             canvasTrailing: [
               // The guest is another process on the catalog daemon's
               // kernel: a change to the app's widgets, or to SceneView
@@ -466,6 +471,17 @@ class _ScenePanelState extends State<_ScenePanel>
 
   /// The artboard's picture is the guest's texture, sized to the artboard so
   /// editor coordinates and guest coordinates are one space.
+  /// The canvas scale, as the canvas reports it. The guest renders at this
+  /// times the host's ratio, so zooming in draws more pixels, not bigger
+  /// ones — the previews stage's answer, measured there to be the only one
+  /// that is sharp (`filterQuality` is a dead knob on an external texture).
+  final _zoom = ValueNotifier(1.0);
+
+  /// The trailing edge of a zoom: a pinch is a stream of scales, and a guest
+  /// resized on every one of them spends its frames on surfaces it never
+  /// shows.
+  Timer? _resizeSettle;
+
   Widget _guestCanvas() {
     var scene = _workspace!.active.scene;
     var width = scene.root.width ?? 1024;
@@ -474,7 +490,10 @@ class _ScenePanelState extends State<_ScenePanel>
       width: width,
       height: height,
       child: AnimatedBuilder(
-        animation: widget.plugin.sessionFor(_package!),
+        animation: Listenable.merge([
+          widget.plugin.sessionFor(_package!),
+          _zoom,
+        ]),
         builder: (context, _) {
           var session = widget.plugin.sessionFor(_package!);
           var engine = session.engine;
@@ -492,11 +511,24 @@ class _ScenePanelState extends State<_ScenePanel>
               ),
             );
           }
-          var dpr = MediaQuery.of(context).devicePixelRatio;
-          if (_resized != Size(width, height)) {
-            _resized = Size(width, height);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              engine.resize((width * dpr).round(), (height * dpr).round(), dpr);
+          var ratio = sceneGuestRatio(
+            width: width,
+            height: height,
+            hostRatio: MediaQuery.of(context).devicePixelRatio,
+            zoom: _zoom.value,
+          );
+          var wanted = (width, height, ratio);
+          if (_resized != wanted) {
+            _resized = wanted;
+            _resizeSettle?.cancel();
+            _resizeSettle = Timer(const Duration(milliseconds: 120), () {
+              _resizeSettle = null;
+              if (!mounted || _resized != wanted) return;
+              engine.resize(
+                (width * ratio).round(),
+                (height * ratio).round(),
+                ratio,
+              );
             });
           }
           return GuestTexture(textureId: engine.textureId!);
@@ -505,7 +537,8 @@ class _ScenePanelState extends State<_ScenePanel>
     );
   }
 
-  Size? _resized;
+  /// What the guest was last asked to render: artboard size and ratio.
+  (double, double, double)? _resized;
 }
 
 /// Back, the breadcrumb, Save, and what the panel last did.
