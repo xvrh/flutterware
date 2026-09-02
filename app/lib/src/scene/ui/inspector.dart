@@ -305,8 +305,10 @@ class SceneInspector extends StatelessWidget {
           for (var c in f.children) {
             var rect = c.measured;
             if (rect != null) {
-              c.x = rect.left - (origin?.left ?? 0);
-              c.y = rect.top - (origin?.top ?? 0);
+              // A measured position carries the layout's float noise;
+              // what gets authored is a half-pixel, not 32.180908203125.
+              c.x = _half(rect.left - (origin?.left ?? 0));
+              c.y = _half(rect.top - (origin?.top ?? 0));
             }
           }
         } else {
@@ -484,6 +486,8 @@ class SceneInspector extends StatelessWidget {
       ],
     );
   }
+
+  static double _half(double v) => (v * 2).round() / 2;
 
   static String _propLabel(String prop) =>
       prop.startsWith('args.') ? prop.substring(5) : prop;
