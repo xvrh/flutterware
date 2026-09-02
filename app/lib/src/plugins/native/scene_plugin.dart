@@ -143,7 +143,7 @@ class _ScenePanelState extends State<_ScenePanel>
     // The new engine started at the session's default size; forget the
     // old one's, or the artboard draws at half scale in a texture nobody
     // resized.
-    _resized = null;
+    _rendered = null;
   }
 
   void _retrack() {
@@ -257,7 +257,7 @@ class _ScenePanelState extends State<_ScenePanel>
     if (_guest?.editor == workspace.editor) return;
     _guest?.dispose();
     _guest = SceneGuest(widget.plugin.sessionFor(package), workspace.editor);
-    _resized = null;
+    _rendered = null;
   }
 
   /// Writes every dirty file the workspace holds — the one on screen and any
@@ -518,12 +518,12 @@ class _ScenePanelState extends State<_ScenePanel>
             zoom: _zoom.value,
           );
           var wanted = (width, height, ratio);
-          if (_resized != wanted) {
-            _resized = wanted;
+          if (_rendered != wanted) {
+            _rendered = wanted;
             _resizeSettle?.cancel();
             _resizeSettle = Timer(const Duration(milliseconds: 120), () {
               _resizeSettle = null;
-              if (!mounted || _resized != wanted) return;
+              if (!mounted || _rendered != wanted) return;
               engine.resize(
                 (width * ratio).round(),
                 (height * ratio).round(),
@@ -538,7 +538,7 @@ class _ScenePanelState extends State<_ScenePanel>
   }
 
   /// What the guest was last asked to render: artboard size and ratio.
-  (double, double, double)? _resized;
+  (double, double, double)? _rendered;
 }
 
 /// Back, the breadcrumb, Save, and what the panel last did.
