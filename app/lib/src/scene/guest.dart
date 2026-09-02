@@ -73,6 +73,11 @@ class SceneGuest {
         'named $sceneHostEntrySymbol';
   }
 
+  /// Sends the document now — after a guest reload, which remounts the host
+  /// with no scene, and otherwise only when the document or the selection
+  /// changes.
+  void push() => _push();
+
   void _push() {
     if (_inflight) {
       _dirty = true;

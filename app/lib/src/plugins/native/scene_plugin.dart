@@ -396,8 +396,12 @@ class _ScenePanelState extends State<_ScenePanel>
               Tooltip(
                 message: 'Hot reload the guest',
                 child: Tappable(
-                  onTap: () =>
-                      widget.plugin.sessionFor(_package!).reload().ignore(),
+                  onTap: () async {
+                    await widget.plugin.sessionFor(_package!).reload();
+                    // The reload remounts the host with no scene in hand;
+                    // nothing else would push until the next edit.
+                    _guest?.push();
+                  },
                   borderRadius: BorderRadius.circular(
                     context.radii.radiusSmall,
                   ),
