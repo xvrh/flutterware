@@ -14,6 +14,7 @@ import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../playback.dart';
 import 'modifiers.dart';
+import 'shortcuts.dart';
 import 'transport.dart';
 
 /// The keyframe editor: one lane per animated track, keys as diamonds, the
@@ -1046,7 +1047,8 @@ class _TimelineShortcuts extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => CallbackShortcuts(
+  Widget build(BuildContext context) => SceneShortcutScope(
+    focusNode: focusNode,
     bindings: {
       const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): editor.undo,
       const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
@@ -1071,10 +1073,6 @@ class _TimelineShortcuts extends StatelessWidget {
             mergeKey: 'keynudge',
           ),
     },
-    child: Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => focusNode.requestFocus(),
-      child: Focus(focusNode: focusNode, child: child),
-    ),
+    child: child,
   );
 }

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/fixtures.dart';
+import 'package:flutterware_app/src/scene/ui/shortcuts.dart';
 import 'package:flutterware_app/src/scene/ui/tree_panel.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -104,14 +105,50 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       editor = SceneEditor(coffeeBannerDraft());
+      // Inside the editing scope, as it is in the workspace: the scope's
+      // own letters and Backspace must not reach the editor while a field
+      // has the keyboard.
       await tester.pumpWidget(
         MaterialApp(
           theme: appTheme,
-          home: Material(child: SceneTreePanel(editor)),
+          home: Material(
+            child: EditorShortcuts(editor, child: SceneTreePanel(editor)),
+          ),
         ),
       );
       await tester.pump();
     }
+
+    testWidgets("the rename field keeps the scope's letters and Backspace", (
+      tester,
+    ) async {
+      await pump(tester);
+      var nodes = editor.doc.walk().length;
+      await tester.tap(find.text('glow'));
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.tap(find.text('glow'));
+      await tester.pump();
+      expect(find.byType(TextField), findsOneWidget);
+      // Typed through the platform, like a real keyboard: the letters t and
+      // s are also tool chords, and Backspace is delete-node.
+      await tester.enterText(find.byType(TextField), 'toasts');
+      await tester.pump();
+      for (var key in [
+        LogicalKeyboardKey.keyT,
+        LogicalKeyboardKey.keyS,
+        LogicalKeyboardKey.backspace,
+      ]) {
+        await tester.sendKeyEvent(key);
+        await tester.pump();
+      }
+      expect(editor.tool, SceneTool.select, reason: 'no tool switched');
+      expect(editor.doc.walk().length, nodes, reason: 'nothing deleted');
+      expect(find.byType(TextField), findsOneWidget, reason: 'still editing');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      // The Backspace reached the field, which is the whole point.
+      expect(editor.doc.nodeNamed('toast'), isNotNull);
+    });
 
     testWidgets('double-click renames in place; Escape backs out', (
       tester,
