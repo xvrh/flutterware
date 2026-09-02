@@ -15,10 +15,10 @@ void main() {
   late SceneEditor editor;
   late MotionDocument motion;
 
-  /// The strip is 800 wide over a 1800ms motion, so 1ms is 4/9 px.
+  /// The strip is 800 wide over the 1800ms motion's 2500ms span.
   const stripWidth = 800.0;
   const gutter = 240.0;
-  const totalMs = 1800;
+  const totalMs = 2500;
 
   double xOf(Duration at) =>
       gutter + 1 + at.inMilliseconds / totalMs * stripWidth;
@@ -118,6 +118,13 @@ void main() {
     // The lanes carry a double-tap recognizer, which arms a timer after any
     // tap; a test that ends with it pending is refused by the framework.
     await tester.pump(kDoubleTapTimeout);
+  });
+
+  test('the strip shows at least a second, with room past the end', () {
+    expect(spanFor(0), 1000);
+    expect(spanFor(1800), 2500, reason: '1.25× rounded up to the 500ms step');
+    expect(spanFor(60), 1000);
+    expect(spanFor(10000), 14000, reason: "12500 up to the 2s step");
   });
 
   testWidgets('a double-click on a lane adds a key there, selected', (

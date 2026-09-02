@@ -26,6 +26,15 @@ import 'transport.dart';
 /// goes through `nudgeKeys` with a merge key, so it is one undo entry
 /// however far it went, and the sort door keeps the track ordered while it
 /// moves.
+/// How much time the strip shows for a motion [durationMs] long: never less
+/// than a second, and always room past the end, rounded up to the ruler's
+/// step — a new motion has no length yet, and a key has to go somewhere.
+int spanFor(int durationMs) {
+  var wanted = math.max(1000, (durationMs * 1.25).ceil());
+  var step = _Ruler.step(wanted);
+  return ((wanted + step - 1) ~/ step) * step;
+}
+
 class SceneTimeline extends StatefulWidget {
   const SceneTimeline(
     this.editor,
@@ -123,7 +132,7 @@ class _SceneTimelineState extends State<SceneTimeline> {
         ]),
         builder: (context, _) {
           var groups = _groups();
-          var total = math.max(1, playback.duration.inMilliseconds);
+          var total = spanFor(playback.duration.inMilliseconds);
           var selected = editor.primary;
           var selectedName = selected?.name;
           var selectedHasGroup = groups.any(
@@ -164,8 +173,10 @@ class _SceneTimelineState extends State<SceneTimeline> {
                     Expanded(
                       child: _Ruler(
                         duration: total,
-                        t: playback.t,
-                        onSeek: playback.seekT,
+                        t: playback.position.inMilliseconds / total,
+                        onSeek: (u) => playback.seek(
+                          Duration(milliseconds: (u * total).round()),
+                        ),
                       ),
                     ),
                   ],
@@ -288,7 +299,9 @@ class _GroupRowState extends State<_GroupRow> {
         widget.total *
         width;
     if (local.dx < start - 4 || local.dx > end + 4) {
-      widget.playback.seekT(local.dx / width);
+      widget.playback.seek(
+        Duration(milliseconds: (local.dx / width * widget.total).round()),
+      );
       return;
     }
     editor.select(editor.doc.nodeNamed(group.target));
@@ -436,7 +449,10 @@ class _GroupRowState extends State<_GroupRow> {
                                   .inMilliseconds /
                               widget.total *
                               width,
-                          playhead: widget.playback.t * width,
+                          playhead:
+                              widget.playback.position.inMilliseconds /
+                              widget.total *
+                              width,
                           fill: selected
                               ? colors.accentSoft2
                               : colors.accentSoft,
@@ -705,7 +721,9 @@ class _KeyStripState extends State<_KeyStrip> {
     var key = _hit(local, width);
     if (key == null) {
       editor.clearKeySelection();
-      widget.playback.seekT(local.dx / width);
+      widget.playback.seek(
+        Duration(milliseconds: (local.dx / width * widget.total).round()),
+      );
       return;
     }
     var ref = _ref(key);
@@ -828,7 +846,10 @@ class _KeyStripState extends State<_KeyStrip> {
                   (lane.at + lane.track.duration).inMilliseconds /
                   widget.total *
                   width,
-              playhead: widget.playback.t * width,
+              playhead:
+                  widget.playback.position.inMilliseconds /
+                  widget.total *
+                  width,
               line: colors.line,
               key: colors.ink2,
               accent: colors.accent,

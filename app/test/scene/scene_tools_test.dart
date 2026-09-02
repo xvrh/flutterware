@@ -170,7 +170,7 @@ void main() {
       var opacity = motion.groupNamed('headlineIn')!.tracks['opacity']!;
       var stripLeft = strip.left + 241;
       var stripWidth = strip.width - 241;
-      var x = stripLeft + 260 / 1800 * stripWidth;
+      var x = stripLeft + 260 / 2500 * stripWidth;
       var y = strip.top + 29 + 26 + 13;
       await tester.tapAt(Offset(x, y), buttons: kSecondaryButton);
       await tester.pump();
