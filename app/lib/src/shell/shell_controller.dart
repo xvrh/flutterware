@@ -357,6 +357,13 @@ class ShellController extends ChangeNotifier {
       switch (change) {
         case WorktreeChange.git:
           if (!_gitMoved.isClosed) _gitMoved.add(null);
+          // A commit or a branch switch moves the merge-base, which is what
+          // every open worktree's delta is measured from. Only the ones with
+          // a tree on screen: a panel that mounts later asks for itself.
+          for (var open in _open.values) {
+            var delta = open.session?.session.branchDelta;
+            if (delta != null && delta.isAttached) unawaited(delta.refresh());
+          }
           await rescanWorktrees();
           await refreshWorktreeFacts();
         case WorktreeChange.agent:

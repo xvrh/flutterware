@@ -5,6 +5,8 @@ import 'package:flutterware/src/inspect/node.dart' show InspectStyle;
 import 'package:flutterware/src/inspect/screen.dart';
 import 'package:json_annotation/json_annotation.dart';
 
+import '../../delta/branch_delta.dart';
+
 part 'previews_results.g.dart';
 
 /// What the Previews actions hand back.
@@ -51,10 +53,15 @@ class CatalogPackageEntries {
     this.diagnostics = const [],
     this.error,
     this.authoring,
+    this.branch,
   });
 
   /// Package path as declared in `tool/flutterware.dart`.
   final String path;
+
+  /// What this branch changed among [entries], against which base. Absent
+  /// when no base resolved, nothing changed, or the delta has not been read.
+  final BranchChangeSummary? branch;
 
   /// Where this package's demos were looked for, relative to the package.
   ///
@@ -178,10 +185,15 @@ class CatalogEntrySummary {
     this.group,
     this.device,
     this.devices = const [],
+    this.change,
   });
 
   /// What `screenshot --entry` and `describe --entry` take.
   final String id;
+
+  /// How this branch touched the entry — `added`, `edited` or `reached`, with
+  /// a sentence — or absent when it did not. See `EntryChangeKind`.
+  final EntryChange? change;
 
   final String name;
 

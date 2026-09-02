@@ -16,6 +16,9 @@ import 'package:flutterware/src/scenarios/selector.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../../delta/branch_delta.dart';
+import '../../delta/branch_delta_controller.dart';
+import '../../delta/delta_painting.dart';
 import '../../embedder/tester_phase.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
@@ -275,6 +278,7 @@ class ScenariosCore extends PluginCore {
     _scans[path] = Isolate.run(scanner.scan)
         .then<void>((result) {
           _results[path] = result;
+          _delta.scanLanded(path, result);
           // A scan that lands clears the failure it recovers from — a save
           // caught mid-write fails one rescan, and that error may not outlive
           // the next scan that read the finished file.
@@ -287,6 +291,38 @@ class ScenariosCore extends PluginCore {
 
   /// A scan result is cheap and kept — releasing it would only buy a rescan.
   void untrack(String path) {}
+
+  /// What the branch changed, installed by the session — see
+  /// `Session.branchDelta` and [DeltaPainting].
+  BranchDeltaController? get branchDelta => _delta.controller;
+  set branchDelta(BranchDeltaController? value) => _delta.controller = value;
+
+  late final _delta = DeltaPainting<ScenarioScanResult>(
+    owner: id,
+    filesOf: (path, scan) => {
+      for (var ref in scan.scenarios) worktreeRelative(path, ref.file),
+    },
+    spansOf: (path, scan) => [
+      for (var ref in scan.scenarios)
+        EntrySpan(
+          id: scenarioChangeKey(ref),
+          file: worktreeRelative(path, ref.file),
+          line: ref.line,
+          endLine: ref.endLine,
+        ),
+    ],
+    onChanged: notifyChanged,
+  );
+
+  /// How the branch touched each scenario of [path], keyed by
+  /// [scenarioChangeKey], or null before the delta has landed.
+  EntryChanges? entryChangesFor(String path) => _delta.changesFor(path);
+
+  /// What [entryChangesFor] keys a scenario by: file, name and line. The
+  /// line, because a name declared twice in one file is two rows (the scan
+  /// keeps both and says so), and an edit to one must not paint the other.
+  static String scenarioChangeKey(ScenarioRef ref) =>
+      '${ref.file}//${ref.name}//${ref.line}';
 
   /// What the **live harness** says a package has: profiles, the devices and
   /// languages they offer, and each scenario's tags. None of it is visible to
@@ -600,6 +636,7 @@ class ScenariosCore extends PluginCore {
     _scans[path] = Isolate.run(scanner.scan)
         .then<void>((result) {
           _results[path] = result;
+          _delta.scanLanded(path, result);
           // Same recovery rule as [track]: the watcher rescans on every
           // save, and the one that read a half-written file must not brand
           // the suite "scan failed" after the next one read it whole.
@@ -2884,6 +2921,10 @@ class ScenariosCore extends PluginCore {
       track(path);
     }
     await Future.wait([for (var path in paths) _scans[path]!]);
+    // The scans registered their files, each starting or queueing a load. A
+    // load already running when they landed was asked before them, so this
+    // waits for the chain to settle rather than for the first to finish.
+    await branchDelta?.whenSettled();
 
     return ScenarioListResult(
       packages: [
@@ -2898,12 +2939,14 @@ class ScenariosCore extends PluginCore {
             ScenarioListPackage(
               path: path,
               directory: scanRootFor(path),
+              branch: _delta.summaryFor(path),
               scenarios: [
                 for (var ref in _results[path]!.scenarios)
                   ScenarioListEntry(
                     name: ref.name,
                     file: ref.file,
                     line: ref.line,
+                    change: _delta.changesFor(path)?[scenarioChangeKey(ref)],
                   ),
               ],
               diagnostics: _results[path]!.diagnostics,
@@ -3952,6 +3995,7 @@ class ScenariosCore extends PluginCore {
 
   @override
   void dispose() {
+    _delta.dispose();
     for (var runner in _runners.values) {
       unawaited(runner.dispose());
     }

@@ -21,6 +21,24 @@ void main() {
       ..writeAsStringSync(content);
   }
 
+  test('records the lines each call spans', () {
+    write('test/scenarios/span_test.dart', '''
+import 'package:flutterware/flutter_test.dart';
+
+void main() {
+  scenario('One', (s) async {});
+  scenario('Two', (s) async {
+    await s.tap('Go');
+  });
+}
+''');
+    var refs = ScenarioScanner(packageRoot: root.path).scan().scenarios;
+    var one = refs.singleWhere((r) => r.name == 'One');
+    var two = refs.singleWhere((r) => r.name == 'Two');
+    expect((one.line, one.endLine), (4, 4));
+    expect((two.line, two.endLine), (5, 7));
+  });
+
   test('finds scenario calls with literal names', () {
     write('test/scenarios/onboarding_test.dart', '''
 import 'package:flutterware/flutter_test.dart';

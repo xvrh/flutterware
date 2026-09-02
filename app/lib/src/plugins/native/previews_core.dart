@@ -36,6 +36,9 @@ import '../../previews/tester_renderer.dart';
 import '../../previews/headless_catalog.dart';
 import '../../previews/test_runner.dart';
 import '../../previews/web_build.dart';
+import '../../delta/branch_delta.dart';
+import '../../delta/branch_delta_controller.dart';
+import '../../delta/delta_painting.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
 import '../../utils/base_href.dart';
@@ -331,6 +334,7 @@ class PreviewsCore extends PluginCore {
   /// into the user's project.
   @override
   void dispose() {
+    _delta.dispose();
     for (var builder in _builds.values) {
       unawaited(builder.cancel());
     }
@@ -471,6 +475,7 @@ class PreviewsCore extends PluginCore {
       } else {
         var previous = _scans[path];
         _scans[path] = result;
+        _delta.scanLanded(path, result);
         // Anything holding a picture of the previous scan is holding one of
         // code that may have moved. An entry whose own file changed is caught
         // by that side's stamp; one whose *neighbour* changed is not, and a
@@ -503,6 +508,32 @@ class PreviewsCore extends PluginCore {
     // already in the maps.
     await overtaking;
   }
+
+  /// What the branch changed, installed by the session — see
+  /// `Session.branchDelta` and [DeltaPainting].
+  BranchDeltaController? get branchDelta => _delta.controller;
+  set branchDelta(BranchDeltaController? value) => _delta.controller = value;
+
+  late final _delta = DeltaPainting<ScanResult>(
+    owner: id,
+    filesOf: (path, scan) => {
+      for (var entry in scan.entries) worktreeRelative(path, entry.path),
+    },
+    spansOf: (path, scan) => [
+      for (var entry in scan.entries)
+        EntrySpan(
+          id: entry.id,
+          file: worktreeRelative(path, entry.path),
+          line: entry.line,
+          endLine: entry.endLine,
+        ),
+    ],
+    onChanged: notifyChanged,
+  );
+
+  /// How the branch touched each entry of [path], or null before the delta
+  /// has landed.
+  EntryChanges? entryChangesFor(String path) => _delta.changesFor(path);
 
   /// What the package is scanned for: `directory` when declared, else the whole
   /// package.
@@ -1778,6 +1809,10 @@ class PreviewsCore extends PluginCore {
     // flag whose unset behaviour would be "possibly stale, no way to tell" —
     // which is not a useful thing to offer someone asking what exists.
     await Future.wait([for (var path in paths) _scan(path)]);
+    // The scans registered their files, each starting or queueing a load. A
+    // load already running when they landed was asked before them, so this
+    // waits for the chain to settle rather than for the first to finish.
+    await branchDelta?.whenSettled();
 
     return CatalogEntriesResult(
       packages: [for (var path in paths) _packageEntries(path)],
@@ -2021,16 +2056,18 @@ class PreviewsCore extends PluginCore {
     // Resolved once for the package rather than per entry: `canvasesFor` walks
     // the package configs, and a list is short where an entry list is not.
     var canvases = canvasesFor(path);
+    var changes = entryChangesFor(path);
     return CatalogPackageEntries(
       path: path,
       directory: rootFor(path),
+      branch: _delta.summaryFor(path),
       authoring: scan == null || scan.entries.isNotEmpty
           ? null
           : '${catalogEmptyReason(directory: rootFor(path), directoryExists: setupFor(path) != CatalogSetup.missing, package: path)}\n\n'
                 '${catalogAuthoringHint(rootFor(path))}',
       entries: [
         for (var entry in scan?.entries ?? const <CatalogEntry>[])
-          _summarise(path, entry, canvases),
+          _summarise(path, entry, canvases, changes?[entry.id]),
       ],
       tree: _treeNodes(
         buildCatalogTree(scan?.entries ?? const <CatalogEntry>[]),
@@ -2072,12 +2109,14 @@ class PreviewsCore extends PluginCore {
     String path,
     CatalogEntry entry,
     List<PreviewCanvas> canvases,
+    EntryChange? change,
   ) {
     var canvas = canvasFor(canvases, entry.path);
     return CatalogEntrySummary(
       id: entry.id,
       name: entry.name,
       group: entry.group,
+      change: change,
       // What every other surface identifies this by — hand it straight back to
       // `screenshot`, or later to `show`.
       address: '${addressFor(path, entry.id)}',

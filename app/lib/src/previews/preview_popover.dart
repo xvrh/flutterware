@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../ui/anchored_card.dart';
 import '../ui/design/design.dart';
 import '../ui/loading_state.dart';
+import '../delta/branch_delta.dart';
+import '../delta/change_marks.dart';
 import 'catalog_entry.dart';
 import 'thumbnails.dart';
 
@@ -22,9 +24,14 @@ class PreviewPopover extends StatelessWidget {
     required this.entry,
     required this.anchor,
     required this.thumbnail,
+    this.change,
   });
 
   final CatalogEntry entry;
+
+  /// How the branch touched [entry], said under the file — the row's tooltip
+  /// is off while this card is up, so the sentence has to travel with it.
+  final EntryChange? change;
 
   /// The row, in global coordinates — which are the root overlay's too.
   final Rect anchor;
@@ -97,11 +104,25 @@ class PreviewPopover extends StatelessWidget {
             horizontal: FwSpacing.md,
             vertical: FwSpacing.sm,
           ),
-          child: Text(
-            '${entry.path} · ${entry.symbol}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.type.micro.copyWith(color: colors.mut),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${entry.path} · ${entry.symbol}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.micro.copyWith(color: colors.mut),
+              ),
+              if (change case var it?)
+                Text(
+                  it.why,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.type.micro.copyWith(
+                    color: changeInk(context, it.kind) ?? colors.mut,
+                  ),
+                ),
+            ],
           ),
         ),
       ],

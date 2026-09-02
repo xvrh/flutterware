@@ -20,7 +20,12 @@ const defaultScenariosDirectory = 'test/scenarios';
 
 /// One `scenario('name', …)` call, located.
 class ScenarioRef {
-  ScenarioRef({required this.name, required this.file, required this.line});
+  ScenarioRef({
+    required this.name,
+    required this.file,
+    required this.line,
+    int? endLine,
+  }) : endLine = endLine ?? line;
 
   final String name;
 
@@ -28,6 +33,11 @@ class ScenarioRef {
   final String file;
 
   final int line;
+
+  /// Where the call ends — its closing parenthesis — 1-based and inclusive
+  /// like [line]. What tells a branch's diff which scenario in a file it
+  /// touched; see `entry_change.dart`.
+  final int endLine;
 
   @override
   String toString() => '$file:$line $name';
@@ -100,6 +110,7 @@ class ScenarioScanner {
     parsed.unit.accept(visitor);
     for (var call in visitor.calls) {
       var line = parsed.lineInfo.getLocation(call.offset).lineNumber;
+      var endLine = parsed.lineInfo.getLocation(call.end).lineNumber;
       var name = call.name;
       if (name == null) {
         diagnostics.add(
@@ -108,7 +119,9 @@ class ScenarioScanner {
         );
         continue;
       }
-      scenarios.add(ScenarioRef(name: name, file: path, line: line));
+      scenarios.add(
+        ScenarioRef(name: name, file: path, line: line, endLine: endLine),
+      );
     }
   }
 
@@ -175,10 +188,11 @@ String commonScenarioDirectory(Iterable<String> files) {
 }
 
 class _ScenarioCall {
-  _ScenarioCall({required this.name, required this.offset});
+  _ScenarioCall({required this.name, required this.offset, required this.end});
 
   final String? name;
   final int offset;
+  final int end;
 }
 
 class _ScenarioCallVisitor extends RecursiveAstVisitor<void> {
@@ -192,6 +206,7 @@ class _ScenarioCallVisitor extends RecursiveAstVisitor<void> {
         _ScenarioCall(
           name: first is StringLiteral ? first.stringValue : null,
           offset: node.offset,
+          end: node.end,
         ),
       );
     }

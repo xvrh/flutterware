@@ -16,6 +16,7 @@ Map<String, dynamic> _$CatalogPackageEntriesToJson(
   CatalogPackageEntries instance,
 ) => <String, dynamic>{
   'path': instance.path,
+  'branch': ?instance.branch?.toJson(),
   'directory': instance.directory,
   'entries': instance.entries.map((e) => e.toJson()).toList(),
   'tree': instance.tree.map((e) => e.toJson()).toList(),
@@ -44,6 +45,7 @@ Map<String, dynamic> _$CatalogEntrySummaryToJson(
   CatalogEntrySummary instance,
 ) => <String, dynamic>{
   'id': instance.id,
+  'change': ?instance.change?.toJson(),
   'name': instance.name,
   'address': instance.address,
   'group': ?instance.group,

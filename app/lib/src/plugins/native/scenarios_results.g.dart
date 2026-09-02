@@ -15,6 +15,7 @@ Map<String, dynamic> _$ScenarioListPackageToJson(
   ScenarioListPackage instance,
 ) => <String, dynamic>{
   'path': instance.path,
+  'branch': ?instance.branch?.toJson(),
   'directory': instance.directory,
   'scenarios': instance.scenarios.map((e) => e.toJson()).toList(),
   'diagnostics': instance.diagnostics,
@@ -25,6 +26,7 @@ Map<String, dynamic> _$ScenarioListPackageToJson(
 Map<String, dynamic> _$ScenarioListEntryToJson(ScenarioListEntry instance) =>
     <String, dynamic>{
       'name': instance.name,
+      'change': ?instance.change?.toJson(),
       'file': instance.file,
       'line': instance.line,
     };

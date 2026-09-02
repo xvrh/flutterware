@@ -185,6 +185,25 @@ CatalogNode? _filter(CatalogNode node, String needle) {
   }
 }
 
+/// Keeps the entries whose id is in [ids], and the folders leading to them —
+/// the "changed on this branch" filter, which composes with the text one.
+List<CatalogNode> restrictCatalogTree(
+  List<CatalogNode> nodes,
+  Set<String> ids,
+) => [for (var node in nodes) ?_restrict(node, ids)];
+
+CatalogNode? _restrict(CatalogNode node, Set<String> ids) {
+  switch (node) {
+    case CatalogLeaf(:var entry):
+      return ids.contains(entry.id) ? node : null;
+    case CatalogBranch(:var children):
+      var kept = [for (var child in children) ?_restrict(child, ids)];
+      return kept.isEmpty
+          ? null
+          : CatalogBranch(id: node.id, label: node.label, children: kept);
+  }
+}
+
 /// Matched against everything that identifies an entry, not only its name: the
 /// file is often what you remember, and the symbol is what an agent is told.
 bool _matches(CatalogEntry entry, String needle) =>

@@ -721,6 +721,12 @@ final resultShapes = <String, ResultShape>{
               'doc': 'Package path as declared in `tool/flutterware.dart`.',
             },
             <String, Object?>{
+              'name': 'branch',
+              'type': 'BranchChangeSummary',
+              'optional': true,
+              'doc': 'What this branch changed among [entries], against which base.',
+            },
+            <String, Object?>{
               'name': 'directory',
               'type': 'String',
               'doc': 'Where this package\'s demos were looked for, relative to the package.',
@@ -735,6 +741,12 @@ final resultShapes = <String, ResultShape>{
                     'name': 'id',
                     'type': 'String',
                     'doc': 'What `screenshot --entry` and `describe --entry` take.',
+                  },
+                  <String, Object?>{
+                    'name': 'change',
+                    'type': 'EntryChange',
+                    'optional': true,
+                    'doc': 'How this branch touched the entry — `added`, `edited` or `reached`, with a sentence — or absent when it did not.',
                   },
                   <String, Object?>{'name': 'name', 'type': 'String'},
                   <String, Object?>{
@@ -956,6 +968,12 @@ final resultShapes = <String, ResultShape>{
         'name': 'id',
         'type': 'String',
         'doc': 'What `screenshot --entry` and `describe --entry` take.',
+      },
+      <String, Object?>{
+        'name': 'change',
+        'type': 'EntryChange',
+        'optional': true,
+        'doc': 'How this branch touched the entry — `added`, `edited` or `reached`, with a sentence — or absent when it did not.',
       },
       <String, Object?>{'name': 'name', 'type': 'String'},
       <String, Object?>{
@@ -1440,6 +1458,12 @@ final resultShapes = <String, ResultShape>{
         'doc': 'Package path as declared in `tool/flutterware.dart`.',
       },
       <String, Object?>{
+        'name': 'branch',
+        'type': 'BranchChangeSummary',
+        'optional': true,
+        'doc': 'What this branch changed among [entries], against which base.',
+      },
+      <String, Object?>{
         'name': 'directory',
         'type': 'String',
         'doc': 'Where this package\'s demos were looked for, relative to the package.',
@@ -1454,6 +1478,12 @@ final resultShapes = <String, ResultShape>{
               'name': 'id',
               'type': 'String',
               'doc': 'What `screenshot --entry` and `describe --entry` take.',
+            },
+            <String, Object?>{
+              'name': 'change',
+              'type': 'EntryChange',
+              'optional': true,
+              'doc': 'How this branch touched the entry — `added`, `edited` or `reached`, with a sentence — or absent when it did not.',
             },
             <String, Object?>{'name': 'name', 'type': 'String'},
             <String, Object?>{
@@ -4551,6 +4581,12 @@ final resultShapes = <String, ResultShape>{
     'fields': <Object?>[
       <String, Object?>{'name': 'name', 'type': 'String'},
       <String, Object?>{
+        'name': 'change',
+        'type': 'EntryChange',
+        'optional': true,
+        'doc': 'How this branch touched the scenario — `added`, `edited` or `reached`, with a sentence — or absent when it did not.',
+      },
+      <String, Object?>{
         'name': 'file',
         'type': 'String',
         'doc': 'Package-relative source file.',
@@ -4563,6 +4599,13 @@ final resultShapes = <String, ResultShape>{
     'fields': <Object?>[
       <String, Object?>{'name': 'path', 'type': 'String'},
       <String, Object?>{
+        'name': 'branch',
+        'type': 'BranchChangeSummary',
+        'optional': true,
+        'doc':
+            'What this branch changed among [scenarios], against which base.',
+      },
+      <String, Object?>{
         'name': 'directory',
         'type': 'String',
         'doc': 'The scanned directory, relative to the package.',
@@ -4574,6 +4617,12 @@ final resultShapes = <String, ResultShape>{
           'type': 'ScenarioListEntry',
           'fields': <Object?>[
             <String, Object?>{'name': 'name', 'type': 'String'},
+            <String, Object?>{
+              'name': 'change',
+              'type': 'EntryChange',
+              'optional': true,
+              'doc': 'How this branch touched the scenario — `added`, `edited` or `reached`, with a sentence — or absent when it did not.',
+            },
             <String, Object?>{
               'name': 'file',
               'type': 'String',
@@ -4613,6 +4662,12 @@ final resultShapes = <String, ResultShape>{
           'fields': <Object?>[
             <String, Object?>{'name': 'path', 'type': 'String'},
             <String, Object?>{
+              'name': 'branch',
+              'type': 'BranchChangeSummary',
+              'optional': true,
+              'doc': 'What this branch changed among [scenarios], against which base.',
+            },
+            <String, Object?>{
               'name': 'directory',
               'type': 'String',
               'doc': 'The scanned directory, relative to the package.',
@@ -4624,6 +4679,12 @@ final resultShapes = <String, ResultShape>{
                 'type': 'ScenarioListEntry',
                 'fields': <Object?>[
                   <String, Object?>{'name': 'name', 'type': 'String'},
+                  <String, Object?>{
+                    'name': 'change',
+                    'type': 'EntryChange',
+                    'optional': true,
+                    'doc': 'How this branch touched the scenario — `added`, `edited` or `reached`, with a sentence — or absent when it did not.',
+                  },
                   <String, Object?>{
                     'name': 'file',
                     'type': 'String',
