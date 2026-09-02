@@ -223,6 +223,91 @@ class SceneEditor extends SceneListenable {
     return best;
   }
 
+  /// Renames [node]. A name is a Dart identifier and the field name in the
+  /// file, so it must be free among the scene's nodes and parameters; every
+  /// group animating the node follows. Refuses rather than guessing.
+  void rename(SceneNode node, String name) {
+    var wanted = name.trim();
+    if (wanted == node.name) return;
+    if (!isValidNodeName(wanted)) {
+      throw ArgumentError(
+        '"$wanted" is not a valid name — letters, digits, '
+        'starting with a lowercase letter',
+      );
+    }
+    if (doc.nodeNamed(wanted) != null ||
+        doc.params.any((p) => p.name == wanted)) {
+      throw ArgumentError('"$wanted" is already taken');
+    }
+    var was = node.name;
+    var selected = isSelected(node);
+    perform('Rename $was', () {
+      node.name = wanted;
+      for (var motion in motions.values) {
+        for (var group in motion.groups) {
+          if (group.target == was) group.target = wanted;
+        }
+      }
+    });
+    if (selected) {
+      _selection
+        ..remove(was)
+        ..add(wanted);
+      notifyListeners();
+    }
+  }
+
+  /// Whether [node] may go into [into]: not the root, not into itself or a
+  /// descendant of itself.
+  bool canReparent(SceneNode node, FrameNode into) {
+    if (node == doc.root) return false;
+    for (SceneNode? p = into; p != null; p = doc.parentOf(p)) {
+      if (p == node) return false;
+    }
+    return true;
+  }
+
+  /// Moves [nodes] into [into], at [index] (appended when null). Under a
+  /// free-layout parent the node keeps its place on the canvas — its
+  /// position is re-expressed against the new parent's measured box; under a
+  /// row or a column its position is its order.
+  void reparent(Iterable<SceneNode> nodes, FrameNode into, {int? index}) {
+    var moving = [
+      for (var (n, _) in doc.walk())
+        if (nodes.contains(n) && canReparent(n, into)) n,
+    ];
+    if (moving.isEmpty) return;
+    perform(
+      moving.length == 1
+          ? 'Move ${moving.single.name}'
+          : 'Move ${moving.length} nodes',
+      () {
+        var at = index ?? into.children.length;
+        for (var node in moving) {
+          var parent = doc.parentOf(node)!;
+          var from = parent.children.indexOf(node);
+          parent.children.removeAt(from);
+          if (parent == into && from < at) at--;
+          if (into.layout == NodeLayout.absolute) {
+            var was = node.measured;
+            var origin = into.measured;
+            if (was != null && origin != null) {
+              node
+                ..x = _half(was.left - origin.left)
+                ..y = _half(was.top - origin.top);
+            }
+          } else {
+            node
+              ..x = 0
+              ..y = 0;
+          }
+          into.children.insert(at.clamp(0, into.children.length), node);
+          at++;
+        }
+      },
+    );
+  }
+
   /// Puts [node] where it was drawn: under the frame at that point, at a
   /// position relative to it when the frame lays out freely, appended when
   /// the frame is a row or a column (position is order there). Selected

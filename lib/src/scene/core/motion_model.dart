@@ -73,7 +73,9 @@ class AnimateGroup {
   AnimateGroup(this.name, this.target);
 
   final String name;
-  final String target;
+
+  /// The node this group animates, by name; follows a rename.
+  String target;
 
   /// Property → track, non-empty only: Save writes no empty tracks (an
   /// always-present empty track is a *runtime* affordance, not a file one).

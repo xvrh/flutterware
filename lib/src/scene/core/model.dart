@@ -49,7 +49,10 @@ class SceneParamDecl {
 sealed class SceneNode {
   SceneNode(this.name);
 
-  final String name;
+  /// The node's identity — the field name in the file. Mutable only so the
+  /// editor's rename door can move it; everything keyed by it (measured
+  /// rects, keys, groups) is re-pointed by that door.
+  String name;
 
   // Authored geometry. x/y are meaningful only under an absolute parent;
   // null width/height means hug content.
