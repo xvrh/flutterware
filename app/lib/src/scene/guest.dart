@@ -137,6 +137,11 @@ class SceneGuest {
               ]),
             },
           )
+          // A call that never answers would hold `_inflight` for good, and a
+          // canvas that stops following edits is indistinguishable from a
+          // frozen editor. Measured round trips are 10–300ms; a second is
+          // already a guest in trouble, and the status line should say so.
+          .timeout(const Duration(seconds: 3))
           .then((reply) {
             var rtt = clock.elapsedMicroseconds / 1000;
             if (reply != null && reply['error'] == null) {
@@ -157,7 +162,11 @@ class SceneGuest {
             }
           })
           .catchError((Object e) {
-            if (_everApplied) status.value = 'guest: push failed';
+            if (_everApplied) {
+              status.value = e is TimeoutException
+                  ? 'guest: no answer in 3s — the host may be stuck'
+                  : 'guest: push failed';
+            }
           })
           .whenComplete(() {
             _inflight = false;

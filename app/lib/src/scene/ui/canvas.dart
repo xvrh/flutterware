@@ -146,30 +146,52 @@ class _SceneCanvasState extends State<SceneCanvas> {
         color: colors.panel,
         border: Border(bottom: BorderSide(color: colors.line)),
       ),
-      child: Row(
-        spacing: FwSpacing.md,
-        children: [
-          AnimatedBuilder(
-            animation: editor.listenable,
-            builder: (context, _) => Row(
-              spacing: FwSpacing.xxs,
-              children: [
-                for (var (tool, icon, label, key) in const [
-                  (SceneTool.select, Icons.near_me_outlined, 'Select', 'V'),
-                  (SceneTool.frame, Icons.crop_square, 'Frame', 'F'),
-                  (SceneTool.text, Icons.text_fields, 'Text', 'T'),
-                  (SceneTool.shape, Icons.circle_outlined, 'Shape', 'S'),
-                ])
-                  _Tool(
-                    icon: icon,
-                    label: label,
-                    shortcut: key,
-                    active: editor.tool == tool,
-                    onTap: () => editor.tool = tool,
-                  ),
-              ],
-            ),
+      // The tools, the zoom verbs and the readout are the bar; the artboard
+      // size and the guest status are the first to go when the pane is
+      // narrower than all of it — measured 302px for the lot, and a docked
+      // canvas beside a tree and an inspector can be 230.
+      child: LayoutBuilder(
+        builder: (context, constraints) => _toolbarRow(
+          context,
+          colors,
+          muted,
+          roomy: constraints.maxWidth >= 360,
+        ),
+      ),
+    );
+  }
+
+  Widget _toolbarRow(
+    BuildContext context,
+    FwPalette colors,
+    TextStyle muted, {
+    required bool roomy,
+  }) {
+    return Row(
+      spacing: FwSpacing.md,
+      children: [
+        AnimatedBuilder(
+          animation: editor.listenable,
+          builder: (context, _) => Row(
+            spacing: FwSpacing.xxs,
+            children: [
+              for (var (tool, icon, label, key) in const [
+                (SceneTool.select, Icons.near_me_outlined, 'Select', 'V'),
+                (SceneTool.frame, Icons.crop_square, 'Frame', 'F'),
+                (SceneTool.text, Icons.text_fields, 'Text', 'T'),
+                (SceneTool.shape, Icons.circle_outlined, 'Shape', 'S'),
+              ])
+                _Tool(
+                  icon: icon,
+                  label: label,
+                  shortcut: key,
+                  active: editor.tool == tool,
+                  onTap: () => editor.tool = tool,
+                ),
+            ],
           ),
+        ),
+        if (roomy) ...[
           Container(width: 1, height: 16, color: colors.line),
           AnimatedBuilder(
             animation: doc.listenable,
@@ -178,28 +200,28 @@ class _SceneCanvasState extends State<SceneCanvas> {
               style: context.type.mono.copyWith(color: colors.mut),
             ),
           ),
-          if (widget.status case var status?)
-            Expanded(
-              child: ValueListenableBuilder<String>(
-                valueListenable: status,
-                builder: (context, value, _) =>
-                    Text(value, style: muted, overflow: TextOverflow.ellipsis),
-              ),
-            )
-          else
-            const Spacer(),
-          _Verb('Fit', _fit),
-          _Verb('1:1', () => _setScale(1)),
-          AnimatedBuilder(
-            animation: _transform,
-            builder: (context, _) => Text(
-              '${(_transform.value.storage[0] * 100).round()}%',
-              style: context.type.mono.copyWith(color: colors.mut2),
-            ),
-          ),
-          ...widget.trailing,
         ],
-      ),
+        if (widget.status case var status? when roomy)
+          Expanded(
+            child: ValueListenableBuilder<String>(
+              valueListenable: status,
+              builder: (context, value, _) =>
+                  Text(value, style: muted, overflow: TextOverflow.ellipsis),
+            ),
+          )
+        else
+          const Spacer(),
+        _Verb('Fit', _fit),
+        _Verb('1:1', () => _setScale(1)),
+        AnimatedBuilder(
+          animation: _transform,
+          builder: (context, _) => Text(
+            '${(_transform.value.storage[0] * 100).round()}%',
+            style: context.type.mono.copyWith(color: colors.mut2),
+          ),
+        ),
+        ...widget.trailing,
+      ],
     );
   }
 

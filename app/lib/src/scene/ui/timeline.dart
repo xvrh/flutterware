@@ -1072,6 +1072,9 @@ class _Ruler extends StatelessWidget {
         var visibleMs = (width / scale.pxPerMs).round();
         var every = step(visibleMs);
         var first = (scale.offsetMs / every).ceil() * every;
+        // A tick keeps its line at any width; the words go when two of them
+        // would touch — a docked strip can be 60px wide.
+        var labelled = every * scale.pxPerMs >= 44;
         void seek(Offset local) => onSeek(math.max(0, scale.msAt(local.dx)));
         return MouseRegion(
           cursor: SystemMouseCursors.resizeLeftRight,
@@ -1096,7 +1099,7 @@ class _Ruler extends StatelessWidget {
                             width: 1,
                             child: ColoredBox(color: context.colors.line),
                           ),
-                          if (scale.xOf(ms) < width - 40)
+                          if (labelled && scale.xOf(ms) < width - 40)
                             Padding(
                               padding: const EdgeInsets.only(
                                 left: FwSpacing.xs,

@@ -53,6 +53,13 @@ class SceneInspector extends StatelessWidget {
     editor.perform('Edit $prop', mergeKey: 'inspect:$prop:$name', fn);
   }
 
+  /// What a field shows for [prop]: while recording, what the motion has
+  /// the node at — the key under the playhead, which the field is editing —
+  /// and the node's own value otherwise. A field showing the authored value
+  /// while its edits went to a key would snap back on every frame.
+  T _shown<T>(SceneNode node, String prop, T authored) =>
+      editor.records(node, prop) ? node.fxRendered(prop) as T : authored;
+
   /// An edit to an animatable property: a key at the playhead while
   /// recording, the node's own value otherwise.
   void _set(String prop, Object value, void Function() apply) {
@@ -111,7 +118,9 @@ class SceneInspector extends StatelessWidget {
         _label(context, 'Fill'),
         _swatches(
           context,
-          node.fill,
+          editor.records(node, 'fill') && node.hasFx('fill')
+              ? node.fxRendered('fill') as SceneColor
+              : node.fill,
           // No fill is not a colour a key can hold: that one edits the node.
           (c) => c == null
               ? _door('fill', () => node.fill = null)
@@ -129,7 +138,7 @@ class SceneInspector extends StatelessWidget {
           _number(
             'opacity',
             'Opacity',
-            node.opacity,
+            _shown(node, 'opacity', node.opacity),
             SceneNumberShape.of(propSpecFor(node, 'opacity')),
             apply: (v) => node.opacity = v.clamp(0, 1),
           ),
@@ -272,7 +281,7 @@ class SceneInspector extends StatelessWidget {
       _number(
         'fontSize',
         'Size',
-        t.fontSize,
+        _shown(t, 'fontSize', t.fontSize),
         SceneNumberShape.of(propSpecFor(t, 'fontSize')),
         apply: (v) => t.fontSize = v,
       ),
@@ -295,7 +304,7 @@ class SceneInspector extends StatelessWidget {
       ),
     ]),
     _label(context, 'Color'),
-    _swatches(context, t.color, (c) {
+    _swatches(context, _shown(t, 'color', t.color), (c) {
       var color = c ?? const SceneColor(0xFF000000);
       _set('color', color, () => t.color = color);
     }),
@@ -342,7 +351,7 @@ class SceneInspector extends StatelessWidget {
       _number(
         'gap',
         'Gap',
-        f.gap,
+        _shown(f, 'gap', f.gap),
         SceneNumberShape.of(propSpecFor(f, 'gap')),
         apply: (v) => f.gap = v,
       ),
