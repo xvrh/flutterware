@@ -97,6 +97,7 @@ class HeadlessCatalog extends CatalogRenderer {
         icuData: ready.icuData,
         name: ready.sessionId,
         viewport: viewport,
+        workingDirectory: config.projectRoot,
       );
       return await body(guest);
     } finally {
@@ -389,6 +390,7 @@ class _GuestSession {
     required String icuData,
     required String name,
     required CaptureViewport viewport,
+    required String workingDirectory,
   }) async {
     // Keyed by the daemon session, like the GUI's `g-<name>.sock` — the run
     // directory is shared by every project on the machine, so anything less
@@ -423,7 +425,10 @@ class _GuestSession {
         // display — see `--free-vsync` in `native/host.c`. Measured at 4.4x
         // on a render.
         '--free-vsync',
-      ]);
+        // The package root, like the tester lane and `flutter test`: a demo
+        // that opens a fixture at a relative path finds it in all three.
+        // Inherited, this would be wherever `fw` was started from.
+      ], workingDirectory: workingDirectory);
       var vmServiceUri = Completer<String>();
       // The guest's last few lines, kept rather than drained: an engine that
       // cannot run its kernel says so here and nowhere else, and the connect
