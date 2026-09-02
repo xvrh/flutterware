@@ -34,8 +34,12 @@ void main() {
     await tester.pump();
   }
 
-  /// The row of a lane: the ruler is 28 + 1, then 26 per lane.
-  double yOfLane(int index) => 29 + 26 * index + 13;
+  /// The row of a lane of the FIRST group: the ruler is 28 + 1, then the
+  /// group's own row, then 26 per lane.
+  double yOfLane(int index) => 29 + 26 * (index + 1) + 13;
+
+  /// The first group's header row.
+  var yOfGroup = 29.0 + 13;
 
   MotionTrack track(String group, String prop) =>
       motion.groupNamed(group)!.tracks[prop]!;
@@ -55,6 +59,9 @@ void main() {
     expect(editor.selectedKeys, isEmpty);
     var playback = tester.state<_HostState>(find.byType(_Host)).playback;
     expect(playback.position.inMilliseconds, closeTo(900, 3));
+    // The lanes carry a double-tap recognizer, which arms a timer after any
+    // tap; a test that ends with it pending is refused by the framework.
+    await tester.pump(kDoubleTapTimeout);
   });
 
   testWidgets(
@@ -80,6 +87,7 @@ void main() {
       editor.undo();
       expect(key.at.inMilliseconds, 260);
       expect(editor.canUndo, isFalse, reason: 'the whole drag was one entry');
+      await tester.pump(kDoubleTapTimeout);
     },
   );
 
@@ -107,6 +115,55 @@ void main() {
     expect(opacity.keys, hasLength(1));
     expect(translate.keys, hasLength(1));
     expect(editor.selectedKeys, isEmpty);
+    // The lanes carry a double-tap recognizer, which arms a timer after any
+    // tap; a test that ends with it pending is refused by the framework.
+    await tester.pump(kDoubleTapTimeout);
+  });
+
+  testWidgets('a double-click on a lane adds a key there, selected', (
+    tester,
+  ) async {
+    await pump(tester);
+    var opacity = track('headlineIn', 'opacity');
+    var at = Offset(xOf(const Duration(milliseconds: 130)), yOfLane(0));
+    await tester.tapAt(at);
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tapAt(at);
+    await tester.pump();
+    expect(opacity.keys, hasLength(3));
+    var added = opacity.keys[1];
+    expect(added.at.inMilliseconds, closeTo(130, 3));
+    expect(editor.selectedKeys.single.keyId, added.id);
+    expect(editor.undoLabel, 'Add key');
+    // The lanes carry a double-tap recognizer, which arms a timer after any
+    // tap; a test that ends with it pending is refused by the framework.
+    await tester.pump(kDoubleTapTimeout);
+  });
+
+  testWidgets('dragging the group bar moves the whole group', (tester) async {
+    await pump(tester);
+    expect(motion.placements['headlineIn'], Duration.zero);
+    var gesture = await tester.startGesture(
+      Offset(xOf(const Duration(milliseconds: 100)), yOfGroup),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await gesture.moveBy(const Offset(stripWidth / totalMs * 30, 0));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pump();
+    expect(motion.placements['headlineIn']!.inMilliseconds, closeTo(300, 3));
+    expect(editor.undoLabel, 'Move headlineIn');
+    expect(editor.selectionNames, [
+      'headline',
+    ], reason: 'the bar selects its node');
+    editor.undo();
+    expect(motion.placements['headlineIn'], Duration.zero);
+    // The lanes carry a double-tap recognizer, which arms a timer after any
+    // tap; a test that ends with it pending is refused by the framework.
+    await tester.pump(kDoubleTapTimeout);
   });
 
   testWidgets('the library places a group at the playhead', (tester) async {
@@ -120,6 +177,9 @@ void main() {
     expect(motion.placements['tapPulse'], const Duration(milliseconds: 500));
     expect(find.text('LIBRARY'), findsNothing);
     expect(editor.undoLabel, 'Place tapPulse');
+    // The lanes carry a double-tap recognizer, which arms a timer after any
+    // tap; a test that ends with it pending is refused by the framework.
+    await tester.pump(kDoubleTapTimeout);
   });
 }
 

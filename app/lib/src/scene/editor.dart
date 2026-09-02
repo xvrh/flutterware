@@ -271,6 +271,177 @@ class SceneEditor extends SceneListenable {
       refs.length == 1 ? '1 key' : '${refs.length} keys';
 
   // -------------------------------------------------------------------------
+  // Authoring keys and groups.
+  // -------------------------------------------------------------------------
+
+  /// The groups of [motion] that animate [node], in document order.
+  Iterable<AnimateGroup> groupsTargeting(String motion, SceneNode node) =>
+      motions[motion]?.groups.where((g) => g.target == node.name) ?? const [];
+
+  /// Puts a key on [prop] of [group] at [at] — the time *within the group* —
+  /// and selects it. The value is what the track already evaluates to there,
+  /// so a fresh key changes nothing until it is edited; a track that does not
+  /// exist yet starts from what the node shows now.
+  ///
+  /// A key within 1ms of an existing one moves that one instead: two keys
+  /// at one instant have no order and no meaning.
+  MotionKeyRef addKey(
+    String motion,
+    String groupName,
+    String prop,
+    Duration at, {
+    Object? value,
+  }) {
+    var group = motions[motion]!.groupNamed(groupName)!;
+    var node = doc.nodeNamed(group.target)!;
+    var existing = trackOf(motion, groupName, prop);
+    var spec = propSpecFor(node, prop);
+    var kind = spec?.kind ?? TrackKind.number;
+    var seed =
+        value ??
+        (existing != null && existing.keys.isNotEmpty
+            ? existing.evaluate(at)
+            : _currentValue(node, prop, kind));
+    late MotionKey key;
+    perform('Add key', () {
+      var track = existing;
+      if (track == null) {
+        track = MotionTrack(kind);
+        if (prop.startsWith('args.')) {
+          group.args[prop.substring(5)] = track;
+        } else {
+          group.tracks[prop] = track;
+        }
+      }
+      var near = track.keys.where((k) => (k.at - at).inMilliseconds.abs() < 1);
+      if (near.isNotEmpty) {
+        key = near.first..value = seed;
+      } else {
+        key = MotionKey(at: at, value: seed);
+        track.insertKey(key);
+      }
+    });
+    var ref = MotionKeyRef(motion, groupName, prop, key.id);
+    selectKey(ref);
+    return ref;
+  }
+
+  /// A new group on [node], placed at [at] on the timeline (appended to the
+  /// top-level `Par`, or wrapped in one), so it plays with the rest.
+  AnimateGroup addGroup(String motion, SceneNode node, {Duration? at}) {
+    var m = motions[motion]!;
+    var base = '${node.name}Motion';
+    var name = base;
+    for (var i = 2; m.groupNamed(name) != null; i++) {
+      name = '$base$i';
+    }
+    var group = AnimateGroup(name, node.name);
+    perform('Animate ${node.name}', () {
+      m.groups.add(group);
+      var ref = GroupRef(name);
+      var child = at == null || at == Duration.zero ? ref : AtExpr(at, ref);
+      m.timeline = switch (m.timeline) {
+        ParExpr p => ParExpr([...p.children, child]),
+        var other => ParExpr([other, child]),
+      };
+    });
+    return group;
+  }
+
+  /// What a fresh track on [prop] starts from: the node's value as shown,
+  /// or the property's identity when the node has no such slot.
+  Object _currentValue(SceneNode node, String prop, TrackKind kind) {
+    if (prop.startsWith('args.')) {
+      var arg = prop.substring(5);
+      var raw = switch (node) {
+        ExternalNode e => e.args[arg],
+        SceneRefNode r =>
+          r.args[arg] ??
+              r.instance?.params
+                  .where((p) => p.name == arg)
+                  .firstOrNull
+                  ?.defaultValue,
+        _ => null,
+      };
+      if (raw is num) return raw.toDouble();
+      if (raw is SceneColor) return raw;
+      return kind == TrackKind.color ? const SceneColor(0xFF000000) : 0.0;
+    }
+    try {
+      var v = node.fxRendered(prop);
+      return v is num ? v.toDouble() : v;
+    } on ArgumentError {
+      return kind == TrackKind.color ? const SceneColor(0xFF000000) : 0.0;
+    }
+  }
+
+  void setKeyValue(MotionKeyRef ref, Object value, {String? mergeKey}) {
+    var key = keyOf(ref);
+    if (key == null || key.value == value) return;
+    perform('Edit key', mergeKey: mergeKey, () => key.value = value);
+  }
+
+  void setKeyCurve(Iterable<MotionKeyRef> refs, String? curve) {
+    var keys = [for (var ref in refs) ?keyOf(ref)];
+    if (keys.isEmpty) return;
+    perform('Ease ${_keyCount(refs.toList())}', () {
+      for (var key in keys) {
+        key.curve = curve;
+      }
+    });
+  }
+
+  void setKeyTime(MotionKeyRef ref, Duration at, {String? mergeKey}) {
+    var key = keyOf(ref);
+    var track = trackOf(ref.motion, ref.group, ref.prop);
+    if (key == null || track == null || key.at == at) return;
+    perform('Move 1 key', mergeKey: mergeKey, () {
+      track.moveKey(key, at < Duration.zero ? Duration.zero : at);
+    });
+  }
+
+  /// Where [group] starts on the timeline, moved to [to]. Only a group
+  /// placed directly under the top-level `Par` (bare, or wrapped in one
+  /// `At`) can be moved this way; one inside a `Seq` or a `Speed` has its
+  /// start decided by its neighbours and is refused.
+  void moveGroup(
+    String motion,
+    String groupName,
+    Duration to, {
+    String? mergeKey,
+  }) {
+    var m = motions[motion]!;
+    var at = to < Duration.zero ? Duration.zero : to;
+    TimelineExpr place(TimelineExpr e) {
+      var ref = GroupRef(groupName);
+      return at == Duration.zero ? ref : AtExpr(at, ref);
+    }
+
+    bool isRef(TimelineExpr e) =>
+        (e is GroupRef && e.name == groupName) ||
+        (e is AtExpr &&
+            e.child is GroupRef &&
+            (e.child as GroupRef).name == groupName);
+    var timeline = m.timeline;
+    var children = switch (timeline) {
+      ParExpr p => p.children,
+      _ => [timeline],
+    };
+    var index = children.indexWhere(isRef);
+    if (index < 0) {
+      throw ArgumentError(
+        '"$groupName" is not placed directly on the timeline — a group inside '
+        'a Seq or a Speed starts where its neighbours put it',
+      );
+    }
+    perform('Move $groupName', mergeKey: mergeKey, () {
+      var next = [...children];
+      next[index] = place(next[index]);
+      m.timeline = ParExpr(next);
+    });
+  }
+
+  // -------------------------------------------------------------------------
   // The command door and its journal.
   // -------------------------------------------------------------------------
 

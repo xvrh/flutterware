@@ -14,6 +14,39 @@ import 'editor.dart';
 class ScenePlayback extends ChangeNotifier {
   ScenePlayback(this.editor, this.motionName, {required this.vsync}) {
     _bind();
+    _shape = _shapeOf();
+    editor.addListener(_onEdit);
+  }
+
+  /// The binding walks groups and the timeline by reference, so a moved key
+  /// needs nothing — but a group added, a track created or the timeline
+  /// rearranged (including by undo) is a different structure, and only a
+  /// rebind knows it. Cheap to check on every edit; done only when it moved.
+  late String _shape;
+
+  String _shapeOf() {
+    var m = motion;
+    return [
+      for (var g in m.groups)
+        '${g.name}:${g.tracks.keys.join(',')}/${g.args.keys.join(',')}',
+      _exprShape(m.timeline),
+    ].join('|');
+  }
+
+  static String _exprShape(TimelineExpr e) => switch (e) {
+    GroupRef r => r.name,
+    ParExpr p => 'par(${p.children.map(_exprShape).join(',')})',
+    SeqExpr s => 'seq(${s.children.map(_exprShape).join(',')})',
+    AtExpr a => 'at${a.offset.inMicroseconds}(${_exprShape(a.child)})',
+    SpeedExpr s => 'x${s.factor}(${_exprShape(s.child)})',
+    RepeatExpr r => 'rep${r.times}(${_exprShape(r.child)})',
+  };
+
+  void _onEdit() {
+    var shape = _shapeOf();
+    if (shape == _shape) return;
+    _shape = shape;
+    rebind();
   }
 
   final SceneEditor editor;
@@ -84,6 +117,7 @@ class ScenePlayback extends ChangeNotifier {
 
   @override
   void dispose() {
+    editor.removeListener(_onEdit);
     _player.dispose();
     super.dispose();
   }
