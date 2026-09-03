@@ -136,14 +136,34 @@ class _SceneViewState extends State<SceneView> {
     });
   }
 
+  /// Which axes of [n] its parent has already sized for it.
+  ({bool width, bool height}) _stretchedBy(SceneNode n) {
+    var parent = widget.scene.parentOf(n);
+    if (parent is! FrameNode || parent.layout == NodeLayout.absolute) {
+      return (width: false, height: false);
+    }
+    var row = parent.layout == NodeLayout.row;
+    var mainFilled = row ? n.widthFills : n.heightFills;
+    var crossStretched = parent.crossAlign == SceneCrossAxisAlignment.stretch;
+    return (
+      width: row ? mainFilled : crossStretched,
+      height: row ? crossStretched : mainFilled,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _sweep();
     var root = widget.scene.root;
+    // The three shapes a scene root comes in, and the only difference
+    // between the three things a scene is for. A banner is fixed on both
+    // axes; a screen takes the constraints the app hands it; a document is
+    // fixed across and grows down. Fill is that: leave the axis alone and
+    // let what is above decide.
     return SizedBox(
       key: _artboard,
-      width: root.width ?? 1024,
-      height: root.height ?? 500,
+      width: root.width,
+      height: root.height,
       // Material, not a bare ColoredBox: without a Material ancestor every
       // Text falls back to the debug style — the yellow double underline.
       child: Material(
@@ -198,39 +218,66 @@ class _SceneViewState extends State<SceneView> {
           inner = _node(context, inst.root, prefix: '$prefix${r.name}/');
         }
       case FrameNode f:
-        var children = [
-          for (var c in f.children) _child(context, f, c, prefix),
-        ];
         var gap = f.fxRendered('gap') as double;
-        inner = switch (f.layout) {
-          NodeLayout.absolute => Stack(
+        if (f.layout == NodeLayout.absolute) {
+          inner = Stack(
             clipBehavior: Clip.none,
-            children: children,
-          ),
-          NodeLayout.row => Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: f.mainAlign.flutter,
-            crossAxisAlignment: f.crossAlign.flutter,
-            spacing: gap,
-            children: children,
-          ),
-          NodeLayout.column => Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: f.mainAlign.flutter,
-            crossAxisAlignment: f.crossAlign.flutter,
-            spacing: gap,
-            children: children,
-          ),
-        };
+            children: [for (var c in f.children) _child(context, f, c, prefix)],
+          );
+          break;
+        }
+        var row = f.layout == NodeLayout.row;
+        Widget flex({required bool expand}) {
+          var children = [
+            for (var c in f.children)
+              _child(context, f, c, prefix, expand: expand),
+          ];
+          return row
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: f.mainAlign.flutter,
+                  crossAxisAlignment: f.crossAlign.flutter,
+                  spacing: gap,
+                  children: children,
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: f.mainAlign.flutter,
+                  crossAxisAlignment: f.crossAlign.flutter,
+                  spacing: gap,
+                  children: children,
+                );
+        }
+
+        // A child can only take what is left when there is a left: a flex
+        // whose own main axis is unbounded has none, and Flutter throws
+        // rather than guessing. Fill degrades to hug there, which is the
+        // honest answer and what the editor has to say out loud.
+        var anyFills = f.children.any(
+          (c) => row ? c.widthFills : c.heightFills,
+        );
+        inner = anyFills
+            ? LayoutBuilder(
+                builder: (context, constraints) => flex(
+                  expand: row
+                      ? constraints.hasBoundedWidth
+                      : constraints.hasBoundedHeight,
+                ),
+              )
+            : flex(expand: false);
     }
 
     var circle = n is ShapeNode && n.circle;
     var fill = n.hasFx('fill') ? n.fxRendered('fill') as SceneColor : n.fill;
     var padding = n is FrameNode ? n.padding : 0.0;
+    // A node the parent already stretched must not also ask for infinity:
+    // `Expanded` hands it a tight box, and an infinite width inside one is
+    // an unbounded-constraint error rather than a wide node.
+    var stretched = _stretchedBy(n);
     Widget result = Container(
       key: _key('$prefix${n.name}'),
-      width: n.width,
-      height: n.height,
+      width: stretched.width ? null : n.width,
+      height: stretched.height ? null : n.height,
       padding: padding > 0
           ? EdgeInsets.symmetric(horizontal: padding, vertical: padding * 0.6)
           : null,
@@ -279,13 +326,21 @@ class _SceneViewState extends State<SceneView> {
     BuildContext context,
     FrameNode parent,
     SceneNode child,
-    String prefix,
-  ) {
+    String prefix, {
+    bool expand = false,
+  }) {
     var view = _node(context, child, prefix: prefix);
     if (parent.layout == NodeLayout.absolute) {
       return Positioned(left: child.x, top: child.y, child: view);
     }
-    return view;
+    // Fill along the parent's main axis is the parent handing out what is
+    // left, which is `Expanded` and nothing else. Along the cross axis it is
+    // the child asking for all of it, which its own box already does with an
+    // infinite width or height.
+    var fillsMain = parent.layout == NodeLayout.row
+        ? child.widthFills
+        : child.heightFills;
+    return fillsMain && expand ? Expanded(child: view) : view;
   }
 }
 

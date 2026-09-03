@@ -2,7 +2,6 @@
 // quiet, and a version that arrives on disk is taken rather than clobbered.
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/autosave.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/fixtures.dart';

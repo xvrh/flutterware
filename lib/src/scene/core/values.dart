@@ -71,6 +71,21 @@ class SceneFontWeight {
 /// Flutter's, because the wire carries the index.
 enum SceneCrossAxisAlignment { start, end, center, stretch, baseline }
 
+/// A size on its way out to the wire or a file.
+///
+/// Fill is [double.infinity] in the model, and `jsonEncode` refuses a
+/// non-finite double, so it travels as a word. Hug is still null and a fixed
+/// size is still its number.
+Object? sizeToWire(double? size) =>
+    size != null && size.isInfinite ? 'fill' : size;
+
+/// The inverse of [sizeToWire].
+double? sizeFromWire(Object? value) => switch (value) {
+  'fill' => double.infinity,
+  num n => n.toDouble(),
+  _ => null,
+};
+
 /// Same contract as [SceneCrossAxisAlignment], for the main axis.
 enum SceneMainAxisAlignment {
   start,

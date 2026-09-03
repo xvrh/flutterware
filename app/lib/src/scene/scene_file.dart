@@ -201,8 +201,8 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
     if (n.y != 0 || n.paramRefs.containsKey('y')) {
       add('y', n.y, () => _num(n.y));
     }
-    if (n.width case var w?) add('width', w, () => _num(w));
-    if (n.height case var h?) add('height', h, () => _num(h));
+    if (n.width case var w?) add('width', w, () => _size(w));
+    if (n.height case var h?) add('height', h, () => _size(h));
     if (n.fill case var f?) add('fill', f, () => _color(f));
     if (n.cornerRadius != 0) {
       add('corner', n.cornerRadius, () => _num(n.cornerRadius));
@@ -275,6 +275,10 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
 /// what makes emit ∘ parse an identity.
 String _num(double v) =>
     v == v.roundToDouble() && v.abs() < 1e15 ? '${v.round()}' : '$v';
+
+/// A size, which is a number or the word for "as much as the parent gives".
+/// Spelled the way Flutter spells it, because that is what it means.
+String _size(double v) => v.isInfinite ? 'double.infinity' : _num(v);
 
 String _color(SceneColor c) =>
     'Color(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
@@ -893,8 +897,8 @@ class _Parser {
   void _applyCommon(SceneNode n, Map<String, Expression> named) {
     _take(named, 'x', (e) => n.x = _doubleV(e, n, 'x') ?? 0);
     _take(named, 'y', (e) => n.y = _doubleV(e, n, 'y') ?? 0);
-    _take(named, 'width', (e) => n.width = _doubleV(e, n, 'width'));
-    _take(named, 'height', (e) => n.height = _doubleV(e, n, 'height'));
+    _take(named, 'width', (e) => n.width = _sizeV(e, n, 'width'));
+    _take(named, 'height', (e) => n.height = _sizeV(e, n, 'height'));
     _take(named, 'fill', (e) => n.fill = _colorV(e, n, 'fill'));
     _take(
       named,
@@ -997,6 +1001,17 @@ class _Parser {
   }
 
   static final _refused = Object();
+
+  /// A size: `double.infinity` for fill, otherwise a number or a parameter.
+  double? _sizeV(Expression e, SceneNode n, String prop) {
+    if (e case PrefixedIdentifier(
+      prefix: Identifier(name: 'double'),
+      identifier: Identifier(name: 'infinity'),
+    )) {
+      return double.infinity;
+    }
+    return _doubleV(e, n, prop);
+  }
 
   double? _doubleV(Expression e, SceneNode n, String prop) {
     var v = _paramRef(e, SceneParamKind.number, n, prop);

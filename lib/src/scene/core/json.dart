@@ -79,8 +79,8 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
   'kind': n.typeName,
   if (n.x != 0) 'x': n.x,
   if (n.y != 0) 'y': n.y,
-  if (n.width != null) 'w': n.width,
-  if (n.height != null) 'h': n.height,
+  if (n.width != null) 'w': sizeToWire(n.width),
+  if (n.height != null) 'h': sizeToWire(n.height),
   if (n.fill != null) 'fill': n.fill!.argb,
   if (n.cornerRadius != 0) 'corner': n.cornerRadius,
   if (n.opacity != 1) 'opacity': n.opacity,
@@ -155,8 +155,8 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
   return node
     ..x = number('x') ?? 0
     ..y = number('y') ?? 0
-    ..width = number('w')
-    ..height = number('h')
+    ..width = sizeFromWire(json['w'])
+    ..height = sizeFromWire(json['h'])
     ..fill = json['fill'] == null
         ? null
         : SceneColor((json['fill']! as num).toInt())
@@ -370,8 +370,8 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
   node
     ..x = number('x') ?? 0
     ..y = number('y') ?? 0
-    ..width = number('w')
-    ..height = number('h')
+    ..width = sizeFromWire(json['w'])
+    ..height = sizeFromWire(json['h'])
     ..fill = color('fill')
     ..cornerRadius = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1;

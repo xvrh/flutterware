@@ -54,12 +54,33 @@ sealed class SceneNode {
   /// rects, keys, groups) is re-pointed by that door.
   String name;
 
-  // Authored geometry. x/y are meaningful only under an absolute parent;
-  // null width/height means hug content.
+  // Authored geometry. x/y are meaningful only under an absolute parent.
   double x = 0;
   double y = 0;
+
+  /// Size along each axis, three-valued in one field:
+  ///
+  /// - `null` — **hug**: as big as the content needs.
+  /// - a finite number — **fixed**.
+  /// - [double.infinity] — **fill**: as much as the parent gives.
+  ///
+  /// The sentinel is Flutter's own vocabulary rather than an invention:
+  /// `Container(width: double.infinity)` already means this, so the value
+  /// reads the way it behaves and every reader that only passes it through
+  /// keeps working. It is not JSON, though — `jsonEncode` refuses a
+  /// non-finite double — so both the wire and the file spell it out; see
+  /// [sizeToWire].
+  ///
+  /// Fill along the parent's MAIN axis needs that parent to be bounded on
+  /// it: a column that hugs its height has no leftover to hand out. The
+  /// renderer honours what it can and the editor is where the contradiction
+  /// has to be shown, not hidden.
   double? width;
   double? height;
+
+  /// Whether this node takes what the parent gives along each axis.
+  bool get widthFills => width != null && width!.isInfinite;
+  bool get heightFills => height != null && height!.isInfinite;
 
   // The uniform styling bag — the bet under test.
   SceneColor? fill;
@@ -348,9 +369,9 @@ class SceneDocument extends SceneListenable {
             case 'y':
               node.y = (v! as num).toDouble();
             case 'width':
-              node.width = (v as num?)?.toDouble();
+              node.width = sizeFromWire(v);
             case 'height':
-              node.height = (v as num?)?.toDouble();
+              node.height = sizeFromWire(v);
             case 'corner':
               node.cornerRadius = (v! as num).toDouble();
             case 'opacity':
@@ -407,8 +428,8 @@ class SceneDocument extends SceneListenable {
       'name': n.name,
       'x': n.x,
       'y': n.y,
-      'w': n.width,
-      'h': n.height,
+      'w': sizeToWire(n.width),
+      'h': sizeToWire(n.height),
       'fill': fill?.argb,
       'corner': n.cornerRadius,
       'opacity': n.fxRendered('opacity'),
@@ -478,7 +499,7 @@ class SceneDocument extends SceneListenable {
       'mainAlign': picture['mainAlign'],
       'crossAlign': picture['crossAlign'],
       'children': children,
-      'w': r.width ?? picture['w'],
+      'w': sizeToWire(r.width) ?? picture['w'],
       'h': r.height ?? picture['h'],
       if (r.fill == null && !r.hasFx('fill')) 'fill': picture['fill'],
       if (r.cornerRadius == 0) 'corner': picture['corner'],
