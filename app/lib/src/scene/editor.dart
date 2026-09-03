@@ -105,6 +105,33 @@ class SceneEditor extends SceneListenable {
     return chosen;
   }
 
+  /// Replaces the whole document, scene and motions, with one read from
+  /// somewhere else — the file changed on disk and this editor is taking
+  /// that version.
+  ///
+  /// A journal entry like any other, so the version it replaced is one undo
+  /// away. The document object itself is kept and transplanted into, because
+  /// the guest, the playbacks and every mounted panel hold it by reference.
+  void adopt(
+    SceneDocument incoming,
+    Map<String, MotionDocument> incomingMotions,
+  ) {
+    clearKeySelection();
+    perform('Reload from disk', () {
+      doc.restore(incoming.snapshot());
+      motions
+        ..clear()
+        ..addAll(incomingMotions);
+    });
+    // The motion that was open may not be in the version that arrived, and
+    // a playback bound to a name the editor no longer has is a crash rather
+    // than an empty timeline.
+    if (_activeMotion != null && !motions.containsKey(_activeMotion)) {
+      _activeMotion = null;
+      notifyListeners();
+    }
+  }
+
   void removeMotion(String name) {
     if (!motions.containsKey(name)) return;
     perform('Delete motion $name', () => motions.remove(name));

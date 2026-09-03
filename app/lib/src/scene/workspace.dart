@@ -21,7 +21,9 @@ class SceneFile {
     required this.className,
     required SceneDocument scene,
     Map<String, MotionDocument> motions = const {},
-  }) : editor = SceneEditor(scene, motions: motions);
+    String? source,
+  }) : editor = SceneEditor(scene, motions: motions),
+       _disk = source;
 
   /// Read a file through the parse door. Refusals are the collecting kind,
   /// so a rejected file yields no document and every reason is listed.
@@ -34,6 +36,7 @@ class SceneFile {
         className: parsed.className!,
         scene: parsed.doc!,
         motions: parsed.motions,
+        source: source,
       ),
       const [],
     );
@@ -42,8 +45,19 @@ class SceneFile {
   /// Where it lives — the identity a workspace dedupes on.
   final String path;
 
-  /// The scene class, which is also the file's name in the UI.
-  final String className;
+  /// The scene class, which is also the file's name in the UI. Follows the
+  /// file when a version written elsewhere renamed it.
+  String className;
+
+  /// The bytes this file last had on disk, as read or as written.
+  ///
+  /// What an external change is compared against, so our own write does not
+  /// come back looking like somebody else's edit, and what a save compares
+  /// against so it writes nothing when there is nothing to change.
+  String? _disk;
+
+  /// Whether [source] is the text this file last read or wrote.
+  bool matchesDisk(String source) => source == _disk;
 
   final SceneEditor editor;
 
@@ -67,7 +81,30 @@ class SceneFile {
     var source = emit();
     var check = parseSceneFile(source);
     if (!check.ok) return check.refusals;
-    write(path, source);
+    // Nothing to write when the bytes are already there. This is what keeps
+    // an editor that saves by itself out of your diff: opening a canonical
+    // file costs nothing, and undoing back to where you started leaves the
+    // file alone and reads clean again.
+    if (source != _disk) {
+      write(path, source);
+      _disk = source;
+    }
+    _savedRevision = editor.revision;
+    return const [];
+  }
+
+  /// Takes the version [source] on disk, as one undoable step.
+  ///
+  /// Undoable is the whole point: a change that arrives while you are working
+  /// — an agent finishing a file, a branch switching under you — can be taken
+  /// without anyone having to answer a dialog about whose version wins,
+  /// because yours is one undo away afterwards.
+  List<SceneRefusal> adopt(String source) {
+    var parsed = parseSceneFile(source);
+    if (!parsed.ok) return parsed.refusals;
+    className = parsed.className!;
+    editor.adopt(parsed.doc!, parsed.motions);
+    _disk = source;
     _savedRevision = editor.revision;
     return const [];
   }

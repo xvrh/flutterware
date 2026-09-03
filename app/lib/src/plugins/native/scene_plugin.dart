@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
@@ -14,11 +15,13 @@ import '../../previews/compiler_daemon_client.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../scene/discovery.dart';
+import '../../scene/autosave.dart';
 import '../../scene/editor.dart';
 import '../../scene/guest.dart';
 import '../../scene/scene_file.dart';
 import '../../scene/playback.dart';
 import '../../scene/ui/workspace_view.dart';
+import '../../scene/watch.dart';
 import '../../scene/workspace.dart';
 import '../../ui/action_button.dart';
 import '../../ui/count_badge.dart';
@@ -86,7 +89,7 @@ class _ScenePanel extends StatefulWidget {
 }
 
 class _ScenePanelState extends State<_ScenePanel>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   String? _tracked;
   String? _package;
 
@@ -99,6 +102,34 @@ class _ScenePanelState extends State<_ScenePanel>
   /// One playback per motion opened, by file and name — a playback owns a
   /// ticker, so it is made once and kept.
   final _playbacks = <String, ScenePlayback>{};
+
+  /// There is no save button: the workspace is written when the editor goes
+  /// quiet. See [SceneAutosave] for what makes that safe.
+  late final _autosave = SceneAutosave(
+    write: (path, source) => File(path).writeAsStringSync(source),
+    onChanged: _redraw,
+  );
+
+  /// The save state moved. Deferred when a build is running, because [build]
+  /// is one of the places that binds the autosaver and a write it flushes on
+  /// the way in must not call `setState` inside that frame.
+  void _redraw() {
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      setState(() {});
+    }
+  }
+
+  /// Watches the package's scene directory, so a file written by an agent or
+  /// arriving with a branch reaches the editor rather than waiting for a
+  /// reopen.
+  SceneWatcher? _watcher;
+  String? _watching;
 
   ScenePlayback _playbackFor(SceneFile file, String motion) {
     // A motion deleted or renamed leaves a playback bound to a name the
@@ -130,10 +161,24 @@ class _ScenePanelState extends State<_ScenePanel>
       AddressScope.segment(context, 0) ?? _core.packages.firstOrNull;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Leaving the app writes what is owed rather than waiting out the quiet
+  /// period. Nobody expects to tab away and come back to unwritten work.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _autosave.flush();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _package = _resolve();
     _retrack();
+    _watchDirectory();
   }
 
   /// A config rebuild hands this panel a new plugin, and with it a new
@@ -166,6 +211,7 @@ class _ScenePanelState extends State<_ScenePanel>
 
   void _close() {
     _disposePlaybacks();
+    _autosave.bind(null);
     _guest?.dispose();
     _guest = null;
     _workspace = null;
@@ -192,6 +238,77 @@ class _ScenePanelState extends State<_ScenePanel>
       _workspace = SceneWorkspace(file, resolveNested: _resolveNested);
       _guest = SceneGuest(widget.plugin.sessionFor(_package!), file.editor);
       _note = '';
+    });
+    _autosave.bind(_workspace);
+  }
+
+  /// Starts (or re-points) the watch on the package's scene directory.
+  void _watchDirectory() {
+    var package = _package;
+    if (package == null) return;
+    var directory = _core.rootFor(package);
+    if (_watching == directory && _watcher?.isWatching == true) return;
+    _watcher?.dispose();
+    _watching = directory;
+    _watcher = SceneWatcher(directory: directory, onChanged: _onDiskChanged)
+      ..start();
+  }
+
+  /// Scene files moved on disk. The listing is refreshed either way; an open
+  /// file is adopted when this editor has nothing of its own to lose, and
+  /// held otherwise.
+  void _onDiskChanged(Set<String> paths) {
+    if (!mounted) return;
+    var package = _package;
+    if (package != null) _core.rescan(package);
+    var workspace = _workspace;
+    if (workspace == null) {
+      setState(() {});
+      return;
+    }
+    var adopted = <String>[];
+    var refused = <String>[];
+    var held = <String>[];
+    for (var file in workspace.openFiles.toList()) {
+      if (!paths.contains(p.canonicalize(file.path))) continue;
+      String source;
+      try {
+        source = File(file.path).readAsStringSync();
+      } on FileSystemException {
+        // Deleted, or caught mid-write. The editor keeps what it has, and the
+        // next event says what the file settled on.
+        continue;
+      }
+      // Our own automatic write, arriving back as an event.
+      if (file.matchesDisk(source)) {
+        _autosave.resume(file.path);
+        continue;
+      }
+      if (file.isDirty) {
+        held.add(p.basename(file.path));
+        _autosave.suspend(
+          file.path,
+          '${p.basename(file.path)} changed on disk — save to keep yours',
+        );
+        continue;
+      }
+      var refusals = file.adopt(source);
+      if (refusals.isEmpty) {
+        adopted.add(p.basename(file.path));
+        _autosave.resume(file.path);
+      } else {
+        refused.add('${p.basename(file.path)}: ${refusals.first}');
+      }
+    }
+    if (adopted.isNotEmpty) workspace.resolveInstances(workspace.active);
+    setState(() {
+      _note = refused.isNotEmpty
+          ? 'on disk and unreadable — ${refused.join('; ')}'
+          : held.isNotEmpty
+          ? '${held.join(', ')} changed on disk'
+          : adopted.isNotEmpty
+          ? 'reloaded ${adopted.join(', ')} from disk'
+          : _note;
     });
   }
 
@@ -273,32 +390,22 @@ class _ScenePanelState extends State<_ScenePanel>
   /// Writes every dirty file the workspace holds — the one on screen and any
   /// nested scene edited on the way here — so a drill-in never leaves work
   /// behind in a file the breadcrumb no longer shows.
+  /// ⌘S. The files are written without it, so this is for the two things an
+  /// automatic write will not do: write now rather than in a moment, and
+  /// overwrite a version that arrived on disk while you were working.
   void _save() {
-    var workspace = _workspace!;
-    var saved = <String>[];
-    var refused = <String>[];
-    for (var file in workspace.dirtyFiles.toList()) {
-      var refusals = file.save(
-        (path, source) => File(path).writeAsStringSync(source),
-      );
-      if (refusals.isEmpty) {
-        saved.add(p.basename(file.path));
-      } else {
-        refused.add('${p.basename(file.path)}: ${refusals.first}');
-      }
-    }
-    setState(() {
-      _note = refused.isNotEmpty
-          ? 'not saved — emit refused its own output (${refused.join('; ')})'
-          : saved.isEmpty
-          ? 'nothing to save'
-          : 'saved ${saved.join(', ')}';
-    });
+    if (_workspace == null) return;
+    setState(_autosave.flush);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _resizeSettle?.cancel();
+    // Before the playbacks and the guest: closing the panel is the last
+    // moment the pending write can still happen.
+    _autosave.dispose();
+    _watcher?.dispose();
     _disposePlaybacks();
     _guest?.dispose();
     super.dispose();
@@ -310,6 +417,11 @@ class _ScenePanelState extends State<_ScenePanel>
     if (package == null) {
       return const NoPackagesConfigured(icon: Icons.movie_filter_outlined);
     }
+    // Both are cheap when nothing moved, and doing them here rather than only
+    // where the workspace is assigned is what makes them survive a hot
+    // reload — the panel's state object outlives one, its fields do not.
+    _autosave.bind(_workspace);
+    _watchDirectory();
     return AnimatedBuilder(
       animation: widget.plugin,
       builder: (context, _) {
@@ -423,7 +535,8 @@ class _ScenePanelState extends State<_ScenePanel>
       children: [
         _Header(
           workspace: workspace,
-          note: _note,
+          note: _autosave.note.isNotEmpty ? _autosave.note : _note,
+          saveState: _autosave.state,
           onBack: () => setState(_close),
           onCrumb: (index) => setState(() {
             workspace.goTo(index);
@@ -550,6 +663,7 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.workspace,
     required this.note,
+    required this.saveState,
     required this.onBack,
     required this.onCrumb,
     required this.onSave,
@@ -557,6 +671,7 @@ class _Header extends StatelessWidget {
 
   final SceneWorkspace workspace;
   final String note;
+  final SceneSaveState saveState;
   final VoidCallback onBack;
   final ValueChanged<int> onCrumb;
   final VoidCallback onSave;
@@ -612,18 +727,43 @@ class _Header extends StatelessWidget {
               ),
           ],
           const Gap(FwSpacing.xs),
-          FwActionButton(
-            label: workspace.anyDirty ? 'Save •' : 'Save',
-            primary: workspace.anyDirty,
-            tooltip: workspace.dirtyFiles.length > 1
-                ? 'Write ${workspace.dirtyFiles.length} scene files (⌘S)'
-                : 'Write the scene file (⌘S)',
-            onPressed: () async => onSave(),
-          ),
+          // No save button. The file is written when the editor goes quiet,
+          // so what belongs here is what happened, not a thing to press —
+          // except when the file moved underneath, which is the one case a
+          // person has to settle.
+          if (saveState == SceneSaveState.conflicted)
+            FwActionButton(
+              label: 'Save anyway',
+              primary: true,
+              tooltip: 'The file changed on disk. Write yours over it (⌘S)',
+              onPressed: () async => onSave(),
+            )
+          else
+            Tooltip(
+              message: saveState == SceneSaveState.refused
+                  ? 'Nothing was written. The work is still here.'
+                  : 'Saved as you work (⌘S writes now)',
+              child: Text(
+                switch (saveState) {
+                  SceneSaveState.pending => 'Saving…',
+                  SceneSaveState.refused => 'Not saved',
+                  _ => 'Saved',
+                },
+                style: type.caption.copyWith(
+                  color: saveState == SceneSaveState.refused
+                      ? colors.red
+                      : colors.mut2,
+                ),
+              ),
+            ),
           Expanded(
             child: Text(
               note,
-              style: type.caption.copyWith(color: colors.mut2),
+              style: type.caption.copyWith(
+                color: saveState == SceneSaveState.refused
+                    ? colors.red
+                    : colors.mut2,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
           ),
