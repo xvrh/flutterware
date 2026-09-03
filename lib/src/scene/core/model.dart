@@ -5,7 +5,14 @@
 import 'listenable.dart';
 import 'values.dart';
 
-enum NodeLayout { absolute, row, column }
+/// How a frame arranges its children.
+///
+/// [table] is the one that is not a flex: its children are ROWS, their
+/// children are cells, and the widths come from the frame's column tracks
+/// rather than from each cell — which is the whole point of it. Stacked
+/// rows each size their own columns and cannot agree; a table is what
+/// agreeing across rows is called.
+enum NodeLayout { absolute, row, column, table }
 
 /// A node's name is its identity everywhere — the wire, the rects, the hit
 /// targets — and in the file it is the *field name* the node is declared
@@ -26,7 +33,15 @@ bool isValidNodeName(String name) =>
 /// Declared in the file as a primary-constructor formal with a default;
 /// referenced by node properties by bare identifier. Parameters share the
 /// class namespace with node fields.
-enum SceneParamKind { string, number, color }
+/// A parameter's type. [list] is the one that is not a value: its default
+/// is a list of items, and what reads it is a node's [SceneNode.repeat]
+/// rather than a property. Substitution and repetition are the same
+/// mechanism seen from two sides, which is why they share this table.
+enum SceneParamKind { string, number, color, list }
+
+/// One item of a list parameter: field name to value, and a value is a
+/// string or a number — the two kinds a bound property can take.
+typedef SceneItem = Map<String, Object>;
 
 class SceneParamDecl {
   SceneParamDecl(this.name, this.kind, this.defaultValue);
@@ -43,6 +58,14 @@ class SceneParamDecl {
     SceneParamKind.string => 'String',
     SceneParamKind.number => 'double',
     SceneParamKind.color => 'Color',
+    SceneParamKind.list => 'List<Map<String, Object>>',
+  };
+
+  /// The declared items, for a [SceneParamKind.list] — the mockup standing
+  /// in for the data until a caller passes its own.
+  List<SceneItem> get items => switch (kind) {
+    SceneParamKind.list => (defaultValue as List).cast<SceneItem>(),
+    _ => const [],
   };
 }
 
@@ -81,6 +104,21 @@ sealed class SceneNode {
   /// Whether this node takes what the parent gives along each axis.
   bool get widthFills => width != null && width!.isInfinite;
   bool get heightFills => height != null && height!.isInfinite;
+
+  /// The list parameter this node is drawn once per item of, or null for a
+  /// node drawn once.
+  ///
+  /// The node stays ONE node: one field in the file, one row in the tree,
+  /// one thing to select and style. What multiplies is the picture, and the
+  /// copies are made where the picture is (see [SceneDocument.expand]). A
+  /// property inside the subtree reads an item's field by binding to
+  /// `<list>.<field>`, which is an ordinary [paramRefs] entry — a repeater
+  /// is a parameter whose value is a list, so it is the same mechanism as
+  /// substitution rather than a second one.
+  ///
+  /// The authored values are the FIRST item's, which is what makes the
+  /// mockup in the file and the data at runtime the same thing.
+  String? repeat;
 
   // The uniform styling bag — the bet under test.
   SceneColor? fill;
@@ -212,6 +250,21 @@ class FrameNode extends SceneNode {
   NodeLayout layout;
   double gap = 8;
   SceneEdges padding = SceneEdges.zero;
+
+  /// The column tracks, when [layout] is [NodeLayout.table]. Each is a size
+  /// in the same three-valued vocabulary as a node's: `null` hugs the
+  /// widest cell in the column, a number is fixed, [double.infinity] takes
+  /// what is left. A column nobody declared hugs.
+  ///
+  /// The tracks belong to the TABLE, not to the cells, and that is the
+  /// difference a table makes: every row is measured against the same
+  /// tracks, so the columns line up whatever each row happens to hold.
+  List<double?> columns = [];
+
+  /// Space inside every cell of a table. Cells are laid out by the table
+  /// rather than by their own boxes, so this is where their breathing room
+  /// has to be said; on any other layout it means nothing.
+  SceneEdges cellPadding = SceneEdges.zero;
   SceneMainAxisAlignment mainAlign = SceneMainAxisAlignment.start;
   SceneCrossAxisAlignment crossAlign = SceneCrossAxisAlignment.center;
 
@@ -366,44 +419,76 @@ class SceneDocument extends SceneListenable {
   /// The scene's declared parameters, in declaration order.
   final params = <SceneParamDecl>[];
 
+  /// List arguments a caller passed, overriding the declared mockups until
+  /// the next [applyArgs]. Scalar arguments need no such table — they land
+  /// in the properties that read them — but nothing holds a list, so this
+  /// does.
+  final _lists = <String, List<SceneItem>>{};
+
+  SceneParamDecl? paramNamed(String name) {
+    for (var p in params) {
+      if (p.name == name) return p;
+    }
+    return null;
+  }
+
+  /// The items a repeat over [param] draws: the argument if one was
+  /// applied, otherwise the mockup the file declares.
+  List<SceneItem> itemsOf(String param) =>
+      _lists[param] ?? paramNamed(param)?.items ?? const [];
+
+  /// What to draw for one child slot: the node itself, and one copy per
+  /// FURTHER item when it repeats.
+  ///
+  /// The first item is not a copy — it is the node, holding the authored
+  /// values, so it keeps its identity: its fx writers, its selection
+  /// outline and the rect the editor drags by are all still its own. The
+  /// copies are pictures, renamed `<name>#1`, `#2`… so no key or measured
+  /// rect of theirs can be mistaken for the template's.
+  List<SceneNode> expand(SceneNode child) {
+    var list = child.repeat;
+    if (list == null) return [child];
+    var items = itemsOf(list);
+    // No data, nothing drawn — which is the honest answer for a table of
+    // an empty list, and the reason the mockup in the file is not empty.
+    if (items.isEmpty) return const [];
+    return [
+      child,
+      for (var i = 1; i < items.length; i++)
+        applySceneItem(
+          deepCopyNode(child, rename: (n) => '$n#$i'),
+          list,
+          items[i],
+        ),
+    ];
+  }
+
   /// Instantiate: set every parameter-bound property whose parameter is
   /// named in [args]. This is what the export matrix does per language and
   /// what a caller's arguments do at mount — the model-level half of
   /// `BannerScene(title: …)`.
   void applyArgs(Map<String, Object?> args) {
     edit(() {
+      for (var p in params) {
+        if (p.kind != SceneParamKind.list) continue;
+        if (args[p.name] case List raw) {
+          _lists[p.name] = [
+            for (var item in raw) (item as Map).cast<String, Object>(),
+          ];
+        }
+      }
       for (var (node, _) in walk()) {
         for (var entry in node.paramRefs.entries) {
           if (!args.containsKey(entry.value)) continue;
-          var v = args[entry.value];
-          switch (entry.key) {
-            case 'x':
-              node.x = (v! as num).toDouble();
-            case 'y':
-              node.y = (v! as num).toDouble();
-            case 'width':
-              node.width = sizeFromWire(v);
-            case 'height':
-              node.height = sizeFromWire(v);
-            case 'corner':
-              node.cornerRadius = (v! as num).toDouble();
-            case 'opacity':
-              node.opacity = (v! as num).toDouble();
-            case 'fill':
-              node.fill = v as SceneColor?;
-            case 'text':
-              (node as TextNode).text = v! as String;
-            case 'fontSize':
-              (node as TextNode).fontSize = (v! as num).toDouble();
-            case 'color':
-              (node as TextNode).color = v! as SceneColor;
-            case 'gap':
-              (node as FrameNode).gap = (v! as num).toDouble();
-            case 'padding':
-              (node as FrameNode).padding = SceneEdges.all(
-                (v! as num).toDouble(),
-              );
-          }
+          setSceneProperty(node, entry.key, args[entry.value]);
+        }
+      }
+      // A repeater's template shows the first item — the same rule the file
+      // is written under, applied to the data that replaced the mockup.
+      for (var (node, _) in walk()) {
+        if (node.repeat case var list?) {
+          var items = itemsOf(list);
+          if (items.isNotEmpty) applySceneItem(node, list, items.first);
         }
       }
     });
@@ -460,9 +545,17 @@ class SceneDocument extends SceneListenable {
           'layout': f.layout.name,
           'gap': f.fxRendered('gap'),
           'padding': f.padding.toWire(),
+          if (f.columns.isNotEmpty)
+            'columns': [for (var c in f.columns) sizeToWire(c)],
+          if (!f.cellPadding.isZero) 'cellPadding': f.cellPadding.toWire(),
           'mainAlign': f.mainAlign.index,
           'crossAlign': f.crossAlign.index,
-          'children': [for (var c in f.children) _json(c)],
+          // The wire is a picture, so a repeat is already spent here: the
+          // host is handed the rows rather than the rule that made them.
+          'children': [
+            for (var c in f.children)
+              for (var drawn in expand(c)) _json(drawn),
+          ],
         },
         TextNode t => {
           'kind': 'text',
@@ -652,6 +745,8 @@ class SceneDocument extends SceneListenable {
               ..layout = s.layout
               ..gap = s.gap
               ..padding = s.padding
+              ..columns = [...s.columns]
+              ..cellPadding = s.cellPadding
               ..mainAlign = s.mainAlign
               ..crossAlign = s.crossAlign
               ..children.clear()
@@ -682,6 +777,7 @@ class SceneDocument extends SceneListenable {
           ..y = snap.y
           ..width = snap.width
           ..height = snap.height
+          ..repeat = snap.repeat
           ..fill = snap.fill
           ..borderColor = snap.borderColor
           ..borderWidth = snap.borderWidth
@@ -719,6 +815,8 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
       FrameNode(name, layout: f.layout)
         ..gap = f.gap
         ..padding = f.padding
+        ..columns = [...f.columns]
+        ..cellPadding = f.cellPadding
         ..mainAlign = f.mainAlign
         ..crossAlign = f.crossAlign
         ..children.addAll([
@@ -746,6 +844,7 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     ..y = node.y
     ..width = node.width
     ..height = node.height
+    ..repeat = node.repeat
     ..fill = node.fill
     ..borderColor = node.borderColor
     ..borderWidth = node.borderWidth
@@ -753,4 +852,61 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     ..opacity = node.opacity
     ..paramRefs.addAll(node.paramRefs);
   return copy;
+}
+
+/// Write one authored property by the name a [SceneNode.paramRefs] entry
+/// keys it under. The one place that maps a property name to a slot, so an
+/// argument and a repeated item's field land the same way.
+void setSceneProperty(SceneNode node, String prop, Object? value) {
+  switch (prop) {
+    case 'x':
+      node.x = (value! as num).toDouble();
+    case 'y':
+      node.y = (value! as num).toDouble();
+    case 'width':
+      node.width = sizeFromWire(value);
+    case 'height':
+      node.height = sizeFromWire(value);
+    case 'corner':
+      node.cornerRadius = (value! as num).toDouble();
+    case 'opacity':
+      node.opacity = (value! as num).toDouble();
+    case 'fill':
+      node.fill = value as SceneColor?;
+    case 'text':
+      // A number filling a text slot is ordinary in a repeated row — a
+      // quantity is a number and reads as one, not as "12.0".
+      (node as TextNode).text = switch (value) {
+        double d when d == d.roundToDouble() && d.abs() < 1e15 =>
+          '${d.round()}',
+        _ => '$value',
+      };
+    case 'fontSize':
+      (node as TextNode).fontSize = (value! as num).toDouble();
+    case 'color':
+      (node as TextNode).color = value! as SceneColor;
+    case 'gap':
+      (node as FrameNode).gap = (value! as num).toDouble();
+    case 'padding':
+      (node as FrameNode).padding = SceneEdges.all((value! as num).toDouble());
+  }
+}
+
+/// Fill in one item's fields across a repeated subtree: every property
+/// bound to `<list>.<field>` takes that field's value. Returns [node], so a
+/// copy can be made and filled in one expression.
+SceneNode applySceneItem(SceneNode node, String list, SceneItem item) {
+  var prefix = '$list.';
+  void visit(SceneNode n) {
+    for (var ref in n.paramRefs.entries) {
+      if (!ref.value.startsWith(prefix)) continue;
+      var field = ref.value.substring(prefix.length);
+      if (!item.containsKey(field)) continue;
+      setSceneProperty(n, ref.key, item[field]);
+    }
+    n.children.forEach(visit);
+  }
+
+  visit(node);
+  return node;
 }

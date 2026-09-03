@@ -89,6 +89,7 @@ class SceneInspector extends StatelessWidget {
     var node = editor.primary ?? doc.root;
     var parent = node == doc.root ? null : doc.parentOf(node);
     var inFlex = parent != null && parent.layout != NodeLayout.absolute;
+    var isRow = parent != null && parent.layout == NodeLayout.table;
 
     return ListView(
       key: ValueKey('inspector:${node.name}'),
@@ -113,7 +114,19 @@ class SceneInspector extends StatelessWidget {
             ),
           ),
         const SizedBox(height: FwSpacing.lg),
-        if (inFlex)
+        if (isRow)
+          // A row under a table is not laid out at all: the table places the
+          // cells, and the row is what paints behind them. Saying so beats
+          // leaving a column of controls that quietly do nothing.
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            child: Text(
+              'A row of ${parent.name}. It paints the fill, the border and '
+              'the corner; ${parent.name} lays out the cells.',
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            ),
+          )
+        else if (inFlex)
           Padding(
             padding: const EdgeInsets.only(bottom: FwSpacing.md),
             child: Text(
@@ -198,10 +211,11 @@ class SceneInspector extends StatelessWidget {
             apply: (v) => node.opacity = v.clamp(0, 1),
           ),
         ]),
+        if (node != doc.root) ..._repeat(context, node),
         const Divider(height: FwSpacing.xxl),
         ...switch (node) {
           TextNode t => _textProps(context, t),
-          FrameNode f => _frameProps(context, f),
+          FrameNode f => isRow ? const [] : _frameProps(context, f),
           ShapeNode s => _shapeProps(context, s),
           ExternalNode e => _extProps(context, e),
           SceneRefNode r => _sceneProps(context, r),
@@ -360,6 +374,21 @@ class SceneInspector extends StatelessWidget {
     required bool horizontal,
   }) {
     var parent = doc.parentOf(node);
+    // Two nodes sit inside a table and neither owns its own width: a row is
+    // placed entirely by the table, and a cell is as wide as its column. A
+    // size set here is not honoured, and looking ignored is worse than
+    // being refused in words.
+    if (parent != null && parent.layout == NodeLayout.table) {
+      return mode == _SizeMode.hug ? null : '${parent.name} lays this out';
+    }
+    var table = parent == null ? null : doc.parentOf(parent);
+    if (table != null &&
+        table.layout == NodeLayout.table &&
+        horizontal &&
+        mode != _SizeMode.hug) {
+      var index = parent!.children.indexOf(node);
+      return 'column ${index + 1} of ${table.name} decides this';
+    }
     if (mode == _SizeMode.fill) {
       if (parent == null || parent.layout == NodeLayout.absolute) {
         return horizontal
@@ -482,6 +511,11 @@ class SceneInspector extends StatelessWidget {
         FwChoice(value: NodeLayout.absolute, label: 'Free'),
         FwChoice(value: NodeLayout.row, label: 'Row'),
         FwChoice(value: NodeLayout.column, label: 'Column'),
+        FwChoice(
+          value: NodeLayout.table,
+          label: 'Table',
+          detail: 'children are rows, their children are cells',
+        ),
       ],
       // A layout switch is a geometry transaction, not a flag flip: entering
       // Free bakes each child's measured position into authored x/y; entering
@@ -511,15 +545,18 @@ class SceneInspector extends StatelessWidget {
       }),
     ),
     const SizedBox(height: FwSpacing.md),
-    _row([
-      _number(
-        'gap',
-        'Gap',
-        _shown(f, 'gap', f.gap),
-        SceneNumberShape.of(propSpecFor(f, 'gap')),
-        apply: (v) => f.gap = v,
-      ),
-    ]),
+    if (f.layout == NodeLayout.table) ...[
+      ..._tableProps(context, f),
+    ] else
+      _row([
+        _number(
+          'gap',
+          'Gap',
+          _shown(f, 'gap', f.gap),
+          SceneNumberShape.of(propSpecFor(f, 'gap')),
+          apply: (v) => f.gap = v,
+        ),
+      ]),
     _label(context, 'Padding'),
     _row([
       _number(
@@ -553,7 +590,22 @@ class SceneInspector extends StatelessWidget {
         apply: (v) => f.padding = f.padding.copyWith(bottom: v),
       ),
     ]),
-    if (f.layout != NodeLayout.absolute) ...[
+    if (f.layout == NodeLayout.table) ...[
+      _label(context, 'Cells sit'),
+      FwPicker<SceneCrossAxisAlignment>(
+        selected: f.crossAlign,
+        choices: const [
+          FwChoice(value: SceneCrossAxisAlignment.start, label: 'Top'),
+          FwChoice(value: SceneCrossAxisAlignment.center, label: 'Middle'),
+          FwChoice(value: SceneCrossAxisAlignment.end, label: 'Bottom'),
+          FwChoice(
+            value: SceneCrossAxisAlignment.stretch,
+            label: 'Filling the row',
+          ),
+        ],
+        onChanged: (v) => _door('crossAlign', () => f.crossAlign = v),
+      ),
+    ] else if (f.layout != NodeLayout.absolute) ...[
       // Both axes, always, and each says when it has nothing to do. Cross
       // align alone was read as "align the contents", which is what main
       // align does — and a frame that hugs the axis it is aligning on has
@@ -597,6 +649,198 @@ class SceneInspector extends StatelessWidget {
       ),
     ],
   ];
+
+  /// Drawn once, or once per item of a list parameter.
+  ///
+  /// A repeat is not a kind of node — any node can be one — so it sits with
+  /// the properties every node has rather than in a type's section. The
+  /// node stays one node: what multiplies is the picture.
+  List<Widget> _repeat(BuildContext context, SceneNode node) {
+    var lists = [
+      for (var p in doc.params)
+        if (p.kind == SceneParamKind.list) p,
+    ];
+    if (lists.isEmpty && node.repeat == null) return const [];
+    var count = node.repeat == null ? 0 : doc.itemsOf(node.repeat!).length;
+    return [
+      const SizedBox(height: FwSpacing.md),
+      _label(context, 'Repeat'),
+      FwPicker<String>(
+        selected: node.repeat ?? '',
+        choices: [
+          const FwChoice(value: '', label: 'Drawn once'),
+          for (var p in lists)
+            FwChoice(
+              value: p.name,
+              label: 'Once per ${p.name}',
+              detail:
+                  '${p.items.length} items, '
+                  '${p.items.isEmpty ? 'no fields' : p.items.first.keys.join(' · ')}',
+            ),
+        ],
+        onChanged: (v) =>
+            _door('repeat', () => node.repeat = v.isEmpty ? null : v),
+      ),
+      if (node.repeat != null)
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          child: Text(
+            count == 0
+                ? 'no items, so nothing is drawn'
+                : 'drawn $count times — this one is the first',
+            style: context.type.micro.copyWith(color: context.colors.mut2),
+          ),
+        ),
+    ];
+  }
+
+  /// A table's own controls: the column tracks, and the room inside a cell.
+  ///
+  /// The tracks are the table — a column that hugs is as wide as the widest
+  /// cell in ANY row, which is the thing stacked rows cannot do — so they
+  /// come first, before anything about one cell.
+  List<Widget> _tableProps(BuildContext context, FrameNode f) {
+    var widest = 0;
+    for (var row in f.children) {
+      if (row.children.length > widest) widest = row.children.length;
+    }
+    return [
+      Row(
+        children: [
+          Expanded(child: _label(context, 'Columns')),
+          Tappable(
+            onTap: () =>
+                _door('columns', () => f.columns = [...f.columns, null]),
+            child: Icon(
+              Icons.add,
+              size: FwIconSize.md,
+              color: context.colors.accent,
+            ),
+          ),
+        ],
+      ),
+      if (f.columns.length < widest)
+        Padding(
+          padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+          child: Text(
+            '$widest cells in the widest row — '
+            '${widest - f.columns.length} column'
+            '${widest - f.columns.length == 1 ? '' : 's'} '
+            'undeclared, and hugging',
+            style: context.type.micro.copyWith(color: context.colors.mut2),
+          ),
+        ),
+      for (var i = 0; i < f.columns.length; i++) _column(context, f, i),
+      const SizedBox(height: FwSpacing.md),
+      _label(context, 'Cell padding'),
+      _row([
+        _number(
+          'cellPadding',
+          'Left',
+          f.cellPadding.left,
+          SceneNumberShape.pixels,
+          apply: (v) => f.cellPadding = f.cellPadding.copyWith(left: v),
+        ),
+        _number(
+          'cellPadding',
+          'Top',
+          f.cellPadding.top,
+          SceneNumberShape.pixels,
+          apply: (v) => f.cellPadding = f.cellPadding.copyWith(top: v),
+        ),
+      ]),
+      _row([
+        _number(
+          'cellPadding',
+          'Right',
+          f.cellPadding.right,
+          SceneNumberShape.pixels,
+          apply: (v) => f.cellPadding = f.cellPadding.copyWith(right: v),
+        ),
+        _number(
+          'cellPadding',
+          'Bottom',
+          f.cellPadding.bottom,
+          SceneNumberShape.pixels,
+          apply: (v) => f.cellPadding = f.cellPadding.copyWith(bottom: v),
+        ),
+      ]),
+    ];
+  }
+
+  /// One column track, in the same three words a node's size uses.
+  Widget _column(BuildContext context, FrameNode f, int index) {
+    var value = f.columns[index];
+    var mode = value == null
+        ? _SizeMode.hug
+        : value.isInfinite
+        ? _SizeMode.fill
+        : _SizeMode.fixed;
+    void set(double? v) =>
+        _door('columns', () => f.columns = [...f.columns]..[index] = v);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: FwSpacing.sm),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 20,
+            child: Text(
+              '${index + 1}',
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            ),
+          ),
+          Expanded(
+            child: mode == _SizeMode.fixed
+                ? SceneScrubNumber(
+                    value: value!,
+                    shape: SceneNumberShape.pixels,
+                    onChanged: set,
+                    onCommit: (v) {
+                      set(v);
+                      editor.endMerge();
+                    },
+                  )
+                : Text(
+                    mode == _SizeMode.hug
+                        ? 'as wide as its widest cell'
+                        : 'what is left',
+                    style: context.type.caption.copyWith(
+                      color: context.colors.mut2,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: FwSpacing.sm),
+          GestureDetector(
+            onTapDown: (d) => showContextMenu(context, d.globalPosition, [
+              for (var option in _SizeMode.values)
+                MenuItem(
+                  option.label,
+                  icon: option == mode ? Icons.check : null,
+                  onSelected: () => set(switch (option) {
+                    _SizeMode.hug => null,
+                    _SizeMode.fill => double.infinity,
+                    _SizeMode.fixed => 96,
+                  }),
+                ),
+              MenuItem(
+                'Remove',
+                onSelected: () => _door(
+                  'columns',
+                  () => f.columns = [...f.columns]..removeAt(index),
+                ),
+              ),
+            ]),
+            child: Text(
+              mode.label,
+              style: context.type.caption.copyWith(
+                color: context.colors.accent,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// Says when an alignment has no room to move anything: the frame hugs
   /// that axis, so every option lands in the same place.
@@ -807,6 +1051,16 @@ class SceneInspector extends StatelessWidget {
                   (c) => _door('args', () => r.args[p.name] = c),
                 ),
               ],
+            ),
+          ),
+          // A list is data, not a value with a field: the nested scene
+          // repeats over whatever it declares, and passing a different one
+          // is the caller's job until there is an editor for it.
+          SceneParamKind.list => Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            child: Text(
+              '${p.name} — ${p.items.length} items, from the scene itself',
+              style: context.type.caption.copyWith(color: context.colors.mut),
             ),
           ),
         },

@@ -125,13 +125,29 @@ class _SceneViewState extends State<SceneView> {
       var root = _artboard.currentContext?.findRenderObject() as RenderBox?;
       if (root == null) return;
       var rects = <String, SceneRect>{};
-      for (var (node, _) in widget.scene.walk()) {
+      SceneRect? visit(SceneNode node) {
         var box =
             _keys[node.name]?.currentContext?.findRenderObject() as RenderBox?;
-        if (box == null || !box.hasSize) continue;
-        var topLeft = box.localToGlobal(Offset.zero, ancestor: root);
-        rects[node.name] = (topLeft & box.size).scene;
+        SceneRect? rect;
+        if (box != null && box.hasSize) {
+          rect =
+              (box.localToGlobal(Offset.zero, ancestor: root) & box.size).scene;
+        }
+        SceneRect? spanned;
+        for (var child in node.children) {
+          var childRect = visit(child);
+          if (childRect == null) continue;
+          spanned = spanned == null ? childRect : _union(spanned, childRect);
+        }
+        // A table row draws no box of its own — the table lays out the
+        // cells and paints the row behind them — so the row IS what its
+        // cells span, which is the rect the editor selects and drops on.
+        rect ??= spanned;
+        if (rect != null) rects[node.name] = rect;
+        return rect;
       }
+
+      visit(widget.scene.root);
       widget.onMeasured!(rects);
     });
   }
@@ -155,11 +171,16 @@ class _SceneViewState extends State<SceneView> {
     return extent;
   }
 
-  /// Which axes of [n] its parent has already sized for it.
-  ({bool width, bool height}) _stretchedBy(SceneNode n) {
-    var parent = widget.scene.parentOf(n);
-    if (parent is! FrameNode || parent.layout == NodeLayout.absolute) {
+  /// Which axes of [n] its parent has already sized for it. The parent is
+  /// passed rather than looked up: a repeated copy hangs in no tree.
+  ({bool width, bool height}) _stretchedBy(SceneNode n, FrameNode? parent) {
+    if (parent == null || parent.layout == NodeLayout.absolute) {
       return (width: false, height: false);
+    }
+    // A cell's width is the column's, and a cell that also asked for one
+    // would be fighting the table for it.
+    if (parent.layout == NodeLayout.table) {
+      return (width: true, height: false);
     }
     var row = parent.layout == NodeLayout.row;
     var mainFilled = row ? n.widthFills : n.heightFills;
@@ -205,6 +226,7 @@ class _SceneViewState extends State<SceneView> {
     SceneNode n, {
     bool root = false,
     String prefix = '',
+    FrameNode? parent,
   }) {
     Widget? inner;
     switch (n) {
@@ -246,7 +268,11 @@ class _SceneViewState extends State<SceneView> {
         if (f.layout == NodeLayout.absolute) {
           var stack = Stack(
             clipBehavior: Clip.none,
-            children: [for (var c in f.children) _child(context, f, c, prefix)],
+            children: [
+              for (var c in f.children)
+                for (var drawn in widget.scene.expand(c))
+                  _child(context, f, drawn, prefix),
+            ],
           );
           // A stack cannot lay out under an unbounded constraint, and a
           // column hands its children exactly that on the main axis. A free
@@ -266,11 +292,16 @@ class _SceneViewState extends State<SceneView> {
           );
           break;
         }
+        if (f.layout == NodeLayout.table) {
+          inner = _table(context, f, prefix);
+          break;
+        }
         var row = f.layout == NodeLayout.row;
         Widget flex({required bool expand}) {
           var children = [
             for (var c in f.children)
-              _child(context, f, c, prefix, expand: expand),
+              for (var drawn in widget.scene.expand(c))
+                _child(context, f, drawn, prefix, expand: expand),
           ];
           return row
               ? Row(
@@ -313,7 +344,7 @@ class _SceneViewState extends State<SceneView> {
     // A node the parent already stretched must not also ask for infinity:
     // `Expanded` hands it a tight box, and an infinite width inside one is
     // an unbounded-constraint error rather than a wide node.
-    var stretched = _stretchedBy(n);
+    var stretched = _stretchedBy(n, parent);
     Widget result = Container(
       key: _key('$prefix${n.name}'),
       width: stretched.width ? null : n.width,
@@ -367,6 +398,108 @@ class _SceneViewState extends State<SceneView> {
     return result;
   }
 
+  /// A table: rows that agree on their columns.
+  ///
+  /// The tracks belong to the frame, so every row is measured against the
+  /// same ones — which is the only way a column hugging its widest cell can
+  /// mean anything, and the reason stacked rows are not a table.
+  Widget _table(BuildContext context, FrameNode f, String prefix) {
+    var rows = [
+      for (var c in f.children)
+        for (var drawn in widget.scene.expand(c)) drawn,
+    ];
+    List<SceneNode> cellsOf(SceneNode row) =>
+        row is FrameNode ? row.children : [row];
+    var count = f.columns.length;
+    for (var r in rows) {
+      var cells = cellsOf(r).length;
+      if (cells > count) count = cells;
+    }
+    if (rows.isEmpty || count == 0) return const SizedBox.shrink();
+
+    Widget table({required bool bounded}) => Table(
+      columnWidths: {
+        for (var i = 0; i < count; i++)
+          i: _track(
+            i < f.columns.length ? f.columns[i] : null,
+            bounded: bounded,
+          ),
+      },
+      defaultVerticalAlignment: switch (f.crossAlign) {
+        SceneCrossAxisAlignment.start => TableCellVerticalAlignment.top,
+        SceneCrossAxisAlignment.end => TableCellVerticalAlignment.bottom,
+        SceneCrossAxisAlignment.stretch => TableCellVerticalAlignment.fill,
+        _ => TableCellVerticalAlignment.middle,
+      },
+      children: [
+        for (var r in rows)
+          TableRow(
+            decoration: _rowDecoration(r),
+            children: [
+              for (var i = 0; i < count; i++)
+                if (cellsOf(r) case var cells)
+                  i < cells.length
+                      ? Padding(
+                          padding: f.cellPadding.flutter,
+                          child: _node(
+                            context,
+                            cells[i],
+                            prefix: prefix,
+                            parent: f,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+            ],
+          ),
+      ],
+    );
+
+    // A column that takes what is left needs there to BE a left, exactly as
+    // `Expanded` does: under an unbounded width it hugs instead.
+    var anyFills = f.columns.any((c) => c != null && c.isInfinite);
+    return anyFills
+        ? LayoutBuilder(
+            builder: (context, constraints) =>
+                table(bounded: constraints.hasBoundedWidth),
+          )
+        : table(bounded: false);
+  }
+
+  TableColumnWidth _track(double? width, {required bool bounded}) =>
+      switch (width) {
+        null => const IntrinsicColumnWidth(),
+        var w when w.isInfinite =>
+          bounded ? const FlexColumnWidth() : const IntrinsicColumnWidth(),
+        var w => FixedColumnWidth(w),
+      };
+
+  /// What paints behind a table row. A row under a table contributes its
+  /// decoration and nothing else — the table lays the cells out, so the
+  /// row's own box, padding and size have nowhere to apply.
+  Decoration? _rowDecoration(SceneNode r) {
+    var selected = widget.selected.contains(r.name);
+    var fill = r.hasFx('fill') ? r.fxRendered('fill') as SceneColor : r.fill;
+    if (fill == null && r.borderColor == null && !selected) return null;
+    // A row has no box to wrap in an Opacity, so it fades what it paints.
+    var opacity = (r.fxRendered('opacity') as double).clamp(0.0, 1.0);
+    return BoxDecoration(
+      color: fill?.flutter.withValues(alpha: fill.alpha / 255 * opacity),
+      border: selected
+          ? Border.all(color: const Color(0xFF4A64D0), width: 1.5)
+          : r.borderColor == null
+          ? null
+          : Border.all(
+              color: r.borderColor!.flutter.withValues(
+                alpha: r.borderColor!.alpha / 255 * opacity,
+              ),
+              width: r.borderWidth,
+            ),
+      borderRadius: r.cornerRadius == 0
+          ? null
+          : BorderRadius.circular(r.cornerRadius),
+    );
+  }
+
   Widget _child(
     BuildContext context,
     FrameNode parent,
@@ -374,7 +507,7 @@ class _SceneViewState extends State<SceneView> {
     String prefix, {
     bool expand = false,
   }) {
-    var view = _node(context, child, prefix: prefix);
+    var view = _node(context, child, prefix: prefix, parent: parent);
     if (parent.layout == NodeLayout.absolute) {
       return Positioned(left: child.x, top: child.y, child: view);
     }
@@ -442,4 +575,12 @@ class _ScenePlayhead implements Playhead {
 
   @override
   void seek(Duration position) => playable.apply(position);
+}
+
+SceneRect _union(SceneRect a, SceneRect b) {
+  var left = a.left < b.left ? a.left : b.left;
+  var top = a.top < b.top ? a.top : b.top;
+  var right = a.right > b.right ? a.right : b.right;
+  var bottom = a.bottom > b.bottom ? a.bottom : b.bottom;
+  return SceneRect(left, top, right - left, bottom - top);
 }

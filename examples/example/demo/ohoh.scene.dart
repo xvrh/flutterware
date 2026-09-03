@@ -1,4 +1,4 @@
-//@flutterware:scene=0.5
+//@flutterware:scene=0.6
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly

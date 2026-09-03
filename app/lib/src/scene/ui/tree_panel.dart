@@ -225,6 +225,16 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
         ],
       ),
       trailing: [
+        // A repeated node is one row here and several on the canvas, which
+        // is exactly the thing that has to be readable from the tree.
+        if (node.repeat case var list?)
+          Tooltip(
+            message: 'Drawn once per item of "$list"',
+            child: Text(
+              '×${doc.itemsOf(list).length}',
+              style: context.type.caption.copyWith(color: colors.mut2),
+            ),
+          ),
         for (var swatch in _swatchesOf(node))
           Container(
             width: 10,

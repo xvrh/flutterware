@@ -1,17 +1,24 @@
-//@flutterware:scene=0.5
+//@flutterware:scene=0.6
 // Target three of three: an invoice template, exported as a PDF.
 //
-// The rows below are the mockup standing in for data. There are four of them
-// because four is what fits and what could be typed, not because an invoice
-// has four lines: the real one has as many as the data has, and every row is
-// the same row with different values. That is the thing this target exists to
-// show the model cannot say yet.
+// The line items are a list parameter: the file carries four of them as the
+// mockup, a caller passes as many as the data has, and either way there is
+// ONE authored row — `lineRow`, drawn once per item, its cells reading the
+// item's fields. The table above it is what makes the columns agree: the
+// tracks belong to the table, so every row is measured against the same
+// ones whatever it happens to hold.
 
 class Invoice({
   final String number = 'INV-2043',
   final String issued = '3 September 2026',
   final String billTo = 'Northwind Coffee Ltd',
   final String total = '£1,248.00',
+  final List<Map<String, Object>> lines = const [
+    {'item': 'Espresso beans, 1kg', 'qty': 12, 'amount': '£384.00'},
+    {'item': 'Oat milk, 12 × 1L', 'qty': 8, 'amount': '£216.00'},
+    {'item': 'Takeaway cups, 500', 'qty': 4, 'amount': '£148.00'},
+    {'item': 'Filter papers, box', 'qty': 25, 'amount': '£500.00'},
+  ],
 }) {
   late final brand = Text(
     'ACME SUPPLY',
@@ -37,130 +44,52 @@ class Invoice({
     children: [brand, invoiceNo, issuedOn, customer],
   );
 
-  late final colItem = Text(
+  late final headItem = Text(
     'Item',
-    width: double.infinity,
     fontSize: 11,
     weight: FontWeight.w600,
     color: Color(0xFF6B5A52),
   );
-  late final colQty = Text(
+  late final headQty = Text(
     'Qty',
-    width: 48,
-    align: TextAlign.right,
     fontSize: 11,
     weight: FontWeight.w600,
     color: Color(0xFF6B5A52),
+    align: TextAlign.right,
   );
-  late final colPrice = Text(
+  late final headAmount = Text(
     'Amount',
-    width: 96,
-    align: TextAlign.right,
     fontSize: 11,
     weight: FontWeight.w600,
     color: Color(0xFF6B5A52),
+    align: TextAlign.right,
   );
-  late final columns = Frame(
-    width: 499,
+  late final headRow = Frame(
     fill: Color(0xFFF3E9E1),
-    layout: NodeLayout.row,
-    gap: 24,
-    padding: 8,
-    children: [colItem, colQty, colPrice],
+    children: [headItem, headQty, headAmount],
   );
 
-  late final item1 = Text(
-    'Espresso beans, 1kg',
-    width: double.infinity,
+  late final lineItem = Text(lines.item, fontSize: 12);
+  late final lineQty = Text(lines.qty, fontSize: 12, align: TextAlign.right);
+  late final lineAmount = Text(
+    lines.amount,
     fontSize: 12,
-  );
-  late final qty1 = Text('12', width: 48, align: TextAlign.right, fontSize: 12);
-  late final price1 = Text(
-    '£384.00',
-    width: 96,
     align: TextAlign.right,
-    fontSize: 12,
   );
-  late final row1 = Frame(
-    width: 499,
-    layout: NodeLayout.row,
-    gap: 24,
-    padding: 8,
+  late final lineRow = Frame(
     borderColor: Color(0xFFEDE4DC),
-    children: [item1, qty1, price1],
-  );
-
-  late final item2 = Text(
-    'Oat milk, 12 × 1L',
-    width: double.infinity,
-    fontSize: 12,
-  );
-  late final qty2 = Text('8', width: 48, align: TextAlign.right, fontSize: 12);
-  late final price2 = Text(
-    '£216.00',
-    width: 96,
-    align: TextAlign.right,
-    fontSize: 12,
-  );
-  late final row2 = Frame(
-    width: 499,
-    layout: NodeLayout.row,
-    gap: 24,
-    padding: 8,
-    borderColor: Color(0xFFEDE4DC),
-    children: [item2, qty2, price2],
-  );
-
-  late final item3 = Text(
-    'Takeaway cups, 500',
-    width: double.infinity,
-    fontSize: 12,
-  );
-  late final qty3 = Text('4', width: 48, align: TextAlign.right, fontSize: 12);
-  late final price3 = Text(
-    '£148.00',
-    width: 96,
-    align: TextAlign.right,
-    fontSize: 12,
-  );
-  late final row3 = Frame(
-    width: 499,
-    layout: NodeLayout.row,
-    gap: 24,
-    padding: 8,
-    borderColor: Color(0xFFEDE4DC),
-    children: [item3, qty3, price3],
-  );
-
-  late final item4 = Text(
-    'Filter papers, box',
-    width: double.infinity,
-    fontSize: 12,
-  );
-  late final qty4 = Text('25', width: 48, align: TextAlign.right, fontSize: 12);
-  late final price4 = Text(
-    '£500.00',
-    width: 96,
-    align: TextAlign.right,
-    fontSize: 12,
-  );
-  late final row4 = Frame(
-    width: 499,
-    layout: NodeLayout.row,
-    gap: 24,
-    padding: 8,
-    borderColor: Color(0xFFEDE4DC),
-    children: [item4, qty4, price4],
+    repeat: lines,
+    children: [lineItem, lineQty, lineAmount],
   );
 
   late final table = Frame(
     x: 48,
     y: 200,
     width: 499,
-    layout: NodeLayout.column,
-    gap: 0,
-    crossAlign: CrossAxisAlignment.start,
-    children: [columns, row1, row2, row3, row4],
+    layout: NodeLayout.table,
+    columns: [double.infinity, 48, 96],
+    cellPadding: 8,
+    children: [headRow, lineRow],
   );
 
   late final totalLabel = Text(

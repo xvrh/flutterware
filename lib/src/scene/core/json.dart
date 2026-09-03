@@ -91,12 +91,16 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
   if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
   if (n.cornerRadius != 0) 'corner': n.cornerRadius,
   if (n.opacity != 1) 'opacity': n.opacity,
+  'repeat': ?n.repeat,
   if (n.paramRefs.isNotEmpty) 'paramRefs': {...n.paramRefs},
   ...switch (n) {
     FrameNode f => {
       'layout': f.layout.name,
       'gap': f.gap,
       'padding': f.padding.toWire(),
+      if (f.columns.isNotEmpty)
+        'columns': [for (var c in f.columns) sizeToWire(c)],
+      if (!f.cellPadding.isZero) 'cellPadding': f.cellPadding.toWire(),
       'mainAlign': f.mainAlign.name,
       'crossAlign': f.crossAlign.name,
       'children': [for (var c in f.children) _nodeToJson(c)],
@@ -132,6 +136,8 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
         )
         ..gap = number('gap') ?? 8
         ..padding = SceneEdges.fromWire(json['padding'])
+        ..columns = _columns(json['columns'])
+        ..cellPadding = SceneEdges.fromWire(json['cellPadding'])
         ..mainAlign = SceneMainAxisAlignment.values.byName(
           json['mainAlign'] as String? ?? 'start',
         )
@@ -181,6 +187,7 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
     }
     ..cornerRadius = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1
+    ..repeat = json['repeat'] as String?
     ..paramRefs.addAll(
       ((json['paramRefs'] as Map?) ?? const {}).map(
         (k, v) => MapEntry('$k', '$v'),
@@ -329,7 +336,16 @@ TimelineExpr _exprFromJson(Map<String, Object?> json) {
 
 Object? _valueToJson(Object? value) => switch (value) {
   SceneColor c => c.argb,
+  List items => [
+    for (var item in items) {...item as Map},
+  ],
   _ => value,
+};
+
+/// Column tracks, in the same three-valued spelling as a node's size.
+List<double?> _columns(Object? raw) => switch (raw) {
+  List l => [for (var c in l) sizeFromWire(c)],
+  _ => <double?>[],
 };
 
 /// A parameter's default, read back as the kind it was declared with — an
@@ -338,6 +354,17 @@ Object _paramValue(SceneParamKind kind, Object? raw) => switch (kind) {
   SceneParamKind.color => SceneColor((raw! as num).toInt()),
   SceneParamKind.number => (raw! as num).toDouble(),
   SceneParamKind.string => raw! as String,
+  // A list's items are string and number fields only, so JSON carries them
+  // as they are — the one parameter default that needs no reviving.
+  SceneParamKind.list => [
+    for (var item in raw! as List)
+      <String, Object>{
+        for (var e in (item as Map).entries)
+          '${e.key}': e.value is num
+              ? (e.value as num).toDouble()
+              : '${e.value}',
+      },
+  ],
 };
 
 /// Read back what [SceneDocument.toWire] wrote — a PICTURE, not a document.
@@ -378,6 +405,8 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
         )
         ..gap = number('gap') ?? 8
         ..padding = SceneEdges.fromWire(json['padding'])
+        ..columns = _columns(json['columns'])
+        ..cellPadding = SceneEdges.fromWire(json['cellPadding'])
         ..mainAlign = SceneMainAxisAlignment
             .values[(json['mainAlign'] as num?)?.toInt() ?? 0]
         ..crossAlign = SceneCrossAxisAlignment

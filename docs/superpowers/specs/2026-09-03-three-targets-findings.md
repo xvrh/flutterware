@@ -33,6 +33,11 @@ is downstream of that.
 
 ## A repeater is missing, and it is not an element type
 
+*(Built 2026-09-03. A parameter may be a list, a node may `repeat:` one, and
+a property inside it reads a field as `lines.item`. The node stays one node —
+one field, one tree row, one thing to select — and the copies are made where
+the picture is.)*
+
 The invoice has four line items because four is what could be typed. A real
 one has as many as the data has. The authored row would be one row bound to a
 list, drawn once per item, its cells bound to the item's fields.
@@ -43,6 +48,10 @@ designed together: a repeater is a parameter whose value is a list. Shipping
 scalar binding first and adding lists later means rebuilding the binding.
 
 ## Stacked rows are not a table
+
+*(Built 2026-09-03. `NodeLayout.table`: the column tracks belong to the
+frame, so every row is measured against the same ones. A track is a size in
+the same three words a node's is — hug, a number, fill.)*
 
 In the invoice picture the quantity column does not line up. Each row is an
 independent row with its own gap, so every column is as wide as that row's
@@ -107,3 +116,19 @@ as one thing rather than retrofitted for the third.
 The parameter and output path is the other half, and it has to be designed
 with lists in scope from the start, because the invoice needs repetition and
 the banner needs substitution and they are the same mechanism.
+
+## What the two of them did not answer
+
+The invoice now has one authored row and columns that agree, and the two
+things it still cannot do are the two the design already named:
+
+- **Nothing after a growing block can be placed.** The totals still sit at a
+  fixed y. Four items or forty, the table grows into them.
+- **`capturePdf` is one page.** A list long enough to need a second page has
+  nowhere to put it, header and footer included.
+
+And one the round found: a row under a table contributes its fill, its
+border and its corner, and nothing else — no padding, no size, no layout of
+its own. The inspector says so rather than showing controls that do nothing,
+but it is a narrowing of the uniform node the model is built on, and the
+first place that bet has cost something.

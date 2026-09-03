@@ -30,6 +30,15 @@
 //     allowlisted enum references, `args: {'k': literal}` maps, and — where
 //     the types agree — A PARAMETER'S NAME, which binds the property to the
 //     typed hole
+//   - a parameter may also be a LIST — `final List<Map<String, Object>>
+//     lines = const [{'item': '…', 'qty': 12}]` — whose items are string
+//     and number fields. A node with `repeat: lines` is drawn once per
+//     item, and a property inside it reads a field by the dotted name
+//     `lines.item`, which is legal only inside that repeat
+//   - a Frame with `layout: NodeLayout.table` takes `columns: [ … ]` — one
+//     size per column, in the same `null`/number/`double.infinity`
+//     vocabulary a node's size uses — and `cellPadding`. Its children are
+//     rows and their children are cells
 //   - nothing else: no comments inside the class body, no loops, no
 //     conditionals, no method calls, no arithmetic, no identifiers off the
 //     allowlist, no inline nodes in children, no class that is neither the
@@ -54,7 +63,7 @@ import 'package:flutterware/scene_authoring.dart';
 
 import 'motion_file.dart';
 
-const sceneFileMarker = '//@flutterware:scene=0.5';
+const sceneFileMarker = '//@flutterware:scene=0.6';
 
 /// One refused construct: where it is and what to do instead.
 class SceneRefusal {
@@ -174,20 +183,35 @@ String _paramDefault(SceneParamDecl p) => switch (p.kind) {
   SceneParamKind.string => _str(p.defaultValue as String),
   SceneParamKind.number => _num(p.defaultValue as double),
   SceneParamKind.color => 'const ${_color(p.defaultValue as SceneColor)}',
+  SceneParamKind.list => 'const [${p.items.map(_item).join(', ')}]',
 };
+
+String _item(SceneItem item) =>
+    '{${[for (var e in item.entries) '${_str(e.key)}: ${_argValue(e.value)}'].join(', ')}}';
 
 void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
   var props = <String>[];
 
   /// A parameter reference survives a save only while the property still
   /// holds the parameter's default — an edited value bakes in and the
-  /// stale reference is dropped, never the edit.
+  /// stale reference is dropped, never the edit. For an item reference the
+  /// default is the FIRST item's field, which is the rule the whole
+  /// repeater rests on.
   String? ref(String key, Object? current) {
     var name = n.paramRefs[key];
     if (name == null) return null;
-    var p = ps[name];
-    if (p == null || p.defaultValue != current) return null;
-    return name;
+    var dot = name.indexOf('.');
+    if (dot < 0) {
+      var p = ps[name];
+      if (p == null || p.defaultValue != current) return null;
+      return name;
+    }
+    var list = ps[name.substring(0, dot)];
+    if (list == null || list.kind != SceneParamKind.list) return null;
+    var items = list.items;
+    if (items.isEmpty) return null;
+    var field = items.first[name.substring(dot + 1)];
+    return field != null && _sameValue(current, field) ? name : null;
   }
 
   void add(String key, Object? current, String Function() spell) {
@@ -214,6 +238,7 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
       add('corner', n.cornerRadius, () => _num(n.cornerRadius));
     }
     if (n.opacity != 1) add('opacity', n.opacity, () => _num(n.opacity));
+    if (n.repeat case var list?) props.add('repeat: $list');
   }
 
   switch (n) {
@@ -234,6 +259,23 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
             ('paddingTop', f.padding.top),
             ('paddingRight', f.padding.right),
             ('paddingBottom', f.padding.bottom),
+          ]) {
+            if (value != 0) props.add('$name: ${_num(value)}');
+          }
+        }
+      }
+      if (f.columns.isNotEmpty) {
+        props.add('columns: [${f.columns.map(_track).join(', ')}]');
+      }
+      if (!f.cellPadding.isZero) {
+        if (f.cellPadding.isUniform) {
+          props.add('cellPadding: ${_num(f.cellPadding.left)}');
+        } else {
+          for (var (name, value) in [
+            ('cellPaddingLeft', f.cellPadding.left),
+            ('cellPaddingTop', f.cellPadding.top),
+            ('cellPaddingRight', f.cellPadding.right),
+            ('cellPaddingBottom', f.cellPadding.bottom),
           ]) {
             if (value != 0) props.add('$name: ${_num(value)}');
           }
@@ -306,6 +348,17 @@ String _num(double v) =>
 /// A size, which is a number or the word for "as much as the parent gives".
 /// Spelled the way Flutter spells it, because that is what it means.
 String _size(double v) => v.isInfinite ? 'double.infinity' : _num(v);
+
+/// A column track: a size, or the word for "as wide as the widest cell".
+String _track(double? v) => v == null ? 'null' : _size(v);
+
+/// Whether a property still holds what an item's field would put there —
+/// the same widening [setSceneProperty] does, so a number filling a text
+/// slot compares as the text it becomes.
+bool _sameValue(Object? current, Object field) {
+  if (current == field) return true;
+  return current is String && field is double && current == _num(field);
+}
 
 String _color(SceneColor c) =>
     'Color(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
@@ -588,6 +641,31 @@ class _Parser {
         );
       }
     }
+    // Phase 3: an item reference reads the row being drawn, so it only
+    // means something inside the repeat that draws it. Outside one it names
+    // nothing at render time, and a value that resolves to nothing is
+    // exactly the silent gap this parser exists to refuse.
+    void checkItemRefs(SceneNode n, Set<String> scope) {
+      var inner = n.repeat == null ? scope : {...scope, n.repeat!};
+      for (var ref in n.paramRefs.entries) {
+        var dot = ref.value.indexOf('.');
+        if (dot < 0) continue;
+        var list = ref.value.substring(0, dot);
+        if (inner.contains(list)) continue;
+        refuse(
+          declared[n.name] ?? found!.offset,
+          'item reference',
+          '"${ref.value}" reads one item of "$list", so "${n.name}" must be '
+              'inside a node with `repeat: $list`',
+        );
+      }
+      for (var c in n.children) {
+        checkItemRefs(c, inner);
+      }
+    }
+
+    checkItemRefs(root, const {});
+
     var doc = SceneDocument(root);
     doc.params.addAll(_params.values);
     return doc;
@@ -680,6 +758,8 @@ class _Parser {
         return (SceneParamKind.number, (negate ? -value : value).toDouble());
       case DoubleLiteral(:var value):
         return (SceneParamKind.number, negate ? -value : value);
+      case ListLiteral list:
+        return (SceneParamKind.list, _items(list));
       default:
         if (_invocation(inner) case ('Color', var args)
             when args.arguments.length == 1) {
@@ -688,6 +768,59 @@ class _Parser {
             return (SceneParamKind.color, SceneColor(v.value!));
           }
         }
+        return null;
+    }
+  }
+
+  /// A list parameter's mockup: items, each a map of string keys to string
+  /// or number values. Nothing else — an item's fields fill properties, and
+  /// those are the two kinds a property takes from one.
+  List<SceneItem> _items(ListLiteral list) {
+    var items = <SceneItem>[];
+    for (var element in list.elements) {
+      if (element is! SetOrMapLiteral) {
+        refuse(
+          element.offset,
+          element is Expression ? _kind(element) : _elementKind(element),
+          "an item is a map literal — {'item': 'Espresso beans', 'qty': 12}",
+        );
+        continue;
+      }
+      var item = <String, Object>{};
+      for (var entry in element.elements) {
+        if (entry is! MapLiteralEntry) {
+          refuse(entry.offset, _elementKind(entry), 'expected a literal entry');
+          continue;
+        }
+        var key = _string(entry.key);
+        var value = _itemValue(entry.value);
+        if (key != null && value != null) item[key] = value;
+      }
+      items.add(item);
+    }
+    return items;
+  }
+
+  Object? _itemValue(Expression e) {
+    var inner = e;
+    var negate = false;
+    if (inner is PrefixExpression && inner.operator.lexeme == '-') {
+      negate = true;
+      inner = inner.operand;
+    }
+    switch (inner) {
+      case SimpleStringLiteral(:var value):
+        return value;
+      case IntegerLiteral(:var value?):
+        return (negate ? -value : value).toDouble();
+      case DoubleLiteral(:var value):
+        return negate ? -value : value;
+      default:
+        refuse(
+          e.offset,
+          _kind(e),
+          "an item's field is a string or a number literal",
+        );
         return null;
     }
   }
@@ -775,6 +908,46 @@ class _Parser {
           _take(named, name, (e) {
             var v = _doubleV(e, node, name);
             if (v != null) node.padding = set(v);
+          });
+        }
+        _take(named, 'columns', (e) {
+          if (e is! ListLiteral) {
+            refuse(
+              e.offset,
+              'columns',
+              'columns takes a list of sizes — '
+                  '[double.infinity, 48, null]',
+            );
+            return;
+          }
+          var tracks = <double?>[];
+          for (var element in e.elements) {
+            if (element is! Expression) {
+              refuse(
+                element.offset,
+                _elementKind(element),
+                'a table names its columns one by one',
+              );
+              continue;
+            }
+            tracks.add(element is NullLiteral ? null : _size(element));
+          }
+          node.columns = tracks;
+        });
+        _take(named, 'cellPadding', (e) {
+          node.cellPadding = SceneEdges.all(
+            _doubleV(e, node, 'cellPadding') ?? 0,
+          );
+        });
+        for (var (name, set) in <(String, SceneEdges Function(double))>[
+          ('cellPaddingLeft', (v) => node.cellPadding.copyWith(left: v)),
+          ('cellPaddingTop', (v) => node.cellPadding.copyWith(top: v)),
+          ('cellPaddingRight', (v) => node.cellPadding.copyWith(right: v)),
+          ('cellPaddingBottom', (v) => node.cellPadding.copyWith(bottom: v)),
+        ]) {
+          _take(named, name, (e) {
+            var v = _doubleV(e, node, name);
+            if (v != null) node.cellPadding = set(v);
           });
         }
         _take(named, 'mainAlign', (e) {
@@ -967,6 +1140,25 @@ class _Parser {
       (e) => n.cornerRadius = _doubleV(e, n, 'corner') ?? 0,
     );
     _take(named, 'opacity', (e) => n.opacity = _doubleV(e, n, 'opacity') ?? 1);
+    _take(named, 'repeat', (e) {
+      if (e is! SimpleIdentifier) {
+        refuse(e.offset, _kind(e), 'repeat names a list parameter');
+        return;
+      }
+      var decl = _params[e.name];
+      if (decl == null || decl.kind != SceneParamKind.list) {
+        refuse(
+          e.offset,
+          'repeat',
+          decl == null
+              ? '"${e.name}" is not a parameter of this scene'
+              : '"${e.name}" is a ${decl.typeName} — a repeat draws its node '
+                    'once per item of a list parameter',
+        );
+        return;
+      }
+      n.repeat = e.name;
+    });
   }
 
   void _take(
@@ -1040,6 +1232,7 @@ class _Parser {
     SceneNode n,
     String prop,
   ) {
+    if (e is PrefixedIdentifier) return _itemRef(e, kind, n, prop);
     if (e is! SimpleIdentifier) return null;
     var decl = _params[e.name];
     if (decl == null) return null;
@@ -1048,6 +1241,7 @@ class _Parser {
         SceneParamKind.string => 'String',
         SceneParamKind.number => 'double',
         SceneParamKind.color => 'Color',
+        SceneParamKind.list => 'List<Map<String, Object>>',
       };
       refuse(
         e.offset,
@@ -1061,18 +1255,69 @@ class _Parser {
     return decl.defaultValue;
   }
 
+  /// `lines.item` — one field of the item a repeat is drawing. The value
+  /// it yields is the FIRST item's, which is what the file holds and what
+  /// the editor shows; the rest are drawn as copies at render time.
+  Object? _itemRef(
+    PrefixedIdentifier e,
+    SceneParamKind kind,
+    SceneNode n,
+    String prop,
+  ) {
+    var decl = _params[e.prefix.name];
+    if (decl == null || decl.kind != SceneParamKind.list) return null;
+    var field = e.identifier.name;
+    var items = decl.items;
+    if (items.isEmpty || !items.first.containsKey(field)) {
+      refuse(
+        e.offset,
+        'unknown field',
+        items.isEmpty
+            ? '"${e.prefix.name}" has no items, so there is no "$field" to read'
+            : '"${e.prefix.name}" items carry '
+                  '${items.first.keys.map((k) => '"$k"').join(', ')} — '
+                  'not "$field"',
+      );
+      return _refused;
+    }
+    var value = items.first[field]!;
+    var converted = switch (kind) {
+      // A number reads as the text it becomes, which is what a quantity in
+      // a table cell is.
+      SceneParamKind.string => value is String ? value : _num(value as double),
+      SceneParamKind.number => value is double ? value : null,
+      _ => null,
+    };
+    if (converted == null) {
+      refuse(
+        e.offset,
+        'field type',
+        '"${e.prefix.name}.$field" is a ${value is String ? 'string' : 'number'}'
+            ' — this property takes a '
+            '${kind == SceneParamKind.number ? 'number' : 'value of another kind'}',
+      );
+      return _refused;
+    }
+    n.paramRefs[prop] = '${e.prefix.name}.$field';
+    return converted;
+  }
+
   static final _refused = Object();
 
   /// A size: `double.infinity` for fill, otherwise a number or a parameter.
   double? _sizeV(Expression e, SceneNode n, String prop) {
-    if (e case PrefixedIdentifier(
-      prefix: Identifier(name: 'double'),
-      identifier: Identifier(name: 'infinity'),
-    )) {
-      return double.infinity;
-    }
+    if (_infinity(e)) return double.infinity;
     return _doubleV(e, n, prop);
   }
+
+  /// A size with no property behind it — a table's column track, which
+  /// belongs to the frame rather than to any one node.
+  double? _size(Expression e) => _infinity(e) ? double.infinity : _double(e);
+
+  bool _infinity(Expression e) =>
+      e is PrefixedIdentifier &&
+      e.prefix.name == 'double' &&
+      e.identifier.name == 'infinity';
 
   double? _doubleV(Expression e, SceneNode n, String prop) {
     var v = _paramRef(e, SceneParamKind.number, n, prop);

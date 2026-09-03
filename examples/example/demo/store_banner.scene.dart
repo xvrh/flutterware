@@ -1,4 +1,4 @@
-//@flutterware:scene=0.5
+//@flutterware:scene=0.6
 // Target one of three: a store banner whose copy is a typed hole, so one
 // scene is exported once per language.
 //
