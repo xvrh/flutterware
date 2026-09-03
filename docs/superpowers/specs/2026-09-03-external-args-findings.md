@@ -40,18 +40,8 @@ abstract class SceneExtArgs<A extends SceneExtArgs<A>> {
 }
 ```
 
-**Declarations of different widgets sit in one list**, through a
-type-forgotten supertype the editor holds them by:
-
-```dart
-abstract class ExternalWidgetBase {
-  String get entry;
-  List<Arg<Object>> get args;
-  Object buildFrom(Object args);
-}
-
-class ExternalWidget<A extends SceneExtArgs<A>> implements ExternalWidgetBase
-```
+**Declarations of different widgets sit in one list** — trivially, once the
+declaration stopped being generic (see the cycle, below).
 
 **The schema is readable at runtime** — `Arg<T>` carries `Type get type => T`,
 so the editor can be told `size` is a `double` without compiling anything.
@@ -72,21 +62,36 @@ Owner steer, second pass: **no strings in the scene file at all.** They are
 gathered in the declaration, which is what stands in for the analyzer, and
 that is the end of them.
 
-### The app declares, once
+### The app declares, once — and never names what is generated
+
+The first draft of this had a cycle in it: the declaration was typed by
+`DrinkBadgeArgs`, which the generator produces *from* the declaration. The
+file would not compile until it had been generated from, which is the
+ordinary codegen bootstrap and still a bad property for a file a person
+writes by hand.
+
+It goes away by keeping the declaration **untyped**. It is the one stringly
+place by decision, so `build` may read its args by name like everything else
+here:
 
 ```dart
-final externals = <ExternalWidgetBase>[
-  ExternalWidget<DrinkBadgeArgs>(
+final externals = [
+  ExternalWidget(
     'DrinkBadge',
     args: [const Arg<double>('size', 56)],
-    build: (a) => DrinkBadge(drinks[1], size: a.size),
-    read: (a) => const DrinkBadgeArgs().merge(a),
+    build: (a) => DrinkBadge(drinks[1], size: a.number('size') ?? 56),
   ),
 ];
 ```
 
-`build` is the one closure in the system and it belongs here, not in every
-scene that places the widget: only the app knows `drinks[1]`.
+Written first, compiles alone, mentions nothing generated. And it made the
+framework smaller: `ExternalWidget` needs no type parameter, so the
+F-bounded supertype and the type-forgotten `ExternalWidgetBase` both go —
+they existed only to carry a generic the declaration no longer has.
+
+The price is that `'size'` appears twice in this file: once as the schema,
+once in the build that reads it. Both mentions sit two lines apart, in the
+file whose job is to be the stringly one.
 
 ### The tool generates two classes per declaration
 
@@ -196,6 +201,11 @@ It **retires** more than it adds:
 4. **Generate `read`** alongside `merge`, so the guest can turn the wire's
    map back into the typed object.
 
+Nothing the tool generates is ever named by a file a person writes, which is
+what keeps the bootstrap honest: the declaration and the app compile before
+the generator has ever run, and only scene and motion files depend on its
+output.
+
 ## Nested scenes fall out for free
 
 A nested scene's parameters are declared in its own file, which the tool
@@ -209,9 +219,11 @@ all — the schema was always there. The same generated shape serves both, and
 - **Where generation runs**: a build step, or the tool on demand when the
   declaration changes. The previews catalog already generates an entrypoint,
   so there is precedent either way.
-- **Whether `entry` survives.** The args type identifies the widget, so the
-  label may be redundant — but something has to cross the wire, and a
-  generated class name is as good a string as any.
+- **Whether `entry` survives.** The args type identifies the widget in a
+  scene file, so the label is only needed to cross the wire and to tie a
+  declaration to its generated pair. It cannot now be derived from a type
+  argument — the declaration has none — so it stays, in the file where
+  strings live anyway.
 - **What an undeclared arg does.** Refusing it is the point; the question is
   whether the scene file can even express one once `args:` is a typed
   constructor call. Probably not, which is the best kind of answer.
