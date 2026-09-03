@@ -1,89 +1,93 @@
-//@flutterware:scene=0.6
+//@flutterware:scene=0.7
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
 // once in a children list; a parameter is a `final` in the class header
 // whose default is the mockup. Anything outside the grammar is refused with
 // a line number rather than silently dropped.
+//
+// This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
+import 'package:flutterware/scene_authoring.dart';
 
-class BannerScene {
-  late final glow = Shape(
+class BannerScene extends SceneDefinition {
+  late final glow = ShapeNode(
     x: 600,
     y: -110,
     width: 480,
     height: 480,
-    fill: Color(0xFF4A2F1F),
+    fill: SceneColor(0xFF4A2F1F),
     opacity: 0.7,
     circle: true,
   );
-  late final cup = Text('☕', x: 690, y: 110, fontSize: 190);
-  late final headline = Text(
+  late final cup = TextNode('☕', x: 690, y: 110, fontSize: 190);
+  late final headline = TextNode(
     'Fresh coffee, faster',
     fontSize: 54,
-    weight: FontWeight.w700,
-    color: Color(0xFFFFFFFF),
+    weight: SceneFontWeight.w700,
+    color: SceneColor(0xFFFFFFFF),
   );
-  late final subtitle = Text(
+  late final subtitle = TextNode(
     'Order ahead. Skip the line. Earn rewards.',
     fontSize: 20,
-    color: Color(0xFFD8C9BD),
+    color: SceneColor(0xFFD8C9BD),
   );
-  late final ctaLabel = Text(
+  late final ctaLabel = TextNode(
     'Get the app',
     fontSize: 17,
-    weight: FontWeight.w600,
-    color: Color(0xFFFFFFFF),
+    weight: SceneFontWeight.w600,
+    color: SceneColor(0xFFFFFFFF),
   );
-  late final cta = Frame(
-    fill: Color(0xFFE8632B),
+  late final cta = FrameNode(
+    fill: SceneColor(0xFFE8632B),
     corner: 28,
     layout: NodeLayout.row,
     padding: 16,
     children: [ctaLabel],
   );
-  late final copy = Frame(
+  late final copy = FrameNode(
     x: 64,
     y: 120,
     width: 500,
     layout: NodeLayout.column,
     gap: 16,
-    crossAlign: CrossAxisAlignment.start,
+    crossAlign: SceneCrossAxisAlignment.start,
     children: [headline, subtitle, cta],
   );
-  late final badge = Ext(
-    DrinkBadge,
+  late final badge = ExternalNode(
+    'DrinkBadge',
     x: 560,
     y: 290,
     width: 140,
     height: 140,
     args: {'size': 140},
   );
-  late final loading = Ext(
-    Spinner,
+  late final loading = ExternalNode(
+    'Spinner',
     x: 950,
     y: 430,
     width: 40,
     height: 40,
     args: {'size': 40},
   );
-  late final order = Ext(
-    OrderButton,
+  late final order = ExternalNode(
+    'OrderButton',
     x: 830,
     y: 400,
     width: 150,
     height: 44,
     args: {'label': 'Order now'},
   );
-  late final promo = Scene(
-    PromoBadge,
+  late final promo = SceneRefNode(
+    'PromoBadge',
     x: 64,
     y: 48,
     args: {'label': 'Now open'},
   );
-  late final root = Frame(
+  @override
+  late final root = FrameNode(
     width: 1024,
     height: 500,
-    fill: Color(0xFF2B1B12),
+    fill: SceneColor(0xFF2B1B12),
     children: [glow, cup, copy, badge, loading, order, promo],
   );
 }

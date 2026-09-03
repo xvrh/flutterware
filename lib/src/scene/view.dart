@@ -64,10 +64,13 @@ class SceneView extends StatefulWidget {
 }
 
 class _SceneViewState extends State<SceneView> {
-  final _keys = <String, GlobalKey>{};
+  /// Keyed by the NODE, not by its name. A compiled scene has no names —
+  /// identity there is the object — and two nodes sharing one key is a
+  /// duplicate-GlobalKey crash rather than a wrong picture.
+  final _keys = <SceneNode, GlobalKey>{};
   final _artboard = GlobalKey();
 
-  GlobalKey _key(String name) => _keys.putIfAbsent(name, GlobalKey.new);
+  GlobalKey _key(SceneNode node) => _keys.putIfAbsent(node, GlobalKey.new);
 
   String? _playheadId;
 
@@ -126,8 +129,7 @@ class _SceneViewState extends State<SceneView> {
       if (root == null) return;
       var rects = <String, SceneRect>{};
       SceneRect? visit(SceneNode node) {
-        var box =
-            _keys[node.name]?.currentContext?.findRenderObject() as RenderBox?;
+        var box = _keys[node]?.currentContext?.findRenderObject() as RenderBox?;
         SceneRect? rect;
         if (box != null && box.hasSize) {
           rect =
@@ -210,10 +212,10 @@ class _SceneViewState extends State<SceneView> {
         color: root.fill?.flutter ?? const Color(0x00000000),
         // The root's corner lives here with its fill, since its decoration
         // is skipped below — a nested scene's root is often a pill.
-        borderRadius: root.cornerRadius == 0
+        borderRadius: root.corner == 0
             ? null
-            : BorderRadius.circular(root.cornerRadius),
-        clipBehavior: root.cornerRadius == 0 ? Clip.none : Clip.antiAlias,
+            : BorderRadius.circular(root.corner),
+        clipBehavior: root.corner == 0 ? Clip.none : Clip.antiAlias,
         child: _node(context, root, root: true),
       ),
     );
@@ -346,7 +348,7 @@ class _SceneViewState extends State<SceneView> {
     // an unbounded-constraint error rather than a wide node.
     var stretched = _stretchedBy(n, parent);
     Widget result = Container(
-      key: _key('$prefix${n.name}'),
+      key: _key(n),
       width: stretched.width ? null : n.width,
       height: stretched.height ? null : n.height,
       padding: padding.isZero ? null : padding.flutter,
@@ -358,7 +360,7 @@ class _SceneViewState extends State<SceneView> {
       // The root's own fill is painted by the Material above, so a nested
       // decoration would double it.
       decoration:
-          !root && (fill != null || n.borderColor != null || n.cornerRadius > 0)
+          !root && (fill != null || n.borderColor != null || n.corner > 0)
           ? BoxDecoration(
               color: fill?.flutter,
               border: n.borderColor == null
@@ -368,9 +370,9 @@ class _SceneViewState extends State<SceneView> {
                       width: n.borderWidth,
                     ),
               shape: circle ? BoxShape.circle : BoxShape.rectangle,
-              borderRadius: circle || n.cornerRadius == 0
+              borderRadius: circle || n.corner == 0
                   ? null
-                  : BorderRadius.circular(n.cornerRadius),
+                  : BorderRadius.circular(n.corner),
             )
           : null,
       child: inner,
@@ -494,9 +496,7 @@ class _SceneViewState extends State<SceneView> {
               ),
               width: r.borderWidth,
             ),
-      borderRadius: r.cornerRadius == 0
-          ? null
-          : BorderRadius.circular(r.cornerRadius),
+      borderRadius: r.corner == 0 ? null : BorderRadius.circular(r.corner),
     );
   }
 

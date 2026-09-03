@@ -10,27 +10,27 @@ import 'package:flutterware_app/src/scene/scene_file.dart';
 
 void main() {
   TextNode text(String name, String value) =>
-      TextNode(name, value)..fontSize = 12;
+      TextNode(value, name: name)..fontSize = 12;
 
   /// A two-row table with three cells each, in a root wide enough for it.
   (SceneDocument, FrameNode) table({List<double?> columns = const []}) {
-    var head = FrameNode('head')
+    var head = FrameNode(name: 'head')
       ..children.addAll([
         text('h1', 'Item'),
         text('h2', 'Qty'),
         text('h3', 'Amount'),
       ]);
-    var line = FrameNode('line')
+    var line = FrameNode(name: 'line')
       ..children.addAll([
         text('c1', 'Espresso beans, 1kg'),
         text('c2', '12'),
         text('c3', '£384.00'),
       ]);
-    var grid = FrameNode('grid', layout: NodeLayout.table)
+    var grid = FrameNode(name: 'grid', layout: NodeLayout.table)
       ..width = 400
       ..columns = [...columns]
       ..children.addAll([head, line]);
-    var root = FrameNode('root')
+    var root = FrameNode(name: 'root')
       ..width = 500
       ..height = 300
       ..children.add(grid);
@@ -116,10 +116,10 @@ void main() {
     var cell = text('cell', 'Espresso beans, 1kg')
       ..paramRefs['text'] = 'lines.item';
     var qty = text('qty', '12')..paramRefs['text'] = 'lines.qty';
-    var row = FrameNode('row', layout: NodeLayout.row)
+    var row = FrameNode(name: 'row', layout: NodeLayout.row)
       ..repeat = 'lines'
       ..children.addAll([cell, qty]);
-    var root = FrameNode('root', layout: NodeLayout.column)
+    var root = FrameNode(name: 'root', layout: NodeLayout.column)
       ..width = 400
       ..height = 300
       ..children.add(row);
@@ -211,10 +211,10 @@ class Ledger({
     {'item': 'Oat milk, 12 × 1L', 'qty': 8},
   ],
 }) {
-  late final cell = Text(lines.item, fontSize: 12);
-  late final qty = Text(lines.qty, fontSize: 12);
-  late final row = Frame(repeat: lines, children: [cell, qty]);
-  late final root = Frame(
+  late final cell = TextNode(lines.item, fontSize: 12);
+  late final qty = TextNode(lines.qty, fontSize: 12);
+  late final row = FrameNode(repeat: lines, children: [cell, qty]);
+  late final root = FrameNode(
     width: 400,
     layout: NodeLayout.table,
     columns: [double.infinity, 48],
@@ -246,7 +246,7 @@ class Ledger({
       reason: 'emit ∘ parse is the identity on what emit wrote',
     );
     expect(out, contains('repeat: lines'));
-    expect(out, contains('Text(lines.item'));
+    expect(out, contains('TextNode(lines.item'));
     expect(out, contains('columns: [double.infinity, 48]'));
   });
 
@@ -259,8 +259,8 @@ class Ledger({
     {'item': 'Espresso beans, 1kg'},
   ],
 }) {
-  late final stray = Text(lines.item, fontSize: 12);
-  late final root = Frame(width: 400, children: [stray]);
+  late final stray = TextNode(lines.item, fontSize: 12);
+  late final root = FrameNode(width: 400, children: [stray]);
 }
 ''');
     expect(parsed.ok, isFalse);
@@ -273,7 +273,7 @@ class Ledger({
 $sceneFileMarker
 
 class Ledger({final String title = 'x'}) {
-  late final root = Frame(width: 400, repeat: title);
+  late final root = FrameNode(width: 400, repeat: title);
 }
 ''');
     expect(parsed.ok, isFalse);
@@ -289,9 +289,9 @@ class Ledger({
     {'item': 'Espresso beans, 1kg'},
   ],
 }) {
-  late final cell = Text(lines.price, fontSize: 12);
-  late final row = Frame(repeat: lines, children: [cell]);
-  late final root = Frame(width: 400, children: [row]);
+  late final cell = TextNode(lines.price, fontSize: 12);
+  late final row = FrameNode(repeat: lines, children: [cell]);
+  late final root = FrameNode(width: 400, children: [row]);
 }
 ''');
     expect(parsed.ok, isFalse);
@@ -305,8 +305,8 @@ class Ledger({
     (doc.nodeNamed('cell')! as TextNode).text = 'Something else';
 
     var out = emitSceneFile(doc, className: parsed.className!);
-    expect(out, contains("Text('Something else'"));
-    expect(out, isNot(contains('Text(lines.item')));
+    expect(out, contains("TextNode('Something else'"));
+    expect(out, isNot(contains('TextNode(lines.item')));
     // The edit survives; the reference is what goes.
     expect(parseSceneFile(out).refusals, isEmpty);
   });

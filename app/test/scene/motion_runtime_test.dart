@@ -69,7 +69,7 @@ void main() {
     test(
       'operators: opacity multiplies, translate adds, fontSize replaces',
       () {
-        var node = TextNode('t', 'hi')..opacity = 0.8;
+        var node = TextNode('hi', name: 't')..opacity = 0.8;
         Object writer1 = 'w1', writer2 = 'w2';
         node.writeFx(writer1, 'opacity', 0.5);
         node.writeFx(writer2, 'opacity', 0.5);
@@ -83,7 +83,7 @@ void main() {
     );
 
     test('the base is read live: an authored mutation composes next read', () {
-      var node = ShapeNode('s')..opacity = 0.8;
+      var node = ShapeNode(name: 's')..opacity = 0.8;
       node.writeFx('m', 'opacity', 0.5);
       expect(node.fxRendered('opacity'), closeTo(0.4, 1e-9));
       node.opacity = 0.4; // the app retunes mid-flight
@@ -91,7 +91,7 @@ void main() {
     });
 
     test('effect handles are independent writers', () {
-      var node = ShapeNode('s');
+      var node = ShapeNode(name: 's');
       var hover = node.effect()..scale = 1.04;
       var press = node.effect()..scale = 0.96;
       node.writeFx('motion', 'scale', 1.2);
@@ -103,7 +103,7 @@ void main() {
     });
 
     test('a writer keeps its stack position through re-writes', () {
-      var node = ShapeNode('s');
+      var node = ShapeNode(name: 's');
       var a = node.effect()..opacity = 0.5;
       var b = node.effect()..opacity = 0.8;
       a.opacity = 0.6;
@@ -122,7 +122,7 @@ void main() {
     });
 
     test('an ext node folds arg contributions into renderedArgs', () {
-      var node = ExternalNode('e', 'DrinkBadge', args: {'size': 140.0});
+      var node = ExternalNode('DrinkBadge', name: 'e', args: {'size': 140.0});
       node.writeFx('m', 'args.progress', 0.5);
       expect(node.renderedArgs, {'size': 140.0, 'progress': 0.5});
       expect(node.args, {'size': 140.0}); // authored untouched
@@ -183,7 +183,7 @@ void main() {
     });
 
     test('binding against a scene missing the target refuses, named', () {
-      var scene = SceneDocument(FrameNode('root'));
+      var scene = SceneDocument(FrameNode(name: 'root'));
       expect(
         () => BoundMotion.bind(coffeeIntroDraft(), scene),
         throwsA(

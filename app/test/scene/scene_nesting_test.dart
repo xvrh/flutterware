@@ -14,16 +14,16 @@ import 'package:flutterware_app/src/scene/workspace.dart';
 
 /// A badge scene with two parameters: the word and the tint.
 SceneDocument badgeTemplate() {
-  var text = TextNode('text', 'New')
+  var text = TextNode('New', name: 'text')
     ..fontSize = 14
     ..weight = SceneFontWeight.w700
     ..color = const SceneColor(0xFFFFFFFF)
     ..paramRefs['text'] = 'label';
-  var root = FrameNode('root', layout: NodeLayout.row)
+  var root = FrameNode(name: 'root', layout: NodeLayout.row)
     ..width = 140
     ..height = 32
     ..fill = const SceneColor(0xFFE8632B)
-    ..cornerRadius = 16
+    ..corner = 16
     ..paramRefs['fill'] = 'tint'
     ..children.add(text);
   return SceneDocument(root)
@@ -40,7 +40,7 @@ SceneDocument badgeTemplate() {
 SceneDocument bannerWithBadge() {
   var scene = coffeeBannerDraft();
   scene.root.children.add(
-    SceneRefNode('promo', 'PromoBadge', args: {'label': 'Now open'})
+    SceneRefNode('PromoBadge', name: 'promo', args: {'label': 'Now open'})
       ..x = 64
       ..y = 48,
   );
@@ -56,7 +56,7 @@ void main() {
   });
 
   test('syncInstance puts every parameter back, not only the overridden', () {
-    var ref = SceneRefNode('promo', 'PromoBadge', args: {'label': 'Hi'})
+    var ref = SceneRefNode('PromoBadge', name: 'promo', args: {'label': 'Hi'})
       ..instance = instantiateScene(badgeTemplate(), {'label': 'Hi'});
     ref.writeFx('m', 'args.tint', const SceneColor(0xFF00FF00));
     ref.syncInstance();
@@ -68,14 +68,14 @@ void main() {
   });
 
   test('only number and color parameters animate', () {
-    var ref = SceneRefNode('promo', 'PromoBadge')
+    var ref = SceneRefNode('PromoBadge', name: 'promo')
       ..instance = instantiateScene(badgeTemplate(), const {});
     var props = animatableProps(ref).map((p) => p.name).toList();
     expect(props, contains('opacity'));
     expect(props, contains('args.tint'));
     expect(props, isNot(contains('args.label')));
     expect(
-      animatableProps(SceneRefNode('x', 'Y')).map((p) => p.name),
+      animatableProps(SceneRefNode('Y', name: 'x')).map((p) => p.name),
       isNot(contains(startsWith('args.'))),
       reason: 'unresolved: imposed only',
     );
@@ -92,7 +92,7 @@ void main() {
     expect(promo.instance, isNull);
   });
 
-  test('the grammar spells a nested scene as Scene(Class, …)', () {
+  test('the grammar spells a nested scene as SceneRefNode with a class', () {
     var scene = bannerWithBadge();
     (scene.nodeNamed('promo')! as SceneRefNode).args['tint'] = const SceneColor(
       0xFF3E7C4F,
@@ -102,7 +102,7 @@ void main() {
     expect(
       source.replaceAll(RegExp(r'\s+'), ''),
       contains(
-        "Scene(PromoBadge,x:64,y:48,args:{'label':'Nowopen','tint':Color(0xFF3E7C4F)}",
+        "SceneRefNode('PromoBadge',x:64,y:48,args:{'label':'Nowopen','tint':SceneColor(0xFF3E7C4F)}",
       ),
     );
     var parsed = parseSceneFile(source);
@@ -115,17 +115,16 @@ void main() {
   });
 
   test('a Scene with no class name is refused with a line', () {
-    var source = emitSceneFile(coffeeBannerDraft(), className: 'B')
-        .replaceFirst(
-          'late final glow = Shape(',
-          'late final promo = Scene(x: 1);\n  late final glow = Shape(',
-        );
+    var source = emitSceneFile(coffeeBannerDraft(), className: 'B').replaceFirst(
+      'late final glow = ShapeNode(',
+      'late final promo = SceneRefNode(x: 1);\n  late final glow = ShapeNode(',
+    );
     var parsed = parseSceneFile(source);
     expect(parsed.ok, isFalse);
     // The orphaned field is refused too; the one about the name teaches.
     expect(
       parsed.refusals.map((r) => r.message),
-      anyElement(contains('Scene(PromoBadge')),
+      anyElement(contains("SceneRefNode('PromoBadge'")),
     );
   });
 
@@ -212,15 +211,12 @@ void main() {
         resolveNested: (node) => node is SceneRefNode ? badge : null,
       );
       var promo = workspace.active.scene.nodeNamed('promo')! as SceneRefNode;
-      expect(promo.instance!.root.cornerRadius, 16);
+      expect(promo.instance!.root.corner, 16);
       workspace.enter(promo);
       expect(workspace.active, same(badge));
-      badge.editor.perform(
-        'Square it',
-        () => badge.scene.root.cornerRadius = 0,
-      );
+      badge.editor.perform('Square it', () => badge.scene.root.corner = 0);
       workspace.exit();
-      expect(promo.instance!.root.cornerRadius, 0);
+      expect(promo.instance!.root.corner, 0);
       expect(promo.instance!.nodeNamed('text'), isNotNull);
       expect(
         (promo.instance!.nodeNamed('text')! as TextNode).text,
@@ -242,7 +238,7 @@ void main() {
       var promo = workspace.active.scene.nodeNamed('promo')! as SceneRefNode;
       workspace.enter(promo);
       var child = workspace.active;
-      child.editor.perform('Edit', () => child.scene.root.cornerRadius = 0);
+      child.editor.perform('Edit', () => child.scene.root.corner = 0);
       workspace.exit();
       workspace.enter(promo);
       expect(workspace.active, same(child), reason: 'not a second copy');

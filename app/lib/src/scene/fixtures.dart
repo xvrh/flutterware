@@ -4,12 +4,12 @@
 import 'package:flutterware/scene_authoring.dart';
 
 SceneDocument coffeeBannerDraft() {
-  var root = FrameNode('root')
+  var root = FrameNode(name: 'root')
     ..width = 1024
     ..height = 500
     ..fill = const SceneColor(0xFF2B1B12);
 
-  var glow = ShapeNode('glow', circle: true)
+  var glow = ShapeNode(name: 'glow', circle: true)
     ..x = 600
     ..y = -110
     ..width = 480
@@ -17,32 +17,33 @@ SceneDocument coffeeBannerDraft() {
     ..fill = const SceneColor(0xFF4A2F1F)
     ..opacity = 0.7;
 
-  var cup = TextNode('cup', '☕')
+  var cup = TextNode('☕', name: 'cup')
     ..x = 690
     ..y = 110
     ..fontSize = 190;
 
-  var headline = TextNode('headline', 'Fresh coffee, faster')
+  var headline = TextNode('Fresh coffee, faster', name: 'headline')
     ..fontSize = 54
     ..weight = SceneFontWeight.w700
     ..color = const SceneColor(0xFFFFFFFF);
 
-  var sub = TextNode('subtitle', 'Order ahead. Skip the line. Earn rewards.')
-    ..fontSize = 20
-    ..color = const SceneColor(0xFFD8C9BD);
+  var sub =
+      TextNode('Order ahead. Skip the line. Earn rewards.', name: 'subtitle')
+        ..fontSize = 20
+        ..color = const SceneColor(0xFFD8C9BD);
 
-  var ctaLabel = TextNode('ctaLabel', 'Get the app')
+  var ctaLabel = TextNode('Get the app', name: 'ctaLabel')
     ..fontSize = 17
     ..weight = SceneFontWeight.w600
     ..color = const SceneColor(0xFFFFFFFF);
 
-  var cta = FrameNode('cta', layout: NodeLayout.row)
+  var cta = FrameNode(name: 'cta', layout: NodeLayout.row)
     ..padding = const SceneEdges.all(16)
     ..fill = const SceneColor(0xFFE8632B)
-    ..cornerRadius = 28;
+    ..corner = 28;
   cta.children.add(ctaLabel);
 
-  var copy = FrameNode('copy', layout: NodeLayout.column)
+  var copy = FrameNode(name: 'copy', layout: NodeLayout.column)
     ..x = 64
     ..y = 120
     ..width = 500
@@ -52,21 +53,22 @@ SceneDocument coffeeBannerDraft() {
 
   // External widgets — rendered as placeholders locally, natively in the
   // guest.
-  var badge = ExternalNode('badge', 'DrinkBadge', args: {'size': 140.0})
+  var badge = ExternalNode('DrinkBadge', name: 'badge', args: {'size': 140.0})
     ..x = 560
     ..y = 290
     ..width = 140
     ..height = 140;
-  var spinner = ExternalNode('loading', 'Spinner', args: {'size': 40.0})
+  var spinner = ExternalNode('Spinner', name: 'loading', args: {'size': 40.0})
     ..x = 950
     ..y = 430
     ..width = 40
     ..height = 40;
-  var order = ExternalNode('order', 'OrderButton', args: {'label': 'Order now'})
-    ..x = 830
-    ..y = 400
-    ..width = 150
-    ..height = 44;
+  var order =
+      ExternalNode('OrderButton', name: 'order', args: {'label': 'Order now'})
+        ..x = 830
+        ..y = 400
+        ..width = 150
+        ..height = 44;
 
   root.children.addAll([glow, cup, copy, badge, spinner, order]);
   return SceneDocument(root);

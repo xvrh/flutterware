@@ -1,12 +1,13 @@
-//@flutterware:scene=0.6
-// Target three of three: an invoice template, exported as a PDF.
+//@flutterware:scene=0.7
+// Owned by the flutterware scene editor, which reads and writes this whole
+// file. Hand edits are welcome inside the grammar: every node is a
+// `late final` field (the field name is the node's identity), placed exactly
+// once in a children list; a parameter is a `final` in the class header
+// whose default is the mockup. Anything outside the grammar is refused with
+// a line number rather than silently dropped.
 //
-// The line items are a list parameter: the file carries four of them as the
-// mockup, a caller passes as many as the data has, and either way there is
-// ONE authored row — `lineRow`, drawn once per item, its cells reading the
-// item's fields. The table above it is what makes the columns agree: the
-// tracks belong to the table, so every row is measured against the same
-// ones whatever it happens to hold.
+// This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
+import 'package:flutterware/scene_authoring.dart';
 
 class Invoice({
   final String number = 'INV-2043',
@@ -19,70 +20,81 @@ class Invoice({
     {'item': 'Takeaway cups, 500', 'qty': 4, 'amount': '£148.00'},
     {'item': 'Filter papers, box', 'qty': 25, 'amount': '£500.00'},
   ],
-}) {
-  late final brand = Text(
+}) extends SceneDefinition {
+  late final brand = TextNode(
     'ACME SUPPLY',
     fontSize: 18,
-    weight: FontWeight.w700,
-    color: Color(0xFF1B1210),
+    weight: SceneFontWeight.w700,
+    color: SceneColor(0xFF1B1210),
   );
-  late final invoiceNo = Text(number, fontSize: 12, color: Color(0xFF6B5A52));
-  late final issuedOn = Text(issued, fontSize: 12, color: Color(0xFF6B5A52));
-  late final customer = Text(
+  late final invoiceNo = TextNode(
+    number,
+    fontSize: 12,
+    color: SceneColor(0xFF6B5A52),
+  );
+  late final issuedOn = TextNode(
+    issued,
+    fontSize: 12,
+    color: SceneColor(0xFF6B5A52),
+  );
+  late final customer = TextNode(
     billTo,
     fontSize: 14,
-    weight: FontWeight.w600,
-    color: Color(0xFF1B1210),
+    weight: SceneFontWeight.w600,
+    color: SceneColor(0xFF1B1210),
   );
-  late final header = Frame(
+  late final header = FrameNode(
     x: 48,
     y: 48,
-    width: 499,
+    width: double.infinity,
     layout: NodeLayout.column,
     gap: 4,
-    crossAlign: CrossAxisAlignment.start,
+    crossAlign: SceneCrossAxisAlignment.start,
     children: [brand, invoiceNo, issuedOn, customer],
   );
-
-  late final headItem = Text(
+  late final headItem = TextNode(
     'Item',
     fontSize: 11,
-    weight: FontWeight.w600,
-    color: Color(0xFF6B5A52),
+    weight: SceneFontWeight.w600,
+    color: SceneColor(0xFF6B5A52),
   );
-  late final headQty = Text(
+  late final headQty = TextNode(
     'Qty',
     fontSize: 11,
-    weight: FontWeight.w600,
-    color: Color(0xFF6B5A52),
-    align: TextAlign.right,
+    weight: SceneFontWeight.w600,
+    color: SceneColor(0xFF6B5A52),
+    align: SceneTextAlign.right,
   );
-  late final headAmount = Text(
+  late final headAmount = TextNode(
     'Amount',
     fontSize: 11,
-    weight: FontWeight.w600,
-    color: Color(0xFF6B5A52),
-    align: TextAlign.right,
+    weight: SceneFontWeight.w600,
+    color: SceneColor(0xFF6B5A52),
+    align: SceneTextAlign.right,
   );
-  late final headRow = Frame(
-    fill: Color(0xFFF3E9E1),
+  late final headRow = FrameNode(
+    fill: SceneColor(0xFFF3E9E1),
     children: [headItem, headQty, headAmount],
   );
-
-  late final lineItem = Text(lines.item, fontSize: 12);
-  late final lineQty = Text(lines.qty, fontSize: 12, align: TextAlign.right);
-  late final lineAmount = Text(
+  late final lineItem = TextNode(lines.item, fontSize: 12);
+  late final lineQty = TextNode(
+    lines.qty,
+    fontSize: 12,
+    weight: SceneFontWeight.w700,
+    color: SceneColor(0xFF000000),
+    align: SceneTextAlign.right,
+  );
+  late final lineAmount = TextNode(
     lines.amount,
     fontSize: 12,
-    align: TextAlign.right,
+    align: SceneTextAlign.right,
   );
-  late final lineRow = Frame(
-    borderColor: Color(0xFFEDE4DC),
+  late final lineRow = FrameNode(
+    borderColor: SceneColor(0xFFEDE4DC),
     repeat: lines,
     children: [lineItem, lineQty, lineAmount],
   );
-
-  late final table = Frame(
+  late final table = FrameNode(
     x: 48,
     y: 200,
     width: 499,
@@ -91,33 +103,32 @@ class Invoice({
     cellPadding: 8,
     children: [headRow, lineRow],
   );
-
-  late final totalLabel = Text(
+  late final totalLabel = TextNode(
     'Total due',
     fontSize: 12,
-    weight: FontWeight.w600,
-    color: Color(0xFF6B5A52),
+    weight: SceneFontWeight.w600,
+    color: SceneColor(0xFF6B5A52),
   );
-  late final totalValue = Text(
+  late final totalValue = TextNode(
     total,
     fontSize: 20,
-    weight: FontWeight.w700,
-    color: Color(0xFF1B1210),
+    weight: SceneFontWeight.w700,
+    color: SceneColor(0xFF1B1210),
   );
-  late final totals = Frame(
+  late final totals = FrameNode(
     x: 48,
     y: 420,
     width: 499,
     layout: NodeLayout.column,
     gap: 4,
-    crossAlign: CrossAxisAlignment.start,
+    crossAlign: SceneCrossAxisAlignment.start,
     children: [totalLabel, totalValue],
   );
-
-  late final root = Frame(
+  @override
+  late final root = FrameNode(
     width: 595,
     height: 842,
-    fill: Color(0xFFFFFFFF),
+    fill: SceneColor(0xFFFFFFFF),
     children: [header, table, totals],
   );
 }

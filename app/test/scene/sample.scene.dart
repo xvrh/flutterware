@@ -9,24 +9,28 @@
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 import 'package:flutterware/scene_authoring.dart';
 
-class PromoBadge({
-  final String label = 'New',
+class SampleScene({
+  final String headline = 'Fresh coffee, faster',
   final SceneColor tint = const SceneColor(0xFFE8632B),
 }) extends SceneDefinition {
-  late final text = TextNode(
-    label,
-    fontSize: 14,
+  late final badge = ShapeNode(width: 24, height: 24, fill: tint, circle: true);
+  late final title = TextNode(
+    headline,
+    fontSize: 32,
     weight: SceneFontWeight.w700,
     color: SceneColor(0xFFFFFFFF),
   );
+  late final bar = FrameNode(
+    layout: NodeLayout.row,
+    gap: 12,
+    padding: 16,
+    children: [badge, title],
+  );
   @override
   late final root = FrameNode(
-    width: 96,
-    height: 32,
-    fill: tint,
-    corner: 16,
-    layout: NodeLayout.row,
-    mainAlign: SceneMainAxisAlignment.center,
-    children: [text],
+    width: 400,
+    height: 120,
+    fill: SceneColor(0xFF2B1B12),
+    children: [bar],
   );
 }

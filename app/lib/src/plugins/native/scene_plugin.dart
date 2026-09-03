@@ -321,7 +321,7 @@ class _ScenePanelState extends State<_ScenePanel>
     double width,
     double height,
   ) {
-    var root = FrameNode('root')
+    var root = FrameNode(name: 'root')
       ..width = width
       ..height = height
       ..fill = const SceneColor(0xFFFFFFFF);

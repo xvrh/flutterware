@@ -120,7 +120,7 @@ void main() {
   });
 
   test('an empty motion and an empty scene both survive the grammar', () {
-    var root = FrameNode('root')
+    var root = FrameNode(name: 'root')
       ..width = 200
       ..height = 64
       ..fill = const SceneColor(0xFFFFFFFF);

@@ -89,7 +89,7 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
   if (n.height != null) 'h': sizeToWire(n.height),
   if (n.fill != null) 'fill': n.fill!.argb,
   if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
-  if (n.cornerRadius != 0) 'corner': n.cornerRadius,
+  if (n.corner != 0) 'corner': n.corner,
   if (n.opacity != 1) 'opacity': n.opacity,
   'repeat': ?n.repeat,
   if (n.paramRefs.isNotEmpty) 'paramRefs': {...n.paramRefs},
@@ -131,7 +131,7 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
   var node = switch (json['kind']) {
     'Frame' =>
       FrameNode(
-          name,
+          name: name,
           layout: NodeLayout.values.byName(json['layout']! as String),
         )
         ..gap = number('gap') ?? 8
@@ -149,22 +149,22 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
             _nodeFromJson((c as Map).cast<String, Object?>()),
         ]),
     'Text' =>
-      TextNode(name, json['text']! as String)
+      TextNode(json['text']! as String, name: name)
         ..fontSize = number('fontSize') ?? 16
         ..weight =
             SceneFontWeight.values[(json['weight'] as num?)?.toInt() ?? 3]
         ..color = SceneColor((json['color'] as num?)?.toInt() ?? 0xFF1A1A1A)
         ..align = _textAlign(json['align'])
         ..maxLines = (json['maxLines'] as num?)?.toInt(),
-    'Shape' => ShapeNode(name, circle: json['circle'] == true),
+    'Shape' => ShapeNode(name: name, circle: json['circle'] == true),
     'Ext' => ExternalNode(
-      name,
       json['entry']! as String,
+      name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
     ),
     'Scene' => SceneRefNode(
-      name,
       json['scene']! as String,
+      name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
     ),
     _ => throw ArgumentError('unknown node kind "${json['kind']}"'),
@@ -185,7 +185,7 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
       List l when l.length > 1 => (l[1] as num).toDouble(),
       _ => 1,
     }
-    ..cornerRadius = number('corner') ?? 0
+    ..corner = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1
     ..repeat = json['repeat'] as String?
     ..paramRefs.addAll(
@@ -385,22 +385,22 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
 
   var node = switch (json['kind']) {
     'text' =>
-      TextNode(name, '${json['text']}')
+      TextNode('${json['text']}', name: name)
         ..fontSize = number('fontSize') ?? 16
         ..weight =
             SceneFontWeight.values[(json['weight'] as num?)?.toInt() ?? 3]
         ..color = color('color') ?? const SceneColor(0xFF1A1A1A)
         ..align = _textAlign(json['align'])
         ..maxLines = (json['maxLines'] as num?)?.toInt(),
-    'shape' => ShapeNode(name, circle: json['circle'] == true),
+    'shape' => ShapeNode(name: name, circle: json['circle'] == true),
     'ext' => ExternalNode(
-      name,
       '${json['entry']}',
+      name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
     ),
     _ =>
       FrameNode(
-          name,
+          name: name,
           layout: NodeLayout.values.byName('${json['layout'] ?? 'absolute'}'),
         )
         ..gap = number('gap') ?? 8
@@ -431,7 +431,7 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
       List l when l.length > 1 => (l[1] as num).toDouble(),
       _ => 1,
     }
-    ..cornerRadius = number('corner') ?? 0
+    ..corner = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1;
 
   if (json['fx'] case List fx when fx.length == 4) {

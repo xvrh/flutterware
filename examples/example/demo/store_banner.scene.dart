@@ -1,59 +1,68 @@
-//@flutterware:scene=0.6
-// Target one of three: a store banner whose copy is a typed hole, so one
-// scene is exported once per language.
+//@flutterware:scene=0.7
+// Owned by the flutterware scene editor, which reads and writes this whole
+// file. Hand edits are welcome inside the grammar: every node is a
+// `late final` field (the field name is the node's identity), placed exactly
+// once in a children list; a parameter is a `final` in the class header
+// whose default is the mockup. Anything outside the grammar is refused with
+// a line number rather than silently dropped.
 //
-// The mockup is English. What an export loop fills in is the parameters
-// below; nothing else about the scene changes between languages.
+// This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
+import 'package:flutterware/scene_authoring.dart';
 
 class StoreBanner({
   final String headline = 'Fresh coffee, faster',
   final String subtitle = 'Order ahead. Skip the line. Earn rewards.',
   final String cta = 'Get the app',
-  final Color tint = const Color(0xFFE8632B),
-}) {
-  late final title = Text(
+  final SceneColor tint = const SceneColor(0xFFE8632B),
+}) extends SceneDefinition {
+  late final glow = ShapeNode(
+    x: 620,
+    y: -90,
+    width: 460,
+    height: 460,
+    fill: SceneColor(0xFF4A2F1F),
+    opacity: 0.7,
+    circle: true,
+  );
+  late final cup = TextNode('☕', x: 700, y: 120, fontSize: 180);
+  late final title = TextNode(
     headline,
     fontSize: 54,
-    weight: FontWeight.w700,
-    color: Color(0xFFFFFFFF),
+    weight: SceneFontWeight.w700,
+    color: SceneColor(0xFFFFFFFF),
   );
-  late final sub = Text(subtitle, fontSize: 20, color: Color(0xFFD8C9BD));
-  late final ctaLabel = Text(
+  late final sub = TextNode(
+    subtitle,
+    fontSize: 20,
+    color: SceneColor(0xFFD8C9BD),
+  );
+  late final ctaLabel = TextNode(
     cta,
     fontSize: 17,
-    weight: FontWeight.w600,
-    color: Color(0xFFFFFFFF),
+    weight: SceneFontWeight.w600,
+    color: SceneColor(0xFFFFFFFF),
   );
-  late final ctaBox = Frame(
+  late final ctaBox = FrameNode(
     fill: tint,
     corner: 28,
     layout: NodeLayout.row,
     padding: 16,
     children: [ctaLabel],
   );
-  late final copy = Frame(
+  late final copy = FrameNode(
     x: 64,
     y: 120,
     width: 500,
     layout: NodeLayout.column,
     gap: 16,
-    crossAlign: CrossAxisAlignment.start,
+    crossAlign: SceneCrossAxisAlignment.start,
     children: [title, sub, ctaBox],
   );
-  late final glow = Shape(
-    x: 620,
-    y: -90,
-    width: 460,
-    height: 460,
-    fill: Color(0xFF4A2F1F),
-    opacity: 0.7,
-    circle: true,
-  );
-  late final cup = Text('☕', x: 700, y: 120, fontSize: 180);
-  late final root = Frame(
+  @override
+  late final root = FrameNode(
     width: 1024,
     height: 500,
-    fill: Color(0xFF2B1B12),
+    fill: SceneColor(0xFF2B1B12),
     children: [glow, cup, copy],
   );
 }

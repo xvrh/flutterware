@@ -43,7 +43,7 @@ void main() {
 
     test('a node drawn on the root lands at its point, half-pixel', () {
       editor.tool = SceneTool.frame;
-      var node = FrameNode('frame1')..width = 120;
+      var node = FrameNode(name: 'frame1')..width = 120;
       editor.insertNode(node, x: 700.3, y: 40.6);
       expect(editor.doc.parentOf(node), same(editor.doc.root));
       expect((node.x, node.y), (700.5, 40.5));
@@ -53,7 +53,7 @@ void main() {
     });
 
     test('a node drawn inside a column is appended, its point ignored', () {
-      var node = TextNode('text1', 'Text');
+      var node = TextNode('Text', name: 'text1');
       editor.insertNode(node, x: 100, y: 150);
       var copy = editor.doc.nodeNamed('copy')! as FrameNode;
       expect(copy.children.last, same(node));

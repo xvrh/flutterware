@@ -63,7 +63,13 @@ import 'package:flutterware/scene_authoring.dart';
 
 import 'motion_file.dart';
 
-const sceneFileMarker = '//@flutterware:scene=0.6';
+const sceneFileMarker = '//@flutterware:scene=0.7';
+
+/// The one library a scene file imports. Its vocabulary IS the model's own
+/// class names — `FrameNode`, `TextNode`, `SceneColor` — because a spelling
+/// that differs from the type is a spelling the compiler cannot check.
+const sceneAuthoringImport =
+    "import 'package:flutterware/scene_authoring.dart';";
 
 /// One refused construct: where it is and what to do instead.
 class SceneRefusal {
@@ -132,6 +138,9 @@ $sceneFileMarker
 // once in a children list; a parameter is a `final` in the class header
 // whose default is the mockup. Anything outside the grammar is refused with
 // a line number rather than silently dropped.
+//
+// This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
+$sceneAuthoringImport
 
 ''');
   var seen = <String>{};
@@ -143,7 +152,7 @@ $sceneFileMarker
     params[p.name] = p;
   }
   if (doc.params.isEmpty) {
-    out.writeln('class $className {');
+    out.writeln('class $className extends SceneDefinition {');
   } else {
     // The primary constructor: formal, field and default in one spelling,
     // in scope for every node initializer below.
@@ -151,7 +160,7 @@ $sceneFileMarker
     for (var p in doc.params) {
       out.write('final ${p.typeName} ${p.name} = ${_paramDefault(p)}, ');
     }
-    out.writeln('}) {');
+    out.writeln('}) extends SceneDefinition {');
   }
   void field(SceneNode n) {
     for (var c in n.children) {
@@ -163,6 +172,9 @@ $sceneFileMarker
         'field names: valid Dart identifiers, unique in the scene',
       );
     }
+    // `root` implements SceneDefinition's abstract getter, so it is an
+    // override like any other member that does.
+    if (n.name == 'root') out.writeln('  @override');
     out.write('  late final ${n.name} = ');
     _emitNode(out, n, params);
     out.writeln(';');
@@ -234,8 +246,8 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
         add('borderWidth', n.borderWidth, () => _num(n.borderWidth));
       }
     }
-    if (n.cornerRadius != 0) {
-      add('corner', n.cornerRadius, () => _num(n.cornerRadius));
+    if (n.corner != 0) {
+      add('corner', n.corner, () => _num(n.corner));
     }
     if (n.opacity != 1) add('opacity', n.opacity, () => _num(n.opacity));
     if (n.repeat case var list?) props.add('repeat: $list');
@@ -282,60 +294,60 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
         }
       }
       if (f.mainAlign != SceneMainAxisAlignment.start) {
-        props.add('mainAlign: MainAxisAlignment.${f.mainAlign.name}');
+        props.add('mainAlign: SceneMainAxisAlignment.${f.mainAlign.name}');
       }
       if (f.crossAlign != SceneCrossAxisAlignment.center) {
-        props.add('crossAlign: CrossAxisAlignment.${f.crossAlign.name}');
+        props.add('crossAlign: SceneCrossAxisAlignment.${f.crossAlign.name}');
       }
       if (f.children.isNotEmpty) {
         props.add('children: [${f.children.map((c) => c.name).join(', ')}]');
       }
-      out.write('Frame(${props.join(', ')})');
+      out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
       props.add(ref('text', t.text) ?? _str(t.text));
       common();
       if (t.fontSize != 16) add('fontSize', t.fontSize, () => _num(t.fontSize));
       if (t.weight != SceneFontWeight.w400) {
-        props.add('weight: FontWeight.w${t.weight.value}');
+        props.add('weight: SceneFontWeight.w${t.weight.value}');
       }
       if (t.color != const SceneColor(0xFF1A1A1A)) {
         add('color', t.color, () => _color(t.color));
       }
       if (t.align != SceneTextAlign.left) {
-        props.add('align: TextAlign.${t.align.name}');
+        props.add('align: SceneTextAlign.${t.align.name}');
       }
       if (t.maxLines case var lines?) {
         add('maxLines', lines.toDouble(), () => '$lines');
       }
-      out.write('Text(${props.join(', ')})');
+      out.write('TextNode(${props.join(', ')})');
     case ShapeNode s:
       common();
       if (s.circle) props.add('circle: true');
-      out.write('Shape(${props.join(', ')})');
+      out.write('ShapeNode(${props.join(', ')})');
     case ExternalNode e:
       if (!isValidNodeName(e.entry)) {
         throw ArgumentError('"${e.entry}" is not a registration entry name');
       }
-      props.add(e.entry);
+      props.add(_str(e.entry));
       common();
       if (e.args.isNotEmpty) {
         props.add(
           'args: {${[for (var entry in e.args.entries) '${_str(entry.key)}: ${_argValue(entry.value)}'].join(', ')}}',
         );
       }
-      out.write('Ext(${props.join(', ')})');
+      out.write('ExternalNode(${props.join(', ')})');
     case SceneRefNode r:
       if (!isValidNodeName(r.sceneClassName)) {
         throw ArgumentError('"${r.sceneClassName}" is not a scene class name');
       }
-      props.add(r.sceneClassName);
+      props.add(_str(r.sceneClassName));
       common();
       if (r.args.isNotEmpty) {
         props.add(
           'args: {${[for (var entry in r.args.entries) '${_str(entry.key)}: ${_argValue(entry.value)}'].join(', ')}}',
         );
       }
-      out.write('Scene(${props.join(', ')})');
+      out.write('SceneRefNode(${props.join(', ')})');
   }
 }
 
@@ -361,7 +373,7 @@ bool _sameValue(Object? current, Object field) {
 }
 
 String _color(SceneColor c) =>
-    'Color(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
+    'SceneColor(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
 
 String _str(String s) {
   var out = StringBuffer("'");
@@ -723,7 +735,7 @@ class _Parser {
         refuse(
           dflt.offset,
           'parameter default',
-          'a default is a string, number or Color(0x…) literal',
+          'a default is a string, number or SceneColor(0x…) literal',
         );
         continue;
       }
@@ -761,7 +773,7 @@ class _Parser {
       case ListLiteral list:
         return (SceneParamKind.list, _items(list));
       default:
-        if (_invocation(inner) case ('Color', var args)
+        if (_invocation(inner) case ('SceneColor', var args)
             when args.arguments.length == 1) {
           var v = args.arguments.single.argumentExpression;
           if (v is IntegerLiteral && v.value != null) {
@@ -865,7 +877,8 @@ class _Parser {
       refuse(
         expr.offset,
         'expression',
-        'a node is a Frame, Text, Shape or Ext constructor call',
+        'a node is a FrameNode, TextNode, ShapeNode or ExternalNode '
+            'constructor call',
       );
       return null;
     }
@@ -879,8 +892,8 @@ class _Parser {
       }
     }
     switch (kind) {
-      case 'Frame':
-        var node = FrameNode(name);
+      case 'FrameNode':
+        var node = FrameNode(name: name);
         _applyCommon(node, named);
         _take(named, 'layout', (e) {
           var v = _enum(e, 'NodeLayout', NodeLayout.values.map((v) => v.name));
@@ -953,7 +966,7 @@ class _Parser {
         _take(named, 'mainAlign', (e) {
           var v = _enum(
             e,
-            'MainAxisAlignment',
+            'SceneMainAxisAlignment',
             SceneMainAxisAlignment.values.map((v) => v.name),
           );
           if (v != null) {
@@ -963,7 +976,7 @@ class _Parser {
         _take(named, 'crossAlign', (e) {
           var v = _enum(
             e,
-            'CrossAxisAlignment',
+            'SceneCrossAxisAlignment',
             SceneCrossAxisAlignment.values.map((v) => v.name),
           );
           if (v != null) {
@@ -1010,11 +1023,11 @@ class _Parser {
             }
           }
         });
-        _refuseRest('Frame', named);
+        _refuseRest('FrameNode', named);
         _checkPositionals(positional, 0);
         return node;
-      case 'Text':
-        var node = TextNode(name, '');
+      case 'TextNode':
+        var node = TextNode('', name: name);
         node.text = _contentOf(positional, args, node) ?? '';
         _applyCommon(node, named);
         _take(
@@ -1023,7 +1036,7 @@ class _Parser {
           (e) => node.fontSize = _doubleV(e, node, 'fontSize') ?? node.fontSize,
         );
         _take(named, 'align', (e) {
-          var v = _enum(e, 'TextAlign', [
+          var v = _enum(e, 'SceneTextAlign', [
             for (var a in SceneTextAlign.values) a.name,
           ]);
           if (v != null) {
@@ -1035,7 +1048,7 @@ class _Parser {
           if (v != null) node.maxLines = v.round();
         });
         _take(named, 'weight', (e) {
-          var v = _enum(e, 'FontWeight', [
+          var v = _enum(e, 'SceneFontWeight', [
             for (var i = 1; i <= 9; i++) 'w${i * 100}',
           ]);
           if (v != null) {
@@ -1048,30 +1061,31 @@ class _Parser {
           'color',
           (e) => node.color = _colorV(e, node, 'color') ?? node.color,
         );
-        _refuseRest('Text', named);
+        _refuseRest('TextNode', named);
         _checkPositionals(positional, 1);
         return node;
-      case 'Shape':
-        var node = ShapeNode(name);
+      case 'ShapeNode':
+        var node = ShapeNode(name: name);
         _applyCommon(node, named);
         _take(named, 'circle', (e) => node.circle = _bool(e) ?? false);
-        _refuseRest('Shape', named);
+        _refuseRest('ShapeNode', named);
         _checkPositionals(positional, 0);
         return node;
-      case 'Ext' || 'Scene':
+      case 'ExternalNode' || 'SceneRefNode':
         var target =
             _entryName(
               positional,
               args,
-              kind == 'Ext'
-                  ? 'an Ext names its registration entry — Ext(DrinkBadge, …)'
-                  : 'a Scene names the scene class it instantiates — '
-                        'Scene(PromoBadge, …)',
+              kind == 'ExternalNode'
+                  ? 'an ExternalNode names its registration entry — '
+                        "ExternalNode('DrinkBadge', …)"
+                  : 'a SceneRefNode names the scene class it instantiates — '
+                        "SceneRefNode('PromoBadge', …)",
             ) ??
             '';
-        var node = kind == 'Ext'
-            ? ExternalNode(name, target)
-            : SceneRefNode(name, target);
+        var node = kind == 'ExternalNode'
+            ? ExternalNode(target, name: name)
+            : SceneRefNode(target, name: name);
         var nodeArgs = node is ExternalNode
             ? node.args
             : (node as SceneRefNode).args;
@@ -1102,7 +1116,8 @@ class _Parser {
         refuse(
           expr.offset,
           'unknown node',
-          '"$kind" is not a scene node — Frame, Text, Shape, Ext or Scene',
+          '"$kind" is not a scene node — FrameNode, TextNode, ShapeNode, '
+              'ExternalNode or SceneRefNode',
         );
         return null;
     }
@@ -1134,11 +1149,7 @@ class _Parser {
       'borderWidth',
       (e) => n.borderWidth = _doubleV(e, n, 'borderWidth') ?? 1,
     );
-    _take(
-      named,
-      'corner',
-      (e) => n.cornerRadius = _doubleV(e, n, 'corner') ?? 0,
-    );
+    _take(named, 'corner', (e) => n.corner = _doubleV(e, n, 'corner') ?? 0);
     _take(named, 'opacity', (e) => n.opacity = _doubleV(e, n, 'opacity') ?? 1);
     _take(named, 'repeat', (e) {
       if (e is! SimpleIdentifier) {
@@ -1240,7 +1251,7 @@ class _Parser {
       var wanted = switch (kind) {
         SceneParamKind.string => 'String',
         SceneParamKind.number => 'double',
-        SceneParamKind.color => 'Color',
+        SceneParamKind.color => 'SceneColor',
         SceneParamKind.list => 'List<Map<String, Object>>',
       };
       refuse(
@@ -1387,12 +1398,16 @@ class _Parser {
   }
 
   SceneColor? _colorOf(Expression e) {
-    if (_invocation(e) case ('Color', var args)
+    if (_invocation(e) case ('SceneColor', var args)
         when args.arguments.length == 1) {
       var v = args.arguments.single.argumentExpression;
       if (v is IntegerLiteral && v.value != null) return SceneColor(v.value!);
     }
-    refuse(e.offset, _kind(e), 'expected a color, spelled Color(0xAARRGGBB)');
+    refuse(
+      e.offset,
+      _kind(e),
+      'expected a color, spelled SceneColor(0xAARRGGBB)',
+    );
     return null;
   }
 
@@ -1424,12 +1439,12 @@ class _Parser {
       DoubleLiteral(:var value) => negate ? -value : value,
       BooleanLiteral(:var value) => value,
       SimpleStringLiteral(:var value) => value,
-      _ when _invocation(inner)?.$1 == 'Color' => _colorOf(inner),
+      _ when _invocation(inner)?.$1 == 'SceneColor' => _colorOf(inner),
       _ => () {
         refuse(
           e.offset,
           _kind(e),
-          'expected a number, string, bool or Color(0x…) literal',
+          'expected a number, string, bool or SceneColor(0x…) literal',
         );
         return null;
       }(),

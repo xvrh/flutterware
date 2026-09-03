@@ -416,15 +416,15 @@ class _HitLayerState extends State<_HitLayer> {
         : Rect.fromLTWH(at.dx, at.dy, 120, 80);
     var node = switch (tool) {
       SceneTool.frame =>
-        FrameNode(doc.uniqueName('frame'))
+        FrameNode(name: doc.uniqueName('frame'))
           ..width = _half(box.width)
           ..height = _half(box.height),
       SceneTool.shape =>
-        ShapeNode(doc.uniqueName('shape'))
+        ShapeNode(name: doc.uniqueName('shape'))
           ..width = _half(box.width)
           ..height = _half(box.height)
           ..fill = const SceneColor(0xFF888888),
-      SceneTool.text => TextNode(doc.uniqueName('text'), 'Text'),
+      SceneTool.text => TextNode('Text', name: doc.uniqueName('text')),
       SceneTool.select => null,
     };
     if (node == null) return;

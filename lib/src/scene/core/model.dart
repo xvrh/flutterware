@@ -33,6 +33,7 @@ bool isValidNodeName(String name) =>
 /// Declared in the file as a primary-constructor formal with a default;
 /// referenced by node properties by bare identifier. Parameters share the
 /// class namespace with node fields.
+///
 /// A parameter's type. [list] is the one that is not a value: its default
 /// is a list of items, and what reads it is a node's [SceneNode.repeat]
 /// rather than a property. Substitution and repetition are the same
@@ -57,7 +58,7 @@ class SceneParamDecl {
   String get typeName => switch (kind) {
     SceneParamKind.string => 'String',
     SceneParamKind.number => 'double',
-    SceneParamKind.color => 'Color',
+    SceneParamKind.color => 'SceneColor',
     SceneParamKind.list => 'List<Map<String, Object>>',
   };
 
@@ -70,16 +71,34 @@ class SceneParamDecl {
 }
 
 sealed class SceneNode {
-  SceneNode(this.name);
+  /// Every authorable property this node kind shares, named exactly as the
+  /// file spells it — because the file IS a call to this constructor. A
+  /// property the grammar has and this does not is a property a scene file
+  /// cannot compile, so the two cannot drift.
+  SceneNode({
+    this.name = '',
+    this.x = 0,
+    this.y = 0,
+    this.width,
+    this.height,
+    this.repeat,
+    this.fill,
+    this.borderColor,
+    this.borderWidth = 1,
+    this.corner = 0,
+    this.opacity = 1,
+  });
 
-  /// The node's identity — the field name in the file. Mutable only so the
-  /// editor's rename door can move it; everything keyed by it (measured
-  /// rects, keys, groups) is re-pointed by that door.
+  /// The node's identity — the field name in the file, and SOURCE-LEVEL
+  /// ONLY. A compiled scene leaves it empty: Dart has no field-name
+  /// reflection, and at runtime a node's identity is the object, which is
+  /// what makes `scene.headline` a typed reference rather than a lookup.
+  /// The editor, which parsed the source, is what fills this in.
   String name;
 
   // Authored geometry. x/y are meaningful only under an absolute parent.
-  double x = 0;
-  double y = 0;
+  double x;
+  double y;
 
   /// Size along each axis, three-valued in one field:
   ///
@@ -127,10 +146,10 @@ sealed class SceneNode {
   /// because the file's vocabulary is flat named arguments and a
   /// `Border(...)` would be a construct the grammar does not have.
   SceneColor? borderColor;
-  double borderWidth = 1;
+  double borderWidth;
 
-  double cornerRadius = 0;
-  double opacity = 1;
+  double corner;
+  double opacity;
 
   /// Laid-out rect in artboard coordinates, swept after each frame by
   /// whichever renderer measured it.
@@ -244,12 +263,75 @@ class Effect {
   void clear() => _node.clearFxWriter(this);
 }
 
+/// One number when one number says it, four names when it does not — the
+/// grammar's own spelling of an inset, assembled into the value the model
+/// carries.
+SceneEdges _edges(
+  double? all,
+  double? left,
+  double? top,
+  double? right,
+  double? bottom,
+) => SceneEdges(
+  left: left ?? all ?? 0,
+  top: top ?? all ?? 0,
+  right: right ?? all ?? 0,
+  bottom: bottom ?? all ?? 0,
+);
+
 class FrameNode extends SceneNode {
-  FrameNode(super.name, {this.layout = NodeLayout.absolute});
+  /// Padding comes in as the grammar spells it — one number when one number
+  /// says it, four names when it does not — rather than as a [SceneEdges],
+  /// which the file has no way to write.
+  FrameNode({
+    super.name,
+    super.x,
+    super.y,
+    super.width,
+    super.height,
+    super.repeat,
+    super.fill,
+    super.borderColor,
+    super.borderWidth,
+    super.corner,
+    super.opacity,
+    this.layout = NodeLayout.absolute,
+    this.gap = 8,
+    double? padding,
+    double? paddingLeft,
+    double? paddingTop,
+    double? paddingRight,
+    double? paddingBottom,
+    List<double?>? columns,
+    double? cellPadding,
+    double? cellPaddingLeft,
+    double? cellPaddingTop,
+    double? cellPaddingRight,
+    double? cellPaddingBottom,
+    this.mainAlign = SceneMainAxisAlignment.start,
+    this.crossAlign = SceneCrossAxisAlignment.center,
+    List<SceneNode> children = const [],
+  }) : columns = columns == null ? [] : [...columns],
+       padding = _edges(
+         padding,
+         paddingLeft,
+         paddingTop,
+         paddingRight,
+         paddingBottom,
+       ),
+       cellPadding = _edges(
+         cellPadding,
+         cellPaddingLeft,
+         cellPaddingTop,
+         cellPaddingRight,
+         cellPaddingBottom,
+       ) {
+    this.children.addAll(children);
+  }
 
   NodeLayout layout;
-  double gap = 8;
-  SceneEdges padding = SceneEdges.zero;
+  double gap;
+  SceneEdges padding;
 
   /// The column tracks, when [layout] is [NodeLayout.table]. Each is a size
   /// in the same three-valued vocabulary as a node's: `null` hugs the
@@ -259,7 +341,7 @@ class FrameNode extends SceneNode {
   /// The tracks belong to the TABLE, not to the cells, and that is the
   /// difference a table makes: every row is measured against the same
   /// tracks, so the columns line up whatever each row happens to hold.
-  List<double?> columns = [];
+  List<double?> columns;
 
   /// Space inside every cell of a table. Cells are laid out by the table
   /// rather than by their own boxes, so this is where their breathing room
@@ -276,13 +358,31 @@ class FrameNode extends SceneNode {
 }
 
 class TextNode extends SceneNode {
-  TextNode(super.name, this.text);
+  TextNode(
+    this.text, {
+    super.name,
+    super.x,
+    super.y,
+    super.width,
+    super.height,
+    super.repeat,
+    super.fill,
+    super.borderColor,
+    super.borderWidth,
+    super.corner,
+    super.opacity,
+    this.fontSize = 16,
+    this.weight = SceneFontWeight.w400,
+    this.color = const SceneColor(0xFF1A1A1A),
+    this.align = SceneTextAlign.left,
+    this.maxLines,
+  });
 
   String text;
-  double fontSize = 16;
-  SceneFontWeight weight = SceneFontWeight.w400;
-  SceneColor color = const SceneColor(0xFF1A1A1A);
-  SceneTextAlign align = SceneTextAlign.left;
+  double fontSize;
+  SceneFontWeight weight;
+  SceneColor color;
+  SceneTextAlign align;
 
   /// How many lines before it is cut with an ellipsis, or null for as many
   /// as it takes. A banner filled per language is the reason: the layout
@@ -294,7 +394,20 @@ class TextNode extends SceneNode {
 }
 
 class ShapeNode extends SceneNode {
-  ShapeNode(super.name, {this.circle = false});
+  ShapeNode({
+    super.name,
+    super.x,
+    super.y,
+    super.width,
+    super.height,
+    super.repeat,
+    super.fill,
+    super.borderColor,
+    super.borderWidth,
+    super.corner,
+    super.opacity,
+    this.circle = false,
+  });
 
   bool circle;
 
@@ -306,8 +419,21 @@ class ShapeNode extends SceneNode {
 /// entry name and its wire-able args; the guest holds the real builder and
 /// the mockups.
 class ExternalNode extends SceneNode {
-  ExternalNode(super.name, this.entry, {Map<String, Object?>? args})
-    : args = args ?? {};
+  ExternalNode(
+    this.entry, {
+    super.name,
+    super.x,
+    super.y,
+    super.width,
+    super.height,
+    super.repeat,
+    super.fill,
+    super.borderColor,
+    super.borderWidth,
+    super.corner,
+    super.opacity,
+    Map<String, Object?>? args,
+  }) : args = args ?? {};
 
   final String entry;
   final Map<String, Object?> args;
@@ -340,8 +466,21 @@ class ExternalNode extends SceneNode {
 /// [args]; nothing serializes it, and a node nobody resolved draws as a
 /// placeholder naming what it wanted.
 class SceneRefNode extends SceneNode {
-  SceneRefNode(super.name, this.sceneClassName, {Map<String, Object?>? args})
-    : args = args ?? {};
+  SceneRefNode(
+    this.sceneClassName, {
+    super.name,
+    super.x,
+    super.y,
+    super.width,
+    super.height,
+    super.repeat,
+    super.fill,
+    super.borderColor,
+    super.borderWidth,
+    super.corner,
+    super.opacity,
+    Map<String, Object?>? args,
+  }) : args = args ?? {};
 
   final String sceneClassName;
   final Map<String, Object?> args;
@@ -385,6 +524,25 @@ SceneDocument instantiateScene(
     ..params.addAll(template.params);
   doc.applyArgs(args);
   return doc;
+}
+
+/// What a `.scene.dart` class extends — the seam between a scene as Dart and
+/// a scene as a document.
+///
+/// The generated file is a REAL Dart file: it compiles, it analyzes, and an
+/// app instantiates it with typed arguments. The class declares its nodes as
+/// `late final` fields and names one of them `root`; this turns that into
+/// the document every other surface consumes.
+///
+/// Nothing here reads a name. A node's identity at runtime is the OBJECT —
+/// which is what lets a motion say `scene.headline` and have the compiler
+/// check it — and the field names live only in the source, where the editor
+/// reads them.
+abstract class SceneDefinition {
+  FrameNode get root;
+
+  /// This definition as a document, built once.
+  late final SceneDocument scene = SceneDocument(root);
 }
 
 class SceneDocument extends SceneListenable {
@@ -532,7 +690,7 @@ class SceneDocument extends SceneListenable {
       'h': sizeToWire(n.height),
       'fill': fill?.argb,
       if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
-      'corner': n.cornerRadius,
+      'corner': n.corner,
       'opacity': n.fxRendered('opacity'),
       // The imposed transforms have no authored slots — identity is the
       // base — so they ride the wire only when a writer moves them.
@@ -613,7 +771,7 @@ class SceneDocument extends SceneListenable {
       'w': sizeToWire(r.width) ?? picture['w'],
       'h': r.height ?? picture['h'],
       if (r.fill == null && !r.hasFx('fill')) 'fill': picture['fill'],
-      if (r.cornerRadius == 0) 'corner': picture['corner'],
+      if (r.corner == 0) 'corner': picture['corner'],
       'opacity':
           (r.fxRendered('opacity') as double) *
           ((picture['opacity'] as num?)?.toDouble() ?? 1),
@@ -781,7 +939,7 @@ class SceneDocument extends SceneListenable {
           ..fill = snap.fill
           ..borderColor = snap.borderColor
           ..borderWidth = snap.borderWidth
-          ..cornerRadius = snap.cornerRadius
+          ..corner = snap.corner
           ..opacity = snap.opacity
           ..paramRefs.clear()
           ..paramRefs.addAll(snap.paramRefs);
@@ -812,7 +970,7 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
   var name = rename == null ? node.name : rename(node.name);
   var copy = switch (node) {
     FrameNode f =>
-      FrameNode(name, layout: f.layout)
+      FrameNode(name: name, layout: f.layout)
         ..gap = f.gap
         ..padding = f.padding
         ..columns = [...f.columns]
@@ -823,18 +981,18 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
           for (var c in f.children) deepCopyNode(c, rename: rename),
         ]),
     TextNode t =>
-      TextNode(name, t.text)
+      TextNode(t.text, name: name)
         ..fontSize = t.fontSize
         ..weight = t.weight
         ..color = t.color
         ..align = t.align
         ..maxLines = t.maxLines,
-    ShapeNode s => ShapeNode(name, circle: s.circle),
-    ExternalNode e => ExternalNode(name, e.entry, args: Map.of(e.args)),
+    ShapeNode s => ShapeNode(name: name, circle: s.circle),
+    ExternalNode e => ExternalNode(e.entry, name: name, args: Map.of(e.args)),
     // The instance is copied too, so the copy draws at once; each copy owns
     // its own, because args are applied by mutating it.
     SceneRefNode r =>
-      SceneRefNode(name, r.sceneClassName, args: Map.of(r.args))
+      SceneRefNode(r.sceneClassName, name: name, args: Map.of(r.args))
         ..instance = r.instance == null
             ? null
             : instantiateScene(r.instance!, r.args),
@@ -848,7 +1006,7 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     ..fill = node.fill
     ..borderColor = node.borderColor
     ..borderWidth = node.borderWidth
-    ..cornerRadius = node.cornerRadius
+    ..corner = node.corner
     ..opacity = node.opacity
     ..paramRefs.addAll(node.paramRefs);
   return copy;
@@ -868,7 +1026,7 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
     case 'height':
       node.height = sizeFromWire(value);
     case 'corner':
-      node.cornerRadius = (value! as num).toDouble();
+      node.corner = (value! as num).toDouble();
     case 'opacity':
       node.opacity = (value! as num).toDouble();
     case 'fill':

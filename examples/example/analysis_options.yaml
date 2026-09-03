@@ -3,11 +3,17 @@ include: ../../analysis_options.yaml
 analyzer:
   exclude:
     - build/**
-    # A scene file — the scene and the motions animating it — is parsed by
-    # the flutterware scene tooling, not compiled (yet): its vocabulary has
-    # no importable library while the format is a spike, so the analyzer
-    # would report every identifier undefined.
-    - '**.scene.dart'
+    # A scene file is ordinary Dart and is analyzed like any other. The ones
+    # still listed here are the ones not yet ported: a motion's vocabulary
+    # (Track, Key, Curves) has no library until that phase lands, so a scene
+    # carrying one cannot compile yet. The list only shrinks.
+    - demo/banner.scene.dart
+    # The repeater: `lines.item` cannot compile, and the closure that
+    # replaces it is its own phase.
+    - demo/invoice.scene.dart
+    - demo/ohoh.scene.dart
+    - demo/promo_badge.scene.dart
+    - demo/story_card.scene.dart
     - android/**
     - ios/**
     - web/**

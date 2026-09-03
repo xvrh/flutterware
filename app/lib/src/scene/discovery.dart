@@ -61,15 +61,21 @@ List<SceneEntry> discoverScenes(String directory) {
 String? sceneClassNameOf(String source) {
   var lines = source.split('\n');
   if (lines.isEmpty || !lines.first.contains('@flutterware:scene')) return null;
-  for (var line in lines) {
-    var match = _classHeader.firstMatch(line);
-    if (match == null) continue;
-    // The scene class is the one that extends nothing — the motions beside
-    // it all extend SceneMotion.
-    if (line.contains('extends ')) continue;
+  // The scene class is the one that is not a motion. Told apart by the
+  // region each class owns — from its own header to the next one — because a
+  // primary constructor puts the extends clause lines below the `class`
+  // keyword, where a line-at-a-time scan cannot see it.
+  var matches = _classHeader.allMatches(source).toList();
+  for (var (index, match) in matches.indexed) {
+    var end = index + 1 < matches.length
+        ? matches[index + 1].start
+        : source.length;
+    if (source.substring(match.start, end).contains('extends SceneMotion')) {
+      continue;
+    }
     return match.group(1);
   }
   return null;
 }
 
-final _classHeader = RegExp(r'^class\s+([A-Za-z_$][\w$]*)');
+final _classHeader = RegExp(r'^class\s+([A-Za-z_$][\w$]*)', multiLine: true);

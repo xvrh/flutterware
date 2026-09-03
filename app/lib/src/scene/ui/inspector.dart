@@ -199,9 +199,9 @@ class SceneInspector extends StatelessWidget {
           _number(
             'corner',
             'Corner',
-            node.cornerRadius,
+            node.corner,
             SceneNumberShape.pixels,
-            apply: (v) => node.cornerRadius = v,
+            apply: (v) => node.corner = v,
           ),
           _number(
             'opacity',

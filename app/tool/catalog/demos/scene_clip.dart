@@ -42,24 +42,24 @@ class _SceneClipState extends State<_SceneClip> {
 }
 
 SceneDocument _buildScene() {
-  var headline = TextNode('headline', 'Fresh coffee, faster')
+  var headline = TextNode('Fresh coffee, faster', name: 'headline')
     ..x = 32
     ..y = 48
     ..fontSize = 32
     ..weight = SceneFontWeight.w700
     ..color = const SceneColor(0xFFFFFFFF);
-  var subtitle = TextNode('subtitle', 'Order ahead. Skip the line.')
+  var subtitle = TextNode('Order ahead. Skip the line.', name: 'subtitle')
     ..x = 32
     ..y = 96
     ..fontSize = 16
     ..color = const SceneColor(0xFFD8C9BD);
-  var badge = ShapeNode('badge', circle: true)
+  var badge = ShapeNode(name: 'badge', circle: true)
     ..x = 400
     ..y = 40
     ..width = 96
     ..height = 96
     ..fill = const SceneColor(0xFFE8632B);
-  var root = FrameNode('root')
+  var root = FrameNode(name: 'root')
     ..width = 540
     ..height = 180
     ..fill = const SceneColor(0xFF3B2A1F)

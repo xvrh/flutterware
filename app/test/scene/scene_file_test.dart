@@ -19,9 +19,9 @@ void main() {
 
   test('every node is a late final field, root last', () {
     var emitted = emitSceneFile(coffeeBannerDraft());
-    expect(emitted, contains('late final headline = Text('));
-    expect(emitted, contains('late final badge = Ext('));
-    expect(emitted, contains('DrinkBadge,'));
+    expect(emitted, contains('late final headline = TextNode('));
+    expect(emitted, contains('late final badge = ExternalNode('));
+    expect(emitted, contains("'DrinkBadge'"));
     expect(emitted, contains('children: [headline, subtitle, cta]'));
     // Canonical order: a field is declared before the field that places it.
     var root = emitted.indexOf('late final root');
@@ -37,27 +37,27 @@ void main() {
 
   test('accepted non-canonical spellings converge in one emit', () {
     // `final` for `late final`, root first (forward references), 1024.0 for
-    // 1024, lowercase hex, double quotes, a quoted Ext entry: accepted, then
-    // canonical.
+    // 1024, lowercase hex, double quotes, and no `extends SceneDefinition`:
+    // accepted, then canonical.
     var parsed = parseSceneFile('''
 $sceneFileMarker
 class S {
-  final root = Frame(
+  final root = FrameNode(
     width: 1024.0,
     height: 500,
-    fill: Color(0xff2b1b12),
+    fill: SceneColor(0xff2b1b12),
     children: [badge, caption],
   );
-  final badge = Ext('DrinkBadge');
-  final caption = Text("Banner");
+  final badge = ExternalNode('DrinkBadge');
+  final caption = TextNode("Banner");
 }
 ''');
     expect(parsed.refusals, isEmpty);
     var emitted = emitSceneFile(parsed.doc!, className: 'S');
     expect(emitted, contains('width: 1024,'));
-    expect(emitted, contains('Color(0xFF2B1B12)'));
-    expect(emitted, contains('late final badge = Ext(DrinkBadge)'));
-    expect(emitted, contains("Text('Banner')"));
+    expect(emitted, contains('SceneColor(0xFF2B1B12)'));
+    expect(emitted, contains("late final badge = ExternalNode('DrinkBadge')"));
+    expect(emitted, contains("TextNode('Banner')"));
     expect(
       emitted.indexOf('late final badge'),
       lessThan(emitted.indexOf('late final root')),
@@ -90,13 +90,13 @@ class S {
 $sceneFileMarker
 class BannerScene({
   final String title = 'Fresh coffee, faster',
-  final Color accent = const Color(0xFFE8632B),
+  final SceneColor accent = const SceneColor(0xFFE8632B),
   final double slide = 24,
 }) {
-  late final headline = Text(title, fontSize: 54);
-  late final cta = Frame(x: slide, fill: accent, children: [label]);
-  late final label = Text('Get the app');
-  late final root = Frame(width: 1024, height: 500, children: [headline, cta]);
+  late final headline = TextNode(title, fontSize: 54);
+  late final cta = FrameNode(x: slide, fill: accent, children: [label]);
+  late final label = TextNode('Get the app');
+  late final root = FrameNode(width: 1024, height: 500, children: [headline, cta]);
 }
 ''';
 
@@ -116,14 +116,14 @@ class BannerScene({
       var emitted = emitSceneFile(doc, className: 'BannerScene');
       expect(emitted, contains('class BannerScene({'));
       expect(emitted, contains("final String title = 'Fresh coffee, faster'"));
-      expect(emitted, contains('const Color(0xFFE8632B)'));
+      expect(emitted, contains('const SceneColor(0xFFE8632B)'));
       var again = emitSceneFile(
         parseSceneFile(emitted).doc!,
         className: 'BannerScene',
       );
       expect(again, emitted);
       // The references survived the round trip as identifiers.
-      expect(emitted, contains('Text(title'));
+      expect(emitted, contains('TextNode(title'));
       expect(emitted, contains('x: slide'));
       expect(emitted, contains('fill: accent'));
     });
@@ -151,8 +151,8 @@ class BannerScene({
         var doc = parseSceneFile(banner).doc!;
         (doc.root.children[0] as TextNode).text = 'Hand-tuned headline';
         var emitted = emitSceneFile(doc, className: 'BannerScene');
-        expect(emitted, contains("Text('Hand-tuned headline'"));
-        expect(emitted, isNot(contains('Text(title')));
+        expect(emitted, contains("TextNode('Hand-tuned headline'"));
+        expect(emitted, isNot(contains('TextNode(title')));
         // And the untouched references survive.
         expect(emitted, contains('x: slide'));
       },
@@ -172,38 +172,38 @@ class BannerScene({
 
     refusesParam('a String parameter where a color is expected', '''
 class S({final String title = 'x'}) {
-  late final root = Frame(fill: title);
+  late final root = FrameNode(fill: title);
 }''', 'parameter type');
     refusesParam('a header type disagreeing with its default', '''
 class S({final double title = 'x'}) {
-  late final root = Frame();
+  late final root = FrameNode();
 }''', 'parameter type');
     refusesParam('a non-literal default', '''
 class S({final String title = compute()}) {
-  late final root = Frame();
+  late final root = FrameNode();
 }''', 'parameter default');
     refusesParam('a parameter without a default', '''
 class S({required final String title}) {
-  late final root = Frame();
+  late final root = FrameNode();
 }''', 'no default');
     refusesParam('a parameter name colliding with a node name', '''
 class S({final double glow = 1}) {
-  late final glow = Shape();
-  late final root = Frame(children: [glow]);
+  late final glow = ShapeNode();
+  late final root = FrameNode(children: [glow]);
 }''', 'duplicate name');
     refusesParam('a this. formal in the header', '''
 class S({this.x = 2}) {
-  late final root = Frame();
+  late final root = FrameNode();
 }''', 'parameter');
     refusesParam("the old grammar's body constructor", '''
 class S {
   S({this.title = 'x'});
   final String title;
-  late final root = Frame();
+  late final root = FrameNode();
 }''', 'constructor');
     refusesParam('a parameter placed as a child', '''
 class S({final String title = 'x'}) {
-  late final root = Frame(children: [title]);
+  late final root = FrameNode(children: [title]);
 }''', 'parameter as child');
   });
 
@@ -232,108 +232,108 @@ class S({final String title = 'x'}) {
 
     refuses(
       'a for element in children',
-      "late final t = Text('x');\n"
+      "late final t = TextNode('x');\n"
           '  late final root = '
-          'Frame(children: [for (var i = 0; i < 3; i++) t]);',
+          'FrameNode(children: [for (var i = 0; i < 3; i++) t]);',
       construct: 'for element',
     );
     refuses(
       'string interpolation',
-      "late final t = Text('hello \$name');\n"
-          '  late final root = Frame(children: [t]);',
+      "late final t = TextNode('hello \$name');\n"
+          '  late final root = FrameNode(children: [t]);',
       construct: 'interpolation',
     );
     refuses(
       'a method call as a value',
-      'late final root = Frame(padding: computePadding());',
+      'late final root = FrameNode(padding: computePadding());',
       construct: 'method call',
     );
     refuses(
       'a conditional',
-      'late final root = Frame(opacity: dark ? 1 : 0.5);',
+      'late final root = FrameNode(opacity: dark ? 1 : 0.5);',
       construct: 'conditional',
     );
     refuses(
       'an identifier off the allowlist',
-      'late final root = Frame(fill: brandColor);',
+      'late final root = FrameNode(fill: brandColor);',
       construct: 'identifier',
     );
     refuses(
       'a Colors.* alias',
-      'late final root = Frame(fill: Colors.white);',
+      'late final root = FrameNode(fill: Colors.white);',
       construct: 'identifier',
     );
     refuses(
       'arithmetic',
-      'late final root = Frame(x: 2 + 3);',
+      'late final root = FrameNode(x: 2 + 3);',
       construct: 'arithmetic',
     );
     refuses(
       'an unknown property',
-      'late final root = Frame(flavor: 1);',
+      'late final root = FrameNode(flavor: 1);',
       construct: 'unknown property',
     );
     refuses(
       'an unknown node type',
       'late final s = Sparkle();\n'
-          '  late final root = Frame(children: [s]);',
+          '  late final root = FrameNode(children: [s]);',
       construct: 'unknown node',
     );
     refuses(
       'a duplicate field name',
-      'late final a = Shape();\n'
-          '  late final a = Shape();\n'
-          '  late final root = Frame(children: [a]);',
+      'late final a = ShapeNode();\n'
+          '  late final a = ShapeNode();\n'
+          '  late final root = FrameNode(children: [a]);',
       construct: 'duplicate name',
     );
     refuses(
       'adjacent strings',
-      "late final t = Text('one' ' two');\n"
-          '  late final root = Frame(children: [t]);',
+      "late final t = TextNode('one' ' two');\n"
+          '  late final root = FrameNode(children: [t]);',
       construct: 'adjacent strings',
     );
     refuses(
       'an inline node in children',
-      "late final root = Frame(children: [Text('x')]);",
+      "late final root = FrameNode(children: [TextNode('x')]);",
       construct: 'inline node',
     );
     refuses(
       'a reference to an undeclared node',
-      'late final root = Frame(children: [ghost]);',
+      'late final root = FrameNode(children: [ghost]);',
       construct: 'unknown reference',
     );
     refuses(
       'a node placed twice',
-      'late final a = Shape();\n'
-          '  late final root = Frame(children: [a, a]);',
+      'late final a = ShapeNode();\n'
+          '  late final root = FrameNode(children: [a, a]);',
       construct: 'placed twice',
     );
     refuses(
       'an orphan field',
-      'late final a = Shape();\n'
-          '  late final root = Frame();',
+      'late final a = ShapeNode();\n'
+          '  late final root = FrameNode();',
       construct: 'orphan node',
     );
     refuses(
       'root placed as a child',
-      'late final root = Frame(children: [root]);',
+      'late final root = FrameNode(children: [root]);',
       construct: 'root as child',
     );
     refuses(
       'a cycle off the root',
-      'late final a = Frame(children: [b]);\n'
-          '  late final b = Frame(children: [a]);\n'
-          '  late final root = Frame();',
+      'late final a = FrameNode(children: [b]);\n'
+          '  late final b = FrameNode(children: [a]);\n'
+          '  late final root = FrameNode();',
       construct: 'unreachable node',
     );
     refuses(
       "the old grammar's positional name",
-      "late final root = Frame('banner');",
+      "late final root = FrameNode('banner');",
       construct: 'positional argument',
     );
     refuses(
       'a method member on the class',
-      'late final root = Frame();\n'
+      'late final root = FrameNode();\n'
           '  int f() => 1;',
       construct: 'member',
     );
@@ -343,7 +343,7 @@ class S({final String title = 'x'}) {
 $sceneFileMarker
 class S {
   // tuned by hand, do not touch
-  late final root = Frame();
+  late final root = FrameNode();
 }
 ''');
       expect(parsed.ok, isFalse);
@@ -351,7 +351,7 @@ class S {
     });
 
     test('a missing marker', () {
-      var parsed = parseSceneFile('class S { late final root = Frame(); }');
+      var parsed = parseSceneFile('class S { late final root = FrameNode(); }');
       expect(parsed.ok, isFalse);
       expect(
         parsed.refusals.map((r) => r.construct),
@@ -363,7 +363,7 @@ class S {
       var parsed = parseSceneFile('''
 $sceneFileMarker
 class S {
-  late final root = Frame(
+  late final root = FrameNode(
     x: 2 + 3,
     fill: brandColor,
     children: [ghost],
@@ -436,7 +436,7 @@ SceneNode _randomNode(Random r, int depth) {
   SceneNode node;
   switch (depth < 3 ? r.nextInt(4) : 1 + r.nextInt(3)) {
     case 0:
-      var frame = FrameNode(name)
+      var frame = FrameNode(name: name)
         ..layout = NodeLayout.values[r.nextInt(3)]
         ..gap = _randomDouble(r).abs()
         ..padding = switch (r.nextInt(3)) {
@@ -456,14 +456,14 @@ SceneNode _randomNode(Random r, int depth) {
       }
       node = frame;
     case 1:
-      node = TextNode(name, _randomString(r))
+      node = TextNode(_randomString(r), name: name)
         ..fontSize = 8 + _randomDouble(r).abs() % 90
         ..weight = SceneFontWeight.values[r.nextInt(9)]
         ..color = _randomColor(r);
     case 2:
-      node = ShapeNode(name, circle: r.nextBool());
+      node = ShapeNode(name: name, circle: r.nextBool());
     default:
-      var ext = ExternalNode(name, 'Entry${r.nextInt(4)}');
+      var ext = ExternalNode('Entry${r.nextInt(4)}', name: name);
       for (var i = 0; i < r.nextInt(3); i++) {
         ext.args['k$i'] = switch (r.nextInt(3)) {
           0 => _randomDouble(r),
@@ -479,13 +479,13 @@ SceneNode _randomNode(Random r, int depth) {
     ..width = r.nextBool() ? null : _randomDouble(r).abs() + 1
     ..height = r.nextBool() ? null : _randomDouble(r).abs() + 1
     ..fill = r.nextBool() ? null : _randomColor(r)
-    ..cornerRadius = r.nextBool() ? 0 : _randomDouble(r).abs()
+    ..corner = r.nextBool() ? 0 : _randomDouble(r).abs()
     ..opacity = r.nextBool() ? 1 : (r.nextInt(10) / 10);
   return node;
 }
 
 SceneDocument _randomDoc(Random r) {
-  var root = FrameNode('root')
+  var root = FrameNode(name: 'root')
     ..width = 1024
     ..height = 500;
   for (var i = 0; i < 1 + r.nextInt(6); i++) {

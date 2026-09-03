@@ -15,12 +15,12 @@ import 'package:flutterware_app/src/ui/theme.dart';
 void main() {
   /// A column of two boxes inside a root, with sizes the test sets.
   (SceneDocument, FrameNode, ShapeNode, ShapeNode) column() {
-    var top = ShapeNode('top')..fill = const SceneColor(0xFFFF0000);
-    var bottom = ShapeNode('bottom')..fill = const SceneColor(0xFF00FF00);
-    var stack = FrameNode('stack', layout: NodeLayout.column)
+    var top = ShapeNode(name: 'top')..fill = const SceneColor(0xFFFF0000);
+    var bottom = ShapeNode(name: 'bottom')..fill = const SceneColor(0xFF00FF00);
+    var stack = FrameNode(name: 'stack', layout: NodeLayout.column)
       ..gap = 0
       ..children.addAll([top, bottom]);
-    var root = FrameNode('root')
+    var root = FrameNode(name: 'root')
       ..width = 200
       ..height = 400
       ..children.add(stack);
@@ -74,10 +74,10 @@ void main() {
       void Function(FrameNode root) shape, {
       NodeLayout layout = NodeLayout.absolute,
     }) async {
-      var child = ShapeNode('block')
+      var child = ShapeNode(name: 'block')
         ..width = 120
         ..height = 90;
-      var root = FrameNode('root', layout: layout)..children.add(child);
+      var root = FrameNode(name: 'root', layout: layout)..children.add(child);
       shape(root);
       var doc = SceneDocument(root);
       await tester.pumpWidget(
@@ -133,7 +133,7 @@ void main() {
   });
 
   test('padding is per side, and one number when one number says it', () {
-    var root = FrameNode('root', layout: NodeLayout.column)
+    var root = FrameNode(name: 'root', layout: NodeLayout.column)
       ..width = 200
       ..padding = const SceneEdges.all(16);
     var doc = SceneDocument(root);
@@ -160,10 +160,10 @@ void main() {
   });
 
   testWidgets('padding is not a guess any more', (tester) async {
-    var block = ShapeNode('block')
+    var block = ShapeNode(name: 'block')
       ..width = 40
       ..height = 40;
-    var root = FrameNode('root', layout: NodeLayout.column)
+    var root = FrameNode(name: 'root', layout: NodeLayout.column)
       ..padding = const SceneEdges(left: 10, top: 20, right: 30, bottom: 40)
       ..children.add(block);
     var rects = <String, SceneRect>{};
@@ -190,13 +190,13 @@ void main() {
     // A column hands its children unbounded constraints on the main axis,
     // and a stack cannot lay out under one. Flipping a frame to Free in the
     // inspector used to take the guest down with it.
-    var block = ShapeNode('block')
+    var block = ShapeNode(name: 'block')
       ..x = 10
       ..y = 20
       ..width = 60
       ..height = 30;
-    var free = FrameNode('free')..children.add(block);
-    var root = FrameNode('root', layout: NodeLayout.column)
+    var free = FrameNode(name: 'free')..children.add(block);
+    var root = FrameNode(name: 'root', layout: NodeLayout.column)
       ..width = 200
       ..children.add(free);
     var rects = <String, SceneRect>{};
@@ -220,13 +220,14 @@ void main() {
     var editor = SceneEditor(doc);
     // The canvas reads measured boxes, so give it the ones a renderer would
     // have left: a column of two, and a free frame beside it.
-    var column = FrameNode('column', layout: NodeLayout.column)
+    var column = FrameNode(name: 'column', layout: NodeLayout.column)
       ..measured = const SceneRect(0, 0, 200, 200);
-    var first = ShapeNode('first')..measured = const SceneRect(0, 0, 200, 100);
-    var second = ShapeNode('second')
+    var first = ShapeNode(name: 'first')
+      ..measured = const SceneRect(0, 0, 200, 100);
+    var second = ShapeNode(name: 'second')
       ..measured = const SceneRect(0, 100, 200, 100);
     column.children.addAll([first, second]);
-    var other = FrameNode('other')
+    var other = FrameNode(name: 'other')
       ..measured = const SceneRect(300, 0, 200, 200);
     doc.root.children
       ..clear()
@@ -270,23 +271,23 @@ void main() {
   });
 
   test('the new properties survive the file, the wire and the JSON', () {
-    var label = TextNode('label', 'Amount')
+    var label = TextNode('Amount', name: 'label')
       ..align = SceneTextAlign.right
       ..maxLines = 2;
-    var row = FrameNode('row', layout: NodeLayout.row)
+    var row = FrameNode(name: 'row', layout: NodeLayout.row)
       ..width = 400
       ..borderColor = const SceneColor(0xFFE0D6CE)
       ..borderWidth = 2
       ..children.add(label);
-    var root = FrameNode('root', layout: NodeLayout.column)
+    var root = FrameNode(name: 'root', layout: NodeLayout.column)
       ..width = 400
       ..children.add(row);
     var doc = SceneDocument(root);
 
     var source = emitSceneFile(doc, className: 'Doc');
-    expect(source, contains('align: TextAlign.right'));
+    expect(source, contains('align: SceneTextAlign.right'));
     expect(source, contains('maxLines: 2'));
-    expect(source, contains('borderColor: Color(0xFFE0D6CE)'));
+    expect(source, contains('borderColor: SceneColor(0xFFE0D6CE)'));
     expect(source, contains('borderWidth: 2'));
 
     var parsed = parseSceneFile(source);
@@ -311,10 +312,10 @@ void main() {
   testWidgets('a right-aligned amount sits at the right of its box', (
     tester,
   ) async {
-    var amount = TextNode('amount', '£384.00')
+    var amount = TextNode('£384.00', name: 'amount')
       ..width = 200
       ..align = SceneTextAlign.right;
-    var root = FrameNode('root', layout: NodeLayout.column)
+    var root = FrameNode(name: 'root', layout: NodeLayout.column)
       ..width = 200
       ..children.add(amount);
     var rects = <String, SceneRect>{};
@@ -334,10 +335,10 @@ void main() {
   });
 
   test('fill survives the wire, the JSON and the file', () {
-    var child = ShapeNode('block')
+    var child = ShapeNode(name: 'block')
       ..width = double.infinity
       ..height = 40;
-    var root = FrameNode('root', layout: NodeLayout.column)
+    var root = FrameNode(name: 'root', layout: NodeLayout.column)
       ..width = 320
       ..height = double.infinity
       ..children.add(child);
