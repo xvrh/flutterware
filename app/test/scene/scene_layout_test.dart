@@ -128,6 +128,58 @@ void main() {
     );
   });
 
+  test('padding is per side, and one number when one number says it', () {
+    var root = FrameNode('root', layout: NodeLayout.column)
+      ..width = 200
+      ..padding = const SceneEdges.all(16);
+    var doc = SceneDocument(root);
+
+    // A frame that only ever wanted one number keeps writing one.
+    var uniform = emitSceneFile(doc, className: 'Padded');
+    expect(uniform, contains('padding: 16'));
+    expect(uniform, isNot(contains('paddingLeft')));
+    expect(parseSceneFile(uniform).doc!.root.padding, const SceneEdges.all(16));
+
+    // And a cell that wants a different top says so.
+    root.padding = const SceneEdges(left: 8, top: 4, right: 8, bottom: 12);
+    var sides = emitSceneFile(doc, className: 'Padded');
+    expect(sides, contains('paddingTop: 4'));
+    expect(sides, isNot(contains('padding: ')));
+    var parsed = parseSceneFile(sides);
+    expect(parsed.ok, isTrue, reason: parsed.refusals.join('; '));
+    expect(parsed.doc!.root.padding, root.padding);
+    expect(emitSceneFile(parsed.doc!, className: 'Padded'), sides);
+
+    // The wire and the JSON both carry it, and still read the old number.
+    expect(SceneEdges.fromWire(root.padding.toWire()), root.padding);
+    expect(SceneEdges.fromWire(12), const SceneEdges.all(12));
+  });
+
+  testWidgets('padding is not a guess any more', (tester) async {
+    var block = ShapeNode('block')
+      ..width = 40
+      ..height = 40;
+    var root = FrameNode('root', layout: NodeLayout.column)
+      ..padding = const SceneEdges(left: 10, top: 20, right: 30, bottom: 40)
+      ..children.add(block);
+    var rects = <String, SceneRect>{};
+    await tester.pumpWidget(
+      MaterialApp(
+        // Centred, so the scene is asked how big it is rather than told.
+        home: Center(
+          child: SceneView(SceneDocument(root), onMeasured: rects.addAll),
+        ),
+      ),
+    );
+    await tester.pump();
+    // Was `EdgeInsets.symmetric(horizontal: p, vertical: p * 0.6)`, which
+    // nobody asked for.
+    expect(rects['root']!.width, 40 + 10 + 30);
+    expect(rects['root']!.height, 40 + 20 + 40);
+    expect(rects['block']!.left - rects['root']!.left, 10);
+    expect(rects['block']!.top - rects['root']!.top, 20);
+  });
+
   test('fill survives the wire, the JSON and the file', () {
     var child = ShapeNode('block')
       ..width = double.infinity

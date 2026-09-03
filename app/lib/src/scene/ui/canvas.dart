@@ -44,7 +44,13 @@ class SceneCanvas extends StatefulWidget {
   /// the artboard-to-pane matrix and the pane's size — for a guest that
   /// renders through the view itself, so a magnified artboard is rasterised
   /// at its magnification. Whichever of the two the host has; both is odd.
-  final Widget Function(BuildContext context, Matrix4 view, Size pane)? pane;
+  final Widget Function(
+    BuildContext context,
+    Matrix4 view,
+    Size pane,
+    Size artboard,
+  )?
+  pane;
 
   /// What the renderer is doing, for the toolbar — the guest booting, a
   /// frame's cost.
@@ -69,8 +75,29 @@ class _SceneCanvasState extends State<SceneCanvas> {
   SceneEditor get editor => widget.editor;
   SceneDocument get doc => widget.editor.doc;
 
-  double get _artboardWidth => doc.root.width ?? 1024;
-  double get _artboardHeight => doc.root.height ?? 500;
+  /// What the artboard is drawn at when the scene does not say.
+  ///
+  /// A root that fills has no size of its own, which is the whole point of
+  /// it: the phone decides at runtime. Something still has to decide here,
+  /// and that is a preview size rather than a property of the scene — the
+  /// same distinction a device frame makes in the previews plugin.
+  static const _previewSize = Size(390, 844);
+
+  bool get _isPreviewSize =>
+      doc.root.width == null ||
+      doc.root.height == null ||
+      doc.root.widthFills ||
+      doc.root.heightFills;
+
+  double get _artboardWidth {
+    var w = doc.root.width;
+    return w == null || w.isInfinite ? _previewSize.width : w;
+  }
+
+  double get _artboardHeight {
+    var h = doc.root.height;
+    return h == null || h.isInfinite ? _previewSize.height : h;
+  }
 
   /// Artboard to pane: the viewer's transform, with the artboard's margin
   /// inside the viewer's child folded in.
@@ -113,8 +140,12 @@ class _SceneCanvasState extends State<SceneCanvas> {
                       if (widget.pane case var pane?)
                         AnimatedBuilder(
                           animation: _transform,
-                          builder: (context, _) =>
-                              pane(context, _artboardToPane, _viewport),
+                          builder: (context, _) => pane(
+                            context,
+                            _artboardToPane,
+                            _viewport,
+                            Size(_artboardWidth, _artboardHeight),
+                          ),
                         ),
                       ZoomableCanvas(
                         transformationController: _transform,
@@ -197,7 +228,8 @@ class _SceneCanvasState extends State<SceneCanvas> {
           AnimatedBuilder(
             animation: doc.listenable,
             builder: (context, _) => Text(
-              '${_artboardWidth.round()} × ${_artboardHeight.round()}',
+              '${_artboardWidth.round()} × ${_artboardHeight.round()}'
+              '${_isPreviewSize ? ' preview' : ''}',
               style: context.type.mono.copyWith(color: colors.mut),
             ),
           ),

@@ -10,6 +10,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/painting.dart' show Size;
 import 'package:flutter/foundation.dart';
 import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:flutterware/scene_authoring.dart';
@@ -59,8 +60,14 @@ class SceneGuest {
 
   /// The canvas moved: tell the host after the gesture settles, so a pinch is
   /// one render rather than sixty.
-  void setView(Matrix4 artboardToPane) {
-    if (_view == artboardToPane) return;
+  /// The box the canvas is drawing the artboard in. A root that fills has
+  /// no size of its own, so the editor's preview size is what the guest
+  /// lays out against.
+  Size? artboard;
+
+  void setView(Matrix4 artboardToPane, {Size? artboard}) {
+    if (_view == artboardToPane && this.artboard == artboard) return;
+    this.artboard = artboard ?? this.artboard;
     _view = artboardToPane.clone();
     _viewSettle?.cancel();
     _viewSettle = Timer(const Duration(milliseconds: 80), _push);
@@ -135,6 +142,8 @@ class SceneGuest {
                 view.storage[12],
                 view.storage[13],
               ]),
+              if (artboard case var size?)
+                'artboard': jsonEncode([size.width, size.height]),
             },
           )
           // A call that never answers would hold `_inflight` for good, and a

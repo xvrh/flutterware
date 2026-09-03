@@ -439,7 +439,16 @@ SceneNode _randomNode(Random r, int depth) {
       var frame = FrameNode(name)
         ..layout = NodeLayout.values[r.nextInt(3)]
         ..gap = _randomDouble(r).abs()
-        ..padding = r.nextBool() ? 0 : _randomDouble(r).abs()
+        ..padding = switch (r.nextInt(3)) {
+          0 => SceneEdges.zero,
+          1 => SceneEdges.all(_randomDouble(r).abs()),
+          _ => SceneEdges(
+            left: _randomDouble(r).abs(),
+            top: _randomDouble(r).abs(),
+            right: _randomDouble(r).abs(),
+            bottom: _randomDouble(r).abs(),
+          ),
+        }
         ..mainAlign = SceneMainAxisAlignment.values[r.nextInt(4)]
         ..crossAlign = SceneCrossAxisAlignment.values[r.nextInt(4)];
       for (var i = 0; i < r.nextInt(5); i++) {

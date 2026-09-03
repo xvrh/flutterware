@@ -612,7 +612,12 @@ class _ScenePanelState extends State<_ScenePanel>
   /// texture is drawn through the difference between the view it shows and
   /// the view the canvas is at, so panning follows the pointer and the
   /// picture snaps crisp at rest.
-  Widget _guestPane(BuildContext context, Matrix4 view, Size pane) {
+  Widget _guestPane(
+    BuildContext context,
+    Matrix4 view,
+    Size pane,
+    Size artboard,
+  ) {
     var session = widget.plugin.sessionFor(_package!);
     var guest = _guest;
     return AnimatedBuilder(
@@ -645,7 +650,7 @@ class _ScenePanelState extends State<_ScenePanel>
             );
           });
         }
-        guest?.setView(view);
+        guest?.setView(view, artboard: artboard);
         var shown = guest?.rendered.value ?? Matrix4.identity();
         var delta = view.clone()..multiply(Matrix4.inverted(shown));
         return Transform(

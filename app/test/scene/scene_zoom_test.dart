@@ -27,7 +27,7 @@ void main() {
           home: Material(
             child: SceneCanvas(
               editor,
-              pane: (context, view, pane) {
+              pane: (context, view, pane, artboard) {
                 views.add(view);
                 return const SizedBox();
               },

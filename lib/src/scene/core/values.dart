@@ -71,6 +71,81 @@ class SceneFontWeight {
 /// Flutter's, because the wire carries the index.
 enum SceneCrossAxisAlignment { start, end, center, stretch, baseline }
 
+/// Space inside a frame, per side.
+///
+/// One value where there used to be a number, because the number could only
+/// ever be uniform and the renderer was quietly making the vertical inset
+/// six tenths of the horizontal one — a guess that looked deliberate and was
+/// not. A cell in a table wants a different top from its left.
+class SceneEdges {
+  const SceneEdges({
+    this.left = 0,
+    this.top = 0,
+    this.right = 0,
+    this.bottom = 0,
+  });
+
+  const SceneEdges.all(double value)
+    : left = value,
+      top = value,
+      right = value,
+      bottom = value;
+
+  static const zero = SceneEdges();
+
+  final double left;
+  final double top;
+  final double right;
+  final double bottom;
+
+  bool get isZero => left == 0 && top == 0 && right == 0 && bottom == 0;
+
+  /// Whether one number says all of it — what the file and the inspector
+  /// offer first, because it is what most frames want.
+  bool get isUniform => left == top && top == right && right == bottom;
+
+  SceneEdges copyWith({
+    double? left,
+    double? top,
+    double? right,
+    double? bottom,
+  }) => SceneEdges(
+    left: left ?? this.left,
+    top: top ?? this.top,
+    right: right ?? this.right,
+    bottom: bottom ?? this.bottom,
+  );
+
+  /// `[l, t, r, b]`, or the one number when they agree.
+  Object toWire() => isUniform ? left : [left, top, right, bottom];
+
+  /// Reads [toWire], and the plain number older payloads carried.
+  static SceneEdges fromWire(Object? value) => switch (value) {
+    num n => SceneEdges.all(n.toDouble()),
+    List l when l.length == 4 => SceneEdges(
+      left: (l[0] as num).toDouble(),
+      top: (l[1] as num).toDouble(),
+      right: (l[2] as num).toDouble(),
+      bottom: (l[3] as num).toDouble(),
+    ),
+    _ => zero,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SceneEdges &&
+      other.left == left &&
+      other.top == top &&
+      other.right == right &&
+      other.bottom == bottom;
+
+  @override
+  int get hashCode => Object.hash(left, top, right, bottom);
+
+  @override
+  String toString() => 'SceneEdges($left, $top, $right, $bottom)';
+}
+
 /// A size on its way out to the wire or a file.
 ///
 /// Fill is [double.infinity] in the model, and `jsonEncode` refuses a

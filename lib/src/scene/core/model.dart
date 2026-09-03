@@ -204,7 +204,7 @@ class FrameNode extends SceneNode {
 
   NodeLayout layout;
   double gap = 8;
-  double padding = 0;
+  SceneEdges padding = SceneEdges.zero;
   SceneMainAxisAlignment mainAlign = SceneMainAxisAlignment.start;
   SceneCrossAxisAlignment crossAlign = SceneCrossAxisAlignment.center;
 
@@ -387,7 +387,9 @@ class SceneDocument extends SceneListenable {
             case 'gap':
               (node as FrameNode).gap = (v! as num).toDouble();
             case 'padding':
-              (node as FrameNode).padding = (v! as num).toDouble();
+              (node as FrameNode).padding = SceneEdges.all(
+                (v! as num).toDouble(),
+              );
           }
         }
       }
@@ -443,7 +445,7 @@ class SceneDocument extends SceneListenable {
           'kind': 'frame',
           'layout': f.layout.name,
           'gap': f.fxRendered('gap'),
-          'padding': f.padding,
+          'padding': f.padding.toWire(),
           'mainAlign': f.mainAlign.index,
           'crossAlign': f.crossAlign.index,
           'children': [for (var c in f.children) _json(c)],

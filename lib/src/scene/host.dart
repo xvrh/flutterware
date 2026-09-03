@@ -55,6 +55,14 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
   /// Artboard to window, as the editor's canvas has it: a scale and a pan.
   var _view = Matrix4.identity();
 
+  /// The box the artboard is drawn in, as the editor's canvas decided it.
+  ///
+  /// A root that fills has no size of its own — that is the point of it —
+  /// so somebody has to say how big the page being authored is. The editor
+  /// does, and sends it; without one there is nothing to lay out against
+  /// and Flutter says so with an infinite-constraint error.
+  Size? _artboard;
+
   /// Once per isolate: a re-mounted widget must not re-register.
   static var _registered = false;
   static _SceneCanvasHostState? _instance;
@@ -100,6 +108,11 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
           String name => {name},
           _ => const {},
         };
+      }
+      if (params['artboard'] case var raw?) {
+        if (jsonDecode(raw) case [num w, num h]) {
+          _artboard = Size(w.toDouble(), h.toDouble());
+        }
       }
       if (params['view'] case var raw?) {
         if (jsonDecode(raw) case [num scale, num tx, num ty]) {
@@ -159,11 +172,19 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
                 minHeight: 0,
                 maxWidth: double.infinity,
                 maxHeight: double.infinity,
-                child: SceneView(
-                  scene,
-                  externals: widget.externals,
-                  selected: _selected,
-                  onMeasured: (rects) => _rects = rects,
+                // The window until the editor says otherwise: the first
+                // push can land before the canvas has laid out and sent an
+                // artboard, and a root that fills would meet the
+                // OverflowBox's infinity and throw.
+                child: SizedBox(
+                  width: (_artboard ?? MediaQuery.sizeOf(context)).width,
+                  height: (_artboard ?? MediaQuery.sizeOf(context)).height,
+                  child: SceneView(
+                    scene,
+                    externals: widget.externals,
+                    selected: _selected,
+                    onMeasured: (rects) => _rects = rects,
+                  ),
                 ),
               ),
             ),

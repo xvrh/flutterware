@@ -64,7 +64,13 @@ class SceneWorkspaceView extends StatefulWidget {
   final List<Widget> canvasTrailing;
 
   /// A pane-sized picture under the artboard — see [SceneCanvas.pane].
-  final Widget Function(BuildContext context, Matrix4 view, Size pane)? pane;
+  final Widget Function(
+    BuildContext context,
+    Matrix4 view,
+    Size pane,
+    Size artboard,
+  )?
+  pane;
 
   static const treeWidth = 230.0;
   static const inspectorWidth = 290.0;

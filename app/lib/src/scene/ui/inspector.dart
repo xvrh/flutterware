@@ -12,8 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
+import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
 import '../../ui/action_button.dart';
+import '../../ui/menu.dart';
 import '../../ui/picker.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
@@ -37,6 +39,16 @@ const _palette = <SceneColor?>[
   SceneColor(0xFF3E7C4F),
   SceneColor(0xFF4A64D0),
 ];
+
+/// The three states a size can be in, in the order the menu offers them.
+enum _SizeMode {
+  fixed('fixed'),
+  hug('hug'),
+  fill('fill');
+
+  const _SizeMode(this.label);
+  final String label;
+}
 
 class SceneInspector extends StatelessWidget {
   const SceneInspector(this.editor, {super.key});
@@ -111,8 +123,20 @@ class SceneInspector extends StatelessWidget {
           ),
         ]),
         _row([
-          _optionalNumber('W', node.width, onChanged: (v) => node.width = v),
-          _optionalNumber('H', node.height, onChanged: (v) => node.height = v),
+          _size(
+            'W',
+            node,
+            node.width,
+            horizontal: true,
+            onChanged: (v) => node.width = v,
+          ),
+          _size(
+            'H',
+            node,
+            node.height,
+            horizontal: false,
+            onChanged: (v) => node.height = v,
+          ),
         ]),
         const SizedBox(height: FwSpacing.md),
         _label(context, 'Fill'),
@@ -182,51 +206,83 @@ class SceneInspector extends StatelessWidget {
     ),
   );
 
-  /// A nullable size: blank means hug, which is a different thing from zero.
-  Widget _optionalNumber(
+  /// A size, in the three states one can be in: a number, hug, or fill.
+  ///
+  /// The mode is a word you tap rather than a picker, because the three
+  /// live in a 96 pixel column beside a number, and the word is also the
+  /// answer to "what is this doing" — which a dropdown showing the same
+  /// word would only repeat.
+  Widget _size(
     String label,
+    SceneNode node,
     double? value, {
+    required bool horizontal,
     required void Function(double?) onChanged,
-  }) => Builder(
-    builder: (context) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: context.type.caption.copyWith(color: context.colors.mut2),
-            ),
-            const Spacer(),
-            // The link says what tapping does, not what the value is: a width
-            // that hugs is offered a number, one that has a number is offered
-            // back to hugging.
-            Tappable(
-              onTap: () =>
-                  _door(label, () => onChanged(value == null ? 100 : null)),
-              child: Text(
-                value == null ? 'set' : 'hug',
+  }) {
+    var mode = value == null
+        ? _SizeMode.hug
+        : value.isInfinite
+        ? _SizeMode.fill
+        : _SizeMode.fixed;
+    var warning = _sizeWarning(node, mode, horizontal: horizontal);
+    return Builder(
+      builder: (context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
                 style: context.type.caption.copyWith(
-                  color: context.colors.accent,
+                  color: context.colors.mut2,
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: FwSpacing.xs),
-        if (value != null)
-          SceneScrubNumber(
-            value: value,
-            shape: SceneNumberShape.pixels,
-            onChanged: (v) => _door(label, () => onChanged(v)),
-            onCommit: (v) {
-              _door(label, () => onChanged(v));
-              editor.endMerge();
-            },
-          )
-        else
-          Builder(
-            builder: (context) => Container(
+              const Spacer(),
+              GestureDetector(
+                onTapDown: (d) => showContextMenu(context, d.globalPosition, [
+                  for (var option in _SizeMode.values)
+                    MenuItem(
+                      option.label,
+                      icon: option == mode ? Icons.check : null,
+                      onSelected: () => _door(
+                        label,
+                        () => onChanged(switch (option) {
+                          _SizeMode.hug => null,
+                          _SizeMode.fill => double.infinity,
+                          // Back from hug or fill to a number: the measured
+                          // size, so the box does not jump when you pin it.
+                          _SizeMode.fixed => _measuredOf(
+                            node,
+                            horizontal: horizontal,
+                          ),
+                        }),
+                      ),
+                    ),
+                ]),
+                child: Text(
+                  mode.label,
+                  style: context.type.caption.copyWith(
+                    color: warning == null
+                        ? context.colors.accent
+                        : context.colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: FwSpacing.xs),
+          if (mode == _SizeMode.fixed)
+            SceneScrubNumber(
+              value: value!,
+              shape: SceneNumberShape.pixels,
+              onChanged: (v) => _door(label, () => onChanged(v)),
+              onCommit: (v) {
+                _door(label, () => onChanged(v));
+                editor.endMerge();
+              },
+            )
+          else
+            Container(
               height: 27,
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
@@ -235,16 +291,66 @@ class SceneInspector extends StatelessWidget {
                 borderRadius: BorderRadius.circular(context.radii.radiusSmall),
               ),
               child: Text(
-                'hug',
+                mode.label,
                 style: context.type.caption.copyWith(
                   color: context.colors.mut2,
                 ),
               ),
             ),
-          ),
-      ],
-    ),
-  );
+          if (warning != null)
+            Padding(
+              padding: const EdgeInsets.only(top: FwSpacing.xs),
+              child: Text(
+                warning,
+                style: context.type.micro.copyWith(color: context.colors.red),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// What the node is actually that big, so pinning a hugging box to a
+  /// number starts from what is on screen.
+  double _measuredOf(SceneNode node, {required bool horizontal}) {
+    var rect = node.measured;
+    if (rect == null) return 100;
+    return _half(horizontal ? rect.width : rect.height);
+  }
+
+  /// The two ways a size can be a contradiction, in the author's words.
+  ///
+  /// Neither is a renderer bug: the renderer does the honest thing and this
+  /// is where it gets said, because an author who cannot see why a fill did
+  /// nothing will go looking in the wrong place.
+  String? _sizeWarning(
+    SceneNode node,
+    _SizeMode mode, {
+    required bool horizontal,
+  }) {
+    var parent = doc.parentOf(node);
+    if (mode == _SizeMode.fill) {
+      if (parent == null || parent.layout == NodeLayout.absolute) {
+        return horizontal
+            ? null
+            : null; // free parents give a box; fill is legal there
+      }
+      var alongParentsMain = (parent.layout == NodeLayout.row) == horizontal;
+      if (!alongParentsMain) return null;
+      var parentSize = horizontal ? parent.width : parent.height;
+      if (parentSize == null) {
+        return 'nothing to fill: ${parent.name} hugs this axis';
+      }
+      return null;
+    }
+    if (mode == _SizeMode.hug &&
+        node is FrameNode &&
+        node.layout == NodeLayout.absolute &&
+        node.children.isNotEmpty) {
+      return 'a free frame takes the room it is given';
+    }
+    return null;
+  }
 
   Widget _row(List<Widget> children) => Padding(
     padding: const EdgeInsets.only(bottom: FwSpacing.md),
@@ -355,12 +461,38 @@ class SceneInspector extends StatelessWidget {
         SceneNumberShape.of(propSpecFor(f, 'gap')),
         apply: (v) => f.gap = v,
       ),
+    ]),
+    _label(context, 'Padding'),
+    _row([
       _number(
         'padding',
-        'Padding',
-        f.padding,
+        'Left',
+        f.padding.left,
         SceneNumberShape.pixels,
-        apply: (v) => f.padding = v,
+        apply: (v) => f.padding = f.padding.copyWith(left: v),
+      ),
+      _number(
+        'padding',
+        'Top',
+        f.padding.top,
+        SceneNumberShape.pixels,
+        apply: (v) => f.padding = f.padding.copyWith(top: v),
+      ),
+    ]),
+    _row([
+      _number(
+        'padding',
+        'Right',
+        f.padding.right,
+        SceneNumberShape.pixels,
+        apply: (v) => f.padding = f.padding.copyWith(right: v),
+      ),
+      _number(
+        'padding',
+        'Bottom',
+        f.padding.bottom,
+        SceneNumberShape.pixels,
+        apply: (v) => f.padding = f.padding.copyWith(bottom: v),
       ),
     ]),
     if (f.layout != NodeLayout.absolute) ...[

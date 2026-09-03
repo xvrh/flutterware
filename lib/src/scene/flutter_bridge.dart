@@ -20,6 +20,10 @@ extension SceneFontWeightToFlutter on SceneFontWeight {
   FontWeight get flutter => FontWeight.values[index];
 }
 
+extension SceneEdgesToFlutter on SceneEdges {
+  EdgeInsets get flutter => EdgeInsets.fromLTRB(left, top, right, bottom);
+}
+
 extension SceneCrossAxisAlignmentToFlutter on SceneCrossAxisAlignment {
   CrossAxisAlignment get flutter => CrossAxisAlignment.values[index];
 }

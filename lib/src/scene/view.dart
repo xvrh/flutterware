@@ -269,7 +269,7 @@ class _SceneViewState extends State<SceneView> {
 
     var circle = n is ShapeNode && n.circle;
     var fill = n.hasFx('fill') ? n.fxRendered('fill') as SceneColor : n.fill;
-    var padding = n is FrameNode ? n.padding : 0.0;
+    var padding = n is FrameNode ? n.padding : SceneEdges.zero;
     // A node the parent already stretched must not also ask for infinity:
     // `Expanded` hands it a tight box, and an infinite width inside one is
     // an unbounded-constraint error rather than a wide node.
@@ -278,9 +278,7 @@ class _SceneViewState extends State<SceneView> {
       key: _key('$prefix${n.name}'),
       width: stretched.width ? null : n.width,
       height: stretched.height ? null : n.height,
-      padding: padding > 0
-          ? EdgeInsets.symmetric(horizontal: padding, vertical: padding * 0.6)
-          : null,
+      padding: padding.isZero ? null : padding.flutter,
       foregroundDecoration: !root && widget.selected.contains(n.name)
           ? BoxDecoration(
               border: Border.all(color: const Color(0xFF4A64D0), width: 1.5),

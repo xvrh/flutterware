@@ -37,7 +37,7 @@ SceneDocument coffeeBannerDraft() {
     ..color = const SceneColor(0xFFFFFFFF);
 
   var cta = FrameNode('cta', layout: NodeLayout.row)
-    ..padding = 16
+    ..padding = const SceneEdges.all(16)
     ..fill = const SceneColor(0xFFE8632B)
     ..cornerRadius = 28;
   cta.children.add(ctaLabel);

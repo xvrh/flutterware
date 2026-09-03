@@ -89,7 +89,7 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
     FrameNode f => {
       'layout': f.layout.name,
       'gap': f.gap,
-      'padding': f.padding,
+      'padding': f.padding.toWire(),
       'mainAlign': f.mainAlign.name,
       'crossAlign': f.crossAlign.name,
       'children': [for (var c in f.children) _nodeToJson(c)],
@@ -122,7 +122,7 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
           layout: NodeLayout.values.byName(json['layout']! as String),
         )
         ..gap = number('gap') ?? 8
-        ..padding = number('padding') ?? 0
+        ..padding = SceneEdges.fromWire(json['padding'])
         ..mainAlign = SceneMainAxisAlignment.values.byName(
           json['mainAlign'] as String? ?? 'start',
         )
@@ -356,7 +356,7 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
           layout: NodeLayout.values.byName('${json['layout'] ?? 'absolute'}'),
         )
         ..gap = number('gap') ?? 8
-        ..padding = number('padding') ?? 0
+        ..padding = SceneEdges.fromWire(json['padding'])
         ..mainAlign = SceneMainAxisAlignment
             .values[(json['mainAlign'] as num?)?.toInt() ?? 0]
         ..crossAlign = SceneCrossAxisAlignment

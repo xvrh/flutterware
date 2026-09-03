@@ -217,7 +217,22 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
         props.add('layout: NodeLayout.${f.layout.name}');
       }
       if (f.gap != 8) add('gap', f.gap, () => _num(f.gap));
-      if (f.padding != 0) add('padding', f.padding, () => _num(f.padding));
+      // One number while one number says it, four names when it does not.
+      // A frame that only ever wanted `padding: 16` keeps writing that.
+      if (!f.padding.isZero) {
+        if (f.padding.isUniform) {
+          add('padding', f.padding.left, () => _num(f.padding.left));
+        } else {
+          for (var (name, value) in [
+            ('paddingLeft', f.padding.left),
+            ('paddingTop', f.padding.top),
+            ('paddingRight', f.padding.right),
+            ('paddingBottom', f.padding.bottom),
+          ]) {
+            if (value != 0) props.add('$name: ${_num(value)}');
+          }
+        }
+      }
       if (f.mainAlign != SceneMainAxisAlignment.start) {
         props.add('mainAlign: MainAxisAlignment.${f.mainAlign.name}');
       }
@@ -736,8 +751,20 @@ class _Parser {
         _take(
           named,
           'padding',
-          (e) => node.padding = _doubleV(e, node, 'padding') ?? 0,
+          (e) =>
+              node.padding = SceneEdges.all(_doubleV(e, node, 'padding') ?? 0),
         );
+        for (var (name, set) in <(String, SceneEdges Function(double))>[
+          ('paddingLeft', (v) => node.padding.copyWith(left: v)),
+          ('paddingTop', (v) => node.padding.copyWith(top: v)),
+          ('paddingRight', (v) => node.padding.copyWith(right: v)),
+          ('paddingBottom', (v) => node.padding.copyWith(bottom: v)),
+        ]) {
+          _take(named, name, (e) {
+            var v = _doubleV(e, node, name);
+            if (v != null) node.padding = set(v);
+          });
+        }
         _take(named, 'mainAlign', (e) {
           var v = _enum(
             e,
