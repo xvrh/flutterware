@@ -21,8 +21,10 @@ class SceneFile {
     required this.className,
     required SceneDocument scene,
     Map<String, MotionDocument> motions = const {},
+    List<String> imports = const [],
     String? source,
   }) : editor = SceneEditor(scene, motions: motions),
+       imports = [...imports],
        _disk = source;
 
   /// Read a file through the parse door. Refusals are the collecting kind,
@@ -36,6 +38,7 @@ class SceneFile {
         className: parsed.className!,
         scene: parsed.doc!,
         motions: parsed.motions,
+        imports: parsed.imports,
         source: source,
       ),
       const [],
@@ -48,6 +51,11 @@ class SceneFile {
   /// The scene class, which is also the file's name in the UI. Follows the
   /// file when a version written elsewhere renamed it.
   String className;
+
+  /// The file's own imports, verbatim — everything but the authoring one.
+  /// Kept because the tool rewrites the whole file and cannot invent them:
+  /// an Ext names an app widget, and only the author knows where it lives.
+  final List<String> imports;
 
   /// The bytes this file last had on disk, as read or as written.
   ///
@@ -73,7 +81,12 @@ class SceneFile {
 
   /// The text to write. Emitting through the door and parsing the result
   /// back is the caller's job — [save] does it.
-  String emit() => emitSceneFile(scene, className: className, motions: motions);
+  String emit() => emitSceneFile(
+    scene,
+    className: className,
+    motions: motions,
+    imports: imports,
+  );
 
   /// Emit, refuse to write anything the parser would reject, and hand the
   /// text to [write]. Returns the refusals — empty on success.
@@ -103,6 +116,9 @@ class SceneFile {
     var parsed = parseSceneFile(source);
     if (!parsed.ok) return parsed.refusals;
     className = parsed.className!;
+    imports
+      ..clear()
+      ..addAll(parsed.imports);
     editor.adopt(parsed.doc!, parsed.motions);
     _disk = source;
     _savedRevision = editor.revision;

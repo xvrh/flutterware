@@ -4,7 +4,11 @@
 //
 // THE GRAMMAR, on a page. A scene file is:
 //   - a `//@flutterware:scene=…` marker in its first line
-//   - file-level comments and imports (before the class; not parsed)
+//   - the authoring import, which every scene file has, and ANY OTHER
+//     IMPORT the file needs — preserved verbatim and written back, because
+//     the tool owns this file and a dropped import is the shredder this
+//     grammar exists to prevent. Prefixes are the author's (`as app`).
+//     Nothing else at file level: no part, no export, no library
 //   - one SCENE class, and after it any number of MOTION classes that
 //     animate it (`class X(super.scene) extends SceneMotion<Scene>`) — the
 //     pair is one file, one marker, one round trip. The motion grammar is
@@ -70,8 +74,8 @@ const sceneFileMarker = '//@flutterware:scene=0.8';
 /// The one library a scene file imports. Its vocabulary IS the model's own
 /// class names — `FrameNode`, `TextNode`, `SceneColor` — because a spelling
 /// that differs from the type is a spelling the compiler cannot check.
-const sceneAuthoringImport =
-    "import 'package:flutterware/scene_authoring.dart';";
+const sceneAuthoringUri = 'package:flutterware/scene_authoring.dart';
+const sceneAuthoringImport = "import '$sceneAuthoringUri';";
 
 /// One refused construct: where it is and what to do instead.
 class SceneRefusal {
@@ -100,11 +104,18 @@ class SceneParse {
     this.className,
     this.refusals, [
     this.motions = const {},
+    this.imports = const [],
   ]);
 
   final SceneDocument? doc;
   final String? className;
   final List<SceneRefusal> refusals;
+
+  /// Every import but the authoring one, verbatim and in the order they
+  /// should be written back. The tool cannot invent these — an Ext names an
+  /// app widget, and only the author knows where it lives — so it keeps
+  /// them instead.
+  final List<String> imports;
 
   /// The motion classes declared beside the scene, by class name, in file
   /// order — a scene may carry several (an intro, an outro) or none.
@@ -125,6 +136,7 @@ String emitSceneFile(
   SceneDocument doc, {
   String className = 'SceneFile',
   Map<String, MotionDocument> motions = const {},
+  List<String> imports = const [],
 }) {
   if (doc.root.name != 'root') {
     throw ArgumentError(
@@ -143,7 +155,7 @@ $sceneFileMarker
 //
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 $sceneAuthoringImport
-
+${_imports(imports)}
 ''');
   var seen = <String>{};
   var params = <String, SceneParamDecl>{};
@@ -196,6 +208,21 @@ $sceneAuthoringImport
     emitMotionClass(out, entry.value, doc, className: entry.key);
   }
   return _formatter.format(out.toString());
+}
+
+/// The file's other imports, canonically: package ones first, each group
+/// sorted, so the order a hand edit put them in converges in one emit.
+String _imports(List<String> imports) {
+  if (imports.isEmpty) return '';
+  var packages = [
+    for (var i in imports)
+      if (i.contains("'package:")) i,
+  ]..sort();
+  var relative = [
+    for (var i in imports)
+      if (!i.contains("'package:")) i,
+  ]..sort();
+  return '${[...packages, ...relative].join('\n')}\n';
 }
 
 String _paramDefault(SceneParamDecl p) => switch (p.kind) {
@@ -483,6 +510,7 @@ SceneParse parseSceneFile(String source) {
     p.className,
     p.refusals,
     motions,
+    p.imports,
   );
 }
 
@@ -495,6 +523,9 @@ class _Parser {
 
   /// Classes carrying `extends SceneMotion<…>` — parsed after the scene.
   final motionClasses = <ClassDeclaration>[];
+
+  /// Imports other than the authoring one, verbatim.
+  final imports = <String>[];
 
   late final _lines = source.split('\n');
 
@@ -536,6 +567,7 @@ class _Parser {
       refuse(error.offset, 'syntax error', error.message);
     }
     if (refusals.isNotEmpty && result.errors.isNotEmpty) return null;
+    _readDirectives(result.unit, source);
 
     ClassDeclaration? found;
     for (var decl in result.unit.declarations) {
@@ -719,6 +751,47 @@ class _Parser {
     // everything draws through.
     bindRepeats(doc);
     return doc;
+  }
+
+  /// The file level: the authoring import, which must be there, and every
+  /// other import, kept exactly as written. A `part`, an `export` or a
+  /// `library` is refused — the tool rewrites this whole file, and those
+  /// change what that means.
+  void _readDirectives(CompilationUnit unit, String source) {
+    var hasAuthoring = false;
+    for (var directive in unit.directives) {
+      if (directive is! ImportDirective) {
+        refuse(
+          directive.offset,
+          'directive',
+          'a scene file imports and nothing else — no part, export or '
+              'library declaration',
+        );
+        continue;
+      }
+      var text = source.substring(directive.offset, directive.end);
+      if (directive.uri.stringValue == sceneAuthoringUri) {
+        if (directive.prefix != null || directive.combinators.isNotEmpty) {
+          refuse(
+            directive.offset,
+            'authoring import',
+            'the authoring import is written plain — $sceneAuthoringImport',
+          );
+          continue;
+        }
+        hasAuthoring = true;
+        continue;
+      }
+      imports.add(text);
+    }
+    if (!hasAuthoring) {
+      refuse(
+        0,
+        'missing import',
+        'a scene file is Dart, so it imports its vocabulary — '
+            '$sceneAuthoringImport',
+      );
+    }
   }
 
   /// The header's formals are the parameter table: each is a named

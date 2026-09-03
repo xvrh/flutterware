@@ -17,6 +17,7 @@ void main(List<String> args) {
     parsed.doc!,
     className: parsed.className!,
     motions: parsed.motions,
+    imports: parsed.imports,
   );
   var again = parseSceneFile(out);
   for (var refusal in again.refusals) {
@@ -27,6 +28,7 @@ void main(List<String> args) {
       again.doc!,
       className: again.className!,
       motions: again.motions,
+      imports: again.imports,
     );
     stderr.writeln(out == twice ? 'STABLE' : 'UNSTABLE');
   }

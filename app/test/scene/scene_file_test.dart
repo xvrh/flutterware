@@ -29,6 +29,92 @@ void main() {
     expect(root, greaterThan(emitted.indexOf('late final copy')));
   });
 
+  group('the file owns its imports', () {
+    String withImports(String extra) =>
+        '''
+$sceneFileMarker
+$sceneAuthoringImport
+$extra
+
+class S extends SceneDefinition {
+  @override
+  late final root = FrameNode(width: 100, height: 100);
+}
+''';
+
+    test('an import the tool did not write survives a save', () {
+      // The tool rewrites this whole file, so an import it drops is gone —
+      // and an Ext names an app widget, which only the author can locate.
+      var parsed = parseSceneFile(
+        withImports("import '../shop/shop_app.dart' as app;"),
+      );
+      expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
+      expect(parsed.imports, ["import '../shop/shop_app.dart' as app;"]);
+      var out = emitSceneFile(
+        parsed.doc!,
+        className: 'S',
+        imports: parsed.imports,
+      );
+      expect(out, contains("import '../shop/shop_app.dart' as app;"));
+      var again = parseSceneFile(out);
+      expect(again.refusals, isEmpty);
+      expect(
+        emitSceneFile(again.doc!, className: 'S', imports: again.imports),
+        out,
+      );
+    });
+
+    test('and converges on one order', () {
+      var parsed = parseSceneFile(
+        withImports(
+          "import '../b.dart';\n"
+          "import 'package:z/z.dart';\n"
+          "import '../a.dart';",
+        ),
+      );
+      expect(parsed.refusals, isEmpty);
+      var out = emitSceneFile(
+        parsed.doc!,
+        className: 'S',
+        imports: parsed.imports,
+      );
+      expect(
+        out.indexOf('package:z/z.dart'),
+        lessThan(out.indexOf('../a.dart')),
+        reason: 'package imports first',
+      );
+      expect(
+        out.indexOf('../a.dart'),
+        lessThan(out.indexOf('../b.dart')),
+        reason: 'each group sorted',
+      );
+    });
+
+    test('a file without the authoring import is refused', () {
+      var parsed = parseSceneFile('''
+$sceneFileMarker
+
+class S extends SceneDefinition {
+  @override
+  late final root = FrameNode(width: 100, height: 100);
+}
+''');
+      expect(parsed.ok, isFalse);
+      expect(
+        parsed.refusals.map((r) => r.construct),
+        contains('missing import'),
+      );
+    });
+
+    test('an export is refused — the tool rewrites the whole file', () {
+      var parsed = parseSceneFile(
+        withImports("export '../shop/shop_app.dart';"),
+      );
+      expect(parsed.ok, isFalse);
+      expect(parsed.refusals.first.construct, 'directive');
+    });
+  });
+
   test('emit ∘ parse is the identity on canonical files', () {
     var canonical = emitSceneFile(coffeeBannerDraft());
     var once = emitSceneFile(parseSceneFile(canonical).doc!);
@@ -41,6 +127,7 @@ void main() {
     // accepted, then canonical.
     var parsed = parseSceneFile('''
 $sceneFileMarker
+$sceneAuthoringImport
 class S {
   final root = FrameNode(
     width: 1024.0,
@@ -88,6 +175,7 @@ class S {
     const banner =
         '''
 $sceneFileMarker
+$sceneAuthoringImport
 class BannerScene({
   final String title = 'Fresh coffee, faster',
   final SceneColor accent = const SceneColor(0xFFE8632B),
@@ -341,6 +429,7 @@ class S({final String title = 'x'}) {
     test('a comment inside the scene', () {
       var parsed = parseSceneFile('''
 $sceneFileMarker
+$sceneAuthoringImport
 class S {
   // tuned by hand, do not touch
   late final root = FrameNode();
@@ -362,6 +451,7 @@ class S {
     test('several hostile constructs are all reported at once', () {
       var parsed = parseSceneFile('''
 $sceneFileMarker
+$sceneAuthoringImport
 class S {
   late final root = FrameNode(
     x: 2 + 3,
