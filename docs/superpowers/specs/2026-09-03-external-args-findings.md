@@ -68,7 +68,11 @@ Spinner: label String
 
 ## What each side would write
 
-**The app declares, once, beside its widgets:**
+Owner steer, second pass: **no strings in the scene file at all.** They are
+gathered in the declaration, which is what stands in for the analyzer, and
+that is the end of them.
+
+### The app declares, once
 
 ```dart
 final externals = <ExternalWidgetBase>[
@@ -76,36 +80,108 @@ final externals = <ExternalWidgetBase>[
     'DrinkBadge',
     args: [const Arg<double>('size', 56)],
     build: (a) => DrinkBadge(drinks[1], size: a.size),
+    read: (a) => const DrinkBadgeArgs().merge(a),
   ),
 ];
 ```
 
-**The tool generates** one class per declaration — the constructor, the
-fields, `merge` and `toMap`. This is where every string ends up, derived
-from the declaration and written by nobody.
+`build` is the one closure in the system and it belongs here, not in every
+scene that places the widget: only the app knows `drinks[1]`.
 
-**A scene file then has no strings and no closures at all:**
+### The tool generates two classes per declaration
 
 ```dart
-late final badge = ExternalNode.of(
-  'DrinkBadge',
-  args: DrinkBadgeArgs(size: 140),
+class DrinkBadgeArgs extends SceneExtArgs<DrinkBadgeArgs> {
+  const DrinkBadgeArgs({this.size = 56});
+  final double size;
+  @override String get entry => 'DrinkBadge';
+  @override DrinkBadgeArgs merge(SceneArgs fx) =>
+      DrinkBadgeArgs(size: fx.number('size') ?? size);
+  @override Map<String, Object?> toMap() => {'size': size};
+}
+
+class DrinkBadgeTracks extends SceneExtTracks {
+  const DrinkBadgeTracks({this.size});
+  final MotionTrack? size;
+  @override Map<String, MotionTrack> toMap() =>
+      {if (size != null) 'size': size!};
+}
+```
+
+Every string in the system that is not in the declaration is in here, and
+nobody types it.
+
+### A scene file has none
+
+```dart
+late final badge = ExternalNode(
+  const DrinkBadgeArgs(size: 140),
+  x: 560,
+  y: 290,
 );
+```
+
+The widget's identity IS the args type. No entry label, no `build:`, no
+`args:` map, no closure — so `ExternalNode` needs no generic and the sealed
+model does not move.
+
+### And a motion has none either
+
+```dart
+late final badgePop = scene.badge.animate(
+  args: const DrinkBadgeTracks(size: MotionTrack([…])),
+);
+```
+
+Which is the part that decides it. `args: {'progress': …}` was the last
+stringly corner of the motion grammar, and a tracks class closes it: a slot
+per animatable arg, typed, generated from the same declaration. **There is
+no way to write `progress` any more.**
+
+### Nested scenes need no declaration at all
+
+A scene's parameters are declared in its own file, which the tool already
+parses. So `PromoBadgeArgs` generates from
+`class PromoBadge({final String label = 'New'})` with nothing else written,
+and the generated class can build it too:
+
+```dart
+SceneDefinition build() => PromoBadge(label: label);
+```
+
+giving `SceneRefNode(const PromoBadgeArgs(label: 'Now open'))` — same shape,
+zero strings, and no declaration list.
+
+### Measured
+
+The whole path runs, in plain Dart: authored, animated at t, read back from
+a wire map, and the schema listed for an inspector.
+
+```
+DrinkBadge(size: 140.0)   // authored
+DrinkBadge(size: 90.0)    // the motion at t=0.5, typed throughout
+DrinkBadge(size: 99.0)    // built from what the wire carried
+DrinkBadge: size double   // what the inspector is told
 ```
 
 ## What it changes about today
 
-- **The `build:` opaque span goes away** for Ext. The scene file stops
-  carrying app code, so the tool understands or refuses every construct in
-  it again — the exception this session introduced is retired rather than
-  entrenched.
+It **retires** more than it adds:
+
+- **The `build:` opaque span goes away** from scene files. They stop carrying
+  app code, so every construct in them is understood or refused again — the
+  exception this session introduced is undone rather than entrenched. The one
+  remaining closure moves to the declaration, where it is the app's own code
+  in the app's own file.
 - **`scenes: [BannerScene.new]` stops being how externals are found.** The
-  guest holds the declarations, which it compiles; the wire carries `entry`
-  plus the args map, and the declaration turns that back into the typed
-  object. (Nested scenes still need their own answer — see below.)
-- **The inspector gets real types.** `size` is a double because the
-  declaration says so, not because somebody wrote a number once.
-- **A motion targeting a parameter that does not exist is refused.**
+  guest compiles the declarations; the wire carries the entry and the args
+  map, and `read` turns that back into the typed object. The
+  closure-cannot-cross-the-wire problem does not arise.
+- **`SceneArgs` leaves the scene file.** It becomes an internal type the
+  generated `merge`/`read` use, never something an author writes.
+- **The inspector gets real types**, because `Arg<double>` said so.
+- **A motion cannot target a parameter that does not exist.** Not refused —
+  unwritable.
 
 ## What the tool has to gain
 
