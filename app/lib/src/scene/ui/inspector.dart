@@ -650,47 +650,43 @@ class SceneInspector extends StatelessWidget {
     ],
   ];
 
-  /// Drawn once, or once per item of a list parameter.
+  /// What a repeat is, when the selected frame is one.
   ///
-  /// A repeat is not a kind of node — any node can be one — so it sits with
-  /// the properties every node has rather than in a type's section. The
-  /// node stays one node: what multiplies is the picture.
+  /// Read-only, and honestly so: the rule is a closure in the file, and
+  /// turning a frame into a repeat means writing one. There is no gesture
+  /// here that could — so rather than a control that lies, this says what
+  /// the frame is drawn from and how many times.
   List<Widget> _repeat(BuildContext context, SceneNode node) {
-    var lists = [
-      for (var p in doc.params)
-        if (p.kind == SceneParamKind.list) p,
-    ];
-    if (lists.isEmpty && node.repeat == null) return const [];
-    var count = node.repeat == null ? 0 : doc.itemsOf(node.repeat!).length;
+    if (node is! FrameNode) return const [];
+    var source = node.repeated?.source;
+    if (source == null || source.isEmpty) return const [];
+    var items = doc.itemsOf(source);
+    var fields = items.isEmpty ? '' : items.first.keys.join(' · ');
     return [
       const SizedBox(height: FwSpacing.md),
       _label(context, 'Repeat'),
-      FwPicker<String>(
-        selected: node.repeat ?? '',
-        choices: [
-          const FwChoice(value: '', label: 'Drawn once'),
-          for (var p in lists)
-            FwChoice(
-              value: p.name,
-              label: 'Once per ${p.name}',
-              detail:
-                  '${p.items.length} items, '
-                  '${p.items.isEmpty ? 'no fields' : p.items.first.keys.join(' · ')}',
-            ),
-        ],
-        onChanged: (v) =>
-            _door('repeat', () => node.repeat = v.isEmpty ? null : v),
+      Text(
+        items.isEmpty
+            ? 'once per $source — no items, so nothing is drawn'
+            : 'once per $source — ${items.length} rows, this one the first',
+        style: context.type.caption,
       ),
-      if (node.repeat != null)
+      if (fields.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          padding: const EdgeInsets.only(top: FwSpacing.xxs),
           child: Text(
-            count == 0
-                ? 'no items, so nothing is drawn'
-                : 'drawn $count times — this one is the first',
+            'each item carries $fields',
             style: context.type.micro.copyWith(color: context.colors.mut2),
           ),
         ),
+      Padding(
+        padding: const EdgeInsets.only(top: FwSpacing.xs),
+        child: Text(
+          'The cells are written inline in the file and have no names, so '
+          'they are edited there rather than here.',
+          style: context.type.micro.copyWith(color: context.colors.mut2),
+        ),
+      ),
     ];
   }
 

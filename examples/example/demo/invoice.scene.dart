@@ -1,4 +1,4 @@
-//@flutterware:scene=0.7
+//@flutterware:scene=0.8
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
@@ -14,11 +14,11 @@ class Invoice({
   final String issued = '3 September 2026',
   final String billTo = 'Northwind Coffee Ltd',
   final String total = '£1,248.00',
-  final List<Map<String, Object>> lines = const [
-    {'item': 'Espresso beans, 1kg', 'qty': 12, 'amount': '£384.00'},
-    {'item': 'Oat milk, 12 × 1L', 'qty': 8, 'amount': '£216.00'},
-    {'item': 'Takeaway cups, 500', 'qty': 4, 'amount': '£148.00'},
-    {'item': 'Filter papers, box', 'qty': 25, 'amount': '£500.00'},
+  final List<({String item, String qty, String amount})> lines = const [
+    (item: 'Espresso beans, 1kg', qty: '12', amount: '£384.00'),
+    (item: 'Oat milk, 12 × 1L', qty: '8', amount: '£216.00'),
+    (item: 'Takeaway cups, 500', qty: '4', amount: '£148.00'),
+    (item: 'Filter papers, box', qty: '25', amount: '£500.00'),
   ],
 }) extends SceneDefinition {
   late final brand = TextNode(
@@ -46,7 +46,7 @@ class Invoice({
   late final header = FrameNode(
     x: 48,
     y: 48,
-    width: double.infinity,
+    width: 499,
     layout: NodeLayout.column,
     gap: 4,
     crossAlign: SceneCrossAxisAlignment.start,
@@ -76,23 +76,14 @@ class Invoice({
     fill: SceneColor(0xFFF3E9E1),
     children: [headItem, headQty, headAmount],
   );
-  late final lineItem = TextNode(lines.item, fontSize: 12);
-  late final lineQty = TextNode(
-    lines.qty,
-    fontSize: 12,
-    weight: SceneFontWeight.w700,
-    color: SceneColor(0xFF000000),
-    align: SceneTextAlign.right,
-  );
-  late final lineAmount = TextNode(
-    lines.amount,
-    fontSize: 12,
-    align: SceneTextAlign.right,
-  );
-  late final lineRow = FrameNode(
+  late final lineRow = FrameNode.repeating(
+    over: lines,
+    row: (line) => [
+      TextNode(line.item, fontSize: 12),
+      TextNode(line.qty, fontSize: 12, align: SceneTextAlign.right),
+      TextNode(line.amount, fontSize: 12, align: SceneTextAlign.right),
+    ],
     borderColor: SceneColor(0xFFEDE4DC),
-    repeat: lines,
-    children: [lineItem, lineQty, lineAmount],
   );
   late final table = FrameNode(
     x: 48,

@@ -59,7 +59,12 @@ class SceneParamDecl {
     SceneParamKind.string => 'String',
     SceneParamKind.number => 'double',
     SceneParamKind.color => 'SceneColor',
-    SceneParamKind.list => 'List<Map<String, Object>>',
+    // A record type, so `line.item` inside a repeat's closure is checked
+    // against the fields the data actually has.
+    SceneParamKind.list =>
+      items.isEmpty
+          ? 'List<Object?>'
+          : 'List<({${[for (var e in items.first.entries) '${e.value is String ? 'String' : 'double'} ${e.key}'].join(', ')}})>',
   };
 
   /// The declared items, for a [SceneParamKind.list] — the mockup standing
@@ -81,7 +86,6 @@ sealed class SceneNode {
     this.y = 0,
     this.width,
     this.height,
-    this.repeat,
     this.fill,
     this.borderColor,
     this.borderWidth = 1,
@@ -123,21 +127,6 @@ sealed class SceneNode {
   /// Whether this node takes what the parent gives along each axis.
   bool get widthFills => width != null && width!.isInfinite;
   bool get heightFills => height != null && height!.isInfinite;
-
-  /// The list parameter this node is drawn once per item of, or null for a
-  /// node drawn once.
-  ///
-  /// The node stays ONE node: one field in the file, one row in the tree,
-  /// one thing to select and style. What multiplies is the picture, and the
-  /// copies are made where the picture is (see [SceneDocument.expand]). A
-  /// property inside the subtree reads an item's field by binding to
-  /// `<list>.<field>`, which is an ordinary [paramRefs] entry — a repeater
-  /// is a parameter whose value is a list, so it is the same mechanism as
-  /// substitution rather than a second one.
-  ///
-  /// The authored values are the FIRST item's, which is what makes the
-  /// mockup in the file and the data at runtime the same thing.
-  String? repeat;
 
   // The uniform styling bag — the bet under test.
   SceneColor? fill;
@@ -263,6 +252,31 @@ class Effect {
   void clear() => _node.clearFxWriter(this);
 }
 
+/// A frame drawn once per item of a list.
+///
+/// The rule is a CLOSURE, because that is the only shape of it Dart can
+/// check: `row: (line) => [TextNode(line.item)]` types `line` as the item
+/// and `line.item` as its field, so a cell reading a field the data does
+/// not have is a program that does not build.
+///
+/// The frame stays one frame — one field in the file, one row in the tree,
+/// one thing to select and style. What multiplies is the picture.
+class SceneRepeat {
+  SceneRepeat({required this.items, required this.row, this.source = ''});
+
+  /// The data. Records in a compiled scene, [SceneItem] maps in one the
+  /// editor parsed; only [row] ever looks inside one.
+  final List<Object?> items;
+
+  /// One item's cells.
+  final List<SceneNode> Function(Object? item) row;
+
+  /// Which parameter the items came from — SOURCE-LEVEL, for the editor and
+  /// the emitter. Empty in a compiled scene, where the closure is the whole
+  /// binding and nothing needs to write it back out.
+  final String source;
+}
+
 /// One number when one number says it, four names when it does not — the
 /// grammar's own spelling of an inset, assembled into the value the model
 /// carries.
@@ -289,7 +303,6 @@ class FrameNode extends SceneNode {
     super.y,
     super.width,
     super.height,
-    super.repeat,
     super.fill,
     super.borderColor,
     super.borderWidth,
@@ -329,6 +342,11 @@ class FrameNode extends SceneNode {
     this.children.addAll(children);
   }
 
+  /// Drawn once per item of [SceneRepeat.items], or null for a frame drawn
+  /// once. Built by [repeating] in a compiled scene; rebuilt from the
+  /// recorded binding by [bindRepeats] in one that was parsed.
+  SceneRepeat? repeated;
+
   NodeLayout layout;
   double gap;
   SceneEdges padding;
@@ -350,6 +368,60 @@ class FrameNode extends SceneNode {
   SceneMainAxisAlignment mainAlign = SceneMainAxisAlignment.start;
   SceneCrossAxisAlignment crossAlign = SceneCrossAxisAlignment.center;
 
+  /// A frame drawn once per item of [over], its cells built by [row].
+  ///
+  /// A static rather than a constructor because it is GENERIC: `T` is the
+  /// item type, inferred from the list, and that is what makes `line.item`
+  /// checked rather than dynamic. The cast inside cannot fail — the list
+  /// and the closure arrive together.
+  ///
+  /// The frame's own children are the first item's cells, so the thing on
+  /// screen and the thing in the file are the same row.
+  static FrameNode repeating<T>({
+    required List<T> over,
+    required List<SceneNode> Function(T item) row,
+    String name = '',
+    double x = 0,
+    double y = 0,
+    double? width,
+    double? height,
+    SceneColor? fill,
+    SceneColor? borderColor,
+    double borderWidth = 1,
+    double corner = 0,
+    double opacity = 1,
+    NodeLayout layout = NodeLayout.absolute,
+    double gap = 8,
+    double? padding,
+    double? paddingLeft,
+    double? paddingTop,
+    double? paddingRight,
+    double? paddingBottom,
+    SceneMainAxisAlignment mainAlign = SceneMainAxisAlignment.start,
+    SceneCrossAxisAlignment crossAlign = SceneCrossAxisAlignment.center,
+  }) => FrameNode(
+    name: name,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    fill: fill,
+    borderColor: borderColor,
+    borderWidth: borderWidth,
+    corner: corner,
+    opacity: opacity,
+    layout: layout,
+    gap: gap,
+    padding: padding,
+    paddingLeft: paddingLeft,
+    paddingTop: paddingTop,
+    paddingRight: paddingRight,
+    paddingBottom: paddingBottom,
+    mainAlign: mainAlign,
+    crossAlign: crossAlign,
+    children: over.isEmpty ? const [] : row(over.first),
+  )..repeated = SceneRepeat(items: over, row: (item) => row(item as T));
+
   @override
   final List<SceneNode> children = [];
 
@@ -365,7 +437,6 @@ class TextNode extends SceneNode {
     super.y,
     super.width,
     super.height,
-    super.repeat,
     super.fill,
     super.borderColor,
     super.borderWidth,
@@ -400,7 +471,6 @@ class ShapeNode extends SceneNode {
     super.y,
     super.width,
     super.height,
-    super.repeat,
     super.fill,
     super.borderColor,
     super.borderWidth,
@@ -426,7 +496,6 @@ class ExternalNode extends SceneNode {
     super.y,
     super.width,
     super.height,
-    super.repeat,
     super.fill,
     super.borderColor,
     super.borderWidth,
@@ -473,7 +542,6 @@ class SceneRefNode extends SceneNode {
     super.y,
     super.width,
     super.height,
-    super.repeat,
     super.fill,
     super.borderColor,
     super.borderWidth,
@@ -604,20 +672,18 @@ class SceneDocument extends SceneListenable {
   /// copies are pictures, renamed `<name>#1`, `#2`… so no key or measured
   /// rect of theirs can be mistaken for the template's.
   List<SceneNode> expand(SceneNode child) {
-    var list = child.repeat;
-    if (list == null) return [child];
-    var items = itemsOf(list);
-    // No data, nothing drawn — which is the honest answer for a table of
-    // an empty list, and the reason the mockup in the file is not empty.
-    if (items.isEmpty) return const [];
+    if (child is! FrameNode) return [child];
+    var rep = child.repeated;
+    if (rep == null) return [child];
+    // No data, nothing drawn — the honest answer for a table of an empty
+    // list, and the reason the mockup in the file is not empty.
+    if (rep.items.isEmpty) return const [];
     return [
       child,
-      for (var i = 1; i < items.length; i++)
-        applySceneItem(
-          deepCopyNode(child, rename: (n) => '$n#$i'),
-          list,
-          items[i],
-        ),
+      for (var i = 1; i < rep.items.length; i++)
+        deepCopyNode(child, rename: (n) => '$n#$i') as FrameNode
+          ..children.clear()
+          ..children.addAll(rep.row(rep.items[i])),
     ];
   }
 
@@ -641,14 +707,9 @@ class SceneDocument extends SceneListenable {
           setSceneProperty(node, entry.key, args[entry.value]);
         }
       }
-      // A repeater's template shows the first item — the same rule the file
-      // is written under, applied to the data that replaced the mockup.
-      for (var (node, _) in walk()) {
-        if (node.repeat case var list?) {
-          var items = itemsOf(list);
-          if (items.isNotEmpty) applySceneItem(node, list, items.first);
-        }
-      }
+      // A repeat over data that just changed is a new rule: rebuilt from
+      // the recorded binding, template row included.
+      bindRepeats(this);
     });
   }
 
@@ -905,6 +966,7 @@ class SceneDocument extends SceneListenable {
               ..padding = s.padding
               ..columns = [...s.columns]
               ..cellPadding = s.cellPadding
+              ..repeated = s.repeated
               ..mainAlign = s.mainAlign
               ..crossAlign = s.crossAlign
               ..children.clear()
@@ -935,7 +997,6 @@ class SceneDocument extends SceneListenable {
           ..y = snap.y
           ..width = snap.width
           ..height = snap.height
-          ..repeat = snap.repeat
           ..fill = snap.fill
           ..borderColor = snap.borderColor
           ..borderWidth = snap.borderWidth
@@ -975,6 +1036,9 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
         ..padding = f.padding
         ..columns = [...f.columns]
         ..cellPadding = f.cellPadding
+        // A renamed copy is one drawn ROW, not the rule that drew it —
+        // carrying the repeat would make each copy repeat again.
+        ..repeated = rename == null ? f.repeated : null
         ..mainAlign = f.mainAlign
         ..crossAlign = f.crossAlign
         ..children.addAll([
@@ -1002,7 +1066,6 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     ..y = node.y
     ..width = node.width
     ..height = node.height
-    ..repeat = node.repeat
     ..fill = node.fill
     ..borderColor = node.borderColor
     ..borderWidth = node.borderWidth
@@ -1067,4 +1130,44 @@ SceneNode applySceneItem(SceneNode node, String list, SceneItem item) {
 
   visit(node);
   return node;
+}
+
+/// Rebuild the repeat closures of a document that was READ — parsed from
+/// source, or decoded from JSON — rather than compiled.
+///
+/// A compiled scene's binding is the closure the file wrote. A read one has
+/// only what the reader could record: which parameter the items came from,
+/// and which property of which cell reads which field ([SceneNode.paramRefs],
+/// spelled `<list>.<field>`). This turns that back into the same closure, so
+/// there is one way to draw a repeat and not two.
+void bindRepeats(SceneDocument doc) {
+  for (var (node, _) in doc.walk()) {
+    if (node is! FrameNode) continue;
+    var source = node.repeated?.source;
+    if (source == null || source.isEmpty) continue;
+    var items = doc.itemsOf(source);
+    var templates = [for (var c in node.children) deepCopyNode(c)];
+    node.repeated = SceneRepeat(
+      items: items,
+      source: source,
+      row: (item) => [
+        for (var t in templates)
+          applySceneItem(deepCopyNode(t), source, item! as SceneItem),
+      ],
+    );
+    // The frame's own cells are the first item's, which is what makes the
+    // row on screen and the row in the file the same row.
+    if (items.isNotEmpty) {
+      node.children
+        ..clear()
+        ..addAll(node.repeated!.row(items.first));
+    }
+  }
+  doc.edit(() {});
+}
+
+/// Record a repeat the way a reader can: the parameter it draws from, with
+/// the cells already in place. [bindRepeats] turns it into the closure.
+void recordRepeat(FrameNode frame, String source) {
+  frame.repeated = SceneRepeat(items: const [], source: source, row: (_) => []);
 }

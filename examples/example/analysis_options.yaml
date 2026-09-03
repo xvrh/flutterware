@@ -3,11 +3,8 @@ include: ../../analysis_options.yaml
 analyzer:
   exclude:
     - build/**
-    # A scene file is ordinary Dart and is analyzed like any other. The one
-    # still listed here is the one not yet ported: the repeater's
-    # `lines.item` cannot compile, and the closure that replaces it is its
-    # own phase. The list only shrinks.
-    - demo/invoice.scene.dart
+    # A scene file is ordinary Dart and is analyzed like any other. Nothing
+    # is excluded any more.
     - android/**
     - ios/**
     - web/**

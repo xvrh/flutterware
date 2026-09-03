@@ -30,11 +30,13 @@
 //     allowlisted enum references, `args: {'k': literal}` maps, and — where
 //     the types agree — A PARAMETER'S NAME, which binds the property to the
 //     typed hole
-//   - a parameter may also be a LIST — `final List<Map<String, Object>>
-//     lines = const [{'item': '…', 'qty': 12}]` — whose items are string
-//     and number fields. A node with `repeat: lines` is drawn once per
-//     item, and a property inside it reads a field by the dotted name
-//     `lines.item`, which is legal only inside that repeat
+//   - a parameter may also be a LIST of records — `final List<({String
+//     item, String qty})> lines = const [(item: '…', qty: '12')]`. A frame
+//     drawn once per item is `FrameNode.repeating(over: lines, row: (line)
+//     => [ … ])`, and inside that closure — THE GRAMMAR'S ONE PLACE WHERE
+//     NODES ARE WRITTEN INLINE — a cell reads a field as `line.item`. The
+//     cells of a repeated row are not fields, so they have no names and
+//     cannot be selected: which cell of which row would it be
 //   - a Frame with `layout: NodeLayout.table` takes `columns: [ … ]` — one
 //     size per column, in the same `null`/number/`double.infinity`
 //     vocabulary a node's size uses — and `cellPadding`. Its children are
@@ -63,7 +65,7 @@ import 'package:flutterware/scene_authoring.dart';
 
 import 'motion_file.dart';
 
-const sceneFileMarker = '//@flutterware:scene=0.7';
+const sceneFileMarker = '//@flutterware:scene=0.8';
 
 /// The one library a scene file imports. Its vocabulary IS the model's own
 /// class names — `FrameNode`, `TextNode`, `SceneColor` — because a spelling
@@ -163,8 +165,13 @@ $sceneAuthoringImport
     out.writeln('}) extends SceneDefinition {');
   }
   void field(SceneNode n) {
-    for (var c in n.children) {
-      field(c);
+    // A repeated row's cells are written inside its closure, not beside it:
+    // they are not fields, so the walk stops here.
+    var repeated = n is FrameNode && (n.repeated?.source.isNotEmpty ?? false);
+    if (!repeated) {
+      for (var c in n.children) {
+        field(c);
+      }
     }
     if (!isValidNodeName(n.name) || !seen.add(n.name)) {
       throw ArgumentError(
@@ -198,10 +205,17 @@ String _paramDefault(SceneParamDecl p) => switch (p.kind) {
   SceneParamKind.list => 'const [${p.items.map(_item).join(', ')}]',
 };
 
+/// One item, as a record literal — the shape that gives `line.item` a type.
 String _item(SceneItem item) =>
-    '{${[for (var e in item.entries) '${_str(e.key)}: ${_argValue(e.value)}'].join(', ')}}';
+    '(${[for (var e in item.entries) '${e.key}: ${_argValue(e.value)}'].join(', ')})';
 
-void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
+void _emitNode(
+  StringBuffer out,
+  SceneNode n,
+  Map<String, SceneParamDecl> ps, {
+  String? list,
+  bool inline = false,
+}) {
   var props = <String>[];
 
   /// A parameter reference survives a save only while the property still
@@ -218,12 +232,18 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
       if (p == null || p.defaultValue != current) return null;
       return name;
     }
-    var list = ps[name.substring(0, dot)];
-    if (list == null || list.kind != SceneParamKind.list) return null;
-    var items = list.items;
+    // An item reference: legal only inside the closure that binds it, and
+    // spelled with the closure's own parameter rather than the list's name.
+    if (list == null || name.substring(0, dot) != list) return null;
+    var decl = ps[list];
+    if (decl == null || decl.kind != SceneParamKind.list) return null;
+    var items = decl.items;
     if (items.isEmpty) return null;
-    var field = items.first[name.substring(dot + 1)];
-    return field != null && _sameValue(current, field) ? name : null;
+    var fieldName = name.substring(dot + 1);
+    var field = items.first[fieldName];
+    return field != null && _sameValue(current, field)
+        ? '$_rowParam.$fieldName'
+        : null;
   }
 
   void add(String key, Object? current, String Function() spell) {
@@ -250,7 +270,6 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
       add('corner', n.corner, () => _num(n.corner));
     }
     if (n.opacity != 1) add('opacity', n.opacity, () => _num(n.opacity));
-    if (n.repeat case var list?) props.add('repeat: $list');
   }
 
   switch (n) {
@@ -299,8 +318,24 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
       if (f.crossAlign != SceneCrossAxisAlignment.center) {
         props.add('crossAlign: SceneCrossAxisAlignment.${f.crossAlign.name}');
       }
+      // A repeat writes its cells INLINE, inside the closure that binds
+      // them — they are not fields, because there is no one row for them to
+      // belong to.
+      if (f.repeated?.source case var list? when list.isNotEmpty) {
+        var cells = [for (var c in f.children) _emitCell(c, ps, list)];
+        out.write(
+          'FrameNode.repeating(over: $list, '
+          'row: ($_rowParam) => [${cells.join(', ')}], '
+          '${props.join(', ')})',
+        );
+        return;
+      }
       if (f.children.isNotEmpty) {
-        props.add('children: [${f.children.map((c) => c.name).join(', ')}]');
+        props.add(
+          inline
+              ? 'children: [${[for (var c in f.children) _emitCell(c, ps, list!)].join(', ')}]'
+              : 'children: [${f.children.map((c) => c.name).join(', ')}]',
+        );
       }
       out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
@@ -349,6 +384,19 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
       }
       out.write('SceneRefNode(${props.join(', ')})');
   }
+}
+
+/// What the closure's parameter is called. One name, because the cells it
+/// binds are unnamed too and a second convention would only be a second
+/// thing to remember.
+const _rowParam = 'line';
+
+/// One cell of a repeated row, written inline. Its own children are written
+/// inline too — the whole subtree is anonymous.
+String _emitCell(SceneNode cell, Map<String, SceneParamDecl> ps, String list) {
+  var out = StringBuffer();
+  _emitNode(out, cell, ps, list: list, inline: true);
+  return '$out';
 }
 
 /// Canonical number spelling: an integral double is an int literal, anything
@@ -453,6 +501,16 @@ class _Parser {
   /// Declared parameters, filled from the class header before any field is
   /// parsed.
   final _params = <String, SceneParamDecl>{};
+
+  /// While a `row:` closure is being read: the closure's parameter name and
+  /// the list it draws from. This is the ONLY place an item reference is
+  /// legal, which is why it is a scope rather than a check afterwards.
+  ({String param, String list})? _itemScope;
+
+  /// Names for the cells of a repeated row. They are not fields — the file
+  /// writes them inline — so they get a derived name the editor can key its
+  /// tree and its rects on, and the emitter never writes it.
+  var _cellSeq = 0;
 
   void refuse(int offset, String construct, String message) {
     var line = 1;
@@ -653,33 +711,13 @@ class _Parser {
         );
       }
     }
-    // Phase 3: an item reference reads the row being drawn, so it only
-    // means something inside the repeat that draws it. Outside one it names
-    // nothing at render time, and a value that resolves to nothing is
-    // exactly the silent gap this parser exists to refuse.
-    void checkItemRefs(SceneNode n, Set<String> scope) {
-      var inner = n.repeat == null ? scope : {...scope, n.repeat!};
-      for (var ref in n.paramRefs.entries) {
-        var dot = ref.value.indexOf('.');
-        if (dot < 0) continue;
-        var list = ref.value.substring(0, dot);
-        if (inner.contains(list)) continue;
-        refuse(
-          declared[n.name] ?? found!.offset,
-          'item reference',
-          '"${ref.value}" reads one item of "$list", so "${n.name}" must be '
-              'inside a node with `repeat: $list`',
-        );
-      }
-      for (var c in n.children) {
-        checkItemRefs(c, inner);
-      }
-    }
-
-    checkItemRefs(root, const {});
-
     var doc = SceneDocument(root);
     doc.params.addAll(_params.values);
+    // An item reference cannot escape its closure — the grammar has no way
+    // to write one outside a `row:` — so there is nothing to check here any
+    // more. What is left is turning each recorded binding into the closure
+    // everything draws through.
+    bindRepeats(doc);
     return doc;
   }
 
@@ -784,29 +822,33 @@ class _Parser {
     }
   }
 
-  /// A list parameter's mockup: items, each a map of string keys to string
-  /// or number values. Nothing else — an item's fields fill properties, and
-  /// those are the two kinds a property takes from one.
+  /// A list parameter's mockup: items, each a RECORD of named fields whose
+  /// values are strings or numbers. A record rather than a map because the
+  /// field names are then a TYPE, and `line.item` inside a repeat's closure
+  /// is checked against it.
   List<SceneItem> _items(ListLiteral list) {
     var items = <SceneItem>[];
     for (var element in list.elements) {
-      if (element is! SetOrMapLiteral) {
+      if (element is! RecordLiteral) {
         refuse(
           element.offset,
           element is Expression ? _kind(element) : _elementKind(element),
-          "an item is a map literal — {'item': 'Espresso beans', 'qty': 12}",
+          "an item is a record literal — (item: 'Espresso beans', qty: '12')",
         );
         continue;
       }
       var item = <String, Object>{};
-      for (var entry in element.elements) {
-        if (entry is! MapLiteralEntry) {
-          refuse(entry.offset, _elementKind(entry), 'expected a literal entry');
+      for (var field in element.fields) {
+        if (field is! RecordLiteralNamedField) {
+          refuse(
+            field.offset,
+            'positional field',
+            "an item's fields are named — (item: '…', qty: '…')",
+          );
           continue;
         }
-        var key = _string(entry.key);
-        var value = _itemValue(entry.value);
-        if (key != null && value != null) item[key] = value;
+        var value = _itemValue(field.fieldExpression);
+        if (value != null) item[field.name.lexeme] = value;
       }
       items.add(item);
     }
@@ -892,6 +934,8 @@ class _Parser {
       }
     }
     switch (kind) {
+      case 'FrameNode.repeating':
+        return _repeating(name, named, positional, args, childRefs);
       case 'FrameNode':
         var node = FrameNode(name: name);
         _applyCommon(node, named);
@@ -986,6 +1030,12 @@ class _Parser {
         _take(named, 'children', (e) {
           if (e is! ListLiteral) {
             refuse(e.offset, 'children', 'children takes a list literal');
+            return;
+          }
+          // Inside a repeat's closure a cell IS written here: it has no one
+          // row to be a field of. Everywhere else a child is placed by name.
+          if (_itemScope != null) {
+            node.children.addAll(_inlineCells(e, childRefs));
             return;
           }
           var refs = childRefs.putIfAbsent(name, () => []);
@@ -1123,6 +1173,164 @@ class _Parser {
     }
   }
 
+  /// `FrameNode.repeating(over: lines, row: (line) => [ … ], …)`.
+  ///
+  /// Read in one pass rather than routed through the plain frame reader,
+  /// because the closure has to be OPEN while its cells are read — that is
+  /// what makes `line.item` mean something there and nowhere else.
+  SceneNode? _repeating(
+    String name,
+    Map<String, Expression> named,
+    List<Expression> positional,
+    ArgumentList args,
+    Map<String, List<(String, int)>> childRefs,
+  ) {
+    var node = FrameNode(name: name);
+    String? list;
+    _take(named, 'over', (e) {
+      if (e is! SimpleIdentifier) {
+        refuse(e.offset, _kind(e), 'over names a list parameter');
+        return;
+      }
+      var decl = _params[e.name];
+      if (decl == null || decl.kind != SceneParamKind.list) {
+        refuse(
+          e.offset,
+          'over',
+          decl == null
+              ? '"${e.name}" is not a parameter of this scene'
+              : '"${e.name}" is a ${decl.typeName} — a repeat draws one row '
+                    'per item of a list parameter',
+        );
+        return;
+      }
+      list = e.name;
+    });
+    if (list == null) {
+      if (!named.containsKey('over')) {
+        refuse(
+          args.offset,
+          'over',
+          'a repeat says what it draws — `over: lines`',
+        );
+      }
+      return null;
+    }
+    var rowArg = named.remove('row');
+    if (rowArg == null) {
+      refuse(
+        args.offset,
+        'row',
+        'a repeat says how to draw one item — `row: (line) => [ … ]`',
+      );
+      return null;
+    }
+    if (rowArg is! FunctionExpression) {
+      refuse(rowArg.offset, _kind(rowArg), 'row is `(line) => [ … ]`');
+      return null;
+    }
+    var formals = rowArg.parameters?.parameters ?? const <FormalParameter>[];
+    var item = formals.length == 1 ? formals.single.name : null;
+    if (item == null) {
+      refuse(
+        rowArg.offset,
+        'row',
+        'row takes one parameter — the item it is drawing',
+      );
+      return null;
+    }
+    var body = rowArg.body;
+    if (body is! ExpressionFunctionBody || body.expression is! ListLiteral) {
+      refuse(
+        rowArg.offset,
+        'row',
+        "row returns the row's cells — `(line) => [TextNode(line.item)]`",
+      );
+      return null;
+    }
+    var outer = _itemScope;
+    _itemScope = (param: item.lexeme, list: list!);
+    // Common properties are read INSIDE the scope too: a row's own fill or
+    // border may read the item like any cell.
+    _applyCommon(node, named);
+    _take(named, 'layout', (e) {
+      var v = _enum(e, 'NodeLayout', NodeLayout.values.map((v) => v.name));
+      if (v != null) node.layout = NodeLayout.values.byName(v);
+    });
+    _take(named, 'gap', (e) => node.gap = _doubleV(e, node, 'gap') ?? node.gap);
+    _take(
+      named,
+      'padding',
+      (e) => node.padding = SceneEdges.all(_doubleV(e, node, 'padding') ?? 0),
+    );
+    for (var (side, set) in <(String, SceneEdges Function(double))>[
+      ('paddingLeft', (v) => node.padding.copyWith(left: v)),
+      ('paddingTop', (v) => node.padding.copyWith(top: v)),
+      ('paddingRight', (v) => node.padding.copyWith(right: v)),
+      ('paddingBottom', (v) => node.padding.copyWith(bottom: v)),
+    ]) {
+      _take(named, side, (e) {
+        var v = _doubleV(e, node, side);
+        if (v != null) node.padding = set(v);
+      });
+    }
+    _take(named, 'mainAlign', (e) {
+      var v = _enum(e, 'SceneMainAxisAlignment', [
+        for (var a in SceneMainAxisAlignment.values) a.name,
+      ]);
+      if (v != null) {
+        node.mainAlign = SceneMainAxisAlignment.values.byName(v);
+      }
+    });
+    _take(named, 'crossAlign', (e) {
+      var v = _enum(e, 'SceneCrossAxisAlignment', [
+        for (var a in SceneCrossAxisAlignment.values) a.name,
+      ]);
+      if (v != null) {
+        node.crossAlign = SceneCrossAxisAlignment.values.byName(v);
+      }
+    });
+    node.children.addAll(
+      _inlineCells(body.expression as ListLiteral, childRefs),
+    );
+    _itemScope = outer;
+    _refuseRest('FrameNode.repeating', named);
+    _checkPositionals(positional, 0);
+    recordRepeat(node, list!);
+    return node;
+  }
+
+  /// The cells of a repeated row, each written inline. Named from the
+  /// sequence rather than from the file, because the file gives them none.
+  List<SceneNode> _inlineCells(
+    ListLiteral list,
+    Map<String, List<(String, int)>> childRefs,
+  ) {
+    var out = <SceneNode>[];
+    for (var element in list.elements) {
+      if (element is! Expression) {
+        refuse(
+          element.offset,
+          _elementKind(element),
+          'a row lists its cells one by one',
+        );
+        continue;
+      }
+      if (element is SimpleIdentifier) {
+        refuse(
+          element.offset,
+          'named cell',
+          'a repeated row writes its cells inline — they are not fields, '
+              'because there is no one row for them to belong to',
+        );
+        continue;
+      }
+      var cell = _node('cell${++_cellSeq}', element, childRefs);
+      if (cell != null) out.add(cell);
+    }
+    return out;
+  }
+
   void _checkPositionals(List<Expression> positional, int count) {
     if (positional.length > count) {
       refuse(
@@ -1151,25 +1359,6 @@ class _Parser {
     );
     _take(named, 'corner', (e) => n.corner = _doubleV(e, n, 'corner') ?? 0);
     _take(named, 'opacity', (e) => n.opacity = _doubleV(e, n, 'opacity') ?? 1);
-    _take(named, 'repeat', (e) {
-      if (e is! SimpleIdentifier) {
-        refuse(e.offset, _kind(e), 'repeat names a list parameter');
-        return;
-      }
-      var decl = _params[e.name];
-      if (decl == null || decl.kind != SceneParamKind.list) {
-        refuse(
-          e.offset,
-          'repeat',
-          decl == null
-              ? '"${e.name}" is not a parameter of this scene'
-              : '"${e.name}" is a ${decl.typeName} — a repeat draws its node '
-                    'once per item of a list parameter',
-        );
-        return;
-      }
-      n.repeat = e.name;
-    });
   }
 
   void _take(
@@ -1275,7 +1464,9 @@ class _Parser {
     SceneNode n,
     String prop,
   ) {
-    var decl = _params[e.prefix.name];
+    var scope = _itemScope;
+    if (scope == null || e.prefix.name != scope.param) return null;
+    var decl = _params[scope.list];
     if (decl == null || decl.kind != SceneParamKind.list) return null;
     var field = e.identifier.name;
     var items = decl.items;
@@ -1284,8 +1475,8 @@ class _Parser {
         e.offset,
         'unknown field',
         items.isEmpty
-            ? '"${e.prefix.name}" has no items, so there is no "$field" to read'
-            : '"${e.prefix.name}" items carry '
+            ? '"${scope.list}" has no items, so there is no "$field" to read'
+            : '"${scope.list}" items carry '
                   '${items.first.keys.map((k) => '"$k"').join(', ')} — '
                   'not "$field"',
       );
@@ -1309,7 +1500,9 @@ class _Parser {
       );
       return _refused;
     }
-    n.paramRefs[prop] = '${e.prefix.name}.$field';
+    // Recorded against the LIST, not the closure's parameter: the parameter
+    // is a local name and the binding has to outlive it.
+    n.paramRefs[prop] = '${scope.list}.$field';
     return converted;
   }
 
@@ -1355,6 +1548,14 @@ class _Parser {
     MethodInvocation(:var methodName, :var target, :var argumentList)
         when target == null =>
       (methodName.name, argumentList),
+    // `FrameNode.repeating(…)` — a static, because the rule it takes is
+    // generic in the item type and a constructor cannot be.
+    MethodInvocation(
+      :var methodName,
+      target: SimpleIdentifier t,
+      :var argumentList,
+    ) =>
+      ('${t.name}.${methodName.name}', argumentList),
     InstanceCreationExpression(:var constructorName, :var argumentList)
         when constructorName.name == null =>
       (constructorName.type.name.lexeme, argumentList),

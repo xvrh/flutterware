@@ -79,6 +79,9 @@ SceneDocument sceneFromJson(Map<String, Object?> json) {
       ),
     );
   }
+  // The parameters are in hand now, so a recorded repeat can become the
+  // closure everything draws through.
+  bindRepeats(doc);
   return doc;
 }
 
@@ -93,11 +96,14 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
   if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
   if (n.corner != 0) 'corner': n.corner,
   if (n.opacity != 1) 'opacity': n.opacity,
-  'repeat': ?n.repeat,
   if (n.paramRefs.isNotEmpty) 'paramRefs': {...n.paramRefs},
   ...switch (n) {
     FrameNode f => {
       'layout': f.layout.name,
+      // Only the binding travels, never the closure: what a reader can
+      // record is which parameter the rows came from.
+      if (f.repeated?.source case var source? when source.isNotEmpty)
+        'repeat': source,
       'gap': f.gap,
       'padding': f.padding.toWire(),
       if (f.columns.isNotEmpty)
@@ -140,6 +146,14 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
         ..padding = SceneEdges.fromWire(json['padding'])
         ..columns = _columns(json['columns'])
         ..cellPadding = SceneEdges.fromWire(json['cellPadding'])
+        ..repeated = switch (json['repeat']) {
+          String source => SceneRepeat(
+            items: const [],
+            source: source,
+            row: (_) => const [],
+          ),
+          _ => null,
+        }
         ..mainAlign = SceneMainAxisAlignment.values.byName(
           json['mainAlign'] as String? ?? 'start',
         )
@@ -189,7 +203,6 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
     }
     ..corner = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1
-    ..repeat = json['repeat'] as String?
     ..paramRefs.addAll(
       ((json['paramRefs'] as Map?) ?? const {}).map(
         (k, v) => MapEntry('$k', '$v'),

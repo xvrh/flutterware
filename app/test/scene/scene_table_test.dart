@@ -112,18 +112,21 @@ void main() {
   // The repeater
   // ---------------------------------------------------------------------
 
+  /// The rule as a READ document has it: the cells carry the binding as
+  /// paramRefs and the frame records which parameter it draws from, which
+  /// is what [bindRepeats] turns into the closure everything draws through.
   SceneDocument repeated({List<SceneItem>? items}) {
     var cell = text('cell', 'Espresso beans, 1kg')
       ..paramRefs['text'] = 'lines.item';
     var qty = text('qty', '12')..paramRefs['text'] = 'lines.qty';
     var row = FrameNode(name: 'row', layout: NodeLayout.row)
-      ..repeat = 'lines'
       ..children.addAll([cell, qty]);
+    recordRepeat(row, 'lines');
     var root = FrameNode(name: 'root', layout: NodeLayout.column)
       ..width = 400
       ..height = 300
       ..children.add(row);
-    return SceneDocument(root)
+    var doc = SceneDocument(root)
       ..params.add(
         SceneParamDecl(
           'lines',
@@ -136,6 +139,26 @@ void main() {
               ],
         ),
       );
+    bindRepeats(doc);
+    return doc;
+  }
+
+  /// The same rule as a COMPILED scene has it: a closure, and no refs.
+  SceneDocument compiledRepeat() {
+    var row = FrameNode.repeating(
+      name: 'row',
+      layout: NodeLayout.row,
+      over: const [
+        (item: 'Espresso beans, 1kg', qty: '12'),
+        (item: 'Oat milk, 12 × 1L', qty: '8'),
+      ],
+      row: (line) => [text('cell', line.item), text('qty', line.qty)],
+    );
+    var root = FrameNode(name: 'root', layout: NodeLayout.column)
+      ..width = 400
+      ..height = 300
+      ..children.add(row);
+    return SceneDocument(root);
   }
 
   testWidgets('one authored row is drawn once per item', (tester) async {
@@ -193,8 +216,19 @@ void main() {
       jsonDecode(jsonEncode(doc.toJson())) as Map<String, Object?>,
     );
     expect(back.root.children.length, 1);
-    expect(back.root.children.single.repeat, 'lines');
+    expect((back.root.children.single as FrameNode).repeated?.source, 'lines');
     expect(back.itemsOf('lines').length, 3);
+  });
+
+  testWidgets('a closure draws the same rows as a recorded binding', (
+    tester,
+  ) async {
+    // One mechanism, two ways in: the file compiles a closure, a reader
+    // rebuilds one. Neither is a second renderer.
+    await render(tester, compiledRepeat());
+    expect(find.text('Espresso beans, 1kg'), findsOneWidget);
+    expect(find.text('Oat milk, 12 × 1L'), findsOneWidget);
+    expect(find.text('8'), findsOneWidget);
   });
 
   // ---------------------------------------------------------------------
@@ -204,16 +238,22 @@ void main() {
   const source =
       '''
 $sceneFileMarker
+$sceneAuthoringImport
 
 class Ledger({
-  final List<Map<String, Object>> lines = const [
-    {'item': 'Espresso beans, 1kg', 'qty': 12},
-    {'item': 'Oat milk, 12 × 1L', 'qty': 8},
+  final List<({String item, String qty})> lines = const [
+    (item: 'Espresso beans, 1kg', qty: '12'),
+    (item: 'Oat milk, 12 × 1L', qty: '8'),
   ],
-}) {
-  late final cell = TextNode(lines.item, fontSize: 12);
-  late final qty = TextNode(lines.qty, fontSize: 12);
-  late final row = FrameNode(repeat: lines, children: [cell, qty]);
+}) extends SceneDefinition {
+  late final row = FrameNode.repeating(
+    over: lines,
+    row: (line) => [
+      TextNode(line.item, fontSize: 12),
+      TextNode(line.qty, fontSize: 12),
+    ],
+  );
+  @override
   late final root = FrameNode(
     width: 400,
     layout: NodeLayout.table,
@@ -230,10 +270,13 @@ class Ledger({
     var doc = parsed.doc!;
 
     expect(doc.params.single.kind, SceneParamKind.list);
+    expect(doc.params.single.typeName, 'List<({String item, String qty})>');
     expect(doc.itemsOf('lines').length, 2);
-    expect(doc.nodeNamed('row')!.repeat, 'lines');
-    // A number field filling a text slot reads as the text it becomes.
-    expect((doc.nodeNamed('qty')! as TextNode).text, '12');
+    var row = doc.nodeNamed('row')! as FrameNode;
+    expect(row.repeated?.source, 'lines');
+    // Its cells are the first item's, and they are not fields.
+    expect((row.children.first as TextNode).text, 'Espresso beans, 1kg');
+    expect((row.children.last as TextNode).text, '12');
     expect(doc.root.columns, [double.infinity, 48]);
     expect(doc.root.cellPadding, const SceneEdges.all(8));
 
@@ -245,52 +288,62 @@ class Ledger({
       out,
       reason: 'emit ∘ parse is the identity on what emit wrote',
     );
-    expect(out, contains('repeat: lines'));
-    expect(out, contains('TextNode(lines.item'));
+    expect(out, contains('FrameNode.repeating('));
+    expect(out, contains('over: lines'));
+    expect(out, contains('row: (line) =>'));
+    expect(out, contains('TextNode(line.item'));
     expect(out, contains('columns: [double.infinity, 48]'));
+    // The cells are inline, so they are not declared beside the row.
+    expect(out, isNot(contains('late final cell')));
   });
 
-  test('an item reference outside its repeat is refused', () {
+  test('an item reference outside its closure is not one', () {
+    // `lines.item` where no closure binds it is just an unknown identifier
+    // — there is no scope for it to mean anything in.
     var parsed = parseSceneFile('''
 $sceneFileMarker
+$sceneAuthoringImport
 
 class Ledger({
-  final List<Map<String, Object>> lines = const [
-    {'item': 'Espresso beans, 1kg'},
-  ],
-}) {
+  final List<({String item})> lines = const [(item: 'Espresso beans, 1kg')],
+}) extends SceneDefinition {
   late final stray = TextNode(lines.item, fontSize: 12);
+  @override
   late final root = FrameNode(width: 400, children: [stray]);
 }
 ''');
     expect(parsed.ok, isFalse);
-    expect(parsed.refusals.single.construct, 'item reference');
-    expect(parsed.refusals.single.message, contains('repeat: lines'));
+    expect(parsed.refusals.first.construct, 'identifier');
   });
 
   test('a repeat over something that is not a list is refused', () {
     var parsed = parseSceneFile('''
 $sceneFileMarker
+$sceneAuthoringImport
 
-class Ledger({final String title = 'x'}) {
-  late final root = FrameNode(width: 400, repeat: title);
+class Ledger({final String title = 'x'}) extends SceneDefinition {
+  late final row = FrameNode.repeating(over: title, row: (line) => []);
+  @override
+  late final root = FrameNode(width: 400, children: [row]);
 }
 ''');
     expect(parsed.ok, isFalse);
-    expect(parsed.refusals.single.construct, 'repeat');
+    expect(parsed.refusals.first.construct, 'over');
   });
 
   test('a field the items do not carry is refused', () {
     var parsed = parseSceneFile('''
 $sceneFileMarker
+$sceneAuthoringImport
 
 class Ledger({
-  final List<Map<String, Object>> lines = const [
-    {'item': 'Espresso beans, 1kg'},
-  ],
-}) {
-  late final cell = TextNode(lines.price, fontSize: 12);
-  late final row = FrameNode(repeat: lines, children: [cell]);
+  final List<({String item})> lines = const [(item: 'Espresso beans, 1kg')],
+}) extends SceneDefinition {
+  late final row = FrameNode.repeating(
+    over: lines,
+    row: (line) => [TextNode(line.price, fontSize: 12)],
+  );
+  @override
   late final root = FrameNode(width: 400, children: [row]);
 }
 ''');
@@ -299,14 +352,33 @@ class Ledger({
     expect(parsed.refusals.first.message, contains('"item"'));
   });
 
+  test('a named cell inside a row is refused', () {
+    var parsed = parseSceneFile('''
+$sceneFileMarker
+$sceneAuthoringImport
+
+class Ledger({
+  final List<({String item})> lines = const [(item: 'Espresso beans, 1kg')],
+}) extends SceneDefinition {
+  late final cell = TextNode('x', fontSize: 12);
+  late final row = FrameNode.repeating(over: lines, row: (line) => [cell]);
+  @override
+  late final root = FrameNode(width: 400, children: [row]);
+}
+''');
+    expect(parsed.ok, isFalse);
+    expect(parsed.refusals.first.construct, 'named cell');
+  });
+
   test('an edited cell bakes in and drops its stale reference', () {
     var parsed = parseSceneFile(source);
     var doc = parsed.doc!;
-    (doc.nodeNamed('cell')! as TextNode).text = 'Something else';
+    var row = doc.nodeNamed('row')! as FrameNode;
+    (row.children.first as TextNode).text = 'Something else';
 
     var out = emitSceneFile(doc, className: parsed.className!);
     expect(out, contains("TextNode('Something else'"));
-    expect(out, isNot(contains('TextNode(lines.item')));
+    expect(out, isNot(contains('TextNode(line.item')));
     // The edit survives; the reference is what goes.
     expect(parseSceneFile(out).refusals, isEmpty);
   });

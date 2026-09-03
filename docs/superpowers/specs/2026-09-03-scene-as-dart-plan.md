@@ -124,14 +124,30 @@ compiled expression cannot say *which* field it read.
 The spelling that compiles **and** keeps the binding is a closure:
 
 ```dart
-late final lineRow = Frame(
-  repeat: lines,
+late final lineRow = FrameNode.repeating(
+  over: lines,
   row: (line) => [
-    Text(line.item, fontSize: 12),
-    Text('${line.qty}', align: TextAlign.right, fontSize: 12),
+    TextNode(line.item, fontSize: 12),
+    TextNode(line.qty, fontSize: 12, align: SceneTextAlign.right),
   ],
 );
 ```
+
+A static rather than a constructor, because it is generic in the item type
+and a Dart constructor cannot be — and that generic is the whole point:
+`T` is inferred from the list, so `line.item` is a record field the
+compiler checks. The items are a `List<({String item, String qty})>`, and
+the record type IS the field names.
+
+There are two ways in and one way to draw. A compiled file supplies the
+closure; a document that was READ — parsed, or decoded from JSON — supplies
+only what a reader can record, which is which parameter the rows came from
+and which property of which cell reads which field. `bindRepeats` turns that
+back into the same closure, so nothing renders through a second path.
+
+A number field is the one thing still awkward: a cell takes a `String`, so
+`line.qty` has to be one. A numeric field would need `'${line.qty}'`, and
+the grammar refuses interpolation.
 
 Real Dart, fully typed, per-item nodes for free. What it costs: the cells are
 no longer fields, so they have no identity — a cell cannot be selected or
@@ -180,7 +196,7 @@ else moves yet.
 `.animate(…)` per node kind, `AnimateGroup` holds a node, `BoundMotion` stops
 looking anything up. The editor keeps the name for display and emit.
 
-**P3 — the repeater becomes a closure.**
+**P3 — the repeater becomes a closure.** *(done)*
 Replace `repeat:`/`lines.item` with `repeat: … , row: (line) => […]`. Rewrite
 the invoice on it. Delete what §3 lists.
 

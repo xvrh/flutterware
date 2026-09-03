@@ -22,7 +22,7 @@ void main() {
     var scene = SampleScene(headline: 'Kaffee, schneller');
     expect(scene.headline, 'Kaffee, schneller');
     expect(scene.root.width, 400);
-    expect(scene.root.children.single.children.length, 2);
+    expect(scene.root.children.first.children.length, 2);
   });
 
   test('a parameter reaches the node that reads it', () {
@@ -42,11 +42,11 @@ void main() {
     // it is the compiler that checks it.
     expect(SampleScene().title.name, isEmpty);
     expect(
-      identical(SampleScene().root.children.single, SampleScene().bar),
+      identical(SampleScene().root.children.first, SampleScene().bar),
       isFalse,
     );
     var one = SampleScene();
-    expect(identical(one.root.children.single, one.bar), isTrue);
+    expect(identical(one.root.children.first, one.bar), isTrue);
   });
 
   testWidgets('and it mounts', (tester) async {
@@ -103,6 +103,36 @@ void main() {
     expect(scene.title.fxRendered('opacity'), 1.0, reason: 'back to authored');
   });
 
+  test('a repeat is a closure, and the compiler checks its fields', () {
+    // `line.label` is a record field, so a cell reading one the data does
+    // not have is a program that does not build — which is why this can
+    // only assert the shape, never the failure.
+    var scene = SampleScene(
+      rows: const [
+        (label: 'Cocoa', value: '2kg'),
+        (label: 'Syrup', value: '6 × 750ml'),
+        (label: 'Cups', value: '500'),
+      ],
+    );
+    var rep = scene.table.repeated!;
+    expect(rep.items, hasLength(3));
+    // The frame's own cells are the FIRST item's, so the row in the file
+    // and the row on screen are the same row.
+    expect((scene.table.children.first as TextNode).text, 'Cocoa');
+    // And it is still one frame: what multiplies is the picture.
+    expect(scene.root.children, hasLength(2));
+    expect(scene.scene.expand(scene.table), hasLength(3));
+  });
+
+  testWidgets('and every row of it is drawn', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: Center(child: SceneView(SampleScene().scene))),
+    );
+    expect(find.text('Beans'), findsOneWidget);
+    expect(find.text('Milk'), findsOneWidget);
+    expect(find.text('12L'), findsOneWidget);
+  });
+
   test('and the parser reads the same file back, unchanged', () {
     var path = 'test/scene/sample.scene.dart';
     var source = File(path).readAsStringSync();
@@ -124,5 +154,10 @@ void main() {
     // the same relationship the compiled pair has.
     var group = parsed.motions['SampleIntro']!.groupNamed('titleIn')!;
     expect(identical(group.node, parsed.doc!.nodeNamed('title')), isTrue);
+    // The read document's repeat draws the same rows the closure does,
+    // rebuilt from what a reader could record.
+    var table = parsed.doc!.nodeNamed('table')! as FrameNode;
+    expect(table.repeated?.source, 'rows');
+    expect(parsed.doc!.expand(table), hasLength(2));
   });
 }
