@@ -9,6 +9,7 @@
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 import 'package:flutterware/scene_authoring.dart';
 
+import 'sample_nested.scene.dart';
 import 'sample_widget.dart' as app;
 
 class SampleScene({
@@ -47,12 +48,17 @@ class SampleScene({
     build: (a) => app.SampleChip(label: a.text('label') ?? 'chip'),
     args: {'label': 'new'},
   );
+  late final badgeRef = SceneRefNode(
+    'SampleBadge',
+    build: (a) => SampleBadge(label: a.text('label') ?? 'New'),
+    args: {'label': 'Open'},
+  );
   @override
   late final root = FrameNode(
     width: 400,
     height: 120,
     fill: SceneColor(0xFF2B1B12),
-    children: [bar, table, chip],
+    children: [bar, table, chip, badgeRef],
   );
 }
 

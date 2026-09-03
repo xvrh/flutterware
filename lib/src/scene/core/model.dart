@@ -609,10 +609,21 @@ class SceneRefNode extends SceneNode {
     super.corner,
     super.opacity,
     Map<String, Object?>? args,
+    this.build,
   }) : args = args ?? {};
 
   final String sceneClassName;
   final Map<String, Object?> args;
+
+  /// How the nested scene is made, when this node was compiled rather than
+  /// read — `build: (a) => PromoBadge(label: a.text('label'))`, a typed
+  /// reference to the other class that the compiler checks.
+  SceneDefinition Function(SceneArgs args)? build;
+
+  /// The builder's source text, when this node was READ; see
+  /// [ExternalNode.buildSource] for why the tool keeps a span it cannot
+  /// author.
+  String buildSource = '';
 
   SceneDocument? instance;
 
@@ -630,6 +641,13 @@ class SceneRefNode extends SceneNode {
   /// so one the motion stopped writing falls back to its default rather
   /// than staying wherever the last frame left it.
   void syncInstance() {
+    // Compiled: the builder IS how args reach the child, so the instance is
+    // rebuilt from the args of the moment. A parsed child has paramRefs and
+    // takes them the other way, in place.
+    if (build case var make?) {
+      instance = make(SceneArgs(renderedArgs)).scene;
+      return;
+    }
     var inst = instance;
     if (inst == null) return;
     inst.applyArgs({
@@ -1066,9 +1084,11 @@ class SceneDocument extends SceneListenable {
               ..args.clear();
             i.args.addAll(s.args);
           case (SceneRefNode i, SceneRefNode s):
-            i.args
-              ..clear()
-              ..addAll(s.args);
+            i
+              ..build = s.build
+              ..buildSource = s.buildSource
+              ..args.clear();
+            i.args.addAll(s.args);
           default:
             throw StateError('unreachable: kinds matched above');
         }
@@ -1145,7 +1165,13 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     // The instance is copied too, so the copy draws at once; each copy owns
     // its own, because args are applied by mutating it.
     SceneRefNode r =>
-      SceneRefNode(r.sceneClassName, name: name, args: Map.of(r.args))
+      SceneRefNode(
+          r.sceneClassName,
+          name: name,
+          args: Map.of(r.args),
+          build: r.build,
+        )
+        ..buildSource = r.buildSource
         ..instance = r.instance == null
             ? null
             : instantiateScene(r.instance!, r.args),

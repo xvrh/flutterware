@@ -122,7 +122,7 @@ void main() {
     // and the row on screen are the same row.
     expect((scene.table.children.first as TextNode).text, 'Cocoa');
     // And it is still one frame: what multiplies is the picture.
-    expect(scene.root.children, hasLength(3));
+    expect(scene.root.children, hasLength(4));
     expect(scene.scene.expand(scene.table), hasLength(3));
   });
 
@@ -186,6 +186,34 @@ void main() {
     // not lose it either.
     expect(chip.buildSource, startsWith('(a) => app.SampleChip('));
     expect(chip.build, isNull, reason: 'read, not compiled');
+  });
+
+  testWidgets('a nested scene is a constructor call the compiler checks', (
+    tester,
+  ) async {
+    // `SampleBadge(label: …)` is the other class, by name, with its
+    // parameters typed — not a string somebody resolves at play time.
+    var scene = SampleScene();
+    scene.badgeRef.syncInstance();
+    expect(scene.badgeRef.instance, isNotNull);
+
+    await tester.pumpWidget(
+      MaterialApp(home: Center(child: SceneView(scene.scene))),
+    );
+    // The arg reached the child's own parameter.
+    expect(find.text('Open'), findsOneWidget);
+  });
+
+  test('and an animated arg rebuilds it', () {
+    var scene = SampleScene();
+    scene.badgeRef.effect().opacity = 1;
+    scene.badgeRef.writeFx(#test, 'args.label', 'Closed');
+    scene.badgeRef.syncInstance();
+    expect(
+      (scene.badgeRef.instance!.root.children.single as TextNode).text,
+      'Closed',
+      reason: 'the builder is how args reach a compiled child',
+    );
   });
 
   test('and the parser reads the same file back, unchanged', () {

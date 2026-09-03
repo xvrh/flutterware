@@ -413,6 +413,7 @@ void _emitNode(
       }
       props.add(_str(r.sceneClassName));
       common();
+      if (r.buildSource.isNotEmpty) props.add('build: ${r.buildSource}');
       if (r.args.isNotEmpty) {
         props.add(
           'args: {${[for (var entry in r.args.entries) '${_str(entry.key)}: ${_argValue(entry.value)}'].join(', ')}}',
@@ -1222,23 +1223,29 @@ class _Parser {
             ? node.args
             : (node as SceneRefNode).args;
         _applyCommon(node, named);
-        if (node is ExternalNode) {
-          _take(named, 'build', (e) {
-            if (e is! FunctionExpression) {
-              refuse(
-                e.offset,
-                _kind(e),
-                'build makes the app widget — '
-                "`build: (a) => app.DrinkBadge(a.number('size'))`",
-              );
-              return;
-            }
-            // KEPT, not read. This is the one span in the file the tool
-            // treats as opaque: it is the author's code, the tool cannot
-            // write it, and dropping it would be the shredder.
-            node.buildSource = source.substring(e.offset, e.end);
-          });
-        }
+        _take(named, 'build', (e) {
+          if (e is! FunctionExpression) {
+            refuse(
+              e.offset,
+              _kind(e),
+              node is ExternalNode
+                  ? 'build makes the app widget — '
+                        "`build: (a) => app.DrinkBadge(a.number('size'))`"
+                  : 'build makes the nested scene — '
+                        "`build: (a) => PromoBadge(label: a.text('label'))`",
+            );
+            return;
+          }
+          // KEPT, not read. These are the only spans in the file the tool
+          // treats as opaque: they are the author's code, the tool cannot
+          // write them, and dropping them would be the shredder.
+          var span = source.substring(e.offset, e.end);
+          if (node is ExternalNode) {
+            node.buildSource = span;
+          } else if (node is SceneRefNode) {
+            node.buildSource = span;
+          }
+        });
         _take(named, 'args', (e) {
           if (e is! SetOrMapLiteral) {
             refuse(e.offset, 'args', 'args takes a map literal');

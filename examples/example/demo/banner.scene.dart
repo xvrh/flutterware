@@ -10,6 +10,8 @@
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_example/shop/shop_app.dart' as app;
 
+import 'promo_badge.scene.dart';
+
 class BannerScene extends SceneDefinition {
   late final glow = ShapeNode(
     x: 600,
@@ -85,6 +87,7 @@ class BannerScene extends SceneDefinition {
     'PromoBadge',
     x: 64,
     y: 48,
+    build: (a) => PromoBadge(label: a.text('label') ?? 'New'),
     args: {'label': 'Now open'},
   );
   @override

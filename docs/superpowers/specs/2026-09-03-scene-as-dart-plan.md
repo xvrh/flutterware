@@ -200,16 +200,46 @@ looking anything up. The editor keeps the name for display and emit.
 Replace `repeat:`/`lines.item` with `repeat: … , row: (line) => […]`. Rewrite
 the invoice on it. Delete what §3 lists.
 
-**P4 — Ext becomes a typed builder.**
-The file holds the widget and its args record; `SceneView.externals` and its
-string keys are deleted. The parser learns prefixed identifiers and starts
-owning the import list.
+**P4 — Ext becomes a typed builder.** *(merged into P6, owner call
+2026-09-03 — see the two findings below. The prerequisite landed on its own:
+the parser now owns the import list, which it was silently dropping.)*
 
 **P5 — the runtime stops carrying the editor's machinery.**
 `applyArgs`/`_lists` out of the runtime; `SceneView` keys by identity;
 `_sweep` reports objects and the editor names them.
 
-**P6 — kill the JSON app path.**
+**P6 — the file holds its widgets, and the app registers scenes.** *(done,
+except the export lane — see below.)*
+
+Two things killed the P4 sketch, both measured rather than argued:
+
+- **The args cannot be a typed record.** Animating one means producing a
+  record with a field changed, and Dart cannot: no `copyWith`, no generic
+  field update. `Map.of(args)` then overwrite is expressible, which is why
+  the current shape works. So arg NAMES stay strings — the motion grammar
+  already calls this its one stringly boundary — and `SceneArgs` reads them
+  by kind so the file never writes a cast.
+- **A closure cannot cross the wire.** The editor sends a scene as data; a
+  builder is a closure. So the app registers its scene CLASSES
+  (`SceneCanvasHost(scenes: [BannerScene.new])`) and the host learns the
+  builders by instantiating each and walking it. One line per scene rather
+  than one per widget, each compiler-checked.
+
+And one thing the grammar gained: `build:` is an OPAQUE SPAN. The tool does
+not read it, keeps it verbatim and writes it back, because it is the
+author's code — the tool cannot author it and must not lose it. Everything
+else in the file is still understood or refused.
+
+**The export lane still speaks JSON, and that may be correct.** The pair
+JSON is no longer an *app* path — an app writes `SceneView(Invoice().scene)`
+and touches none of it. What remains is flutterware's own transport between
+the editor and the tester lane, which is the same category as the
+editor→guest wire that stays by design. Compiling the scene file in the
+export lane would additionally catch a file that does not build, which is
+worth something; it is an improvement to tooling rather than a correctness
+fix for a consumer.
+
+**P6 (old) — kill the JSON app path.**
 A nested scene becomes a constructor call (`PromoBadge(title: …)`) instead of
 a class-name lookup. The video/preview export instantiates the class through
 a generated entrypoint — the previews plugin already generates one that
