@@ -7,6 +7,7 @@
 // a guest needs when it is going to evaluate the motion itself rather than be
 // fed frames — an export walking a playhead in a tester, or an app mounting a
 // scene it was handed.
+import 'curves.dart';
 import 'model.dart';
 import 'motion_model.dart';
 import 'values.dart';
@@ -42,6 +43,7 @@ sceneFileFromJson(Map<String, Object?> json) {
         '${e.key}': motionFromJson(
           (e.value as Map).cast<String, Object?>(),
           sceneClassName: className,
+          scene: scene,
         ),
     },
   );
@@ -209,7 +211,7 @@ extension MotionDocumentJson on MotionDocument {
       for (var g in groups)
         {
           'name': g.name,
-          'target': g.target,
+          'target': g.node.name,
           'tracks': {
             for (var e in g.tracks.entries) e.key: _trackToJson(e.value),
           },
@@ -220,9 +222,15 @@ extension MotionDocumentJson on MotionDocument {
   };
 }
 
+/// The inverse of [MotionDocumentJson.toJson].
+///
+/// [scene] is required because a group holds the NODE it animates, and JSON
+/// can only carry the name — so this is the one place a name becomes a node
+/// again, and it is a read of something the editor wrote.
 MotionDocument motionFromJson(
   Map<String, Object?> json, {
   required String sceneClassName,
+  required SceneDocument scene,
 }) {
   var doc = MotionDocument(sceneClassName: sceneClassName);
   for (var raw in (json['params'] as List? ?? const [])) {
@@ -238,7 +246,14 @@ MotionDocument motionFromJson(
   }
   for (var raw in (json['groups'] as List? ?? const [])) {
     var g = (raw as Map).cast<String, Object?>();
-    var group = AnimateGroup(g['name']! as String, g['target']! as String);
+    var target = g['target']! as String;
+    var node = scene.nodeNamed(target);
+    if (node == null) {
+      throw ArgumentError(
+        'the motion animates "$target", which this scene does not declare',
+      );
+    }
+    var group = AnimateGroup(node, name: g['name']! as String);
     for (var e in ((g['tracks'] as Map?) ?? const {}).entries) {
       group.tracks['${e.key}'] = _trackFromJson(
         (e.value as Map).cast<String, Object?>(),
@@ -253,6 +268,7 @@ MotionDocument motionFromJson(
   }
   doc.timeline = _exprFromJson(
     (json['timeline']! as Map).cast<String, Object?>(),
+    doc,
   );
   return doc;
 }
@@ -264,7 +280,7 @@ Map<String, Object?> _trackToJson(MotionTrack t) => {
       {
         'at': k.at.inMicroseconds,
         'value': _valueToJson(k.value),
-        if (k.curve != null) 'curve': k.curve,
+        if (k.curve case var curve?) 'curve': curve.name,
         if (k.paramRef != null) 'paramRef': k.paramRef,
       },
   ],
@@ -272,7 +288,7 @@ Map<String, Object?> _trackToJson(MotionTrack t) => {
 
 MotionTrack _trackFromJson(Map<String, Object?> json) {
   var kind = TrackKind.values.byName(json['kind']! as String);
-  return MotionTrack(kind, [
+  return MotionTrack([
     for (var raw in (json['keys'] as List? ?? const []))
       if ((raw as Map).cast<String, Object?>() case var k)
         MotionKey(
@@ -280,14 +296,16 @@ MotionTrack _trackFromJson(Map<String, Object?> json) {
           value: kind == TrackKind.color
               ? SceneColor((k['value']! as num).toInt())
               : (k['value']! as num).toDouble(),
-          curve: k['curve'] as String?,
+          curve: sceneCurvesByName[k['curve']],
           paramRef: k['paramRef'] as String?,
         ),
-  ]);
+  ], kind: kind);
 }
 
 Map<String, Object?> _exprToJson(TimelineExpr e) => switch (e) {
-  GroupRef r => {'op': 'ref', 'name': r.name},
+  // A placed group travels as its name, which is all JSON can carry; the
+  // read side puts it back to the group itself.
+  AnimateGroup g => {'op': 'ref', 'name': g.name},
   ParExpr p => {
     'op': 'par',
     'children': [for (var c in p.children) _exprToJson(c)],
@@ -313,15 +331,19 @@ Map<String, Object?> _exprToJson(TimelineExpr e) => switch (e) {
   },
 };
 
-TimelineExpr _exprFromJson(Map<String, Object?> json) {
+TimelineExpr _exprFromJson(Map<String, Object?> json, MotionDocument doc) {
   List<TimelineExpr> children() => [
     for (var c in (json['children'] as List? ?? const []))
-      _exprFromJson((c as Map).cast<String, Object?>()),
+      _exprFromJson((c as Map).cast<String, Object?>(), doc),
   ];
   TimelineExpr child() =>
-      _exprFromJson((json['child']! as Map).cast<String, Object?>());
+      _exprFromJson((json['child']! as Map).cast<String, Object?>(), doc);
   return switch (json['op']) {
-    'ref' => GroupRef(json['name']! as String),
+    'ref' =>
+      doc.groupNamed(json['name']! as String) ??
+          (throw ArgumentError(
+            'the timeline places "${json['name']}", which is not a group here',
+          )),
     'par' => ParExpr(children()),
     'seq' => SeqExpr(children()),
     'at' => AtExpr(

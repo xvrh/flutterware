@@ -16,14 +16,14 @@ void main() {
   });
 
   group('track evaluation', () {
-    var track = MotionTrack(TrackKind.number, [
+    var track = MotionTrack([
       MotionKey(at: Duration.zero, value: 0.0),
       MotionKey(
         at: const Duration(milliseconds: 400),
         value: 1.0,
-        curve: 'easeOut',
+        curve: SceneCurves.easeOut,
       ),
-    ]);
+    ], kind: TrackKind.number);
 
     test('the hold rule at both edges', () {
       expect(track.evaluate(const Duration(milliseconds: -50)), 0.0);
@@ -39,13 +39,13 @@ void main() {
     });
 
     test('a color track lerps through SceneColor.lerp', () {
-      var colors = MotionTrack(TrackKind.color, [
+      var colors = MotionTrack([
         MotionKey(at: Duration.zero, value: const SceneColor(0xFF000000)),
         MotionKey(
           at: const Duration(milliseconds: 100),
           value: const SceneColor(0xFFFFFFFF),
         ),
-      ]);
+      ], kind: TrackKind.color);
       var mid = colors.evaluate(const Duration(milliseconds: 50));
       expect(
         mid,
@@ -59,7 +59,7 @@ void main() {
 
     test('an empty track refuses to evaluate', () {
       expect(
-        () => MotionTrack(TrackKind.number).evaluate(Duration.zero),
+        () => MotionTrack([], kind: TrackKind.number).evaluate(Duration.zero),
         throwsStateError,
       );
     });
@@ -132,7 +132,7 @@ void main() {
   group('the bound pair', () {
     test('the coffee intro plays over the coffee banner', () {
       var scene = coffeeBannerDraft();
-      var bound = BoundMotion.bind(coffeeIntroDraft(), scene);
+      var bound = BoundMotion.bind(coffeeIntroDraft(scene), scene);
       expect(bound.duration, const Duration(milliseconds: 1800));
 
       var headline = scene.nodeNamed('headline')!;
@@ -169,7 +169,7 @@ void main() {
 
     test('an unplaced group plays independently', () {
       var scene = coffeeBannerDraft();
-      var bound = BoundMotion.bind(coffeeIntroDraft(), scene);
+      var bound = BoundMotion.bind(coffeeIntroDraft(scene), scene);
       var cta = scene.nodeNamed('cta')!;
       var headline = scene.nodeNamed('headline')!;
 
@@ -183,9 +183,13 @@ void main() {
     });
 
     test('binding against a scene missing the target refuses, named', () {
+      // The motion is authored against one scene and bound against another,
+      // which is the mistake: a group holds a node, and this one's node is
+      // in a document nobody is drawing.
+      var motion = coffeeIntroDraft();
       var scene = SceneDocument(FrameNode(name: 'root'));
       expect(
-        () => BoundMotion.bind(coffeeIntroDraft(), scene),
+        () => BoundMotion.bind(motion, scene),
         throwsA(
           isA<StateError>().having(
             (e) => e.message,
@@ -198,26 +202,28 @@ void main() {
   });
 
   group('combinators are pure time transforms', () {
-    (SceneDocument, MotionDocument) pair(TimelineExpr Function() timeline) {
+    (SceneDocument, MotionDocument) pair(
+      TimelineExpr Function(AnimateGroup a, AnimateGroup b) timeline,
+    ) {
       var scene = coffeeBannerDraft();
       var doc = MotionDocument(sceneClassName: 'BannerScene');
-      var a = AnimateGroup('a', 'glow');
-      a.tracks['opacity'] = MotionTrack(TrackKind.number, [
+      var a = AnimateGroup(scene.nodeNamed('glow')!, name: 'a');
+      a.tracks['opacity'] = MotionTrack([
         MotionKey(at: Duration.zero, value: 0.0),
         MotionKey(at: const Duration(milliseconds: 200), value: 1.0),
-      ]);
-      var b = AnimateGroup('b', 'cup');
-      b.tracks['opacity'] = MotionTrack(TrackKind.number, [
+      ], kind: TrackKind.number);
+      var b = AnimateGroup(scene.nodeNamed('cup')!, name: 'b');
+      b.tracks['opacity'] = MotionTrack([
         MotionKey(at: Duration.zero, value: 1.0),
         MotionKey(at: const Duration(milliseconds: 300), value: 0.0),
-      ]);
+      ], kind: TrackKind.number);
       doc.groups.addAll([a, b]);
-      doc.timeline = timeline();
+      doc.timeline = timeline(a, b);
       return (scene, doc);
     }
 
     test('Seq: the second child waits, holding its start', () {
-      var (scene, doc) = pair(() => SeqExpr([GroupRef('a'), GroupRef('b')]));
+      var (scene, doc) = pair((a, b) => SeqExpr([a, b]));
       var bound = BoundMotion.bind(doc, scene);
       expect(bound.duration, const Duration(milliseconds: 500));
       var cup = scene.nodeNamed('cup')!;
@@ -228,9 +234,7 @@ void main() {
     });
 
     test('Speed halves or doubles the clock', () {
-      var (scene, doc) = pair(
-        () => ParExpr([SpeedExpr(2, GroupRef('a')), GroupRef('b')]),
-      );
+      var (scene, doc) = pair((a, b) => ParExpr([SpeedExpr(2, a), b]));
       var bound = BoundMotion.bind(doc, scene);
       var glow = scene.nodeNamed('glow')!;
       bound.apply(const Duration(milliseconds: 50));
@@ -240,7 +244,7 @@ void main() {
     });
 
     test('Repeat cycles, and its last frame holds the end', () {
-      var (scene, doc) = pair(() => RepeatExpr(3, GroupRef('a')));
+      var (scene, doc) = pair((a, b) => RepeatExpr(3, a));
       var bound = BoundMotion.bind(doc, scene);
       expect(bound.duration, const Duration(milliseconds: 600));
       var glow = scene.nodeNamed('glow')!;
@@ -255,13 +259,13 @@ void main() {
     (SceneDocument, BoundMotion) shortPair() {
       var scene = coffeeBannerDraft();
       var doc = MotionDocument(sceneClassName: 'BannerScene');
-      var g = AnimateGroup('g', 'glow');
-      g.tracks['translateY'] = MotionTrack(TrackKind.number, [
+      var g = AnimateGroup(scene.nodeNamed('glow')!, name: 'g');
+      g.tracks['translateY'] = MotionTrack([
         MotionKey(at: Duration.zero, value: 0.0),
         MotionKey(at: const Duration(milliseconds: 200), value: 100.0),
-      ]);
+      ], kind: TrackKind.number);
       doc.groups.add(g);
-      doc.timeline = ParExpr([GroupRef('g')]);
+      doc.timeline = ParExpr([g]);
       return (scene, BoundMotion.bind(doc, scene));
     }
 
@@ -341,7 +345,7 @@ void main() {
 
     testWidgets('the wire carries the rendered picture', (tester) async {
       var scene = coffeeBannerDraft();
-      var bound = BoundMotion.bind(coffeeIntroDraft(), scene);
+      var bound = BoundMotion.bind(coffeeIntroDraft(scene), scene);
       bound.apply(const Duration(milliseconds: 130));
       var root = scene.toWire()['root'] as Map<String, dynamic>;
       var copy = (root['children'] as List)[2] as Map<String, dynamic>;
@@ -394,7 +398,7 @@ void main() {
       var headline = scene.nodeNamed('headline')!;
       var editor = SceneEditor(
         scene,
-        motions: {'BannerIntro': coffeeIntroDraft()},
+        motions: {'BannerIntro': coffeeIntroDraft(scene)},
       );
       await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: _TransportHost(editor))),
@@ -420,7 +424,7 @@ void main() {
       var scene = coffeeBannerDraft();
       var editor = SceneEditor(
         scene,
-        motions: {'BannerIntro': coffeeIntroDraft()},
+        motions: {'BannerIntro': coffeeIntroDraft(scene)},
       );
       await tester.pumpWidget(
         MaterialApp(

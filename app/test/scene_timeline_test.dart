@@ -29,7 +29,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     var doc = coffeeBannerDraft();
-    motion = coffeeIntroDraft();
+    motion = coffeeIntroDraft(doc);
     editor = SceneEditor(doc, motions: {'BannerIntro': motion});
     await tester.pumpWidget(MaterialApp(theme: appTheme, home: _Host(editor)));
     await tester.pump();

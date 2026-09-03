@@ -66,8 +66,9 @@ void main() {
     late MotionDocument motion;
     const m = 'BannerIntro';
     setUp(() {
-      motion = coffeeIntroDraft();
-      editor = SceneEditor(coffeeBannerDraft(), motions: {m: motion});
+      var scene = coffeeBannerDraft();
+      motion = coffeeIntroDraft(scene);
+      editor = SceneEditor(scene, motions: {m: motion});
     });
 
     test('a group leaves the timeline with it, and comes back on undo', () {
@@ -104,11 +105,9 @@ void main() {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      motion = coffeeIntroDraft();
-      editor = SceneEditor(
-        coffeeBannerDraft(),
-        motions: {'BannerIntro': motion},
-      );
+      var scene = coffeeBannerDraft();
+      motion = coffeeIntroDraft(scene);
+      editor = SceneEditor(scene, motions: {'BannerIntro': motion});
       if (motionOpen) editor.activeMotion = 'BannerIntro';
       await tester.pumpWidget(
         MaterialApp(theme: appTheme, home: _Host(editor)),

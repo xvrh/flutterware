@@ -3,21 +3,38 @@
 // animation groups over that scene's nodes (typed targets, field-name
 // identity — the same law the scene settled), arranges them on a mandatory
 // `timeline`, and may keep unplaced groups as library assets fired on events.
+import 'curves.dart';
 import 'model.dart';
+import 'values.dart';
 
 /// What a track's values are. Mirrors the scene's parameter kinds minus
 /// string — words are not tweened.
 enum TrackKind { number, color }
 
 /// One keyframe. `value` is a double or a Color per the owning track's kind;
-/// `curve` is an allowlisted `Curves.<name>` (null = linear); `paramRef` is
+/// `curve` is one of [Curves] (null = linear); `paramRef` is
 /// provenance — which motion parameter fed the value — and survives a save
 /// only while the value still equals that parameter's default.
 class MotionKey {
-  MotionKey({required this.at, required this.value, this.curve, this.paramRef})
-    : id = _nextId++;
+  MotionKey({
+    required this.at,
+    required Object value,
+    this.curve,
+    this.paramRef,
+  }) : _value = _asValue(value),
+       id = _nextId++;
 
-  MotionKey._copy(this.id, this.at, this.value, this.curve, this.paramRef);
+  MotionKey._copy(this.id, this.at, Object value, this.curve, this.paramRef)
+    : _value = _asValue(value);
+
+  /// A number key holds a DOUBLE, whatever it arrived as.
+  ///
+  /// The file writes `value: 1` for one, because an integral double is
+  /// spelled as an int literal — and a compiled file hands that straight
+  /// over, where every reader casts to double. Coerced at the door rather
+  /// than at each of them.
+  static Object _asValue(Object value) =>
+      value is int ? value.toDouble() : value;
 
   static var _nextId = 1;
 
@@ -28,8 +45,12 @@ class MotionKey {
   final int id;
 
   Duration at;
-  Object value;
-  String? curve;
+
+  Object _value;
+  Object get value => _value;
+  set value(Object v) => _value = _asValue(v);
+
+  SceneCurve? curve;
   String? paramRef;
 
   MotionKey copy() => MotionKey._copy(id, at, value, curve, paramRef);
@@ -40,7 +61,17 @@ class MotionKey {
 /// keep the list sorted — the everyday editor drag past a neighbour would
 /// otherwise silently break the hold rule.
 class MotionTrack {
-  MotionTrack(this.kind, [List<MotionKey>? keys]) : keys = keys ?? [] {
+  /// The kind is READ OFF THE KEYS unless it is given: a track of colours is
+  /// a colour track, and a file that spells `MotionTrack([MotionKey(…)])`
+  /// should not also have to say so. Given explicitly for an empty track,
+  /// which has nothing to read.
+  MotionTrack(List<MotionKey> keys, {TrackKind? kind})
+    : keys = keys,
+      kind =
+          kind ??
+          (keys.isNotEmpty && keys.first.value is SceneColor
+              ? TrackKind.color
+              : TrackKind.number) {
     _sort();
   }
 
@@ -63,22 +94,29 @@ class MotionTrack {
 
   void _sort() => keys.sort((a, b) => a.at.compareTo(b.at));
 
-  MotionTrack copy() => MotionTrack(kind, [for (var k in keys) k.copy()]);
+  MotionTrack copy() => MotionTrack([for (var k in keys) k.copy()], kind: kind);
 }
 
-/// One `late final <name> = scene.<target>.animate(…)` field. The field name
-/// is the group's identity; the target is a scene node's field name, and the
-/// legal properties come from [animatableProps] for that node's kind.
-class AnimateGroup {
-  AnimateGroup(this.name, this.target);
+/// One `late final <name> = scene.<node>.animate(…)` field.
+///
+/// A group holds the NODE it animates, not its name: in a compiled scene
+/// file `scene.headline` is a typed reference the compiler checks, and a
+/// motion pointed at a node the scene does not have is a program that does
+/// not build. Nothing resolves anything at play time.
+///
+/// It is also a [TimelineExpr] in its own right, because the file places it
+/// by writing the field — `Par([headlineIn, …])` — so there is no third
+/// thing standing between a group and its place in the arrangement.
+class AnimateGroup extends TimelineExpr {
+  AnimateGroup(this.node, {this.name = ''});
 
-  /// The group's name — the field it is in the motion class, which is what
-  /// the timeline refers to it by. Mutable so the editor can rename it; the
-  /// editor rewrites the timeline's references in the same edit.
+  /// The group's name — the field it is declared under, and SOURCE-LEVEL
+  /// only, like a node's. Empty in a compiled motion, filled by the parser,
+  /// and what the editor shows and the emitter writes.
   String name;
 
-  /// The node this group animates, by name; follows a rename.
-  String target;
+  /// The node this group animates.
+  SceneNode node;
 
   /// Property → track, non-empty only: Save writes no empty tracks (an
   /// always-present empty track is a *runtime* affordance, not a file one).
@@ -93,7 +131,7 @@ class AnimateGroup {
     for (var t in args.values) t.duration,
   ].fold(Duration.zero, (m, d) => d > m ? d : m);
 
-  AnimateGroup copy() => AnimateGroup(name, target)
+  AnimateGroup copy() => AnimateGroup(node, name: name)
     ..tracks.addAll({for (var e in tracks.entries) e.key: e.value.copy()})
     ..args.addAll({for (var e in args.entries) e.key: e.value.copy()});
 }
@@ -245,11 +283,6 @@ ScenePropSpec? propSpecFor(SceneNode node, String prop) {
 /// library assets (independently playable, no autoplay).
 sealed class TimelineExpr {}
 
-class GroupRef extends TimelineExpr {
-  GroupRef(this.name);
-  final String name;
-}
-
 class ParExpr extends TimelineExpr {
   ParExpr(this.children);
   final List<TimelineExpr> children;
@@ -278,6 +311,163 @@ class RepeatExpr extends TimelineExpr {
   final TimelineExpr child;
 }
 
+/// Milliseconds, so a file can write `240.ms` — the only spelling the motion
+/// grammar accepts for a time.
+extension SceneMillis on int {
+  Duration get ms => Duration(milliseconds: this);
+}
+
+/// What a `.scene.dart` motion class extends.
+///
+/// The scene is the TYPE parameter, so `scene.headline` inside a motion is a
+/// typed reference the compiler checks: a motion pointed at a node the scene
+/// does not declare is a program that does not build, and one pointed at the
+/// wrong kind of node cannot name that kind's properties either.
+abstract class SceneMotion<T extends SceneDefinition> {
+  SceneMotion(this.scene);
+
+  final T scene;
+
+  /// What plays. Groups place themselves in it, so nothing is looked up.
+  TimelineExpr get timeline;
+
+  /// Carry this motion's live state into [other] and hand it back — what a
+  /// generated `copy` calls to rebind onto another instance of the scene.
+  ///
+  /// Nothing is carried yet: a fresh motion over a fresh scene already
+  /// evaluates to the same frames, and the editor's own state lives in its
+  /// document. Kept because the generated member calls it, and because the
+  /// day a motion holds runtime state this is where it goes.
+  M copyStateInto<M extends SceneMotion<T>>(M other) => other;
+}
+
+/// The imposed properties, animatable on every node whatever its kind.
+extension SceneNodeAnimate on SceneNode {
+  AnimateGroup animate({
+    MotionTrack? opacity,
+    MotionTrack? translateX,
+    MotionTrack? translateY,
+    MotionTrack? scale,
+    MotionTrack? rotate,
+  }) => _group(this, {
+    'opacity': opacity,
+    'translateX': translateX,
+    'translateY': translateY,
+    'scale': scale,
+    'rotate': rotate,
+  });
+}
+
+extension TextNodeAnimate on TextNode {
+  AnimateGroup animate({
+    MotionTrack? opacity,
+    MotionTrack? translateX,
+    MotionTrack? translateY,
+    MotionTrack? scale,
+    MotionTrack? rotate,
+    MotionTrack? fontSize,
+    MotionTrack? color,
+  }) => _group(this, {
+    'opacity': opacity,
+    'translateX': translateX,
+    'translateY': translateY,
+    'scale': scale,
+    'rotate': rotate,
+    'fontSize': fontSize,
+    'color': color,
+  });
+}
+
+extension FrameNodeAnimate on FrameNode {
+  AnimateGroup animate({
+    MotionTrack? opacity,
+    MotionTrack? translateX,
+    MotionTrack? translateY,
+    MotionTrack? scale,
+    MotionTrack? rotate,
+    MotionTrack? gap,
+    MotionTrack? fill,
+  }) => _group(this, {
+    'opacity': opacity,
+    'translateX': translateX,
+    'translateY': translateY,
+    'scale': scale,
+    'rotate': rotate,
+    'gap': gap,
+    'fill': fill,
+  });
+}
+
+extension ShapeNodeAnimate on ShapeNode {
+  AnimateGroup animate({
+    MotionTrack? opacity,
+    MotionTrack? translateX,
+    MotionTrack? translateY,
+    MotionTrack? scale,
+    MotionTrack? rotate,
+    MotionTrack? fill,
+  }) => _group(this, {
+    'opacity': opacity,
+    'translateX': translateX,
+    'translateY': translateY,
+    'scale': scale,
+    'rotate': rotate,
+    'fill': fill,
+  });
+}
+
+extension ExternalNodeAnimate on ExternalNode {
+  /// [args] is the grammar's one stringly boundary: an external widget's
+  /// arguments are discovered by scan, not declared, so there is no type to
+  /// check them against.
+  AnimateGroup animate({
+    MotionTrack? opacity,
+    MotionTrack? translateX,
+    MotionTrack? translateY,
+    MotionTrack? scale,
+    MotionTrack? rotate,
+    Map<String, MotionTrack>? args,
+  }) => _group(this, {
+    'opacity': opacity,
+    'translateX': translateX,
+    'translateY': translateY,
+    'scale': scale,
+    'rotate': rotate,
+  }, args: args);
+}
+
+extension SceneRefNodeAnimate on SceneRefNode {
+  AnimateGroup animate({
+    MotionTrack? opacity,
+    MotionTrack? translateX,
+    MotionTrack? translateY,
+    MotionTrack? scale,
+    MotionTrack? rotate,
+    Map<String, MotionTrack>? args,
+  }) => _group(this, {
+    'opacity': opacity,
+    'translateX': translateX,
+    'translateY': translateY,
+    'scale': scale,
+    'rotate': rotate,
+  }, args: args);
+}
+
+AnimateGroup _group(
+  SceneNode node,
+  Map<String, MotionTrack?> tracks, {
+  Map<String, MotionTrack>? args,
+}) {
+  var group = AnimateGroup(node);
+  for (var entry in tracks.entries) {
+    // Save writes no empty tracks, and neither does a hand-written file:
+    // a property nobody animated is a property the group does not carry.
+    if (entry.value case var track?) group.tracks[entry.key] = track;
+  }
+  if (args != null) group.args.addAll(args);
+  return group;
+}
+
 /// Names a motion class member may not take: the header's super field, the
 /// mandatory arrangement, and the derived copy member.
 const motionReservedNames = {'scene', 'timeline', 'copy'};
@@ -299,6 +489,19 @@ class MotionDocument {
   /// Mandatory: what plays. `Par` of everything is the tool's default.
   TimelineExpr timeline = ParExpr([]);
 
+  /// Re-resolve every group's target against [scene], by name.
+  ///
+  /// The editor's door, and only the editor's: a group holds a node object,
+  /// and an undo that brings a deleted node back brings back a NEW object,
+  /// leaving the group pointed at the one that went away. Names exist only
+  /// where the source was read, which is exactly here.
+  void repoint(SceneDocument scene) {
+    for (var g in groups) {
+      var node = scene.nodeNamed(g.node.name);
+      if (node != null) g.node = node;
+    }
+  }
+
   AnimateGroup? groupNamed(String name) {
     for (var g in groups) {
       if (g.name == name) return g;
@@ -306,12 +509,12 @@ class MotionDocument {
     return null;
   }
 
-  /// Every group reference in the timeline, in tree order.
-  Iterable<GroupRef> placedRefs() sync* {
-    Iterable<GroupRef> visit(TimelineExpr e) sync* {
+  /// Every group placed in the timeline, in tree order.
+  Iterable<AnimateGroup> placedRefs() sync* {
+    Iterable<AnimateGroup> visit(TimelineExpr e) sync* {
       switch (e) {
-        case GroupRef r:
-          yield r;
+        case AnimateGroup g:
+          yield g;
         case ParExpr p:
           for (var c in p.children) {
             yield* visit(c);
@@ -334,16 +537,32 @@ class MotionDocument {
 
   /// The motion at one moment, deep-copied — the other half of the editor's
   /// undo journal (the scene's is [SceneDocument.snapshot]).
-  MotionSnapshot snapshot() => MotionSnapshot._(
-    [...params],
-    [for (var g in groups) g.copy()],
-    _copyExpr(timeline),
-  );
+  MotionSnapshot snapshot() {
+    // The timeline places group OBJECTS, so a snapshot's arrangement has to
+    // point at the snapshot's own copies rather than at the live ones.
+    var copies = {for (var g in groups) g: g.copy()};
+    return MotionSnapshot._(
+      [...params],
+      copies.values.toList(),
+      _copyExpr(timeline, copies),
+      // The target's name AS IT WAS, captured rather than read back off the
+      // node: a rename between snapshot and restore moves the node's name,
+      // and this is the string that has to survive it.
+      [for (var g in groups) g.node.name],
+    );
+  }
 
   /// Write [state] back. Groups are REVIVED by name and keys by id, the way
   /// the scene revives nodes: a bound motion holds group objects and a
   /// player holds its writers, and an undo must not detach them.
-  void restore(MotionSnapshot state) {
+  /// Write [state] back, re-pointing each group at [scene] by the name the
+  /// snapshot recorded.
+  ///
+  /// [scene] is what makes an undo across a rename work. The scene's own
+  /// restore revives nodes by name, so a node renamed since the snapshot
+  /// comes back as a NEW object and a group left holding the old one would
+  /// animate something nobody is drawing.
+  void restore(MotionSnapshot state, {SceneDocument? scene}) {
     params
       ..clear()
       ..addAll(state._params);
@@ -351,7 +570,7 @@ class MotionDocument {
     var revived = <AnimateGroup>[];
     for (var snap in state._groups) {
       var into = live[snap.name];
-      if (into == null || into.target != snap.target) {
+      if (into == null || !identical(into.node, snap.node)) {
         revived.add(snap.copy());
         continue;
       }
@@ -359,10 +578,23 @@ class MotionDocument {
       _restoreTracks(into.args, snap.args);
       revived.add(into);
     }
+    if (scene != null) {
+      for (var (index, g) in revived.indexed) {
+        if (index >= state._targets.length) continue;
+        var node = scene.nodeNamed(state._targets[index]);
+        if (node != null) g.node = node;
+      }
+    }
     groups
       ..clear()
       ..addAll(revived);
-    timeline = _copyExpr(state._timeline);
+    // Same mapping in the other direction: the snapshot's arrangement names
+    // the snapshot's groups, and what plays has to be the live ones.
+    var back = <AnimateGroup, AnimateGroup>{};
+    for (var (index, snap) in state._groups.indexed) {
+      if (index < revived.length) back[snap] = revived[index];
+    }
+    timeline = _copyExpr(state._timeline, back);
   }
 
   void _restoreTracks(
@@ -375,7 +607,7 @@ class MotionDocument {
     };
     into.clear();
     for (var entry in from.entries) {
-      var track = MotionTrack(entry.value.kind);
+      var track = MotionTrack([], kind: entry.value.kind);
       for (var snap in entry.value.keys) {
         var key = liveKeys[snap.id];
         if (key == null) {
@@ -397,33 +629,38 @@ class MotionDocument {
 /// One motion's state at a moment: opaque, made by
 /// [MotionDocument.snapshot], consumed by [MotionDocument.restore].
 class MotionSnapshot {
-  MotionSnapshot._(this._params, this._groups, this._timeline);
+  MotionSnapshot._(this._params, this._groups, this._timeline, this._targets);
 
   final List<SceneParamDecl> _params;
   final List<AnimateGroup> _groups;
   final TimelineExpr _timeline;
+
+  /// One node name per group, in [_groups] order — see [MotionDocument.restore].
+  final List<String> _targets;
 }
 
-TimelineExpr _copyExpr(TimelineExpr e) => switch (e) {
-  GroupRef r => GroupRef(r.name),
-  ParExpr p => ParExpr([for (var c in p.children) _copyExpr(c)]),
-  SeqExpr s => SeqExpr([for (var c in s.children) _copyExpr(c)]),
-  AtExpr a => AtExpr(a.offset, _copyExpr(a.child)),
-  SpeedExpr s => SpeedExpr(s.factor, _copyExpr(s.child)),
-  RepeatExpr r => RepeatExpr(r.times, _copyExpr(r.child)),
-};
+/// A copy of the arrangement with every placed group swapped through [map].
+/// The shape is copied; the groups are not — they are looked up, because a
+/// group placed in a timeline IS the group.
+TimelineExpr _copyExpr(TimelineExpr e, Map<AnimateGroup, AnimateGroup> map) =>
+    switch (e) {
+      AnimateGroup g => map[g] ?? g,
+      ParExpr p => ParExpr([for (var c in p.children) _copyExpr(c, map)]),
+      SeqExpr s => SeqExpr([for (var c in s.children) _copyExpr(c, map)]),
+      AtExpr a => AtExpr(a.offset, _copyExpr(a.child, map)),
+      SpeedExpr s => SpeedExpr(s.factor, _copyExpr(s.child, map)),
+      RepeatExpr r => RepeatExpr(r.times, _copyExpr(r.child, map)),
+    };
 
 /// The timeline expression, laid out: where each placed group starts and how
 /// long the whole runs. What a timeline panel draws from, and what the
 /// runtime computes for itself when it binds — the same arithmetic, kept here
 /// so the picture and the playback cannot disagree.
 extension MotionTimelineLayout on MotionDocument {
-  /// How long [expr] runs, groups resolved against this document. A reference
-  /// to a group that does not exist runs for no time rather than refusing:
-  /// the timeline is edited live, and a dangling reference is a state the
-  /// editor passes through.
+  /// How long [expr] runs. A group placed here is the group, so there is
+  /// nothing to resolve and nothing that can dangle.
   Duration durationOf(TimelineExpr expr) => switch (expr) {
-    GroupRef r => groupNamed(r.name)?.duration ?? Duration.zero,
+    AnimateGroup g => g.duration,
     ParExpr p => p.children.fold(
       Duration.zero,
       (m, c) => durationOf(c) > m ? durationOf(c) : m,
@@ -445,8 +682,8 @@ extension MotionTimelineLayout on MotionDocument {
     var out = <String, Duration>{};
     void visit(TimelineExpr e, Duration at) {
       switch (e) {
-        case GroupRef r:
-          out.putIfAbsent(r.name, () => at);
+        case AnimateGroup g:
+          out.putIfAbsent(g.name, () => at);
         case ParExpr p:
           for (var c in p.children) {
             visit(c, at);

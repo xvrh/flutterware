@@ -59,18 +59,70 @@ void main() {
     expect(tester.getSize(find.byType(SceneView)), const Size(400, 120));
   });
 
+  test('a motion names its target with a checked identifier', () {
+    var scene = SampleScene();
+    var motion = SampleIntro(scene);
+
+    // `scene.title` is the node itself, so the group needs nothing resolved
+    // — and a motion pointed at a node the scene does not declare, or at a
+    // property the node's kind cannot animate, does not compile. There is
+    // no test that can be written for that, which is the point.
+    expect(identical(motion.titleIn.node, scene.title), isTrue);
+    expect(identical(motion.badgePop.node, scene.badge), isTrue);
+    expect(motion.titleIn.tracks.keys, containsAll(['opacity', 'translateY']));
+    // A property nobody animated is a track the group does not carry.
+    expect(motion.titleIn.tracks.containsKey('scale'), isFalse);
+  });
+
+  test('a motion parameter reaches the key that reads it', () {
+    var scene = SampleScene();
+    var slid = SampleIntro(scene, slideFrom: 80);
+    expect(slid.titleIn.tracks['translateY']!.keys.first.value, 80.0);
+    expect(
+      SampleIntro(scene).titleIn.tracks['translateY']!.keys.first.value,
+      24.0,
+    );
+  });
+
+  testWidgets('and the motion plays, with no document and no lookup', (
+    tester,
+  ) async {
+    var scene = SampleScene();
+    var motion = SampleIntro(scene);
+    var play = playTimeline(motion.timeline);
+
+    // Par of a 260ms group and a 240ms one placed at 120: 360, not 500.
+    expect(play.duration, const Duration(milliseconds: 360));
+    play.apply(Duration.zero);
+    expect(scene.title.fxRendered('opacity'), 0.0);
+    play.apply(const Duration(milliseconds: 260));
+    expect(scene.title.fxRendered('opacity'), 1.0);
+    // The badge is placed 120ms in, so at 260 it is 140 through its 240.
+    expect(scene.badge.fxRendered('scale') as double, greaterThan(0.6));
+    play.clearFx();
+    expect(scene.title.fxRendered('opacity'), 1.0, reason: 'back to authored');
+  });
+
   test('and the parser reads the same file back, unchanged', () {
     var path = 'test/scene/sample.scene.dart';
     var source = File(path).readAsStringSync();
     var parsed = parseSceneFile(source);
     expect(parsed.refusals, isEmpty, reason: '$path must satisfy the grammar');
     expect(
-      emitSceneFile(parsed.doc!, className: parsed.className!),
+      emitSceneFile(
+        parsed.doc!,
+        className: parsed.className!,
+        motions: parsed.motions,
+      ),
       source,
       reason: 'the file the compiler accepts is the file the editor writes',
     );
     // The names the compiler cannot see are exactly what the parser supplies.
     expect(parsed.doc!.nodeNamed('title'), isNotNull);
     expect(parsed.doc!.root.name, 'root');
+    // And the parsed motion's groups hold the parsed scene's nodes, which is
+    // the same relationship the compiled pair has.
+    var group = parsed.motions['SampleIntro']!.groupNamed('titleIn')!;
+    expect(identical(group.node, parsed.doc!.nodeNamed('title')), isTrue);
   });
 }

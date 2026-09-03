@@ -32,9 +32,10 @@ void main() {
   });
 
   test('renaming a motion keeps its place, its content and the active one', () {
+    var scene = coffeeBannerDraft();
     var editor = SceneEditor(
-      coffeeBannerDraft(),
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      scene,
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     var second = editor.addMotion('BannerScene');
     editor.activeMotion = 'BannerIntro';
@@ -59,15 +60,13 @@ void main() {
   });
 
   test('renaming a group rewrites the timeline that places it', () {
-    var motion = coffeeIntroDraft();
-    var editor = SceneEditor(
-      coffeeBannerDraft(),
-      motions: {'BannerIntro': motion},
-    );
+    var scene = coffeeBannerDraft();
+    var motion = coffeeIntroDraft(scene);
+    var editor = SceneEditor(scene, motions: {'BannerIntro': motion});
     var before = motion.placements;
     editor.renameGroup('BannerIntro', 'headlineIn', 'headlineRise');
     expect(motion.groupNamed('headlineIn'), isNull);
-    expect(motion.groupNamed('headlineRise')!.target, 'headline');
+    expect(motion.groupNamed('headlineRise')!.node.name, 'headline');
     var after = motion.placements;
     expect(after['headlineRise'], before['headlineIn']);
     expect(after.containsKey('headlineIn'), isFalse);
@@ -82,9 +81,10 @@ void main() {
   });
 
   test('adding and removing motions is undoable as a set', () {
+    var scene = coffeeBannerDraft();
     var editor = SceneEditor(
-      coffeeBannerDraft(),
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      scene,
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     var name = editor.addMotion('BannerScene');
     editor.addKey(
@@ -149,7 +149,10 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     var doc = coffeeBannerDraft();
-    var editor = SceneEditor(doc, motions: {'BannerIntro': coffeeIntroDraft()});
+    var editor = SceneEditor(
+      doc,
+      motions: {'BannerIntro': coffeeIntroDraft(doc)},
+    );
     await tester.pumpWidget(MaterialApp(theme: appTheme, home: _Host(editor)));
     await tester.pump();
     expect(find.byType(SceneTimeline), findsNothing, reason: 'static first');

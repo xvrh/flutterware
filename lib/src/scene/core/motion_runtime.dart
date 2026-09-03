@@ -33,9 +33,7 @@ extension MotionTrackEvaluate on MotionTrack {
       if (t <= keys[i].at) {
         var a = keys[i - 1], b = keys[i];
         var u = (t - a.at).inMicroseconds / (b.at - a.at).inMicroseconds;
-        var shaped =
-            (sceneCurvesByName[b.curve] ?? sceneCurvesByName['linear']!)
-                .transform(u);
+        var shaped = (b.curve ?? SceneCurves.linear).transform(u);
         return switch (kind) {
           TrackKind.number =>
             (a.value as double) +
@@ -95,7 +93,7 @@ abstract class Playable {
 /// is the writer identity in the fx stack, so first write fixes its
 /// position and re-writes stay put (probe M8).
 class BoundGroup extends Playable {
-  BoundGroup._(this.group, this.node);
+  BoundGroup._(this.group) : node = group.node;
 
   final AnimateGroup group;
   final SceneNode node;
@@ -210,50 +208,75 @@ class _Repeat extends Playable {
 Duration _clamp(Duration t, Duration max) =>
     t < Duration.zero ? Duration.zero : (t > max ? max : t);
 
-/// A motion document bound to one scene: names resolved to nodes, the
-/// timeline built as a playable tree, the pair guarded. Unplaced groups
-/// bind too — [group] hands them out for independent play — but only the
-/// timeline plays through [apply].
+/// An arrangement as something that plays.
+///
+/// Nothing is resolved here: a placed group IS the group, and a group holds
+/// the node it animates. Binding is building the tree, which is why a
+/// compiled motion needs no document and no scene to play — it hands its
+/// own `timeline` over.
+///
+/// [into] caches one [BoundGroup] per group, so a group placed twice writes
+/// through one writer rather than two that fight.
+Playable playTimeline(
+  TimelineExpr expr, {
+  Map<AnimateGroup, BoundGroup>? into,
+}) {
+  var bound = into ?? <AnimateGroup, BoundGroup>{};
+  Playable build(TimelineExpr e) => switch (e) {
+    AnimateGroup g => bound.putIfAbsent(g, () => BoundGroup._(g)),
+    ParExpr p => _Par([for (var c in p.children) build(c)]),
+    SeqExpr s => _Seq([for (var c in s.children) build(c)]),
+    AtExpr a => _At(a.offset, build(a.child)),
+    SpeedExpr s => _Speed(s.factor, build(s.child)),
+    RepeatExpr r => _Repeat(r.times, build(r.child)),
+  };
+  return build(expr);
+}
+
+/// A motion document bound to one scene: the timeline built as a playable
+/// tree, and the pair guarded. Unplaced groups bind too — [group] hands
+/// them out for independent play — but only the timeline plays through
+/// [apply].
 class BoundMotion extends Playable {
   BoundMotion._(this.doc, this.scene, this._groups, this._root);
 
   factory BoundMotion.bind(MotionDocument doc, SceneDocument scene) {
-    var groups = <String, BoundGroup>{};
+    var nodes = {for (var (n, _) in scene.walk()) n};
+    var bound = <AnimateGroup, BoundGroup>{};
     for (var g in doc.groups) {
-      var node = scene.nodeNamed(g.target);
-      if (node == null) {
+      // The guard survives even though nothing is resolved: a motion still
+      // has to be played against the scene it was authored against, and a
+      // group pointing outside it is a wiring mistake worth naming.
+      if (!nodes.contains(g.node)) {
         throw StateError(
-          'the motion targets a node this scene does not have '
-          '("${g.target}", from group "${g.name}") — bound against a '
+          'the motion animates a node this scene does not have '
+          '("${g.node.name}", from group "${g.name}") — bound against a '
           'different scene? Bind the pair that was authored together.',
         );
       }
-      groups[g.name] = BoundGroup._(g, node);
+      bound[g] = BoundGroup._(g);
     }
-    Playable build(TimelineExpr e) => switch (e) {
-      GroupRef r => groups[r.name]!,
-      ParExpr p => _Par([for (var c in p.children) build(c)]),
-      SeqExpr s => _Seq([for (var c in s.children) build(c)]),
-      AtExpr a => _At(a.offset, build(a.child)),
-      SpeedExpr s => _Speed(s.factor, build(s.child)),
-      RepeatExpr r => _Repeat(r.times, build(r.child)),
-    };
-    return BoundMotion._(doc, scene, groups, build(doc.timeline));
+    return BoundMotion._(
+      doc,
+      scene,
+      bound,
+      playTimeline(doc.timeline, into: bound),
+    );
   }
 
   final MotionDocument doc;
   final SceneDocument scene;
-  final Map<String, BoundGroup> _groups;
+  final Map<AnimateGroup, BoundGroup> _groups;
   final Playable _root;
 
   /// A bound group by name — placed or library asset alike; hand it to its
-  /// own player for independent play.
+  /// own player for independent play. Names are the editor's, so this is
+  /// the editor's door; a compiled motion holds its groups as fields.
   BoundGroup group(String name) {
-    var g = _groups[name];
-    if (g == null) {
-      throw ArgumentError('"$name" is not a group of this motion');
+    for (var entry in _groups.entries) {
+      if (entry.key.name == name) return entry.value;
     }
-    return g;
+    throw ArgumentError('"$name" is not a group of this motion');
   }
 
   @override

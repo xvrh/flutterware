@@ -3,17 +3,11 @@ include: ../../analysis_options.yaml
 analyzer:
   exclude:
     - build/**
-    # A scene file is ordinary Dart and is analyzed like any other. The ones
-    # still listed here are the ones not yet ported: a motion's vocabulary
-    # (Track, Key, Curves) has no library until that phase lands, so a scene
-    # carrying one cannot compile yet. The list only shrinks.
-    - demo/banner.scene.dart
-    # The repeater: `lines.item` cannot compile, and the closure that
-    # replaces it is its own phase.
+    # A scene file is ordinary Dart and is analyzed like any other. The one
+    # still listed here is the one not yet ported: the repeater's
+    # `lines.item` cannot compile, and the closure that replaces it is its
+    # own phase. The list only shrinks.
     - demo/invoice.scene.dart
-    - demo/ohoh.scene.dart
-    - demo/promo_badge.scene.dart
-    - demo/story_card.scene.dart
     - android/**
     - ios/**
     - web/**

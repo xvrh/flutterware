@@ -16,12 +16,13 @@
 //     FIELD NAME IS THE GROUP'S IDENTITY, the target is the scene node's
 //     own field name (typed in real Dart, resolved against the scene here),
 //     and the named arguments are that node kind's animatable properties,
-//     each a `Track([Key(…), …])`; an external node additionally takes
+//     each a `MotionTrack([MotionKey(…), …])`; an external node takes
 //     `args: {'<arg>': Track(…)}` — the grammar's one stringly boundary
 //   - a Key is `Key(at: <int>.ms, value: <literal or parameter name>,
-//     curve: Curves.<allowlisted>)` — keys time-sorted, times unique,
+//     curve: SceneCurves.<allowlisted>)` — keys time-sorted, times unique,
 //     tracks non-empty (Save writes no empty tracks)
-//   - a mandatory `late final timeline = <arrangement>` — Par/Seq lists,
+//   - a mandatory `@override late final timeline = <arrangement>` — ParExpr
+//     and SeqExpr lists,
 //     At(<int>.ms, …), Speed(<number>, …), Repeat(<int>, …) over group
 //     names; a group placed at most once; an UNPLACED group is a library
 //     asset (independently playable, no autoplay), not an orphan
@@ -35,7 +36,7 @@
 //
 // Invariants the tests hold: parse(emit(model)) succeeds and re-emits
 // identically; emit ∘ parse is the identity on canonical files; accepted
-// non-canonical spellings (`final` for `late final`, `Curves.linear`,
+// non-canonical spellings (`final` for `late final`, `SceneCurves.linear`,
 // a missing or stale `copy`, a type-less parameter formal) converge in one
 // emit; every hostile construct is refused with an offset and a name.
 import 'package:analyzer/dart/ast/ast.dart';
@@ -44,7 +45,7 @@ import 'package:flutterware/scene_authoring.dart';
 
 import 'scene_file.dart' show SceneRefusal;
 
-/// The curves a key may name — canonical spelling `Curves.<name>`; `linear`
+/// The curves a key may name — canonical spelling `SceneCurves.<name>`; `linear`
 /// is accepted and converges to no curve at all.
 const motionCurves = [
   'linear',
@@ -108,11 +109,11 @@ void emitMotionClass(
         'valid identifiers, unique in the class, off the reserved list',
       );
     }
-    var target = scene.nodeNamed(g.target);
-    if (target == null) {
-      throw ArgumentError('"${g.target}" is not a node in this scene');
+    var target = g.node;
+    if (scene.nodeNamed(target.name) != target) {
+      throw ArgumentError('"${target.name}" is not a node in this scene');
     }
-    out.write('  late final ${g.name} = scene.${g.target}.animate(');
+    out.write('  late final ${g.name} = scene.${target.name}.animate(');
     for (var ScenePropSpec(name: prop, :kind) in animatableProps(target)) {
       var track = g.tracks[prop];
       if (track == null) continue;
@@ -130,6 +131,9 @@ void emitMotionClass(
     }
     out.writeln(');');
   }
+  // SceneMotion declares `timeline`, so the field that supplies it is an
+  // override like the scene's `root`.
+  out.writeln('  @override');
   out.writeln('  late final timeline = ${_expr(doc.timeline)};');
   out.write('  $className copy(${doc.sceneClassName} scene) => ');
   out.write('copyStateInto($className(scene');
@@ -164,24 +168,26 @@ String _track(MotionTrack t, TrackKind kind, Map<String, SceneParamDecl> ps) {
         'value: ${kind == TrackKind.color ? _color(k.value as SceneColor) : _num((k.value as num).toDouble())}',
       );
     }
-    if (k.curve case var curve? when curve != 'linear') {
-      if (!motionCurves.contains(curve)) {
-        throw ArgumentError('"$curve" is not an allowlisted curve');
+    if (k.curve case var curve? when curve.name != 'linear') {
+      if (!motionCurves.contains(curve.name)) {
+        throw ArgumentError('"${curve.name}" is not an allowlisted curve');
       }
-      parts.add('curve: Curves.$curve');
+      parts.add('curve: SceneCurves.${curve.name}');
     }
-    return 'Key(${parts.join(', ')})';
+    return 'MotionKey(${parts.join(', ')})';
   });
-  return 'Track([${keys.join(', ')}])';
+  return 'MotionTrack([${keys.join(', ')}])';
 }
 
 String _expr(TimelineExpr e) => switch (e) {
-  GroupRef r => r.name,
-  ParExpr p => 'Par([${p.children.map(_expr).join(', ')}])',
-  SeqExpr s => 'Seq([${s.children.map(_expr).join(', ')}])',
-  AtExpr a => 'At(${_dur(a.offset)}, ${_expr(a.child)})',
-  SpeedExpr s => 'Speed(${_num(s.factor)}, ${_expr(s.child)})',
-  RepeatExpr r => 'Repeat(${r.times}, ${_expr(r.child)})',
+  // A placed group is written as the FIELD it is declared under, which is
+  // what makes the arrangement a set of typed references.
+  AnimateGroup g => g.name,
+  ParExpr p => 'ParExpr([${p.children.map(_expr).join(', ')}])',
+  SeqExpr s => 'SeqExpr([${s.children.map(_expr).join(', ')}])',
+  AtExpr a => 'AtExpr(${_dur(a.offset)}, ${_expr(a.child)})',
+  SpeedExpr s => 'SpeedExpr(${_num(s.factor)}, ${_expr(s.child)})',
+  RepeatExpr r => 'RepeatExpr(${r.times}, ${_expr(r.child)})',
 };
 
 String _dur(Duration d) {
@@ -291,7 +297,7 @@ class _Parser {
       for (var p in _params.keys) p: -1,
     };
     (TimelineExpr, int)? timeline;
-    var refOffsets = <GroupRef, int>{};
+    var refOffsets = <AnimateGroup, int>{};
     for (var member in found.body.members) {
       if (member is ConstructorDeclaration) {
         refuse(
@@ -360,7 +366,8 @@ class _Parser {
         refuse(
           found.offset,
           'no timeline',
-          'the motion class declares `late final timeline = Par([…])` — '
+          'the motion class declares '
+              '`@override late final timeline = ParExpr([…])` — '
               'the timeline is what plays',
         );
       }
@@ -394,10 +401,23 @@ class _Parser {
         );
       }
     }
-    doc.timeline = timeline.$1;
+    doc.timeline = _resolveRefs(timeline.$1, doc);
     doc.params.addAll(_params.values);
     return doc;
   }
+
+  /// Swap every placeholder in [expr] for the group it names. A name that
+  /// resolves to nothing was already refused; the placeholder stays so the
+  /// tree keeps its shape for whatever reports the refusal.
+  static TimelineExpr _resolveRefs(TimelineExpr expr, MotionDocument doc) =>
+      switch (expr) {
+        AnimateGroup g => doc.groupNamed(g.name) ?? g,
+        ParExpr p => ParExpr([for (var c in p.children) _resolveRefs(c, doc)]),
+        SeqExpr s => SeqExpr([for (var c in s.children) _resolveRefs(c, doc)]),
+        AtExpr a => AtExpr(a.offset, _resolveRefs(a.child, doc)),
+        SpeedExpr s => SpeedExpr(s.factor, _resolveRefs(s.child, doc)),
+        RepeatExpr r => RepeatExpr(r.times, _resolveRefs(r.child, doc)),
+      };
 
   /// The class header: `(super.scene, {…params})` and
   /// `extends SceneMotion<Scene>`.
@@ -636,7 +656,7 @@ class _Parser {
       );
       return null;
     }
-    var group = AnimateGroup(name, targetName);
+    var group = AnimateGroup(target, name: name);
     var allowed = {
       for (var spec in animatableProps(target)) spec.name: spec.kind,
     };
@@ -702,13 +722,17 @@ class _Parser {
 
   MotionTrack? _trackOf(Expression e, TrackKind kind) {
     ListLiteral? list;
-    if (_invocation(e) case ('Track', var args)
+    if (_invocation(e) case ('MotionTrack', var args)
         when args.arguments.length == 1) {
       var only = args.arguments.single.argumentExpression;
       if (only is ListLiteral) list = only;
     }
     if (list == null) {
-      refuse(e.offset, _kind(e), 'a property is a Track([Key(…), …])');
+      refuse(
+        e.offset,
+        _kind(e),
+        'a property is a MotionTrack([MotionKey(…), …])',
+      );
       return null;
     }
     if (list.elements.isEmpty) {
@@ -720,7 +744,7 @@ class _Parser {
       );
       return null;
     }
-    var track = MotionTrack(kind);
+    var track = MotionTrack([], kind: kind);
     Duration? last;
     for (var element in list.elements) {
       if (element is! Expression) {
@@ -753,7 +777,7 @@ class _Parser {
 
   MotionKey? _keyOf(Expression e, TrackKind kind) {
     ArgumentList? args;
-    if (_invocation(e) case ('Key', var a)) args = a;
+    if (_invocation(e) case ('MotionKey', var a)) args = a;
     if (args == null) {
       refuse(e.offset, _kind(e), 'expected Key(at: …, value: …)');
       return null;
@@ -761,7 +785,7 @@ class _Parser {
     Duration? at;
     Object? value;
     String? paramRef;
-    String? curve;
+    SceneCurve? curve;
     var before = refusals.length;
     for (var arg in args.arguments) {
       if (arg is! NamedArgument) {
@@ -788,7 +812,7 @@ class _Parser {
       // A refusal inside an argument already told the story; only a key
       // with the arguments simply absent needs its own.
       if (refusals.length == before) {
-        refuse(e.offset, 'key', 'a Key needs `at:` and `value:`');
+        refuse(e.offset, 'key', 'a MotionKey needs `at:` and `value:`');
       }
       return null;
     }
@@ -844,17 +868,18 @@ class _Parser {
     }
   }
 
-  String? _curveOf(Expression e) {
+  SceneCurve? _curveOf(Expression e) {
     if (e is PrefixedIdentifier &&
-        e.prefix.name == 'Curves' &&
+        e.prefix.name == 'SceneCurves' &&
         motionCurves.contains(e.identifier.name)) {
       var name = e.identifier.name;
-      return name == 'linear' ? null : name;
+      // Linear is the default, so the file writes no curve at all for it.
+      return name == 'linear' ? null : sceneCurvesByName[name];
     }
     refuse(
       e.offset,
       'unknown curve',
-      'expected Curves.<${motionCurves.take(4).join('|')}…> — nothing else '
+      'expected SceneCurves.<${motionCurves.take(4).join('|')}…> — nothing else '
           'is on the allowlist',
     );
     return null;
@@ -862,9 +887,12 @@ class _Parser {
 
   /// The arrangement tree. References are collected with their offsets and
   /// validated after every group is known.
-  TimelineExpr? _timeline(Expression e, Map<GroupRef, int> refOffsets) {
+  TimelineExpr? _timeline(Expression e, Map<AnimateGroup, int> refOffsets) {
     if (e is SimpleIdentifier) {
-      var ref = GroupRef(e.name);
+      // A placeholder: the arrangement holds group OBJECTS, and the field it
+      // names may be declared further down. Swapped for the real one once
+      // every group is known.
+      var ref = AnimateGroup(ShapeNode(), name: e.name);
       refOffsets[ref] = e.offset;
       return ref;
     }
@@ -873,7 +901,8 @@ class _Parser {
       refuse(
         e.offset,
         _kind(e),
-        'the timeline arranges groups with Par, Seq, At, Speed and Repeat',
+        'the timeline arranges groups with ParExpr, SeqExpr, AtExpr, '
+        'SpeedExpr and RepeatExpr',
       );
       return null;
     }
@@ -901,16 +930,16 @@ class _Parser {
     }
 
     switch (name) {
-      case 'Par' || 'Seq' when args.arguments.length == 1:
+      case 'ParExpr' || 'SeqExpr' when args.arguments.length == 1:
         var kids = children(0);
         if (kids == null) return null;
-        return name == 'Par' ? ParExpr(kids) : SeqExpr(kids);
-      case 'At' when args.arguments.length == 2:
+        return name == 'ParExpr' ? ParExpr(kids) : SeqExpr(kids);
+      case 'AtExpr' when args.arguments.length == 2:
         var offset = _durOf(args.arguments[0].argumentExpression);
         var child = _timeline(args.arguments[1].argumentExpression, refOffsets);
         if (offset == null || child == null) return null;
         return AtExpr(offset, child);
-      case 'Speed' when args.arguments.length == 2:
+      case 'SpeedExpr' when args.arguments.length == 2:
         var factor = _double(args.arguments[0].argumentExpression);
         var child = _timeline(args.arguments[1].argumentExpression, refOffsets);
         if (factor == null || child == null) return null;
@@ -923,7 +952,7 @@ class _Parser {
           return null;
         }
         return SpeedExpr(factor, child);
-      case 'Repeat' when args.arguments.length == 2:
+      case 'RepeatExpr' when args.arguments.length == 2:
         var timesExpr = args.arguments[0].argumentExpression;
         var times = timesExpr is IntegerLiteral ? timesExpr.value : null;
         var child = _timeline(args.arguments[1].argumentExpression, refOffsets);
@@ -947,18 +976,20 @@ class _Parser {
           return null;
         }
         return RepeatExpr(times, child);
-      case 'Par' || 'Seq' || 'At' || 'Speed' || 'Repeat':
+      case 'ParExpr' || 'SeqExpr' || 'AtExpr' || 'SpeedExpr' || 'RepeatExpr':
         refuse(
           e.offset,
           'arguments',
-          '$name takes ${name == 'Par' || name == 'Seq' ? 'one list' : 'two arguments'}',
+          '$name takes '
+              '${name == 'ParExpr' || name == 'SeqExpr' ? 'one list' : 'two arguments'}',
         );
         return null;
       default:
         refuse(
           e.offset,
           'unknown combinator',
-          '"$name" is not an arrangement — Par, Seq, At, Speed or Repeat',
+          '"$name" is not an arrangement — ParExpr, SeqExpr, AtExpr, '
+              'SpeedExpr or RepeatExpr',
         );
         return null;
     }

@@ -13,8 +13,9 @@ void main() {
   const m = 'BannerIntro';
 
   setUp(() {
-    motion = coffeeIntroDraft();
-    editor = SceneEditor(coffeeBannerDraft(), motions: {m: motion});
+    var scene = coffeeBannerDraft();
+    motion = coffeeIntroDraft(scene);
+    editor = SceneEditor(scene, motions: {m: motion});
   });
 
   test('a key on an existing track takes the value evaluated there', () {
@@ -86,12 +87,12 @@ void main() {
     editor.setKeyValue(ref, 0.5, mergeKey: 'scrub');
     editor.setKeyValue(ref, 0.6, mergeKey: 'scrub');
     editor.endMerge();
-    editor.setKeyCurve([ref], 'bounceOut');
+    editor.setKeyCurve([ref], SceneCurves.bounceOut);
     editor.setKeyTime(ref, const Duration(milliseconds: 100));
     var key = editor.keyOf(ref)!;
     expect(
       (key.value, key.curve, key.at),
-      (0.6, 'bounceOut', const Duration(milliseconds: 100)),
+      (0.6, SceneCurves.bounceOut, const Duration(milliseconds: 100)),
     );
     editor.undo();
     editor.undo();
@@ -99,7 +100,7 @@ void main() {
     key = editor.keyOf(ref)!;
     expect(
       (key.value, key.curve, key.at),
-      (1.0, 'easeOut', const Duration(milliseconds: 260)),
+      (1.0, SceneCurves.easeOut, const Duration(milliseconds: 260)),
     );
   });
 
@@ -109,7 +110,10 @@ void main() {
     editor.moveGroup(m, 'badgePop', Duration.zero);
     expect(motion.placements['badgePop'], Duration.zero);
     expect(motion.timeline, isA<ParExpr>());
-    motion.timeline = SeqExpr([GroupRef('headlineIn'), GroupRef('badgePop')]);
+    motion.timeline = SeqExpr([
+      motion.groupNamed('headlineIn')!,
+      motion.groupNamed('badgePop')!,
+    ]);
     expect(
       () => editor.moveGroup(m, 'badgePop', Duration.zero),
       throwsArgumentError,

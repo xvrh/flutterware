@@ -74,64 +74,69 @@ SceneDocument coffeeBannerDraft() {
   return SceneDocument(root);
 }
 
-/// The motion sibling of [coffeeBannerDraft], target names matching its node
-/// fields.
-MotionDocument coffeeIntroDraft() {
+/// The motion sibling of [coffeeBannerDraft].
+///
+/// It takes the scene because a group holds the NODE it animates — the same
+/// law the file follows, where `scene.headline` is a typed reference. Pass
+/// the document this motion will be bound to; a fresh draft when omitted.
+MotionDocument coffeeIntroDraft([SceneDocument? of]) {
+  var scene = of ?? coffeeBannerDraft();
+  SceneNode node(String name) => scene.nodeNamed(name)!;
   var doc = MotionDocument(sceneClassName: 'BannerScene');
   doc.params.add(SceneParamDecl('slideFrom', SceneParamKind.number, 24.0));
 
-  var headlineIn = AnimateGroup('headlineIn', 'headline');
-  headlineIn.tracks['opacity'] = MotionTrack(TrackKind.number, [
+  var headlineIn = AnimateGroup(node('headline'), name: 'headlineIn');
+  headlineIn.tracks['opacity'] = MotionTrack([
     MotionKey(at: Duration.zero, value: 0.0),
     MotionKey(
       at: const Duration(milliseconds: 260),
       value: 1.0,
-      curve: 'easeOut',
+      curve: SceneCurves.easeOut,
     ),
-  ]);
-  headlineIn.tracks['translateY'] = MotionTrack(TrackKind.number, [
+  ], kind: TrackKind.number);
+  headlineIn.tracks['translateY'] = MotionTrack([
     MotionKey(at: Duration.zero, value: 24.0, paramRef: 'slideFrom'),
     MotionKey(
       at: const Duration(milliseconds: 260),
       value: 0.0,
-      curve: 'easeOut',
+      curve: SceneCurves.easeOut,
     ),
-  ]);
+  ], kind: TrackKind.number);
 
-  var glowMood = AnimateGroup('glowMood', 'glow');
-  glowMood.tracks['opacity'] = MotionTrack(TrackKind.number, [
+  var glowMood = AnimateGroup(node('glow'), name: 'glowMood');
+  glowMood.tracks['opacity'] = MotionTrack([
     MotionKey(at: Duration.zero, value: 1.0),
     MotionKey(at: const Duration(milliseconds: 900), value: 0.85),
     MotionKey(at: const Duration(milliseconds: 1800), value: 1.0),
-  ]);
+  ], kind: TrackKind.number);
 
-  var badgePop = AnimateGroup('badgePop', 'badge');
-  badgePop.tracks['scale'] = MotionTrack(TrackKind.number, [
+  var badgePop = AnimateGroup(node('badge'), name: 'badgePop');
+  badgePop.tracks['scale'] = MotionTrack([
     MotionKey(at: Duration.zero, value: 0.6),
     MotionKey(
       at: const Duration(milliseconds: 240),
       value: 1.0,
-      curve: 'easeOutBack',
+      curve: SceneCurves.easeOutBack,
     ),
-  ]);
-  badgePop.args['progress'] = MotionTrack(TrackKind.number, [
+  ], kind: TrackKind.number);
+  badgePop.args['progress'] = MotionTrack([
     MotionKey(at: Duration.zero, value: 0.0),
     MotionKey(at: const Duration(milliseconds: 300), value: 1.0),
-  ]);
+  ], kind: TrackKind.number);
 
   // A library asset: not in the timeline, fired on events by its own player.
-  var tapPulse = AnimateGroup('tapPulse', 'cta');
-  tapPulse.tracks['scale'] = MotionTrack(TrackKind.number, [
+  var tapPulse = AnimateGroup(node('cta'), name: 'tapPulse');
+  tapPulse.tracks['scale'] = MotionTrack([
     MotionKey(at: Duration.zero, value: 1.0),
     MotionKey(at: const Duration(milliseconds: 120), value: 1.06),
     MotionKey(at: const Duration(milliseconds: 240), value: 1.0),
-  ]);
+  ], kind: TrackKind.number);
 
   doc.groups.addAll([headlineIn, glowMood, badgePop, tapPulse]);
   doc.timeline = ParExpr([
-    GroupRef('headlineIn'),
-    AtExpr(const Duration(milliseconds: 400), GroupRef('badgePop')),
-    GroupRef('glowMood'),
+    headlineIn,
+    AtExpr(const Duration(milliseconds: 400), badgePop),
+    glowMood,
   ]);
   return doc;
 }

@@ -6,12 +6,15 @@ import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/workspace.dart';
 
-SceneFile openDraft({String path = '/demo/banner.scene.dart'}) => SceneFile(
-  path: path,
-  className: 'BannerScene',
-  scene: coffeeBannerDraft(),
-  motions: {'BannerIntro': coffeeIntroDraft()},
-);
+SceneFile openDraft({String path = '/demo/banner.scene.dart'}) {
+  var scene = coffeeBannerDraft();
+  return SceneFile(
+    path: path,
+    className: 'BannerScene',
+    scene: scene,
+    motions: {'BannerIntro': coffeeIntroDraft(scene)},
+  );
+}
 
 MotionKeyRef refFor(
   SceneEditor editor,

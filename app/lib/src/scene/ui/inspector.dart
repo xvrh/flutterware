@@ -910,11 +910,11 @@ class SceneInspector extends StatelessWidget {
     var group = single == null
         ? null
         : editor.motions[single.motion]?.groupNamed(single.group);
-    var node = group == null ? null : doc.nodeNamed(group.target);
+    var node = group == null ? null : doc.nodeNamed(group.node.name);
     var spec = node == null || single == null
         ? null
         : propSpecFor(node, single.prop);
-    var shared = {for (var ref in refs) editor.keyOf(ref)?.curve};
+    var shared = {for (var ref in refs) editor.keyOf(ref)?.curve?.name};
     return ListView(
       key: ValueKey('keys:${refs.join(',')}'),
       padding: const EdgeInsets.all(FwSpacing.lg),
@@ -929,7 +929,7 @@ class SceneInspector extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: FwSpacing.xxs),
             child: Text(
-              'on ${group.target}',
+              'on ${group.node.name}',
               style: context.type.caption.copyWith(color: colors.mut2),
             ),
           ),
@@ -975,7 +975,12 @@ class SceneInspector extends StatelessWidget {
         _label(context, 'Ease into this key'),
         SceneCurvePicker(
           name: shared.length == 1 ? shared.single : null,
-          onPick: (curve) => editor.setKeyCurve(refs, curve),
+          // The picker speaks names because a menu is a list of words; the
+          // model holds the curve itself.
+          onPick: (name) => editor.setKeyCurve(
+            refs,
+            name == null ? null : sceneCurvesByName[name],
+          ),
         ),
         if (shared.length > 1)
           Padding(

@@ -26,7 +26,7 @@ class _SceneClip extends StatefulWidget {
 
 class _SceneClipState extends State<_SceneClip> {
   late final SceneDocument _scene = _buildScene();
-  late final Playable _motion = BoundMotion.bind(_buildMotion(), _scene);
+  late final Playable _motion = BoundMotion.bind(_buildMotion(_scene), _scene);
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -67,31 +67,33 @@ SceneDocument _buildScene() {
   return SceneDocument(root);
 }
 
-MotionDocument _buildMotion() {
-  var headlineIn = AnimateGroup('headlineIn', 'headline')
-    ..tracks['opacity'] = MotionTrack(TrackKind.number, [
-      MotionKey(at: Duration.zero, value: 0.0),
-      MotionKey(at: const Duration(milliseconds: 600), value: 1.0),
-    ])
-    ..tracks['translateY'] = MotionTrack(TrackKind.number, [
-      MotionKey(at: Duration.zero, value: 24.0, curve: 'easeOut'),
-      MotionKey(at: const Duration(milliseconds: 600), value: 0.0),
-    ]);
-  var subtitleIn = AnimateGroup('subtitleIn', 'subtitle')
-    ..tracks['opacity'] = MotionTrack(TrackKind.number, [
-      MotionKey(at: Duration.zero, value: 0.0),
+MotionDocument _buildMotion(SceneDocument scene) {
+  var headlineIn =
+      AnimateGroup(scene.nodeNamed('headline')!, name: 'headlineIn')
+        ..tracks['opacity'] = MotionTrack([
+          MotionKey(at: Duration.zero, value: 0.0),
+          MotionKey(at: const Duration(milliseconds: 600), value: 1.0),
+        ], kind: TrackKind.number)
+        ..tracks['translateY'] = MotionTrack([
+          MotionKey(at: Duration.zero, value: 24.0, curve: SceneCurves.easeOut),
+          MotionKey(at: const Duration(milliseconds: 600), value: 0.0),
+        ], kind: TrackKind.number);
+  var subtitleIn =
+      AnimateGroup(scene.nodeNamed('subtitle')!, name: 'subtitleIn')
+        ..tracks['opacity'] = MotionTrack([
+          MotionKey(at: Duration.zero, value: 0.0),
+          MotionKey(at: const Duration(milliseconds: 500), value: 1.0),
+        ], kind: TrackKind.number);
+  var badgePop = AnimateGroup(scene.nodeNamed('badge')!, name: 'badgePop')
+    ..tracks['scale'] = MotionTrack([
+      MotionKey(at: Duration.zero, value: 0.0, curve: SceneCurves.easeOutBack),
       MotionKey(at: const Duration(milliseconds: 500), value: 1.0),
-    ]);
-  var badgePop = AnimateGroup('badgePop', 'badge')
-    ..tracks['scale'] = MotionTrack(TrackKind.number, [
-      MotionKey(at: Duration.zero, value: 0.0, curve: 'easeOutBack'),
-      MotionKey(at: const Duration(milliseconds: 500), value: 1.0),
-    ]);
+    ], kind: TrackKind.number);
   return MotionDocument(sceneClassName: 'SceneClip')
     ..groups.addAll([headlineIn, subtitleIn, badgePop])
     ..timeline = ParExpr([
-      GroupRef('headlineIn'),
-      AtExpr(const Duration(milliseconds: 200), GroupRef('subtitleIn')),
-      AtExpr(const Duration(milliseconds: 400), GroupRef('badgePop')),
+      headlineIn,
+      AtExpr(const Duration(milliseconds: 200), subtitleIn),
+      AtExpr(const Duration(milliseconds: 400), badgePop),
     ]);
 }

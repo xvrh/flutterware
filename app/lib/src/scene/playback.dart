@@ -34,7 +34,7 @@ class ScenePlayback extends ChangeNotifier {
   }
 
   static String _exprShape(TimelineExpr e) => switch (e) {
-    GroupRef r => r.name,
+    AnimateGroup g => g.name,
     ParExpr p => 'par(${p.children.map(_exprShape).join(',')})',
     SeqExpr s => 'seq(${s.children.map(_exprShape).join(',')})',
     AtExpr a => 'at${a.offset.inMicroseconds}(${_exprShape(a.child)})',

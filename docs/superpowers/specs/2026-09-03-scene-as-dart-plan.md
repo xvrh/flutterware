@@ -168,7 +168,7 @@ inspector say *this is bound to `number`* and lets Save drop a stale ref.
 
 Each lands something that works. Ordered so the risky half comes early.
 
-**P1 — the library, and one file that compiles.**
+**P1 — the library, and one file that compiles.** *(done — 1c68b73f)*
 Write the authoring surface; move the node constructors to all-named; make
 `store_banner.scene.dart` (the simplest of the three targets) compile with
 its exclusion removed. Prove it with a widget test that mounts
@@ -176,7 +176,7 @@ its exclusion removed. Prove it with a widget test that mounts
 `flutter analyze` covers the file. Names still come from the parser; nothing
 else moves yet.
 
-**P2 — motions bind to objects.**
+**P2 — motions bind to objects.** *(done)*
 `.animate(…)` per node kind, `AnimateGroup` holds a node, `BoundMotion` stops
 looking anything up. The editor keeps the name for display and emit.
 

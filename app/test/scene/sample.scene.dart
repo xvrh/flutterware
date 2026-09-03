@@ -34,3 +34,27 @@ class SampleScene({
     children: [bar],
   );
 }
+
+class SampleIntro(super.scene, {final double slideFrom = 24})
+    extends SceneMotion<SampleScene> {
+  late final titleIn = scene.title.animate(
+    opacity: MotionTrack([
+      MotionKey(at: 0.ms, value: 0),
+      MotionKey(at: 260.ms, value: 1, curve: SceneCurves.easeOut),
+    ]),
+    translateY: MotionTrack([
+      MotionKey(at: 0.ms, value: slideFrom),
+      MotionKey(at: 260.ms, value: 0, curve: SceneCurves.easeOut),
+    ]),
+  );
+  late final badgePop = scene.badge.animate(
+    scale: MotionTrack([
+      MotionKey(at: 0.ms, value: 0.6),
+      MotionKey(at: 240.ms, value: 1, curve: SceneCurves.easeOutBack),
+    ]),
+  );
+  @override
+  late final timeline = ParExpr([titleIn, AtExpr(120.ms, badgePop)]);
+  SampleIntro copy(SampleScene scene) =>
+      copyStateInto(SampleIntro(scene, slideFrom: slideFrom));
+}

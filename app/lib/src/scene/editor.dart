@@ -122,6 +122,11 @@ class SceneEditor extends SceneListenable {
       motions
         ..clear()
         ..addAll(incomingMotions);
+      // The incoming groups hold the INCOMING document's nodes, and what is
+      // being drawn is this one, revived in place. Same names, other objects.
+      for (var m in motions.values) {
+        m.repoint(doc);
+      }
     });
     // The motion that was open may not be in the version that arrived, and
     // a playback bound to a name the editor no longer has is a crash rather
@@ -188,28 +193,9 @@ class SceneEditor extends SceneListenable {
     }
     // A key selection names its group; simpler to drop it than to follow.
     clearKeySelection();
-    perform('Rename $name', () {
-      group.name = wanted;
-      m.timeline = _mapRefs(
-        m.timeline,
-        (r) => r.name == name ? GroupRef(wanted) : r,
-      );
-    });
-  }
-
-  static TimelineExpr _mapRefs(
-    TimelineExpr expr,
-    TimelineExpr Function(GroupRef ref) map,
-  ) {
-    TimelineExpr walk(TimelineExpr e) => switch (e) {
-      GroupRef r => map(r),
-      ParExpr p => ParExpr([for (var c in p.children) walk(c)]),
-      SeqExpr s => SeqExpr([for (var c in s.children) walk(c)]),
-      AtExpr a => AtExpr(a.offset, walk(a.child)),
-      SpeedExpr s => SpeedExpr(s.factor, walk(s.child)),
-      RepeatExpr r => RepeatExpr(r.times, walk(r.child)),
-    };
-    return walk(expr);
+    // The arrangement places the group ITSELF, so a rename is one field and
+    // nothing to follow — which is the whole point of holding objects.
+    perform('Rename $name', () => group.name = wanted);
   }
 
   String _freeMotionName(String sceneClassName) {
@@ -414,12 +400,8 @@ class SceneEditor extends SceneListenable {
     var was = node.name;
     var selected = isSelected(node);
     perform('Rename $was', () {
+      // Nothing else to re-point: a group holds the node, not its name.
       node.name = wanted;
-      for (var motion in motions.values) {
-        for (var group in motion.groups) {
-          if (group.target == was) group.target = wanted;
-        }
-      }
     });
     if (selected) {
       _selection
@@ -638,7 +620,7 @@ class SceneEditor extends SceneListenable {
 
   /// The groups of [motion] that animate [node], in document order.
   Iterable<AnimateGroup> groupsTargeting(String motion, SceneNode node) =>
-      motions[motion]?.groups.where((g) => g.target == node.name) ?? const [];
+      motions[motion]?.groups.where((g) => identical(g.node, node)) ?? const [];
 
   /// Puts a key on [prop] of [group] at [at] — the time *within the group* —
   /// and selects it. The value is what the track already evaluates to there,
@@ -657,7 +639,7 @@ class SceneEditor extends SceneListenable {
     bool select = true,
   }) {
     var group = motions[motion]!.groupNamed(groupName)!;
-    var node = doc.nodeNamed(group.target)!;
+    var node = group.node;
     var existing = trackOf(motion, groupName, prop);
     var spec = propSpecFor(node, prop);
     var kind = spec?.kind ?? TrackKind.number;
@@ -673,7 +655,7 @@ class SceneEditor extends SceneListenable {
       () {
         var track = existing;
         if (track == null) {
-          track = MotionTrack(kind);
+          track = MotionTrack([], kind: kind);
           if (prop.startsWith('args.')) {
             group.args[prop.substring(5)] = track;
           } else {
@@ -707,11 +689,10 @@ class SceneEditor extends SceneListenable {
     for (var i = 2; m.groupNamed(name) != null; i++) {
       name = '$base$i';
     }
-    var group = AnimateGroup(name, node.name);
+    var group = AnimateGroup(node, name: name);
     perform('Animate ${node.name}', () {
       m.groups.add(group);
-      var ref = GroupRef(name);
-      var child = at == null || at == Duration.zero ? ref : AtExpr(at, ref);
+      var child = at == null || at == Duration.zero ? group : AtExpr(at, group);
       m.timeline = switch (m.timeline) {
         ParExpr p => ParExpr([...p.children, child]),
         var other => ParExpr([other, child]),
@@ -777,11 +758,11 @@ class SceneEditor extends SceneListenable {
   static String _propLabel(String prop) =>
       prop.startsWith('args.') ? prop.substring(5) : prop;
 
-  /// [expr] with every reference to [name] gone, and any combinator left
+  /// [expr] with every placement of [name] gone, and any combinator left
   /// empty by that collapsed.
   static TimelineExpr _without(TimelineExpr expr, String name) {
     TimelineExpr? strip(TimelineExpr e) => switch (e) {
-      GroupRef r => r.name == name ? null : r,
+      AnimateGroup g => g.name == name ? null : g,
       ParExpr p => ParExpr([for (var c in p.children) ?strip(c)]),
       SeqExpr s => SeqExpr([for (var c in s.children) ?strip(c)]),
       AtExpr a => switch (strip(a.child)) {
@@ -806,7 +787,7 @@ class SceneEditor extends SceneListenable {
     perform('Edit key', mergeKey: mergeKey, () => key.value = value);
   }
 
-  void setKeyCurve(Iterable<MotionKeyRef> refs, String? curve) {
+  void setKeyCurve(Iterable<MotionKeyRef> refs, SceneCurve? curve) {
     var keys = [for (var ref in refs) ?keyOf(ref)];
     if (keys.isEmpty) return;
     perform('Ease ${_keyCount(refs.toList())}', () {
@@ -837,16 +818,12 @@ class SceneEditor extends SceneListenable {
   }) {
     var m = motions[motion]!;
     var at = to < Duration.zero ? Duration.zero : to;
-    TimelineExpr place(TimelineExpr e) {
-      var ref = GroupRef(groupName);
-      return at == Duration.zero ? ref : AtExpr(at, ref);
-    }
+    var group = m.groupNamed(groupName)!;
+    TimelineExpr place(TimelineExpr e) =>
+        at == Duration.zero ? group : AtExpr(at, group);
 
     bool isRef(TimelineExpr e) =>
-        (e is GroupRef && e.name == groupName) ||
-        (e is AtExpr &&
-            e.child is GroupRef &&
-            (e.child as GroupRef).name == groupName);
+        identical(e, group) || (e is AtExpr && identical(e.child, group));
     var timeline = m.timeline;
     var children = switch (timeline) {
       ParExpr p => p.children,
@@ -863,7 +840,7 @@ class SceneEditor extends SceneListenable {
       var next = [...children];
       // A declared group the timeline never placed joins it here.
       if (index < 0) {
-        next.add(place(GroupRef(groupName)));
+        next.add(place(group));
       } else {
         next[index] = place(next[index]);
       }
@@ -975,12 +952,12 @@ class SceneEditor extends SceneListenable {
     for (var e in entry.motions.entries) {
       var existing = motions[e.key];
       if (existing != null) {
-        existing.restore(e.value);
+        existing.restore(e.value, scene: doc);
         restored[e.key] = existing;
       } else {
         restored[e.key] = MotionDocument(
           sceneClassName: entry.motionClasses[e.key]!,
-        )..restore(e.value);
+        )..restore(e.value, scene: doc);
       }
     }
     motions

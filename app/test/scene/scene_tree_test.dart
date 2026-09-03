@@ -14,9 +14,10 @@ import 'package:flutterware_app/src/ui/theme.dart';
 void main() {
   group('rename', () {
     test('a rename follows into the groups animating the node', () {
+      var scene = coffeeBannerDraft();
       var editor = SceneEditor(
-        coffeeBannerDraft(),
-        motions: {'BannerIntro': coffeeIntroDraft()},
+        scene,
+        motions: {'BannerIntro': coffeeIntroDraft(scene)},
       );
       var headline = editor.doc.nodeNamed('headline')!;
       editor.select(headline);
@@ -24,14 +25,14 @@ void main() {
       expect(headline.name, 'title');
       expect(editor.doc.nodeNamed('headline'), isNull);
       expect(
-        editor.motions['BannerIntro']!.groupNamed('headlineIn')!.target,
+        editor.motions['BannerIntro']!.groupNamed('headlineIn')!.node.name,
         'title',
       );
       expect(editor.selectionNames, ['title'], reason: 'selection follows');
       editor.undo();
       expect(editor.doc.nodeNamed('headline'), isNotNull);
       expect(
-        editor.motions['BannerIntro']!.groupNamed('headlineIn')!.target,
+        editor.motions['BannerIntro']!.groupNamed('headlineIn')!.node.name,
         'headline',
       );
     });

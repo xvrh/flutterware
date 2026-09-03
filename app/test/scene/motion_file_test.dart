@@ -22,8 +22,12 @@ void main() {
     required String className,
   }) => emitSceneFile(scene, className: sceneClass, motions: {className: doc});
 
+  // The scene comes back with the motion, because a motion's groups hold
+  // THAT scene's nodes — re-emitting one against a different document is a
+  // pair the emitter is right to refuse.
   ({
     MotionDocument? doc,
+    SceneDocument? scene,
     String? className,
     List<SceneRefusal> refusals,
     bool ok,
@@ -35,6 +39,7 @@ void main() {
         : parsed.motions.entries.first;
     return (
       doc: motion?.value,
+      scene: parsed.doc,
       className: motion?.key,
       refusals: parsed.refusals,
       ok: parsed.ok && motion != null,
@@ -42,19 +47,23 @@ void main() {
   }
 
   test('the coffee intro round-trips', () {
-    var doc = coffeeIntroDraft();
+    var doc = coffeeIntroDraft(scene);
     var emitted = emitMotionFile(doc, scene, className: 'BannerIntro');
     var parsed = parseWithScene(emitted);
     expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
     expect(parsed.ok, isTrue);
     expect(parsed.className, 'BannerIntro');
-    var again = emitMotionFile(parsed.doc!, scene, className: 'BannerIntro');
+    var again = emitMotionFile(
+      parsed.doc!,
+      parsed.scene!,
+      className: 'BannerIntro',
+    );
     expect(again, emitted);
   });
 
   test('the emitted file carries the settled spellings', () {
     var emitted = emitMotionFile(
-      coffeeIntroDraft(),
+      coffeeIntroDraft(scene),
       scene,
       className: 'BannerIntro',
     );
@@ -71,12 +80,12 @@ void main() {
     expect(emitted, contains('late final badgePop = scene.badge.animate('));
     // The parameter feeds a key by name; the curve is allowlisted.
     expect(emitted, contains('value: slideFrom'));
-    expect(emitted, contains('curve: Curves.easeOut'));
+    expect(emitted, contains('curve: SceneCurves.easeOut'));
     // Ext args are the one stringly boundary.
-    expect(emitted, contains("'progress': Track("));
+    expect(emitted, contains("'progress': MotionTrack("));
     // The timeline is mandatory and arranges by reference.
-    expect(emitted, contains('late final timeline = Par('));
-    expect(emitted, contains('At(400.ms, badgePop)'));
+    expect(emitted, contains('late final timeline = ParExpr('));
+    expect(emitted, contains('AtExpr(400.ms, badgePop)'));
     // tapPulse is a library asset: declared, playable, not in the timeline.
     expect(emitted, contains('late final tapPulse'));
     expect(emitted.contains('tapPulse,'), isFalse);
@@ -88,44 +97,38 @@ void main() {
 
   test('emit ∘ parse is the identity on canonical files', () {
     var canonical = emitMotionFile(
-      coffeeIntroDraft(),
+      coffeeIntroDraft(scene),
       scene,
       className: 'BannerIntro',
     );
-    var once = emitMotionFile(
-      parseWithScene(canonical).doc!,
-      scene,
-      className: 'BannerIntro',
-    );
+    var back = parseWithScene(canonical);
+    var once = emitMotionFile(back.doc!, back.scene!, className: 'BannerIntro');
     expect(once, canonical);
   });
 
   test('accepted non-canonical spellings converge in one emit', () {
-    // `final` for `late final`, Curves.linear for no curve, a missing copy,
+    // `final` for `late final`, SceneCurves.linear for no curve, a missing copy,
     // a type-less parameter formal: accepted, then canonical.
     var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene, {final slideFrom = 24}) extends SceneMotion<BannerScene> {
   final glowIn = scene.glow.animate(
-    opacity: Track([
-      Key(at: 0.ms, value: 0, curve: Curves.linear),
-      Key(at: 400.ms, value: 1),
+    opacity: MotionTrack([
+      MotionKey(at: 0.ms, value: 0, curve: SceneCurves.linear),
+      MotionKey(at: 400.ms, value: 1),
     ]),
   );
-  final timeline = Par([glowIn]);
+  final timeline = ParExpr([glowIn]);
 }
 ''');
     expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
-    var emitted = emitMotionFile(parsed.doc!, scene, className: 'M');
+    var emitted = emitMotionFile(parsed.doc!, parsed.scene!, className: 'M');
     expect(emitted, contains('late final glowIn'));
     expect(emitted, contains('final double slideFrom = 24'));
     expect(emitted.contains('linear'), isFalse);
     expect(emitted, contains('M copy(BannerScene scene)'));
-    var again = emitMotionFile(
-      parseWithScene(emitted).doc!,
-      scene,
-      className: 'M',
-    );
+    var round = parseWithScene(emitted);
+    var again = emitMotionFile(round.doc!, round.scene!, className: 'M');
     expect(again, emitted);
   });
 
@@ -136,14 +139,14 @@ class M(super.scene, {final slideFrom = 24}) extends SceneMotion<BannerScene> {
 $filePrefix
 class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> {
   late final glowIn = scene.glow.animate(
-    opacity: Track([Key(at: 0.ms, value: 0), Key(at: 400.ms, value: 1)]),
+    opacity: MotionTrack([MotionKey(at: 0.ms, value: 0), MotionKey(at: 400.ms, value: 1)]),
   );
-  late final timeline = Par([glowIn]);
+  late final timeline = ParExpr([glowIn]);
   M copy(BannerScene scene) => copyStateInto(M(scene));
 }
 ''');
     expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
-    var emitted = emitMotionFile(parsed.doc!, scene, className: 'M');
+    var emitted = emitMotionFile(parsed.doc!, parsed.scene!, className: 'M');
     expect(emitted, contains('tempo: tempo'));
   });
 
@@ -152,9 +155,9 @@ class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> 
 $filePrefix
 class M(super.scene, {final double slide = 24}) extends SceneMotion<BannerScene> {
   late final headlineIn = scene.headline.animate(
-    translateY: Track([Key(at: 0.ms, value: slide), Key(at: 300.ms, value: 0)]),
+    translateY: MotionTrack([MotionKey(at: 0.ms, value: slide), MotionKey(at: 300.ms, value: 0)]),
   );
-  late final timeline = Par([headlineIn]);
+  late final timeline = ParExpr([headlineIn]);
 }
 ''');
     expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
@@ -166,13 +169,13 @@ class M(super.scene, {final double slide = 24}) extends SceneMotion<BannerScene>
     // The divergence-bakes rule: edit the key, the reference is dropped —
     // never the edit.
     track.keys.first.value = 40.0;
-    var emitted = emitMotionFile(doc, scene, className: 'M');
+    var emitted = emitMotionFile(doc, parsed.scene!, className: 'M');
     expect(emitted, contains('value: 40'));
     expect(emitted.contains('value: slide'), isFalse);
   });
 
   test('the track door keeps keys sorted through a drag past a neighbour', () {
-    var doc = coffeeIntroDraft();
+    var doc = coffeeIntroDraft(scene);
     var track = doc.groups.first.tracks['opacity']!;
     var key = track.keys.first;
     track.moveKey(key, const Duration(milliseconds: 500));
@@ -195,7 +198,11 @@ class M(super.scene, {final double slide = 24}) extends SceneMotion<BannerScene>
             'iteration $i refused its own emit:\n'
             '${parsed.refusals.join('\n')}\n$emitted',
       );
-      var again = emitMotionFile(parsed.doc!, scene, className: 'Fuzz$i');
+      var again = emitMotionFile(
+        parsed.doc!,
+        parsed.scene!,
+        className: 'Fuzz$i',
+      );
       expect(again, emitted, reason: 'iteration $i drifted');
     }
   });
@@ -206,7 +213,7 @@ class M(super.scene, {final double slide = 24}) extends SceneMotion<BannerScene>
 $filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
 $members
-  late final timeline = Par([]);
+  late final timeline = ParExpr([]);
 }
 ''';
 
@@ -214,90 +221,90 @@ $members
       'a target outside the scene': (
         wrap(
           '  late final g = scene.rocket.animate(opacity: '
-          'Track([Key(at: 0.ms, value: 1)]));',
+          'MotionTrack([MotionKey(at: 0.ms, value: 1)]));',
         ),
         'unknown target',
       ),
       'a property the target kind cannot animate': (
         wrap(
           '  late final g = scene.glow.animate(fontSize: '
-          'Track([Key(at: 0.ms, value: 12)]));',
+          'MotionTrack([MotionKey(at: 0.ms, value: 12)]));',
         ),
         'unknown property',
       ),
       'a color literal on a number track': (
         wrap(
           '  late final g = scene.glow.animate(opacity: '
-          'Track([Key(at: 0.ms, value: Color(0xFF000000))]));',
+          'MotionTrack([MotionKey(at: 0.ms, value: Color(0xFF000000))]));',
         ),
         'method call',
       ),
       'args on a node that is not external': (
         wrap(
           '  late final g = scene.glow.animate(args: '
-          "{'x': Track([Key(at: 0.ms, value: 1)])});",
+          "{'x': MotionTrack([MotionKey(at: 0.ms, value: 1)])});",
         ),
         'args',
       ),
       'an empty track': (
-        wrap('  late final g = scene.glow.animate(opacity: Track([]));'),
+        wrap('  late final g = scene.glow.animate(opacity: MotionTrack([]));'),
         'empty track',
       ),
       'keys out of time order': (
         wrap(
-          '  late final g = scene.glow.animate(opacity: Track(['
-          'Key(at: 400.ms, value: 1), Key(at: 0.ms, value: 0)]));',
+          '  late final g = scene.glow.animate(opacity: MotionTrack(['
+          'MotionKey(at: 400.ms, value: 1), MotionKey(at: 0.ms, value: 0)]));',
         ),
         'keys out of order',
       ),
       'two keys at one time': (
         wrap(
-          '  late final g = scene.glow.animate(opacity: Track(['
-          'Key(at: 100.ms, value: 1), Key(at: 100.ms, value: 0)]));',
+          '  late final g = scene.glow.animate(opacity: MotionTrack(['
+          'MotionKey(at: 100.ms, value: 1), MotionKey(at: 100.ms, value: 0)]));',
         ),
         'duplicate key time',
       ),
       'a curve off the allowlist': (
         wrap(
-          '  late final g = scene.glow.animate(opacity: Track(['
-          'Key(at: 0.ms, value: 1, curve: Curves.wobble)]));',
+          '  late final g = scene.glow.animate(opacity: MotionTrack(['
+          'MotionKey(at: 0.ms, value: 1, curve: SceneCurves.wobble)]));',
         ),
         'unknown curve',
       ),
       'a time not spelled in ms': (
         wrap(
-          '  late final g = scene.glow.animate(opacity: Track(['
-          'Key(at: 100, value: 1)]));',
+          '  late final g = scene.glow.animate(opacity: MotionTrack(['
+          'MotionKey(at: 100, value: 1)]));',
         ),
         'IntegerLiteralImpl',
       ),
       'an undeclared identifier as a value': (
         wrap(
-          '  late final g = scene.glow.animate(opacity: Track(['
-          'Key(at: 0.ms, value: mystery)]));',
+          '  late final g = scene.glow.animate(opacity: MotionTrack(['
+          'MotionKey(at: 0.ms, value: mystery)]));',
         ),
         'identifier',
       ),
       'arithmetic in a value': (
         wrap(
-          '  late final g = scene.glow.animate(opacity: Track(['
-          'Key(at: 0.ms, value: 1 + 2)]));',
+          '  late final g = scene.glow.animate(opacity: MotionTrack(['
+          'MotionKey(at: 0.ms, value: 1 + 2)]));',
         ),
         'arithmetic',
       ),
       'a group name used twice': (
         wrap(
           '  late final g = scene.glow.animate(opacity: '
-          'Track([Key(at: 0.ms, value: 1)]));\n'
+          'MotionTrack([MotionKey(at: 0.ms, value: 1)]));\n'
           '  late final g = scene.cup.animate(opacity: '
-          'Track([Key(at: 0.ms, value: 1)]));',
+          'MotionTrack([MotionKey(at: 0.ms, value: 1)]));',
         ),
         'duplicate name',
       ),
       'a reserved name as a group': (
         wrap(
           '  late final copy = scene.glow.animate(opacity: '
-          'Track([Key(at: 0.ms, value: 1)]));',
+          'MotionTrack([MotionKey(at: 0.ms, value: 1)]));',
         ),
         'duplicate name',
       ),
@@ -335,7 +342,7 @@ $members
       var parsed = parseWithScene('''
 $filePrefix
 class M({final double x = 1}) extends SceneMotion<BannerScene> {
-  late final timeline = Par([]);
+  late final timeline = ParExpr([]);
 }
 ''');
       expect(parsed.refusals.map((r) => r.construct), contains('scene formal'));
@@ -345,7 +352,7 @@ class M({final double x = 1}) extends SceneMotion<BannerScene> {
       var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene) {
-  late final timeline = Par([]);
+  late final timeline = ParExpr([]);
 }
 ''');
       expect(parsed.refusals.map((r) => r.construct), contains('extends'));
@@ -355,7 +362,7 @@ class M(super.scene) {
       var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene) extends SceneMotion<OtherScene> {
-  late final timeline = Par([]);
+  late final timeline = ParExpr([]);
 }
 ''');
       var refusal = parsed.refusals.singleWhere(
@@ -369,7 +376,7 @@ class M(super.scene) extends SceneMotion<OtherScene> {
       var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene, {this.x = 1}) extends SceneMotion<BannerScene> {
-  late final timeline = Par([]);
+  late final timeline = ParExpr([]);
 }
 ''');
       expect(parsed.refusals.map((r) => r.construct), contains('parameter'));
@@ -381,7 +388,7 @@ class M(super.scene, {this.x = 1}) extends SceneMotion<BannerScene> {
       var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
-  late final g = scene.glow.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
+  late final g = scene.glow.animate(opacity: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
 }
 ''');
       expect(parsed.refusals.single.construct, 'no timeline');
@@ -391,8 +398,8 @@ class M(super.scene) extends SceneMotion<BannerScene> {
       var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
-  late final g = scene.glow.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
-  late final timeline = Par([g, Seq([g])]);
+  late final g = scene.glow.animate(opacity: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
+  late final timeline = ParExpr([g, SeqExpr([g])]);
 }
 ''');
       expect(parsed.refusals.map((r) => r.construct), contains('placed twice'));
@@ -402,7 +409,7 @@ class M(super.scene) extends SceneMotion<BannerScene> {
       var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> {
-  late final timeline = Par([ghost, tempo]);
+  late final timeline = ParExpr([ghost, tempo]);
 }
 ''');
       expect(
@@ -416,9 +423,9 @@ class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> 
 $filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
   late final tapPulse = scene.cta.animate(
-    scale: Track([Key(at: 0.ms, value: 1), Key(at: 120.ms, value: 1.06)]),
+    scale: MotionTrack([MotionKey(at: 0.ms, value: 1), MotionKey(at: 120.ms, value: 1.06)]),
   );
-  late final timeline = Par([]);
+  late final timeline = ParExpr([]);
 }
 ''');
       expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
@@ -430,10 +437,10 @@ class M(super.scene) extends SceneMotion<BannerScene> {
       var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
-  late final a = scene.glow.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
-  late final b = scene.cup.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
-  late final c = scene.cta.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
-  late final timeline = Par([Speed(0, a), Repeat(0, b), Wobble(c)]);
+  late final a = scene.glow.animate(opacity: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
+  late final b = scene.cup.animate(opacity: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
+  late final c = scene.cta.animate(opacity: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
+  late final timeline = ParExpr([SpeedExpr(0, a), RepeatExpr(0, b), Wobble(c)]);
 }
 ''');
       expect(
@@ -446,17 +453,19 @@ class M(super.scene) extends SceneMotion<BannerScene> {
       var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
-  late final a = scene.glow.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
-  late final b = scene.cup.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
-  late final c = scene.cta.animate(opacity: Track([Key(at: 0.ms, value: 1)]));
-  late final timeline = Seq([a, At(120.ms, Repeat(3, Speed(0.5, Par([b, c]))))]);
+  late final a = scene.glow.animate(opacity: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
+  late final b = scene.cup.animate(opacity: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
+  late final c = scene.cta.animate(opacity: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
+  late final timeline = SeqExpr([a, AtExpr(120.ms, RepeatExpr(3, SpeedExpr(0.5, ParExpr([b, c]))))]);
 }
 ''');
       expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
-      var emitted = emitMotionFile(parsed.doc!, scene, className: 'M');
+      var emitted = emitMotionFile(parsed.doc!, parsed.scene!, className: 'M');
       expect(
         emitted,
-        contains('At(120.ms, Repeat(3, Speed(0.5, Par([b, c]))))'),
+        contains(
+          'AtExpr(120.ms, RepeatExpr(3, SpeedExpr(0.5, ParExpr([b, c]))))',
+        ),
       );
     });
   });
@@ -465,9 +474,9 @@ class M(super.scene) extends SceneMotion<BannerScene> {
     var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene) extends SceneMotion<BannerScene> {
-  late final g = scene.rocket.animate(opacity: Track([]));
-  late final h = scene.glow.animate(warp: Track([Key(at: 0.ms, value: 1)]));
-  late final timeline = Par([ghost]);
+  late final g = scene.rocket.animate(opacity: MotionTrack([]));
+  late final h = scene.glow.animate(warp: MotionTrack([MotionKey(at: 0.ms, value: 1)]));
+  late final timeline = ParExpr([ghost]);
 }
 ''');
     expect(parsed.ok, isFalse);
@@ -486,7 +495,7 @@ class M(super.scene) extends SceneMotion<BannerScene> {
   test('a missing marker', () {
     var parsed = parseWithScene('''
 class M(super.scene) extends SceneMotion<BannerScene> {
-  late final timeline = Par([]);
+  late final timeline = ParExpr([]);
 }
 ''');
     expect(parsed.refusals.map((r) => r.construct), contains('missing marker'));
@@ -507,7 +516,7 @@ MotionDocument _randomMotion(Random random, SceneDocument scene) {
   var groupCount = 1 + random.nextInt(4);
   for (var i = 0; i < groupCount && i < nodes.length; i++) {
     var target = nodes[i];
-    var group = AnimateGroup('g$i', target.name);
+    var group = AnimateGroup(target, name: 'g$i');
     var props = animatableProps(target)..shuffle(random);
     var trackCount = 1 + random.nextInt(2);
     for (var spec in props.take(trackCount)) {
@@ -522,7 +531,7 @@ MotionDocument _randomMotion(Random random, SceneDocument scene) {
     }
     doc.groups.add(group);
   }
-  var placeable = [for (var g in doc.groups) GroupRef(g.name)]..shuffle(random);
+  var placeable = [...doc.groups]..shuffle(random);
   if (random.nextBool() && placeable.isNotEmpty) placeable.removeLast();
   TimelineExpr wrap(TimelineExpr e) => switch (random.nextInt(4)) {
     0 => AtExpr(Duration(milliseconds: random.nextInt(500)), e),
@@ -536,7 +545,7 @@ MotionDocument _randomMotion(Random random, SceneDocument scene) {
 }
 
 MotionTrack _randomTrack(Random random, TrackKind kind, MotionDocument doc) {
-  var track = MotionTrack(kind);
+  var track = MotionTrack([], kind: kind);
   var at = 0;
   var keyCount = 1 + random.nextInt(3);
   for (var i = 0; i < keyCount; i++) {
@@ -556,7 +565,8 @@ MotionTrack _randomTrack(Random random, TrackKind kind, MotionDocument doc) {
         at: Duration(milliseconds: at),
         value: value,
         curve: random.nextBool()
-            ? motionCurves[1 + random.nextInt(motionCurves.length - 1)]
+            ? sceneCurvesByName[motionCurves[1 +
+                  random.nextInt(motionCurves.length - 1)]]
             : null,
         paramRef: paramRef,
       ),

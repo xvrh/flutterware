@@ -221,7 +221,7 @@ class _SceneTimelineState extends State<SceneTimeline> {
           var selected = editor.primary;
           var selectedName = selected?.name;
           var selectedHasGroup = groups.any(
-            (g) => g.group.target == selectedName,
+            (g) => g.group.node.name == selectedName,
           );
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -302,8 +302,8 @@ class _SceneTimelineState extends State<SceneTimeline> {
                                         groups
                                             .where(
                                               (o) =>
-                                                  o.group.target ==
-                                                  g.group.target,
+                                                  o.group.node.name ==
+                                                  g.group.node.name,
                                             )
                                             .length >
                                         1,
@@ -437,7 +437,7 @@ class _GroupRowState extends State<_GroupRow> {
       );
       return;
     }
-    editor.select(editor.doc.nodeNamed(group.target));
+    editor.select(editor.doc.nodeNamed(group.node.name));
     _dragging = true;
     _carried = 0;
   }
@@ -466,7 +466,7 @@ class _GroupRowState extends State<_GroupRow> {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var node = editor.doc.nodeNamed(group.target);
+    var node = editor.doc.nodeNamed(group.node.name);
     var tracked = {
       ...group.tracks.keys,
       ...group.args.keys.map((a) => 'args.$a'),
@@ -474,7 +474,7 @@ class _GroupRowState extends State<_GroupRow> {
     var offered = node == null
         ? const <ScenePropSpec>[]
         : animatableProps(node).where((p) => !tracked.contains(p.name));
-    var hovered = editor.hover == group.target;
+    var hovered = editor.hover == group.node.name;
     var selected = node != null && editor.isSelected(node);
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -500,9 +500,9 @@ class _GroupRowState extends State<_GroupRow> {
             SizedBox(
               width: widget.gutterWidth,
               child: MouseRegion(
-                onEnter: (_) => editor.hover = group.target,
+                onEnter: (_) => editor.hover = group.node.name,
                 onExit: (_) {
-                  if (editor.hover == group.target) editor.hover = null;
+                  if (editor.hover == group.node.name) editor.hover = null;
                 },
                 child: Tappable(
                   onTap: () => editor.select(node, toggle: toggleModifier),
@@ -528,7 +528,7 @@ class _GroupRowState extends State<_GroupRow> {
                           Expanded(
                             child: Text.rich(
                               TextSpan(
-                                text: group.target,
+                                text: group.node.name,
                                 style: context.type.body.copyWith(
                                   color: hovered || selected
                                       ? colors.accentDark
@@ -551,7 +551,7 @@ class _GroupRowState extends State<_GroupRow> {
                         if (offered.isNotEmpty)
                           _AddPropertyButton(
                             tooltip:
-                                'Animate another property of ${group.target} — '
+                                'Animate another property of ${group.node.name} — '
                                 'a key at the playhead',
                             entries: [
                               for (var spec in offered)
@@ -760,7 +760,7 @@ class _LaneRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    var node = editor.doc.nodeNamed(lane.group.target);
+    var node = editor.doc.nodeNamed(lane.group.node.name);
     var hovered = node != null && editor.hover == node.name;
     return SizedBox(
       height: height,
@@ -770,9 +770,9 @@ class _LaneRow extends StatelessWidget {
           SizedBox(
             width: gutterWidth,
             child: MouseRegion(
-              onEnter: (_) => editor.hover = lane.group.target,
+              onEnter: (_) => editor.hover = lane.group.node.name,
               onExit: (_) {
-                if (editor.hover == lane.group.target) editor.hover = null;
+                if (editor.hover == lane.group.node.name) editor.hover = null;
               },
               child: Tappable(
                 onTap: () => editor.select(node, toggle: toggleModifier),

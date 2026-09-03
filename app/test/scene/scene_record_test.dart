@@ -13,7 +13,7 @@ import 'package:flutterware_app/src/ui/theme.dart';
 void main() {
   test('the player parks past the end, at the end pose', () {
     var scene = coffeeBannerDraft();
-    var bound = BoundMotion.bind(coffeeIntroDraft(), scene);
+    var bound = BoundMotion.bind(coffeeIntroDraft(scene), scene);
     var player = MotionPlayer(bound);
     var seen = <Duration>[];
     player.onPosition = seen.add;
@@ -28,7 +28,7 @@ void main() {
     var scene = coffeeBannerDraft();
     var editor = SceneEditor(
       scene,
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     var playback = ScenePlayback(editor, 'BannerIntro', vsync: tester);
     addTearDown(playback.dispose);
@@ -77,9 +77,10 @@ void main() {
   });
 
   test('recording puts an edit on a key at the playhead', () {
+    var scene = coffeeBannerDraft();
     var editor = SceneEditor(
-      coffeeBannerDraft(),
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      scene,
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     var cup = editor.doc.nodeNamed('cup')!;
     expect(editor.recordKey(cup, 'opacity', 0.5), isFalse, reason: 'off');
@@ -110,9 +111,10 @@ void main() {
     tester.view.physicalSize = const Size(400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
+    var scene = coffeeBannerDraft();
     var editor = SceneEditor(
-      coffeeBannerDraft(),
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      scene,
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     var glow = editor.doc.nodeNamed('glow')!;
     editor

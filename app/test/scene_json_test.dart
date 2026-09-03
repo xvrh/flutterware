@@ -42,7 +42,7 @@ void main() {
       sceneFileToJson(
         scene,
         className: 'BannerScene',
-        motions: {'BannerIntro': coffeeIntroDraft()},
+        motions: {'BannerIntro': coffeeIntroDraft(scene)},
       ),
     );
     var back = sceneFileFromJson(jsonDecode(encoded) as Map<String, Object?>);
@@ -70,15 +70,16 @@ void main() {
     expect(motion.params.single.name, 'slideFrom');
     var track = motion.groupNamed('headlineIn')!.tracks['opacity']!;
     expect(track.keys.map((k) => k.at.inMilliseconds), [0, 260]);
-    expect(track.keys.last.curve, 'easeOut');
+    expect(track.keys.last.curve, SceneCurves.easeOut);
     expect(motion.groupNamed('badgePop')!.args['progress'], isNotNull);
   });
 
   test('the decoded pair binds and evaluates like the original', () {
+    var scene = coffeeBannerDraft();
     var json = sceneFileToJson(
-      coffeeBannerDraft(),
+      scene,
       className: 'BannerScene',
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     var back = sceneFileFromJson(
       jsonDecode(jsonEncode(json)) as Map<String, Object?>,
@@ -93,17 +94,19 @@ void main() {
   });
 
   test('the timeline tree survives, nesting included', () {
-    var motion = coffeeIntroDraft()
-      ..timeline = SeqExpr([
-        GroupRef('headlineIn'),
-        AtExpr(
-          const Duration(milliseconds: 200),
-          SpeedExpr(2, RepeatExpr(3, GroupRef('tapPulse'))),
-        ),
-      ]);
+    var scene = coffeeBannerDraft();
+    var motion = coffeeIntroDraft(scene);
+    motion.timeline = SeqExpr([
+      motion.groupNamed('headlineIn')!,
+      AtExpr(
+        const Duration(milliseconds: 200),
+        SpeedExpr(2, RepeatExpr(3, motion.groupNamed('tapPulse')!)),
+      ),
+    ]);
     var back = motionFromJson(
       jsonDecode(jsonEncode(motion.toJson())) as Map<String, Object?>,
       sceneClassName: 'BannerScene',
+      scene: scene,
     );
     var seq = back.timeline as SeqExpr;
     var at = seq.children[1] as AtExpr;
@@ -112,6 +115,6 @@ void main() {
     expect(at.offset, const Duration(milliseconds: 200));
     expect(speed.factor, 2);
     expect(repeat.times, 3);
-    expect((repeat.child as GroupRef).name, 'tapPulse');
+    expect((repeat.child as AnimateGroup).name, 'tapPulse');
   });
 }

@@ -19,10 +19,11 @@ void main() {
   }
 
   test('finds scene files and reads the class each declares', () {
+    var scene = coffeeBannerDraft();
     var pair = emitSceneFile(
-      coffeeBannerDraft(),
+      scene,
       className: 'BannerScene',
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     write('banner.scene.dart', pair);
     write(
@@ -40,10 +41,11 @@ void main() {
   test('the scene class is the one that extends nothing', () {
     // A motion class sits in the same file and must never be mistaken for
     // the scene it animates.
+    var scene = coffeeBannerDraft();
     var source = emitSceneFile(
-      coffeeBannerDraft(),
+      scene,
       className: 'BannerScene',
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     expect(source, contains('class BannerIntro('));
     expect(sceneClassNameOf(source), 'BannerScene');

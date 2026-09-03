@@ -10,10 +10,11 @@ import 'package:flutterware_app/src/scene/workspace.dart';
 void main() {
   /// A file as it would come off disk, so its bytes are known.
   (SceneFile, String) opened() {
+    var scene = coffeeBannerDraft();
     var source = emitSceneFile(
-      coffeeBannerDraft(),
+      scene,
       className: 'BannerScene',
-      motions: {'BannerIntro': coffeeIntroDraft()},
+      motions: {'BannerIntro': coffeeIntroDraft(scene)},
     );
     var open = SceneFile.open('/scenes/banner.scene.dart', source);
     expect(open.ok, isTrue, reason: open.refusals.join('; '));

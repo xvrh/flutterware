@@ -45,13 +45,16 @@ void main() {
   }
 
   void writeScene(String name, {bool withMotion = true}) {
+    var scene = coffeeBannerDraft();
     var file = File(p.join(root.path, 'demo', '$name.scene.dart'));
     file.parent.createSync(recursive: true);
     file.writeAsStringSync(
       emitSceneFile(
-        coffeeBannerDraft(),
+        scene,
         className: name,
-        motions: withMotion ? {'${name}Intro': coffeeIntroDraft()} : const {},
+        motions: withMotion
+            ? {'${name}Intro': coffeeIntroDraft(scene)}
+            : const {},
       ),
     );
   }

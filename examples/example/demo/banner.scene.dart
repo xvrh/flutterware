@@ -95,39 +95,47 @@ class BannerScene extends SceneDefinition {
 class BannerIntro(super.scene, {final double slideFrom = 24})
     extends SceneMotion<BannerScene> {
   late final headlineIn = scene.headline.animate(
-    opacity: Track([
-      Key(at: 0.ms, value: 0),
-      Key(at: 260.ms, value: 1, curve: Curves.easeOut),
+    opacity: MotionTrack([
+      MotionKey(at: 0.ms, value: 0),
+      MotionKey(at: 260.ms, value: 1, curve: SceneCurves.easeOut),
     ]),
-    translateY: Track([
-      Key(at: 0.ms, value: slideFrom),
-      Key(at: 260.ms, value: 0, curve: Curves.easeOut),
+    translateY: MotionTrack([
+      MotionKey(at: 0.ms, value: slideFrom),
+      MotionKey(at: 260.ms, value: 0, curve: SceneCurves.easeOut),
     ]),
   );
   late final glowMood = scene.glow.animate(
-    opacity: Track([
-      Key(at: 0.ms, value: 1),
-      Key(at: 900.ms, value: 0.85),
-      Key(at: 1800.ms, value: 1),
+    opacity: MotionTrack([
+      MotionKey(at: 0.ms, value: 1),
+      MotionKey(at: 900.ms, value: 0.85),
+      MotionKey(at: 1800.ms, value: 1),
     ]),
   );
   late final badgePop = scene.badge.animate(
-    scale: Track([
-      Key(at: 0.ms, value: 0.6),
-      Key(at: 240.ms, value: 1, curve: Curves.easeOutBack),
+    scale: MotionTrack([
+      MotionKey(at: 0.ms, value: 0.6),
+      MotionKey(at: 240.ms, value: 1, curve: SceneCurves.easeOutBack),
     ]),
     args: {
-      'progress': Track([Key(at: 0.ms, value: 0), Key(at: 300.ms, value: 1)]),
+      'progress': MotionTrack([
+        MotionKey(at: 0.ms, value: 0),
+        MotionKey(at: 300.ms, value: 1),
+      ]),
     },
   );
   late final tapPulse = scene.cta.animate(
-    scale: Track([
-      Key(at: 0.ms, value: 1),
-      Key(at: 120.ms, value: 1.06),
-      Key(at: 240.ms, value: 1),
+    scale: MotionTrack([
+      MotionKey(at: 0.ms, value: 1),
+      MotionKey(at: 120.ms, value: 1.06),
+      MotionKey(at: 240.ms, value: 1),
     ]),
   );
-  late final timeline = Par([headlineIn, At(400.ms, badgePop), glowMood]);
+  @override
+  late final timeline = ParExpr([
+    headlineIn,
+    AtExpr(400.ms, badgePop),
+    glowMood,
+  ]);
   BannerIntro copy(BannerScene scene) =>
       copyStateInto(BannerIntro(scene, slideFrom: slideFrom));
 }
