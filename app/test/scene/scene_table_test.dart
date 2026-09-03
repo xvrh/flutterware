@@ -205,9 +205,17 @@ void main() {
     expect(children.length, 3);
     expect((children[0] as Map)['name'], 'row');
     expect((children[1] as Map)['name'], 'row#1');
-    // The copy carries the item's values, already resolved.
+    // The copy carries the item's values, already resolved — and its cells
+    // are renamed with it, so nothing answers to the template's name twice.
+    // A cell that did would be outlined as the selection in every row, and
+    // measured as the template by the last one.
     var cells = (children[1] as Map)['children'] as List;
     expect((cells[0] as Map)['text'], 'Oat milk, 12 × 1L');
+    expect((cells[0] as Map)['name'], 'cell#1');
+    expect(
+      [for (var c in children) (c as Map)['name']],
+      ['row', 'row#1', 'row#2'],
+    );
   });
 
   test('the authored document keeps the rule instead', () {
@@ -218,6 +226,36 @@ void main() {
     expect(back.root.children.length, 1);
     expect((back.root.children.single as FrameNode).repeated?.source, 'lines');
     expect(back.itemsOf('lines').length, 3);
+  });
+
+  test('editing a cell changes every row, not just the first', () {
+    // The frame's cells ARE the first row, so a property nobody bound has
+    // to reach the copies too. Getting this wrong looks like it worked: the
+    // row on screen changes and the ones under it do not.
+    var doc = repeated();
+    var row = doc.root.children.single as FrameNode;
+    (row.children.first as TextNode).fontSize = 30;
+
+    expect(
+      [
+        for (var drawn in doc.expand(row))
+          ((drawn as FrameNode).children.first as TextNode).fontSize,
+      ],
+      [30, 30, 30],
+      reason: 'every row reads the cell that was edited',
+    );
+  });
+
+  test('and a bound property still belongs to its item', () {
+    // The other half of the same rule: `text` reads `lines.item`, so each
+    // row keeps its own value however the cell is edited.
+    var doc = repeated();
+    var row = doc.root.children.single as FrameNode;
+    var rows = doc.expand(row);
+    expect(
+      [for (var r in rows) ((r as FrameNode).children.first as TextNode).text],
+      ['Espresso beans, 1kg', 'Oat milk, 12 × 1L', 'Takeaway cups, 500'],
+    );
   });
 
   testWidgets('a closure draws the same rows as a recorded binding', (

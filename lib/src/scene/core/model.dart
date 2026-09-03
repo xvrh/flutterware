@@ -680,11 +680,28 @@ class SceneDocument extends SceneListenable {
     if (rep.items.isEmpty) return const [];
     return [
       child,
-      for (var i = 1; i < rep.items.length; i++)
-        deepCopyNode(child, rename: (n) => '$n#$i') as FrameNode
-          ..children.clear()
-          ..children.addAll(rep.row(rep.items[i])),
+      for (var i = 1; i < rep.items.length; i++) _drawnRow(child, rep, i),
     ];
+  }
+
+  /// Row [i] of a repeat: a copy of the template holding that item's cells.
+  ///
+  /// Every name in it takes the `#i` suffix — the cells come out of the
+  /// closure carrying the template's own names, and a copy answering to the
+  /// template's name is a copy the editor outlines as the selection and
+  /// measures the template by.
+  SceneNode _drawnRow(FrameNode template, SceneRepeat rep, int i) {
+    var copy = deepCopyNode(template, rename: (n) => '$n#$i') as FrameNode;
+    copy.children
+      ..clear()
+      ..addAll(rep.row(rep.items[i]));
+    void suffix(SceneNode n) {
+      if (n.name.isNotEmpty) n.name = '${n.name}#$i';
+      n.children.forEach(suffix);
+    }
+
+    copy.children.forEach(suffix);
+    return copy;
   }
 
   /// Instantiate: set every parameter-bound property whose parameter is
@@ -1008,6 +1025,10 @@ class SceneDocument extends SceneListenable {
       }
 
       revive(state._root);
+      // A node the snapshot brought back is a NEW object, and a repeat's
+      // closure reads the cells of the one it was built for. Rebound here
+      // rather than left to whoever notices.
+      bindRepeats(this);
     });
   }
 }
@@ -1140,30 +1161,36 @@ SceneNode applySceneItem(SceneNode node, String list, SceneItem item) {
 /// and which property of which cell reads which field ([SceneNode.paramRefs],
 /// spelled `<list>.<field>`). This turns that back into the same closure, so
 /// there is one way to draw a repeat and not two.
+///
+/// Safe to call again whenever the items change or the tree is restored —
+/// it rebinds rather than accumulating, and a closure that outlived its
+/// node is exactly what a restore leaves behind.
 void bindRepeats(SceneDocument doc) {
   for (var (node, _) in doc.walk()) {
     if (node is! FrameNode) continue;
     var source = node.repeated?.source;
     if (source == null || source.isEmpty) continue;
     var items = doc.itemsOf(source);
-    var templates = [for (var c in node.children) deepCopyNode(c)];
     node.repeated = SceneRepeat(
       items: items,
       source: source,
+      // Read off the frame's LIVE cells, every time. They are not a
+      // template beside the first row — they ARE the first row, so editing
+      // one has to change every row and not just the one on screen.
       row: (item) => [
-        for (var t in templates)
-          applySceneItem(deepCopyNode(t), source, item! as SceneItem),
+        for (var cell in node.children)
+          applySceneItem(deepCopyNode(cell), source, item! as SceneItem),
       ],
     );
-    // The frame's own cells are the first item's, which is what makes the
-    // row on screen and the row in the file the same row.
+    // Which makes the first item's values belong ON those cells, written in
+    // place so the objects the editor selected and the motion writes to are
+    // the same ones afterwards.
     if (items.isNotEmpty) {
-      node.children
-        ..clear()
-        ..addAll(node.repeated!.row(items.first));
+      for (var cell in node.children) {
+        applySceneItem(cell, source, items.first);
+      }
     }
   }
-  doc.edit(() {});
 }
 
 /// Record a repeat the way a reader can: the parameter it draws from, with
