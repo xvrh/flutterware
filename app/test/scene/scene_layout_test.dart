@@ -6,7 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/src/scene/editor.dart';
+import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
+import 'package:flutterware_app/src/scene/ui/canvas.dart';
+import 'package:flutterware_app/src/ui/theme.dart';
 
 void main() {
   /// A column of two boxes inside a root, with sizes the test sets.
@@ -178,6 +182,91 @@ void main() {
     expect(rects['root']!.height, 40 + 20 + 40);
     expect(rects['block']!.left - rects['root']!.left, 10);
     expect(rects['block']!.top - rects['root']!.top, 20);
+  });
+
+  testWidgets('a free frame inside a column lays out rather than asserting', (
+    tester,
+  ) async {
+    // A column hands its children unbounded constraints on the main axis,
+    // and a stack cannot lay out under one. Flipping a frame to Free in the
+    // inspector used to take the guest down with it.
+    var block = ShapeNode('block')
+      ..x = 10
+      ..y = 20
+      ..width = 60
+      ..height = 30;
+    var free = FrameNode('free')..children.add(block);
+    var root = FrameNode('root', layout: NodeLayout.column)
+      ..width = 200
+      ..children.add(free);
+    var rects = <String, SceneRect>{};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SceneView(SceneDocument(root), onMeasured: rects.addAll),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    // As far as its children reach, which is the only size it has ever had.
+    expect(rects['free']!.height, 50);
+  });
+
+  testWidgets('a canvas drag reorders, and changes parent over another frame', (
+    tester,
+  ) async {
+    var doc = coffeeBannerDraft();
+    var editor = SceneEditor(doc);
+    // The canvas reads measured boxes, so give it the ones a renderer would
+    // have left: a column of two, and a free frame beside it.
+    var column = FrameNode('column', layout: NodeLayout.column)
+      ..measured = const SceneRect(0, 0, 200, 200);
+    var first = ShapeNode('first')..measured = const SceneRect(0, 0, 200, 100);
+    var second = ShapeNode('second')
+      ..measured = const SceneRect(0, 100, 200, 100);
+    column.children.addAll([first, second]);
+    var other = FrameNode('other')
+      ..measured = const SceneRect(300, 0, 200, 200);
+    doc.root.children
+      ..clear()
+      ..addAll([column, other]);
+    doc.root.measured = const SceneRect(0, 0, 600, 300);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Material(child: SceneCanvas(editor, content: const SizedBox())),
+      ),
+    );
+    await tester.pump();
+
+    // A node inside a frame is addressable once it is selected — the
+    // canvas's drill-down model — so select it the way a click would.
+    editor.select(first);
+    await tester.pump();
+
+    // Dragged between the widgets rather than by a pixel count: the canvas
+    // is zoomed to fit, so a screen delta is not an artboard one.
+    Offset centreOf(String name) =>
+        tester.getCenter(find.byKey(ValueKey('node:$name')));
+
+    // Past the middle of the second reorders it.
+    var first0 = centreOf('first');
+    await tester.dragFrom(
+      first0,
+      centreOf('second') + const Offset(0, 8) - first0,
+    );
+    await tester.pump();
+    expect(column.children.map((c) => c.name), ['second', 'first']);
+
+    // And onto the other frame moves it there — while the drag is still
+    // running, so the picture under the pointer is the preview.
+    var first1 = centreOf('first');
+    await tester.dragFrom(first1, centreOf('other') - first1);
+    await tester.pump();
+    expect(editor.doc.parentOf(first)?.name, 'other');
+    expect(column.children.map((c) => c.name), ['second']);
   });
 
   test('fill survives the wire, the JSON and the file', () {

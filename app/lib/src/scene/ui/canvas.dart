@@ -524,18 +524,57 @@ class _NodeTargetState extends State<_NodeTarget> {
   SceneDocument get doc => widget.editor.doc;
   SceneNode get node => widget.node;
 
-  /// A drag under an absolute parent moves the selection; under a row or a
-  /// column it reorders, because there position *is* order.
-  void _apply(Offset localPosition, Offset delta) {
-    var parent = doc.parentOf(node);
-    if (parent == null) return;
-    if (parent.layout == NodeLayout.absolute) {
-      editor.nudgeSelection(delta.dx, delta.dy, mergeKey: 'drag');
-      return;
+  /// How far outside its parent a drag must reach before the node leaves
+  /// it. Enough to survive a shaky hand, small enough to feel deliberate.
+  static const _escapeMargin = 12.0;
+
+  /// Whether [inner] is [outer] or sits inside it.
+  bool _isInside(FrameNode inner, FrameNode outer) {
+    for (SceneNode? p = inner; p != null; p = doc.parentOf(p)) {
+      if (p == outer) return true;
     }
+    return false;
+  }
+
+  /// Where the pointer is, in artboard coordinates.
+  ///
+  /// The target sits exactly on the node's measured rect, so the pointer's
+  /// offset inside it plus that rect's corner is the artboard point — no
+  /// walk up the transform needed.
+  Offset _pointer(Offset localPosition) {
     var m = node.measured;
-    var p = (m == null ? Offset.zero : Offset(m.left, m.top)) + localPosition;
-    var main = parent.layout == NodeLayout.row ? p.dx : p.dy;
+    return (m == null ? Offset.zero : Offset(m.left, m.top)) + localPosition;
+  }
+
+  /// The frame a drop at [point] belongs in: the innermost one containing
+  /// it, skipping the dragged node and anything inside it.
+  FrameNode _dropTarget(Offset point, FrameNode fallback) {
+    FrameNode? best;
+    var bestArea = double.infinity;
+    for (var (candidate, _) in doc.walk()) {
+      if (candidate is! FrameNode) continue;
+      if (!editor.canReparent(node, candidate)) continue;
+      var rect = candidate.measured;
+      if (rect == null) continue;
+      if (point.dx < rect.left ||
+          point.dx > rect.left + rect.width ||
+          point.dy < rect.top ||
+          point.dy > rect.top + rect.height) {
+        continue;
+      }
+      var area = rect.width * rect.height;
+      if (area < bestArea) {
+        best = candidate;
+        bestArea = area;
+      }
+    }
+    return best ?? fallback;
+  }
+
+  /// Where in [parent]'s children a drop at [point] lands: past every
+  /// sibling whose middle the pointer is beyond, along the parent's axis.
+  int _indexIn(FrameNode parent, Offset point) {
+    var main = parent.layout == NodeLayout.row ? point.dx : point.dy;
     var index = 0;
     for (var sibling in parent.children) {
       if (sibling == node) continue;
@@ -546,6 +585,50 @@ class _NodeTargetState extends State<_NodeTarget> {
           : rect.centerY;
       if (main > center) index++;
     }
+    return index;
+  }
+
+  /// A drag under an absolute parent moves the selection; under a row or a
+  /// column it reorders, because there position *is* order. Over a different
+  /// frame it changes parent, and it does so while the drag is still
+  /// running: the picture under the pointer is where the node would land,
+  /// which is the only preview worth drawing.
+  void _apply(Offset localPosition, Offset delta) {
+    var parent = doc.parentOf(node);
+    if (parent == null) return;
+    var point = _pointer(localPosition);
+    var target = _dropTarget(point, parent);
+
+    // Leaving a parent asks for more than a wobble. Going *into* a frame is
+    // immediate, because you aimed at it; falling out of one because the
+    // drag overshot its edge by a pixel is how a node ends up somewhere
+    // nobody put it.
+    if (target != parent && !_isInside(target, parent)) {
+      var rect = parent.measured;
+      if (rect != null &&
+          point.dx > rect.left - _escapeMargin &&
+          point.dx < rect.left + rect.width + _escapeMargin &&
+          point.dy > rect.top - _escapeMargin &&
+          point.dy < rect.top + rect.height + _escapeMargin) {
+        target = parent;
+      }
+    }
+
+    if (target != parent) {
+      editor.reparent(
+        [node],
+        target,
+        index: target.layout == NodeLayout.absolute
+            ? null
+            : _indexIn(target, point),
+      );
+      return;
+    }
+    if (parent.layout == NodeLayout.absolute) {
+      editor.nudgeSelection(delta.dx, delta.dy, mergeKey: 'drag');
+      return;
+    }
+    var index = _indexIn(parent, point);
     var from = parent.children.indexOf(node);
     if (from == index) return;
     editor.perform('Reorder ${node.name}', mergeKey: 'drag', () {

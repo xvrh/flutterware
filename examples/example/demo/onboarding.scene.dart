@@ -1,18 +1,10 @@
 //@flutterware:scene=0.5
-// Target two of three: an onboarding screen, authored once and run inside
-// the app on whatever screen it is given.
-//
-// Everything dynamic arrives as a parameter, the way it would at runtime.
-// The root fills both axes, so the phone decides the size and the column
-// decides the arrangement — there are no authored coordinates in this file.
-//
-// Two things the grammar taught while this was written: a parameter default
-// is one string literal, so the body copy sits on one long line; and a
-// comment inside the class is refused, because the editor rewrites the file
-// and would drop it. That is why these notes are up here.
-//
-// `width: double.infinity` is fill. The button takes the width the screen
-// leaves it, on every phone, without anybody typing a number.
+// Owned by the flutterware scene editor, which reads and writes this whole
+// file. Hand edits are welcome inside the grammar: every node is a
+// `late final` field (the field name is the node's identity), placed exactly
+// once in a children list; a parameter is a `final` in the class header
+// whose default is the mockup. Anything outside the grammar is refused with
+// a line number rather than silently dropped.
 
 class Onboarding({
   final String title = 'Skip the queue',
@@ -28,18 +20,19 @@ class Onboarding({
     corner: 100,
     layout: NodeLayout.row,
     mainAlign: MainAxisAlignment.center,
-    crossAlign: CrossAxisAlignment.center,
     children: [cup],
   );
+  late final copy = Text(body, color: Color(0xFF6B5A52));
   late final heading = Text(
     title,
     fontSize: 30,
     weight: FontWeight.w700,
     color: Color(0xFF1B1210),
   );
-  late final copy = Text(body, fontSize: 16, color: Color(0xFF6B5A52));
   late final ctaLabel = Text(
     cta,
+    x: 219.60405419435222,
+    y: 13.579370847176051,
     fontSize: 17,
     weight: FontWeight.w600,
     color: Color(0xFFFFFFFF),
@@ -49,8 +42,8 @@ class Onboarding({
     fill: tint,
     corner: 28,
     layout: NodeLayout.row,
-    mainAlign: MainAxisAlignment.center,
     padding: 16,
+    mainAlign: MainAxisAlignment.center,
     children: [ctaLabel],
   );
   late final root = Frame(
@@ -58,10 +51,10 @@ class Onboarding({
     height: double.infinity,
     fill: Color(0xFFFFFBF8),
     layout: NodeLayout.column,
-    mainAlign: MainAxisAlignment.center,
-    crossAlign: CrossAxisAlignment.start,
     gap: 24,
     padding: 32,
+    mainAlign: MainAxisAlignment.center,
+    crossAlign: CrossAxisAlignment.start,
     children: [art, heading, copy, ctaBox],
   );
 }

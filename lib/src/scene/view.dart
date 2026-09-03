@@ -136,6 +136,25 @@ class _SceneViewState extends State<SceneView> {
     });
   }
 
+  /// How far the children of a free frame reach along one axis: the
+  /// authored size where there is one, and what the last layout measured
+  /// where there is not.
+  double _freeExtent(FrameNode f, {required bool horizontal}) {
+    var extent = 0.0;
+    for (var child in f.children) {
+      var authored = horizontal ? child.width : child.height;
+      var size = authored != null && authored.isFinite
+          ? authored
+          : switch (child.measured) {
+              var m? => horizontal ? m.width : m.height,
+              _ => 0.0,
+            };
+      var end = (horizontal ? child.x : child.y) + size;
+      if (end > extent) extent = end;
+    }
+    return extent;
+  }
+
   /// Which axes of [n] its parent has already sized for it.
   ({bool width, bool height}) _stretchedBy(SceneNode n) {
     var parent = widget.scene.parentOf(n);
@@ -220,9 +239,25 @@ class _SceneViewState extends State<SceneView> {
       case FrameNode f:
         var gap = f.fxRendered('gap') as double;
         if (f.layout == NodeLayout.absolute) {
-          inner = Stack(
+          var stack = Stack(
             clipBehavior: Clip.none,
             children: [for (var c in f.children) _child(context, f, c, prefix)],
+          );
+          // A stack cannot lay out under an unbounded constraint, and a
+          // column hands its children exactly that on the main axis. A free
+          // frame with no size of its own inside one would assert, so it is
+          // given the extent its children actually reach — which is the only
+          // size a free frame has ever meant.
+          inner = LayoutBuilder(
+            builder: (context, constraints) => SizedBox(
+              width: constraints.hasBoundedWidth
+                  ? null
+                  : _freeExtent(f, horizontal: true),
+              height: constraints.hasBoundedHeight
+                  ? null
+                  : _freeExtent(f, horizontal: false),
+              child: stack,
+            ),
           );
           break;
         }
