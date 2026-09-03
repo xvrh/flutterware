@@ -76,7 +76,14 @@ class SceneCore extends PluginCore {
   void track(String package) => _cache.track(package);
 
   /// Forget what was found, so the next look walks the directory again.
+  ///
+  /// Only forgets: something has to ask again afterwards, or a surface that
+  /// reads the listing sits on its loading state forever. [reload] is the one
+  /// to call when nobody else will ask.
   void rescan(String package) => _cache.invalidate(package);
+
+  /// Walks the directory again now — what a file appearing on disk needs.
+  Future<void> reload(String package) => _cache.reload(package);
 
   /// Discovery is a directory walk and a first line, so every surface that
   /// asks for status can afford it — which is what keeps `fw` and MCP from

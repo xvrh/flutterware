@@ -178,7 +178,6 @@ class _ScenePanelState extends State<_ScenePanel>
     super.didChangeDependencies();
     _package = _resolve();
     _retrack();
-    _watchDirectory();
   }
 
   /// A config rebuild hands this panel a new plugin, and with it a new
@@ -243,9 +242,7 @@ class _ScenePanelState extends State<_ScenePanel>
   }
 
   /// Starts (or re-points) the watch on the package's scene directory.
-  void _watchDirectory() {
-    var package = _package;
-    if (package == null) return;
+  void _watchDirectory(String package) {
     var directory = _core.rootFor(package);
     if (_watching == directory && _watcher?.isWatching == true) return;
     _watcher?.dispose();
@@ -259,8 +256,10 @@ class _ScenePanelState extends State<_ScenePanel>
   /// held otherwise.
   void _onDiskChanged(Set<String> paths) {
     if (!mounted) return;
-    var package = _package;
-    if (package != null) _core.rescan(package);
+    var package = _package ?? _resolve();
+    // reload, not rescan: forgetting the listing without asking again leaves
+    // every surface reading it on "Looking for scenes" for good.
+    if (package != null) unawaited(_core.reload(package));
     var workspace = _workspace;
     if (workspace == null) {
       setState(() {});
@@ -417,11 +416,15 @@ class _ScenePanelState extends State<_ScenePanel>
     if (package == null) {
       return const NoPackagesConfigured(icon: Icons.movie_filter_outlined);
     }
-    // Both are cheap when nothing moved, and doing them here rather than only
-    // where the workspace is assigned is what makes them survive a hot
-    // reload — the panel's state object outlives one, its fields do not.
+    // The surface that reads the listing is the one that asks for it. Doing
+    // it here rather than only when the address changes is what keeps a scan
+    // that never started — or one something invalidated — from leaving this
+    // panel on its loading state for good. All three are cheap when nothing
+    // moved, and doing them here is also what carries them through a hot
+    // reload: the panel's state object outlives one, its fields do not.
+    _core.track(package);
     _autosave.bind(_workspace);
-    _watchDirectory();
+    _watchDirectory(package);
     return AnimatedBuilder(
       animation: widget.plugin,
       builder: (context, _) {
