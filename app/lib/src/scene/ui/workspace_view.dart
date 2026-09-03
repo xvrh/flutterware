@@ -132,7 +132,12 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                             editor: editor,
                             sceneClassName: widget.sceneClassName,
                             onClose: active == null ? null : _closeMotion,
-                            onPick: (name) => editor.activeMotion = name,
+                            onPick: (name) {
+                              editor.activeMotion = name;
+                              // A motion that was closed comes back on the
+                              // picture; one already open is unchanged.
+                              widget.playbackFor(name).apply();
+                            },
                           ),
                           if (open) ...[
                             Container(height: 1, color: line),

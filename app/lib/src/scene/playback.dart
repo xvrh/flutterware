@@ -53,6 +53,11 @@ class ScenePlayback extends ChangeNotifier {
       rebind();
       return;
     }
+    // Stopped: the fx are off the scene and only [apply] puts them back.
+    // This listens to the EDITOR, which notifies for hovering a node and
+    // for closing the motion as much as for editing a key — so without
+    // this the pose came back inside the very gesture that dropped it.
+    if (!_applied) return;
     // A key's value changed under a parked playhead: the picture is stale
     // until the motion is applied again. Playing re-applies every tick.
     if (!isPlaying) _player.seek(_player.position);
@@ -79,10 +84,14 @@ class ScenePlayback extends ChangeNotifier {
   void rebind() {
     var at = position;
     var wasPlaying = isPlaying;
+    var wasApplied = _applied;
+    // Disposing stops the old player, which drops the fx it wrote.
     _player.dispose();
     _bind();
-    seek(at);
-    if (wasPlaying) play();
+    if (wasApplied) {
+      seek(at);
+      if (wasPlaying) play();
+    }
     notifyListeners();
   }
 
@@ -91,10 +100,14 @@ class ScenePlayback extends ChangeNotifier {
   bool get isPlaying => _player.status == MotionPlayerStatus.playing;
   bool get isIdle => _player.status == MotionPlayerStatus.idle;
 
-  /// Whether the motion is on the picture — playing, paused, or parked
-  /// anywhere by a seek. What the stop button has to undo; a seek alone
-  /// changes no status, so status is not enough to know.
-  bool get isApplied => !isIdle || position > Duration.zero;
+  /// Whether the motion is on the picture — its fx written to the nodes.
+  ///
+  /// What the stop button undoes, and the one thing that says whether this
+  /// playback may write to the scene at all. Not derivable from the
+  /// player's status: a seek applies a pose and leaves the player idle, so
+  /// idle-at-zero is both "stopped" and "parked on the first frame".
+  bool get isApplied => _applied;
+  var _applied = true;
 
   double get rate => _player.rate;
   set rate(double value) {
@@ -110,7 +123,16 @@ class ScenePlayback extends ChangeNotifier {
   bool get autoKey => editor.autoKey;
   set autoKey(bool value) => editor.autoKey = value;
 
+  /// Puts the motion back on the picture at the playhead — what opening a
+  /// motion does, including reopening one that was closed.
+  void apply() {
+    _applied = true;
+    _player.seek(_player.position);
+    notifyListeners();
+  }
+
   void play() {
+    _applied = true;
     _player.play();
     notifyListeners();
   }
@@ -122,12 +144,16 @@ class ScenePlayback extends ChangeNotifier {
 
   void toggle() => isPlaying ? pause() : play();
 
+  /// Cancel: the fx come off and nothing puts them back until [apply],
+  /// [play] or a [seek].
   void stop() {
+    _applied = false;
     _player.stop();
     notifyListeners();
   }
 
   void seek(Duration at) {
+    _applied = true;
     _player.seek(at);
     notifyListeners();
   }

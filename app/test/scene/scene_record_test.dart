@@ -6,6 +6,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/fixtures.dart';
+import 'package:flutterware_app/src/scene/playback.dart';
 import 'package:flutterware_app/src/scene/ui/inspector.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -21,6 +22,58 @@ void main() {
     expect(scene.nodeNamed('headline')!.fxRendered('opacity'), 1.0);
     expect(seen, [const Duration(seconds: 5)]);
     player.dispose();
+  });
+
+  testWidgets('a stopped motion stays off the picture', (tester) async {
+    var scene = coffeeBannerDraft();
+    var editor = SceneEditor(
+      scene,
+      motions: {'BannerIntro': coffeeIntroDraft()},
+    );
+    var playback = ScenePlayback(editor, 'BannerIntro', vsync: tester);
+    addTearDown(playback.dispose);
+    var headline = scene.nodeNamed('headline')!;
+    // The first key is 0 where the node itself is opaque: the difference
+    // between the motion being on the picture and off it.
+    expect(headline.opacity, 1.0);
+    playback.seek(Duration.zero);
+    expect(headline.fxRendered('opacity'), 0.0);
+    expect(playback.isApplied, isTrue, reason: 'parked at zero is applied');
+
+    playback.stop();
+    expect(
+      headline.fxRendered('opacity'),
+      1.0,
+      reason: 'the scene as authored',
+    );
+    expect(playback.isApplied, isFalse);
+
+    // Hovering a node notifies the editor, as does closing the motion —
+    // neither may put the pose back.
+    editor.hover = 'cup';
+    editor.activeMotion = null;
+    editor.select(scene.nodeNamed('cup'));
+    expect(headline.fxRendered('opacity'), 1.0);
+
+    // Editing a key while stopped leaves the picture alone; reopening the
+    // motion puts it back on.
+    editor.setKeyValue(
+      MotionKeyRef(
+        'BannerIntro',
+        'headlineIn',
+        'opacity',
+        editor.motions['BannerIntro']!
+            .groupNamed('headlineIn')!
+            .tracks['opacity']!
+            .keys
+            .first
+            .id,
+      ),
+      0.25,
+    );
+    expect(headline.fxRendered('opacity'), 1.0);
+    playback.apply();
+    expect(headline.fxRendered('opacity'), 0.25);
   });
 
   test('recording puts an edit on a key at the playhead', () {
