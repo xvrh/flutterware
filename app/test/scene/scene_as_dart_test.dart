@@ -5,6 +5,7 @@
 // it — and read off disk and re-emitted — so the parser grades it. A change
 // that satisfies one and not the other fails here, which is the only thing
 // keeping the two halves of the format honest now that the file is Dart.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 
 import 'sample.scene.dart';
+import 'sample_widget.dart' as app;
 
 void main() {
   test('a scene file is a class an app can instantiate', () {
@@ -120,7 +122,7 @@ void main() {
     // and the row on screen are the same row.
     expect((scene.table.children.first as TextNode).text, 'Cocoa');
     // And it is still one frame: what multiplies is the picture.
-    expect(scene.root.children, hasLength(2));
+    expect(scene.root.children, hasLength(3));
     expect(scene.scene.expand(scene.table), hasLength(3));
   });
 
@@ -133,6 +135,59 @@ void main() {
     expect(find.text('12L'), findsOneWidget);
   });
 
+  testWidgets('an external node builds the app widget from the file', (
+    tester,
+  ) async {
+    // No registry, and nothing to register: the builder is in the file, so
+    // the widget and its mockup live where the compiler checks them.
+    await tester.pumpWidget(
+      MaterialApp(home: Center(child: SceneView(SampleScene().scene))),
+    );
+    expect(find.byType(app.SampleChip), findsOneWidget);
+    expect(find.text('new'), findsOneWidget);
+  });
+
+  testWidgets('and a scene that arrived as data resolves it by label', (
+    tester,
+  ) async {
+    // The editor's path: a closure is not data and cannot cross the wire,
+    // so the builders are learned from the scene classes the app declared.
+    var wire = jsonDecode(
+      jsonEncode(SampleScene().scene.toWire()),
+    ) as Map<String, Object?>;
+    var arrived = sceneFromWire((wire['root']! as Map).cast<String, Object?>());
+    // Found by its label, not its name: a compiled scene has no names, and
+    // the label is exactly what does cross the wire.
+    var ext = [
+      for (var (node, _) in arrived.walk())
+        if (node is ExternalNode) node,
+    ].single;
+    expect(ext.entry, 'SampleChip');
+    expect(ext.build, isNull, reason: 'the closure did not travel');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SceneView(
+            arrived,
+            externals: sceneExternalsFrom([SampleScene.new]),
+          ),
+        ),
+      ),
+    );
+    expect(find.byType(app.SampleChip), findsOneWidget);
+  });
+
+  test('and the builder it could not read comes back verbatim', () {
+    var source = File('test/scene/sample.scene.dart').readAsStringSync();
+    var parsed = parseSceneFile(source);
+    var chip = parsed.doc!.nodeNamed('chip')! as ExternalNode;
+    // Kept as a span, because the tool cannot author app code — and must
+    // not lose it either.
+    expect(chip.buildSource, startsWith('(a) => app.SampleChip('));
+    expect(chip.build, isNull, reason: 'read, not compiled');
+  });
+
   test('and the parser reads the same file back, unchanged', () {
     var path = 'test/scene/sample.scene.dart';
     var source = File(path).readAsStringSync();
@@ -143,6 +198,7 @@ void main() {
         parsed.doc!,
         className: parsed.className!,
         motions: parsed.motions,
+        imports: parsed.imports,
       ),
       source,
       reason: 'the file the compiler accepts is the file the editor writes',

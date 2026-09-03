@@ -304,3 +304,32 @@ class WelcomeScreen extends StatelessWidget {
     );
   }
 }
+
+/// A busy indicator at whatever size it is asked for.
+///
+/// It lives here rather than in a lambda beside the scene that places it:
+/// a scene names the app's widgets, and this is one of them.
+class Spinner extends StatelessWidget {
+  const Spinner({super.key, this.size = 36});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: size,
+    height: size,
+    child: const CircularProgressIndicator(strokeWidth: 3),
+  );
+}
+
+/// The call to action, so a scene can place the real button rather than a
+/// rectangle that looks like one.
+class OrderButton extends StatelessWidget {
+  const OrderButton({super.key, this.label = 'Order now'});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) =>
+      FilledButton(onPressed: () {}, child: Text(label));
+}

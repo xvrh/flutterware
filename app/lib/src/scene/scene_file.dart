@@ -26,6 +26,11 @@
 //     content as one positional string, Ext takes its registration entry as
 //     one positional identifier, Scene takes another scene file's class
 //     name the same way (its `args:` override that scene's parameters)
+//   - an ExternalNode additionally takes `build:`, a closure returning the
+//     app's widget — `build: (a) => app.DrinkBadge(a.number('size'))`. THE
+//     TOOL DOES NOT READ IT: it keeps the span exactly as written and puts
+//     it back, because it cannot author app code and must not lose it
+//     either. The arg names inside are the grammar's stringly boundary
 //   - `children: [ … ]` lists nodes BY FIELD NAME — every node is declared
 //     as its own field and placed exactly once (forward references are fine;
 //     `late` is what makes sibling references legal Dart)
@@ -392,6 +397,10 @@ void _emitNode(
       }
       props.add(_str(e.entry));
       common();
+      // Verbatim, because the tool never read it. A node with no source is
+      // one that was compiled rather than parsed, and there is nothing to
+      // write.
+      if (e.buildSource.isNotEmpty) props.add('build: ${e.buildSource}');
       if (e.args.isNotEmpty) {
         props.add(
           'args: {${[for (var entry in e.args.entries) '${_str(entry.key)}: ${_argValue(entry.value)}'].join(', ')}}',
@@ -1213,6 +1222,23 @@ class _Parser {
             ? node.args
             : (node as SceneRefNode).args;
         _applyCommon(node, named);
+        if (node is ExternalNode) {
+          _take(named, 'build', (e) {
+            if (e is! FunctionExpression) {
+              refuse(
+                e.offset,
+                _kind(e),
+                'build makes the app widget — '
+                "`build: (a) => app.DrinkBadge(a.number('size'))`",
+              );
+              return;
+            }
+            // KEPT, not read. This is the one span in the file the tool
+            // treats as opaque: it is the author's code, the tool cannot
+            // write it, and dropping it would be the shredder.
+            node.buildSource = source.substring(e.offset, e.end);
+          });
+        }
         _take(named, 'args', (e) {
           if (e is! SetOrMapLiteral) {
             refuse(e.offset, 'args', 'args takes a map literal');

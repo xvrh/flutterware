@@ -9,6 +9,8 @@
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 import 'package:flutterware/scene_authoring.dart';
 
+import 'sample_widget.dart' as app;
+
 class SampleScene({
   final String headline = 'Fresh coffee, faster',
   final SceneColor tint = const SceneColor(0xFFE8632B),
@@ -38,12 +40,19 @@ class SampleScene({
     ],
     layout: NodeLayout.row,
   );
+  late final chip = ExternalNode(
+    'SampleChip',
+    width: 60,
+    height: 20,
+    build: (a) => app.SampleChip(label: a.text('label') ?? 'chip'),
+    args: {'label': 'new'},
+  );
   @override
   late final root = FrameNode(
     width: 400,
     height: 120,
     fill: SceneColor(0xFF2B1B12),
-    children: [bar, table],
+    children: [bar, table, chip],
   );
 }
 

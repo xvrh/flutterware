@@ -30,12 +30,22 @@ import 'view.dart';
 class SceneCanvasHost extends StatefulWidget {
   const SceneCanvasHost({
     super.key,
-    this.externals = const {},
+    this.scenes = const [],
     this.ground = const Color(0x00000000),
   });
 
-  /// Everything a scene may name, by entry — the app's own widgets.
-  final Map<String, SceneExternalBuilder> externals;
+  /// The app's scene classes, as constructors.
+  ///
+  /// The editor sends a scene as DATA, and an external node's builder is a
+  /// closure — which is not data and cannot travel. So the app hands over
+  /// the classes instead: this instantiates each one, walks it, and learns
+  /// which builder each `entry` label meant. That is the whole of the
+  /// registration, and it is compiler-checked: `BannerScene.new`, not a
+  /// string paired with a lambda.
+  ///
+  /// One line per scene rather than one per widget, and a scene the app
+  /// forgets shows its external nodes named rather than blank.
+  final List<SceneDefinition Function()> scenes;
 
   /// What shows around the artboard. Transparent by default, so the editor's
   /// own ground shows through.
@@ -62,6 +72,16 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
   /// does, and sends it; without one there is nothing to lay out against
   /// and Flutter says so with an infinite-constraint error.
   Size? _artboard;
+
+  /// `entry` label to builder, learned from the registered classes once.
+  ///
+  /// Built lazily because instantiating every scene walks every node, and
+  /// a canvas that never draws an external node should not pay for it.
+  late final Map<String, SceneWidgetBuilder> _builders = {
+    for (var make in widget.scenes)
+      for (var (node, _) in make().scene.walk())
+        if (node case ExternalNode(:var build?, :var entry)) entry: build,
+  };
 
   /// Once per isolate: a re-mounted widget must not re-register.
   static var _registered = false;
@@ -181,7 +201,7 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
                   height: (_artboard ?? MediaQuery.sizeOf(context)).height,
                   child: SceneView(
                     scene,
-                    externals: widget.externals,
+                    externals: (entry) => _builders[entry],
                     selected: _selected,
                     onMeasured: (rects) => _rects = rects,
                   ),

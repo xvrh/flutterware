@@ -8,6 +8,7 @@
 //
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_example/shop/shop_app.dart' as app;
 
 class BannerScene extends SceneDefinition {
   late final glow = ShapeNode(
@@ -59,6 +60,7 @@ class BannerScene extends SceneDefinition {
     y: 290,
     width: 140,
     height: 140,
+    build: (a) => app.DrinkBadge(app.drinks[1], size: a.number('size') ?? 140),
     args: {'size': 140},
   );
   late final loading = ExternalNode(
@@ -67,6 +69,7 @@ class BannerScene extends SceneDefinition {
     y: 430,
     width: 40,
     height: 40,
+    build: (a) => app.Spinner(size: a.number('size') ?? 36),
     args: {'size': 40},
   );
   late final order = ExternalNode(
@@ -75,6 +78,7 @@ class BannerScene extends SceneDefinition {
     y: 400,
     width: 150,
     height: 44,
+    build: (a) => app.OrderButton(label: a.text('label') ?? 'Order now'),
     args: {'label': 'Order now'},
   );
   late final promo = SceneRefNode(

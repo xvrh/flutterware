@@ -14,28 +14,23 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_example/shop/shop_app.dart';
+
+import 'banner.scene.dart';
 
 void main() {
   runApp(const SceneHostApp());
 }
 
-/// Everything a scene may name, by entry — the app's own widgets, with their
-/// mockup data on this side of the wire where it belongs. A [Drink] never
-/// serializes; the scene only knows the name `DrinkBadge`.
-final _externals = <String, SceneExternalBuilder>{
-  'DrinkBadge': (context, args) =>
-      DrinkBadge(drinks[1], size: (args['size'] as num?)?.toDouble() ?? 56),
-  'Spinner': (context, args) => SizedBox(
-    width: (args['size'] as num?)?.toDouble() ?? 36,
-    height: (args['size'] as num?)?.toDouble() ?? 36,
-    child: const CircularProgressIndicator(strokeWidth: 3),
-  ),
-  'OrderButton': (context, args) => FilledButton(
-    onPressed: () {},
-    child: Text('${args['label'] ?? 'Order now'}'),
-  ),
-};
+/// The app's scene classes, as constructors.
+///
+/// This is the whole registration now, and it is one line per scene rather
+/// than one per widget. The editor sends a scene as data and an external
+/// node's builder is a closure — not data, and it cannot travel — so the
+/// host learns the builders by instantiating these and walking them.
+///
+/// Each entry is compiler-checked: a renamed scene class breaks the build
+/// rather than the canvas.
+final _scenes = <SceneDefinition Function()>[BannerScene.new];
 
 /// A scene and its motion, played from the file the editor wrote — the shape
 /// an export walks.
@@ -68,7 +63,7 @@ class ScenePlayerHost extends StatelessWidget {
         child: SceneView(
           pair.scene,
           motion: motion == null ? null : BoundMotion.bind(motion, pair.scene),
-          externals: _externals,
+          externals: sceneExternalsFrom(_scenes),
         ),
       ),
     );
@@ -104,6 +99,6 @@ class SceneHostApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     // The app's own look — what the editor canvas inherits by construction.
     theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
-    home: SceneCanvasHost(externals: _externals),
+    home: SceneCanvasHost(scenes: _scenes),
   );
 }

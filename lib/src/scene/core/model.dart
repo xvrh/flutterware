@@ -485,9 +485,59 @@ class ShapeNode extends SceneNode {
   String get typeName => 'Shape';
 }
 
-/// A widget the editor has never compiled against. The editor knows its
-/// entry name and its wire-able args; the guest holds the real builder and
-/// the mockups.
+/// What an [ExternalNode] builds, given the args of the moment.
+///
+/// The return is `Object` and not `Widget` because this half of the scene
+/// system is pure Dart by decision — a widget is a subtype of Object, so a
+/// file writing `(a) => app.DrinkBadge(…)` satisfies it, and the renderer
+/// is where it becomes a Widget again.
+typedef SceneWidgetBuilder = Object Function(SceneArgs args);
+
+/// An external node's arguments, read by name and by kind.
+///
+/// Names are strings here and stay strings: a foreign widget's parameters
+/// are not something a scene can type, which is why the motion grammar
+/// already calls this its one stringly boundary. What the reader buys is
+/// that a missing or wrong-kinded arg is a null rather than a crash, and
+/// that the file never writes a cast.
+class SceneArgs {
+  const SceneArgs(this._values);
+
+  final Map<String, Object?> _values;
+
+  double? number(String name) => switch (_values[name]) {
+    num n => n.toDouble(),
+    _ => null,
+  };
+
+  String? text(String name) => switch (_values[name]) {
+    String s => s,
+    var v when v != null => '$v',
+    _ => null,
+  };
+
+  SceneColor? color(String name) => switch (_values[name]) {
+    SceneColor c => c,
+    num argb => SceneColor(argb.toInt()),
+    _ => null,
+  };
+
+  bool? flag(String name) => switch (_values[name]) {
+    bool b => b,
+    _ => null,
+  };
+
+  /// Every name the node carries — what an editor lists.
+  Iterable<String> get names => _values.keys;
+}
+
+/// A widget from the app, placed in a scene.
+///
+/// The file holds the BUILDER — `build: (a) => app.DrinkBadge(…)` — so the
+/// widget and its mockup data live where the compiler checks them, and the
+/// app no longer keeps a map of strings to lambdas. [entry] is the label
+/// that carries across the editor's wire, where a closure cannot go: the
+/// editor's guest resolves it against the scene classes it was given.
 class ExternalNode extends SceneNode {
   ExternalNode(
     this.entry, {
@@ -502,10 +552,21 @@ class ExternalNode extends SceneNode {
     super.corner,
     super.opacity,
     Map<String, Object?>? args,
+    this.build,
   }) : args = args ?? {};
 
   final String entry;
   final Map<String, Object?> args;
+
+  /// How the widget is made, when this node was compiled rather than read.
+  /// A closure is not data, so it never crosses the editor's wire — see
+  /// [entry] for what does.
+  SceneWidgetBuilder? build;
+
+  /// The builder's source text, when this node was READ. The tool rewrites
+  /// the whole file and cannot author app code, so it keeps this span
+  /// exactly as written and puts it back. Empty in a compiled scene.
+  String buildSource = '';
 
   /// Authored args with fx contributions folded in (an ext arg's operator
   /// is replace, in stack order) — what the guest should render.
@@ -999,9 +1060,11 @@ class SceneDocument extends SceneListenable {
           case (ShapeNode i, ShapeNode s):
             i.circle = s.circle;
           case (ExternalNode i, ExternalNode s):
-            i.args
-              ..clear()
-              ..addAll(s.args);
+            i
+              ..build = s.build
+              ..buildSource = s.buildSource
+              ..args.clear();
+            i.args.addAll(s.args);
           case (SceneRefNode i, SceneRefNode s):
             i.args
               ..clear()
@@ -1073,7 +1136,12 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
         ..align = t.align
         ..maxLines = t.maxLines,
     ShapeNode s => ShapeNode(name: name, circle: s.circle),
-    ExternalNode e => ExternalNode(e.entry, name: name, args: Map.of(e.args)),
+    ExternalNode e => ExternalNode(
+      e.entry,
+      name: name,
+      args: Map.of(e.args),
+      build: e.build,
+    )..buildSource = e.buildSource,
     // The instance is copied too, so the copy draws at once; each copy owns
     // its own, because args are applied by mutating it.
     SceneRefNode r =>

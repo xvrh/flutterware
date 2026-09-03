@@ -75,7 +75,7 @@ class _WorkspaceState extends State<_Workspace> with TickerProviderStateMixin {
     sceneClassName: 'BannerScene',
     content: SceneView(
       _doc,
-      externals: _externals,
+      externals: (e) => _externals[e],
       onMeasured: (rects) => applyMeasuredRects(_doc, rects),
     ),
   );
@@ -83,9 +83,13 @@ class _WorkspaceState extends State<_Workspace> with TickerProviderStateMixin {
 
 /// Stand-ins for the app's widgets, so the fixture lays out at the sizes
 /// the real ones take.
-final _externals = <String, SceneExternalBuilder>{
-  'DrinkBadge': (context, args) {
-    var size = (args['size'] as num?)?.toDouble() ?? 56;
+///
+/// A resolver rather than a registry: a real scene file holds its builders,
+/// and this is the shape the editor's canvas asks in when the scene arrived
+/// as data and the closures could not.
+final _externals = <String, SceneWidgetBuilder>{
+  'DrinkBadge': (args) {
+    var size = args.number('size') ?? 56;
     return Container(
       width: size,
       height: size,
@@ -97,8 +101,8 @@ final _externals = <String, SceneExternalBuilder>{
       child: Text('☕', style: TextStyle(fontSize: size * 0.45)),
     );
   },
-  'Spinner': (context, args) {
-    var size = (args['size'] as num?)?.toDouble() ?? 36;
+  'Spinner': (args) {
+    var size = args.number('size') ?? 36;
     return Container(
       width: size,
       height: size,
@@ -108,14 +112,14 @@ final _externals = <String, SceneExternalBuilder>{
       ),
     );
   },
-  'OrderButton': (context, args) => Container(
+  'OrderButton': (args) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
     decoration: BoxDecoration(
       color: const Color(0xFFE8632B),
       borderRadius: BorderRadius.circular(22),
     ),
     child: Text(
-      '${args['label'] ?? 'Order now'}',
+      args.text('label') ?? 'Order now',
       style: const TextStyle(color: Colors.white, fontSize: 15),
     ),
   ),

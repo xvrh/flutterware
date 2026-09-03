@@ -16,12 +16,14 @@ import 'core/motion_runtime.dart';
 import 'core/values.dart';
 import 'flutter_bridge.dart';
 
-/// Builds the app's widget for an external node — the registration the scene
-/// v1 design settled on, handed in by the app rather than discovered.
-typedef SceneExternalBuilder = Widget Function(
-  BuildContext context,
-  Map<String, Object?> args,
-);
+/// Finds the builder for an external node the wire brought, by its [entry]
+/// label.
+///
+/// The shipped path never uses this: a compiled scene's node holds its own
+/// builder, because the file wrote it. This exists for the EDITOR, where
+/// the scene arrives as data and a closure cannot — the host resolves the
+/// label against the scene classes the app registered.
+typedef SceneExternalResolver = SceneWidgetBuilder? Function(String entry);
 
 /// Reports what the layout measured, in artboard coordinates. The editor's
 /// geometry comes from here: a flex child has no authored position, so the
@@ -33,7 +35,7 @@ class SceneView extends StatefulWidget {
     this.scene, {
     super.key,
     this.motion,
-    this.externals = const {},
+    this.externals,
     this.selected = const {},
     this.onMeasured,
   });
@@ -51,8 +53,10 @@ class SceneView extends StatefulWidget {
   /// [MotionPlayer] over the same playable is how a scene plays on screen.
   final Playable? motion;
 
-  /// The app's widgets, by the entry name a node holds.
-  final Map<String, SceneExternalBuilder> externals;
+  /// How to find a builder for an external node that arrived without one —
+  /// the editor's path. Null in a shipped scene, where every node has its
+  /// own.
+  final SceneExternalResolver? externals;
 
   /// Names to outline — editor chrome, and empty in a shipped scene.
   final Set<String> selected;
@@ -250,13 +254,16 @@ class _SceneViewState extends State<SceneView> {
       case ShapeNode _:
         inner = null;
       case ExternalNode e:
-        var build = widget.externals[e.entry];
+        // The node's own builder first — that is a compiled scene, and the
+        // common case. The resolver is the editor asking the app which
+        // widget a label meant, because the closure could not travel.
+        var build = e.build ?? widget.externals?.call(e.entry);
         inner = build == null
-            // Named rather than blank: a scene naming an entry the app does
-            // not register is a wiring mistake, and a silent gap reads as a
-            // layout one.
+            // Named rather than blank: a scene naming an entry nothing can
+            // build is a wiring mistake, and a silent gap reads as a layout
+            // one.
             ? _MissingExternal(e.entry)
-            : build(context, e.renderedArgs);
+            : _asWidget(build(SceneArgs(e.renderedArgs)), e.entry);
       case SceneRefNode r:
         var inst = r.instance;
         if (inst == null) {
@@ -576,6 +583,30 @@ class _ScenePlayhead implements Playhead {
   @override
   void seek(Duration position) => playable.apply(position);
 }
+
+/// The builders a set of scene classes declares, as a resolver.
+///
+/// What [SceneCanvasHost] does for the editor, for anything else that has
+/// to draw a scene it received as DATA — an export walking a pair, a test.
+/// A shipped scene needs none of this: its nodes hold their own builders.
+SceneExternalResolver sceneExternalsFrom(
+  List<SceneDefinition Function()> scenes,
+) {
+  var builders = <String, SceneWidgetBuilder>{
+    for (var make in scenes)
+      for (var (node, _) in make().scene.walk())
+        if (node case ExternalNode(:var build?, :var entry)) entry: build,
+  };
+  return (entry) => builders[entry];
+}
+
+/// A builder returns `Object`, because the half of the model that declares
+/// it is pure Dart. This is where that becomes a widget again, and where a
+/// builder that returned something else says so instead of crashing the
+/// frame.
+Widget _asWidget(Object built, String entry) => built is Widget
+    ? built
+    : _MissingExternal('$entry built a ${built.runtimeType}, not a widget');
 
 SceneRect _union(SceneRect a, SceneRect b) {
   var left = a.left < b.left ? a.left : b.left;
