@@ -169,6 +169,108 @@ DrinkBadge(size: 99.0)    // built from what the wire carried
 DrinkBadge: size double   // what the inspector is told
 ```
 
+## The rest of it, end to end
+
+Run as one program, with every part marked for the file it would live in.
+Output at the bottom is real.
+
+### The generated class knows its own declaration
+
+This is the piece that makes everything else fall out. `build()` lives on
+the generated args:
+
+```dart
+@override Object build() => _declared(entry).build(SceneArgs(toMap()));
+```
+
+So a node can draw itself, and **a shipped app passes nothing**:
+
+```dart
+SceneView(BannerScene().scene)
+```
+
+`SceneView.externals` is deleted rather than replaced. The declaration list
+is reached from the generated file, which the app already compiles.
+
+### Rendering, including a motion
+
+```dart
+Object render(double t) => args
+    .merge(SceneArgs({for (var e in fx.entries) e.key: e.value.at(t)}))
+    .build();
+```
+
+Typed the whole way: `merge` returns `DrinkBadgeArgs`, and `build` reads
+`a.size`.
+
+### The wire, and the guest
+
+The wire carries a name, a label and a map — no closure and no generated
+type, so nothing about it is new:
+
+```
+{name: badge, entry: DrinkBadge, args: {size: 140.0}}
+```
+
+The guest turns it back through a generated lookup:
+
+```dart
+final sceneExtArgsByEntry = <String, SceneExtArgs Function(SceneArgs)>{
+  'DrinkBadge': DrinkBadgeArgs.read,
+};
+```
+
+### The inspector
+
+Straight off the declaration — name, type, and the default a field falls
+back to. This is the part that replaces resolving.
+
+### Emit
+
+The tool writes the constructor call back, skipping anything still equal to
+the declared default:
+
+```dart
+ExternalNode(const DrinkBadgeArgs(size: 140))
+```
+
+### What the parser must learn
+
+Reading `DrinkBadgeArgs(size: 140)` needs three things, all cheap: the class
+name gives the entry (`…Args` stripped), the named arguments give the
+values, and the declaration gives their types — so an argument the widget
+does not declare is refused with a line number.
+
+**This puts declarations before scene files in the load order.** A scene
+parsed with none available can still be read structurally, but nothing about
+its args can be checked; the editor should say so rather than pretend.
+
+### And the same thing twice over
+
+A motion targeting an undeclared arg is stopped in both graders, which is
+the property worth having:
+
+```dart
+scene.badge.animate(args: DrinkBadgeTracks(progress: …))  // does not compile
+```
+
+and the parser refuses it too, because `DrinkBadgeTracks` has no such field.
+
+### Measured
+
+```
+— the shipped app, nothing passed to it
+  t=0.0  DrinkBadge(flat white, size: 140.0)
+  t=0.5  DrinkBadge(flat white, size: 90.0)
+— the editor: what the inspector is told
+  size: double (default 56.0)
+— the wire, and the guest on the far side of it
+  carries {name: badge, entry: DrinkBadge, args: {size: 140.0}}
+  guest draws DrinkBadge(flat white, size: 140.0)
+— emit: what the tool writes back into the scene file
+  ExternalNode(const DrinkBadgeArgs(size: 140.0))
+```
+
 ## What it changes about today
 
 It **retires** more than it adds:
@@ -219,6 +321,10 @@ all — the schema was always there. The same generated shape serves both, and
 - **Where generation runs**: a build step, or the tool on demand when the
   declaration changes. The previews catalog already generates an entrypoint,
   so there is precedent either way.
+- **What happens when a declaration changes.** Removing an arg makes every
+  scene that set it invalid; renaming one silently drops its value unless
+  the tool notices. Regeneration is the easy half — the migration is not,
+  and it is the same question the scene grammar answers with refusals.
 - **Whether `entry` survives.** The args type identifies the widget in a
   scene file, so the label is only needed to cross the wire and to tie a
   declaration to its generated pair. It cannot now be derived from a type
