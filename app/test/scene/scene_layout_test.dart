@@ -269,6 +269,70 @@ void main() {
     expect(column.children.map((c) => c.name), ['second']);
   });
 
+  test('the new properties survive the file, the wire and the JSON', () {
+    var label = TextNode('label', 'Amount')
+      ..align = SceneTextAlign.right
+      ..maxLines = 2;
+    var row = FrameNode('row', layout: NodeLayout.row)
+      ..width = 400
+      ..borderColor = const SceneColor(0xFFE0D6CE)
+      ..borderWidth = 2
+      ..children.add(label);
+    var root = FrameNode('root', layout: NodeLayout.column)
+      ..width = 400
+      ..children.add(row);
+    var doc = SceneDocument(root);
+
+    var source = emitSceneFile(doc, className: 'Doc');
+    expect(source, contains('align: TextAlign.right'));
+    expect(source, contains('maxLines: 2'));
+    expect(source, contains('borderColor: Color(0xFFE0D6CE)'));
+    expect(source, contains('borderWidth: 2'));
+
+    var parsed = parseSceneFile(source);
+    expect(parsed.ok, isTrue, reason: parsed.refusals.join('; '));
+    var back = parsed.doc!.nodeNamed('label')! as TextNode;
+    expect(back.align, SceneTextAlign.right);
+    expect(back.maxLines, 2);
+    var backRow = parsed.doc!.nodeNamed('row')!;
+    expect(backRow.borderColor, const SceneColor(0xFFE0D6CE));
+    expect(backRow.borderWidth, 2);
+    expect(emitSceneFile(parsed.doc!, className: 'Doc'), source);
+
+    var json = sceneFromJson(
+      jsonDecode(jsonEncode(doc.toJson())) as Map<String, Object?>,
+    );
+    expect((json.nodeNamed('label')! as TextNode).align, SceneTextAlign.right);
+    expect((json.nodeNamed('label')! as TextNode).maxLines, 2);
+    expect(json.nodeNamed('row')!.borderWidth, 2);
+    expect(jsonEncode(doc.toWire()), contains('border'));
+  });
+
+  testWidgets('a right-aligned amount sits at the right of its box', (
+    tester,
+  ) async {
+    var amount = TextNode('amount', '£384.00')
+      ..width = 200
+      ..align = SceneTextAlign.right;
+    var root = FrameNode('root', layout: NodeLayout.column)
+      ..width = 200
+      ..children.add(amount);
+    var rects = <String, SceneRect>{};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SceneView(SceneDocument(root), onMeasured: rects.addAll),
+        ),
+      ),
+    );
+    await tester.pump();
+    // The box is the full width either way; what moved is the glyphs, so
+    // this checks the property reached the renderer rather than the layout.
+    expect(rects['amount']!.width, 200);
+    var text = tester.widget<Text>(find.text('£384.00'));
+    expect(text.textAlign, TextAlign.right);
+  });
+
   test('fill survives the wire, the JSON and the file', () {
     var child = ShapeNode('block')
       ..width = double.infinity

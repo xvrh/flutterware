@@ -84,6 +84,13 @@ sealed class SceneNode {
 
   // The uniform styling bag — the bet under test.
   SceneColor? fill;
+
+  /// A line around the node, or none. Two fields rather than one value,
+  /// because the file's vocabulary is flat named arguments and a
+  /// `Border(...)` would be a construct the grammar does not have.
+  SceneColor? borderColor;
+  double borderWidth = 1;
+
   double cornerRadius = 0;
   double opacity = 1;
 
@@ -222,6 +229,12 @@ class TextNode extends SceneNode {
   double fontSize = 16;
   SceneFontWeight weight = SceneFontWeight.w400;
   SceneColor color = const SceneColor(0xFF1A1A1A);
+  SceneTextAlign align = SceneTextAlign.left;
+
+  /// How many lines before it is cut with an ellipsis, or null for as many
+  /// as it takes. A banner filled per language is the reason: the layout
+  /// that fits English has to survive German, and something has to give.
+  int? maxLines;
 
   @override
   String get typeName => 'Text';
@@ -433,6 +446,7 @@ class SceneDocument extends SceneListenable {
       'w': sizeToWire(n.width),
       'h': sizeToWire(n.height),
       'fill': fill?.argb,
+      if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
       'corner': n.cornerRadius,
       'opacity': n.fxRendered('opacity'),
       // The imposed transforms have no authored slots — identity is the
@@ -452,6 +466,8 @@ class SceneDocument extends SceneListenable {
         },
         TextNode t => {
           'kind': 'text',
+          'align': t.align.index,
+          if (t.maxLines != null) 'maxLines': ?t.maxLines,
           'text': t.text,
           'fontSize': t.fxRendered('fontSize'),
           'weight': t.weight.index,
@@ -645,7 +661,9 @@ class SceneDocument extends SceneListenable {
               ..text = s.text
               ..fontSize = s.fontSize
               ..weight = s.weight
-              ..color = s.color;
+              ..color = s.color
+              ..align = s.align
+              ..maxLines = s.maxLines;
           case (ShapeNode i, ShapeNode s):
             i.circle = s.circle;
           case (ExternalNode i, ExternalNode s):
@@ -665,6 +683,8 @@ class SceneDocument extends SceneListenable {
           ..width = snap.width
           ..height = snap.height
           ..fill = snap.fill
+          ..borderColor = snap.borderColor
+          ..borderWidth = snap.borderWidth
           ..cornerRadius = snap.cornerRadius
           ..opacity = snap.opacity
           ..paramRefs.clear()
@@ -708,7 +728,9 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
       TextNode(name, t.text)
         ..fontSize = t.fontSize
         ..weight = t.weight
-        ..color = t.color,
+        ..color = t.color
+        ..align = t.align
+        ..maxLines = t.maxLines,
     ShapeNode s => ShapeNode(name, circle: s.circle),
     ExternalNode e => ExternalNode(name, e.entry, args: Map.of(e.args)),
     // The instance is copied too, so the copy draws at once; each copy owns
@@ -725,6 +747,8 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     ..width = node.width
     ..height = node.height
     ..fill = node.fill
+    ..borderColor = node.borderColor
+    ..borderWidth = node.borderWidth
     ..cornerRadius = node.cornerRadius
     ..opacity = node.opacity
     ..paramRefs.addAll(node.paramRefs);

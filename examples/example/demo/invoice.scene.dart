@@ -39,18 +39,23 @@ class Invoice({
 
   late final colItem = Text(
     'Item',
+    width: double.infinity,
     fontSize: 11,
     weight: FontWeight.w600,
     color: Color(0xFF6B5A52),
   );
   late final colQty = Text(
     'Qty',
+    width: 48,
+    align: TextAlign.right,
     fontSize: 11,
     weight: FontWeight.w600,
     color: Color(0xFF6B5A52),
   );
   late final colPrice = Text(
     'Amount',
+    width: 96,
+    align: TextAlign.right,
     fontSize: 11,
     weight: FontWeight.w600,
     color: Color(0xFF6B5A52),
@@ -64,47 +69,87 @@ class Invoice({
     children: [colItem, colQty, colPrice],
   );
 
-  late final item1 = Text('Espresso beans, 1kg', fontSize: 12);
-  late final qty1 = Text('12', fontSize: 12);
-  late final price1 = Text('£384.00', fontSize: 12);
+  late final item1 = Text(
+    'Espresso beans, 1kg',
+    width: double.infinity,
+    fontSize: 12,
+  );
+  late final qty1 = Text('12', width: 48, align: TextAlign.right, fontSize: 12);
+  late final price1 = Text(
+    '£384.00',
+    width: 96,
+    align: TextAlign.right,
+    fontSize: 12,
+  );
   late final row1 = Frame(
     width: 499,
     layout: NodeLayout.row,
     gap: 24,
     padding: 8,
+    borderColor: Color(0xFFEDE4DC),
     children: [item1, qty1, price1],
   );
 
-  late final item2 = Text('Oat milk, 12 × 1L', fontSize: 12);
-  late final qty2 = Text('8', fontSize: 12);
-  late final price2 = Text('£216.00', fontSize: 12);
+  late final item2 = Text(
+    'Oat milk, 12 × 1L',
+    width: double.infinity,
+    fontSize: 12,
+  );
+  late final qty2 = Text('8', width: 48, align: TextAlign.right, fontSize: 12);
+  late final price2 = Text(
+    '£216.00',
+    width: 96,
+    align: TextAlign.right,
+    fontSize: 12,
+  );
   late final row2 = Frame(
     width: 499,
     layout: NodeLayout.row,
     gap: 24,
     padding: 8,
+    borderColor: Color(0xFFEDE4DC),
     children: [item2, qty2, price2],
   );
 
-  late final item3 = Text('Takeaway cups, 500', fontSize: 12);
-  late final qty3 = Text('4', fontSize: 12);
-  late final price3 = Text('£148.00', fontSize: 12);
+  late final item3 = Text(
+    'Takeaway cups, 500',
+    width: double.infinity,
+    fontSize: 12,
+  );
+  late final qty3 = Text('4', width: 48, align: TextAlign.right, fontSize: 12);
+  late final price3 = Text(
+    '£148.00',
+    width: 96,
+    align: TextAlign.right,
+    fontSize: 12,
+  );
   late final row3 = Frame(
     width: 499,
     layout: NodeLayout.row,
     gap: 24,
     padding: 8,
+    borderColor: Color(0xFFEDE4DC),
     children: [item3, qty3, price3],
   );
 
-  late final item4 = Text('Filter papers, box', fontSize: 12);
-  late final qty4 = Text('25', fontSize: 12);
-  late final price4 = Text('£500.00', fontSize: 12);
+  late final item4 = Text(
+    'Filter papers, box',
+    width: double.infinity,
+    fontSize: 12,
+  );
+  late final qty4 = Text('25', width: 48, align: TextAlign.right, fontSize: 12);
+  late final price4 = Text(
+    '£500.00',
+    width: 96,
+    align: TextAlign.right,
+    fontSize: 12,
+  );
   late final row4 = Frame(
     width: 499,
     layout: NodeLayout.row,
     gap: 24,
     padding: 8,
+    borderColor: Color(0xFFEDE4DC),
     children: [item4, qty4, price4],
   );
 

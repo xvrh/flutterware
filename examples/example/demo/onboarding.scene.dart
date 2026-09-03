@@ -22,16 +22,15 @@ class Onboarding({
     mainAlign: MainAxisAlignment.center,
     children: [cup],
   );
-  late final copy = Text(body, color: Color(0xFF6B5A52));
   late final heading = Text(
     title,
     fontSize: 30,
     weight: FontWeight.w700,
     color: Color(0xFF1B1210),
   );
+  late final copy = Text(body, color: Color(0xFF6B5A52));
   late final ctaLabel = Text(
     cta,
-    x: 219.60405419435222,
     y: 13.579370847176051,
     fontSize: 17,
     weight: FontWeight.w600,
@@ -44,6 +43,7 @@ class Onboarding({
     layout: NodeLayout.row,
     padding: 16,
     mainAlign: MainAxisAlignment.center,
+    crossAlign: CrossAxisAlignment.start,
     children: [ctaLabel],
   );
   late final root = Frame(

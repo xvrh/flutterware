@@ -11,6 +11,12 @@ import 'model.dart';
 import 'motion_model.dart';
 import 'values.dart';
 
+SceneTextAlign _textAlign(Object? raw) => switch (raw) {
+  num i when i >= 0 && i < SceneTextAlign.values.length =>
+    SceneTextAlign.values[i.toInt()],
+  _ => SceneTextAlign.left,
+};
+
 /// A whole file as data: the scene, the class it is named after, and the
 /// motions that animate it.
 Map<String, Object?> sceneFileToJson(
@@ -82,6 +88,7 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
   if (n.width != null) 'w': sizeToWire(n.width),
   if (n.height != null) 'h': sizeToWire(n.height),
   if (n.fill != null) 'fill': n.fill!.argb,
+  if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
   if (n.cornerRadius != 0) 'corner': n.cornerRadius,
   if (n.opacity != 1) 'opacity': n.opacity,
   if (n.paramRefs.isNotEmpty) 'paramRefs': {...n.paramRefs},
@@ -99,6 +106,8 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
       'fontSize': t.fontSize,
       'weight': t.weight.index,
       'color': t.color.argb,
+      if (t.align != SceneTextAlign.left) 'align': t.align.index,
+      if (t.maxLines != null) 'maxLines': ?t.maxLines,
     },
     ShapeNode s => {'circle': s.circle},
     ExternalNode e => {
@@ -138,7 +147,9 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
         ..fontSize = number('fontSize') ?? 16
         ..weight =
             SceneFontWeight.values[(json['weight'] as num?)?.toInt() ?? 3]
-        ..color = SceneColor((json['color'] as num?)?.toInt() ?? 0xFF1A1A1A),
+        ..color = SceneColor((json['color'] as num?)?.toInt() ?? 0xFF1A1A1A)
+        ..align = _textAlign(json['align'])
+        ..maxLines = (json['maxLines'] as num?)?.toInt(),
     'Shape' => ShapeNode(name, circle: json['circle'] == true),
     'Ext' => ExternalNode(
       name,
@@ -160,6 +171,14 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
     ..fill = json['fill'] == null
         ? null
         : SceneColor((json['fill']! as num).toInt())
+    ..borderColor = switch (json['border']) {
+      List l when l.isNotEmpty => SceneColor((l[0] as num).toInt()),
+      _ => null,
+    }
+    ..borderWidth = switch (json['border']) {
+      List l when l.length > 1 => (l[1] as num).toDouble(),
+      _ => 1,
+    }
     ..cornerRadius = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1
     ..paramRefs.addAll(
@@ -343,7 +362,9 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
         ..fontSize = number('fontSize') ?? 16
         ..weight =
             SceneFontWeight.values[(json['weight'] as num?)?.toInt() ?? 3]
-        ..color = color('color') ?? const SceneColor(0xFF1A1A1A),
+        ..color = color('color') ?? const SceneColor(0xFF1A1A1A)
+        ..align = _textAlign(json['align'])
+        ..maxLines = (json['maxLines'] as num?)?.toInt(),
     'shape' => ShapeNode(name, circle: json['circle'] == true),
     'ext' => ExternalNode(
       name,
@@ -373,6 +394,14 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
     ..width = sizeFromWire(json['w'])
     ..height = sizeFromWire(json['h'])
     ..fill = color('fill')
+    ..borderColor = switch (json['border']) {
+      List l when l.isNotEmpty => SceneColor((l[0] as num).toInt()),
+      _ => null,
+    }
+    ..borderWidth = switch (json['border']) {
+      List l when l.length > 1 => (l[1] as num).toDouble(),
+      _ => 1,
+    }
     ..cornerRadius = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1;
 

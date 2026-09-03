@@ -71,6 +71,10 @@ class SceneFontWeight {
 /// Flutter's, because the wire carries the index.
 enum SceneCrossAxisAlignment { start, end, center, stretch, baseline }
 
+/// How a text sits in the box it was given. Flutter's own names, because
+/// that is what the file spells and what it becomes.
+enum SceneTextAlign { left, right, center, justify }
+
 /// Space inside a frame, per side.
 ///
 /// One value where there used to be a number, because the number could only

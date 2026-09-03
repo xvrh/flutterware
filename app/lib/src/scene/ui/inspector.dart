@@ -94,7 +94,24 @@ class SceneInspector extends StatelessWidget {
       key: ValueKey('inspector:${node.name}'),
       padding: const EdgeInsets.all(FwSpacing.lg),
       children: [
-        Text('${node.typeName} · ${node.name}', style: context.type.bodyStrong),
+        Text(
+          node == doc.root
+              ? 'Artboard · ${node.name}'
+              : '${node.typeName} · ${node.name}',
+          style: context.type.bodyStrong,
+        ),
+        // The root is not selectable — it is the page, not a thing on it —
+        // and this panel falls back to it when nothing is selected. Saying
+        // so is the difference between "here is your selection" and "you
+        // have none", which the tree was telling the truth about all along.
+        if (node == doc.root && editor.selectedNodes.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: FwSpacing.xxs),
+            child: Text(
+              'nothing selected',
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            ),
+          ),
         const SizedBox(height: FwSpacing.lg),
         if (inFlex)
           Padding(
@@ -151,6 +168,20 @@ class SceneInspector extends StatelessWidget {
               : _set('fill', c, () => node.fill = c),
         ),
         const SizedBox(height: FwSpacing.md),
+        _label(context, 'Border'),
+        _swatches(context, node.borderColor, (c) {
+          _door('borderColor', () => node.borderColor = c);
+        }),
+        if (node.borderColor != null)
+          _row([
+            _number(
+              'borderWidth',
+              'Width',
+              node.borderWidth,
+              SceneNumberShape.pixels,
+              apply: (v) => node.borderWidth = v,
+            ),
+          ]),
         _row([
           _number(
             'corner',
@@ -409,6 +440,33 @@ class SceneInspector extends StatelessWidget {
         ],
       ),
     ]),
+    _row([
+      Builder(
+        builder: (context) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _label(context, 'Align'),
+            FwPicker<SceneTextAlign>(
+              selected: t.align,
+              choices: const [
+                FwChoice(value: SceneTextAlign.left, label: 'Left'),
+                FwChoice(value: SceneTextAlign.center, label: 'Center'),
+                FwChoice(value: SceneTextAlign.right, label: 'Right'),
+                FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
+              ],
+              onChanged: (v) => _door('align', () => t.align = v),
+            ),
+          ],
+        ),
+      ),
+      _number(
+        'maxLines',
+        'Max lines (0 = all)',
+        (t.maxLines ?? 0).toDouble(),
+        const SceneNumberShape(perPixel: 0.1, decimals: 0, min: 0, softMax: 10),
+        apply: (v) => t.maxLines = v < 1 ? null : v.round(),
+      ),
+    ]),
     _label(context, 'Color'),
     _swatches(context, _shown(t, 'color', t.color), (c) {
       var color = c ?? const SceneColor(0xFF000000);
@@ -496,7 +554,37 @@ class SceneInspector extends StatelessWidget {
       ),
     ]),
     if (f.layout != NodeLayout.absolute) ...[
+      // Both axes, always, and each says when it has nothing to do. Cross
+      // align alone was read as "align the contents", which is what main
+      // align does — and a frame that hugs the axis it is aligning on has
+      // no spare room, so every option looks the same and the control
+      // looks broken.
+      _label(context, 'Main align'),
+      _alignNote(context, f, main: true),
+      FwPicker<SceneMainAxisAlignment>(
+        selected: f.mainAlign,
+        choices: const [
+          FwChoice(value: SceneMainAxisAlignment.start, label: 'Start'),
+          FwChoice(value: SceneMainAxisAlignment.center, label: 'Center'),
+          FwChoice(value: SceneMainAxisAlignment.end, label: 'End'),
+          FwChoice(
+            value: SceneMainAxisAlignment.spaceBetween,
+            label: 'Space between',
+          ),
+          FwChoice(
+            value: SceneMainAxisAlignment.spaceAround,
+            label: 'Space around',
+          ),
+          FwChoice(
+            value: SceneMainAxisAlignment.spaceEvenly,
+            label: 'Space evenly',
+          ),
+        ],
+        onChanged: (v) => _door('mainAlign', () => f.mainAlign = v),
+      ),
+      const SizedBox(height: FwSpacing.md),
       _label(context, 'Cross align'),
+      _alignNote(context, f, main: false),
       FwPicker<SceneCrossAxisAlignment>(
         selected: f.crossAlign,
         choices: const [
@@ -509,6 +597,21 @@ class SceneInspector extends StatelessWidget {
       ),
     ],
   ];
+
+  /// Says when an alignment has no room to move anything: the frame hugs
+  /// that axis, so every option lands in the same place.
+  Widget _alignNote(BuildContext context, FrameNode f, {required bool main}) {
+    var horizontal = (f.layout == NodeLayout.row) == main;
+    var size = horizontal ? f.width : f.height;
+    if (size != null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+      child: Text(
+        'no room: ${f.name} hugs its ${horizontal ? 'width' : 'height'}',
+        style: context.type.micro.copyWith(color: context.colors.mut2),
+      ),
+    );
+  }
 
   List<Widget> _shapeProps(BuildContext context, ShapeNode s) => [
     Tappable(

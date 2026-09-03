@@ -211,6 +211,11 @@ class _SceneViewState extends State<SceneView> {
       case TextNode t:
         inner = Text(
           t.text,
+          textAlign: t.align.flutter,
+          maxLines: t.maxLines,
+          overflow: t.maxLines == null
+              ? TextOverflow.clip
+              : TextOverflow.ellipsis,
           style: TextStyle(
             fontSize: t.fxRendered('fontSize') as double,
             fontWeight: t.weight.flutter,
@@ -321,9 +326,16 @@ class _SceneViewState extends State<SceneView> {
           : null,
       // The root's own fill is painted by the Material above, so a nested
       // decoration would double it.
-      decoration: !root && (fill != null || n.cornerRadius > 0)
+      decoration:
+          !root && (fill != null || n.borderColor != null || n.cornerRadius > 0)
           ? BoxDecoration(
               color: fill?.flutter,
+              border: n.borderColor == null
+                  ? null
+                  : Border.all(
+                      color: n.borderColor!.flutter,
+                      width: n.borderWidth,
+                    ),
               shape: circle ? BoxShape.circle : BoxShape.rectangle,
               borderRadius: circle || n.cornerRadius == 0
                   ? null

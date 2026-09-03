@@ -204,6 +204,12 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
     if (n.width case var w?) add('width', w, () => _size(w));
     if (n.height case var h?) add('height', h, () => _size(h));
     if (n.fill case var f?) add('fill', f, () => _color(f));
+    if (n.borderColor case var b?) {
+      add('borderColor', b, () => _color(b));
+      if (n.borderWidth != 1) {
+        add('borderWidth', n.borderWidth, () => _num(n.borderWidth));
+      }
+    }
     if (n.cornerRadius != 0) {
       add('corner', n.cornerRadius, () => _num(n.cornerRadius));
     }
@@ -252,6 +258,12 @@ void _emitNode(StringBuffer out, SceneNode n, Map<String, SceneParamDecl> ps) {
       }
       if (t.color != const SceneColor(0xFF1A1A1A)) {
         add('color', t.color, () => _color(t.color));
+      }
+      if (t.align != SceneTextAlign.left) {
+        props.add('align: TextAlign.${t.align.name}');
+      }
+      if (t.maxLines case var lines?) {
+        add('maxLines', lines.toDouble(), () => '$lines');
       }
       out.write('Text(${props.join(', ')})');
     case ShapeNode s:
@@ -837,6 +849,18 @@ class _Parser {
           'fontSize',
           (e) => node.fontSize = _doubleV(e, node, 'fontSize') ?? node.fontSize,
         );
+        _take(named, 'align', (e) {
+          var v = _enum(e, 'TextAlign', [
+            for (var a in SceneTextAlign.values) a.name,
+          ]);
+          if (v != null) {
+            node.align = SceneTextAlign.values.firstWhere((a) => a.name == v);
+          }
+        });
+        _take(named, 'maxLines', (e) {
+          var v = _double(e);
+          if (v != null) node.maxLines = v.round();
+        });
         _take(named, 'weight', (e) {
           var v = _enum(e, 'FontWeight', [
             for (var i = 1; i <= 9; i++) 'w${i * 100}',
@@ -927,6 +951,16 @@ class _Parser {
     _take(named, 'width', (e) => n.width = _sizeV(e, n, 'width'));
     _take(named, 'height', (e) => n.height = _sizeV(e, n, 'height'));
     _take(named, 'fill', (e) => n.fill = _colorV(e, n, 'fill'));
+    _take(
+      named,
+      'borderColor',
+      (e) => n.borderColor = _colorV(e, n, 'borderColor'),
+    );
+    _take(
+      named,
+      'borderWidth',
+      (e) => n.borderWidth = _doubleV(e, n, 'borderWidth') ?? 1,
+    );
     _take(
       named,
       'corner',
