@@ -42,6 +42,11 @@ class MotionPlayer {
     if (_position >= playable.duration) _position = Duration.zero;
     _lastElapsed = Duration.zero;
     status = MotionPlayerStatus.playing;
+    // The pose it is about to play FROM, now rather than on the first tick.
+    // A ticker's first callback is a frame away, so a motion that opens on
+    // opacity 0 used to draw one frame of the authored scene first — the
+    // flash of a finished thing before it starts.
+    playable.apply(_position);
     _ticker.start();
   }
 
