@@ -68,9 +68,17 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
   }
 
   Iterable<(SceneNode, int)> _rows() sync* {
+    // A canvas drag proposing a target inside a folded branch would light up
+    // a row nobody can see. Revealed for the length of the drag, and only in
+    // the render: [_folded] is untouched, so the tree goes back to how it
+    // was left rather than to how a drag happened to open it.
+    var revealed = <String>{};
+    for (SceneNode? p = editor.dropTarget; p != null; p = doc.parentOf(p)) {
+      revealed.add(p.name);
+    }
     Iterable<(SceneNode, int)> visit(SceneNode node, int depth) sync* {
       yield (node, depth);
-      if (_folded.contains(node.name)) return;
+      if (_folded.contains(node.name) && !revealed.contains(node.name)) return;
       for (var child in node.children) {
         yield* visit(child, depth + 1);
       }
@@ -188,7 +196,15 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
     var selected = editor.isSelected(node);
     var hovered = editor.hover == node.name;
     var renaming = _renaming == node.name;
-    var drop = _dropAt?.$1 == node.name ? _dropAt!.$2 : null;
+    // Two drags can propose this row: the tree's own, and the canvas's,
+    // which puts the frame it would drop into on the editor. One indicator
+    // for both — a drop target is a drop target, and the tree is where the
+    // hierarchy is legible.
+    var drop = _dropAt?.$1 == node.name
+        ? _dropAt!.$2
+        : identical(editor.dropTarget, node)
+        ? _Drop.into
+        : null;
 
     var row = FwTreeRow(
       depth: depth,

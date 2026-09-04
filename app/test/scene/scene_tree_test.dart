@@ -9,7 +9,12 @@ import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/ui/shortcuts.dart';
 import 'package:flutterware_app/src/scene/ui/tree_panel.dart';
+import 'package:flutterware_app/src/ui/tree_row.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
+
+FwTreeRow rowOf(WidgetTester tester, String name) => tester.widget<FwTreeRow>(
+  find.ancestor(of: find.text(name), matching: find.byType(FwTreeRow)).first,
+);
 
 void main() {
   group('rename', () {
@@ -119,6 +124,41 @@ void main() {
       );
       await tester.pump();
     }
+
+    testWidgets('a canvas drop target lights up here, folded or not', (
+      tester,
+    ) async {
+      await pump(tester);
+      var copy = editor.doc.nodeNamed('copy')! as FrameNode;
+
+      // Folded away, so its row is not even rendered — the state a
+      // highlight alone would be invisible in.
+      await tester.tap(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('copy'),
+            matching: find.byType(FwTreeRow),
+          ),
+          matching: find.byIcon(Icons.expand_more),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('headline'), findsNothing);
+
+      // The canvas proposes it. The row comes back and reads as the drop
+      // target — the same indicator the tree's own drag uses.
+      editor.dropTarget = copy;
+      await tester.pump();
+      expect(find.text('copy'), findsOneWidget);
+      expect(rowOf(tester, 'copy').selected, isTrue);
+
+      // And the reveal is only a reveal: the fold the user left is still
+      // theirs when the drag ends.
+      editor.dropTarget = null;
+      await tester.pump();
+      expect(find.text('headline'), findsNothing);
+      expect(rowOf(tester, 'copy').selected, isFalse);
+    });
 
     testWidgets("the rename field keeps the scope's letters and Backspace", (
       tester,
