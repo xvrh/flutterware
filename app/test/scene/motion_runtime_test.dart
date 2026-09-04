@@ -278,7 +278,7 @@ void main() {
     ) async {
       var (scene, bound) = shortPair();
       var glow = scene.nodeNamed('glow')!;
-      var player = MotionPlayer.bound(bound);
+      var player = MotionPlayer.bound(bound, vsync: null);
       player.play();
       expect(player.status, MotionPlayerStatus.playing);
       await tester.pump(); // the ticker's first tick stamps its start time
@@ -297,7 +297,7 @@ void main() {
       tester,
     ) async {
       var (_, bound) = shortPair();
-      var player = MotionPlayer.bound(bound)..rate = 2;
+      var player = MotionPlayer.bound(bound, vsync: null)..rate = 2;
       player.play();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 110));
@@ -308,7 +308,7 @@ void main() {
     testWidgets('pause holds, seek is pure in any direction', (tester) async {
       var (scene, bound) = shortPair();
       var glow = scene.nodeNamed('glow')!;
-      var player = MotionPlayer.bound(bound);
+      var player = MotionPlayer.bound(bound, vsync: null);
       player.play();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -316,7 +316,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(player.position, const Duration(milliseconds: 100));
       expect(glow.fxRendered('translateY'), 50.0);
-      player.seek(const Duration(milliseconds: 40));
+      player.position = (const Duration(milliseconds: 40));
       expect(glow.fxRendered('translateY'), 20.0);
       player.dispose();
     });
@@ -324,7 +324,7 @@ void main() {
     testWidgets('stop is cancel: fx drops, base untouched', (tester) async {
       var (scene, bound) = shortPair();
       var glow = scene.nodeNamed('glow')!;
-      var player = MotionPlayer.bound(bound);
+      var player = MotionPlayer.bound(bound, vsync: null);
       player.play();
       await tester.pump(const Duration(milliseconds: 100));
       player.stop();
@@ -338,8 +338,8 @@ void main() {
       tester,
     ) async {
       var (_, bound) = shortPair();
-      var first = MotionPlayer.bound(bound)..play();
-      var second = MotionPlayer.bound(bound);
+      var first = MotionPlayer.bound(bound, vsync: null)..play();
+      var second = MotionPlayer.bound(bound, vsync: null);
       expect(second.play, throwsStateError);
       first.dispose();
       // Released on stop: now the second may drive.

@@ -60,7 +60,7 @@ class ScenePlayback extends ChangeNotifier {
     if (!_applied) return;
     // A key's value changed under a parked playhead: the picture is stale
     // until the motion is applied again. Playing re-applies every tick.
-    if (!isPlaying) _player.seek(_player.position);
+    if (!isPlaying) _player.position = _player.position;
   }
 
   final SceneEditor editor;
@@ -75,7 +75,7 @@ class ScenePlayback extends ChangeNotifier {
   void _bind() {
     _bound = BoundMotion.bind(motion, editor.doc);
     _player = MotionPlayer.bound(_bound, vsync: vsync)
-      ..onPosition = (at) => editor.playhead = at;
+      ..addListener(() => editor.playhead = _player.position);
     editor.playhead = _player.position;
   }
 
@@ -127,7 +127,7 @@ class ScenePlayback extends ChangeNotifier {
   /// motion does, including reopening one that was closed.
   void apply() {
     _applied = true;
-    _player.seek(_player.position);
+    _player.position = _player.position;
     notifyListeners();
   }
 
@@ -154,7 +154,7 @@ class ScenePlayback extends ChangeNotifier {
 
   void seek(Duration at) {
     _applied = true;
-    _player.seek(at);
+    _player.position = at;
     notifyListeners();
   }
 

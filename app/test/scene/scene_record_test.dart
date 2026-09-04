@@ -14,10 +14,10 @@ void main() {
   test('the player parks past the end, at the end pose', () {
     var scene = coffeeBannerDraft();
     var bound = BoundMotion.bind(coffeeIntroDraft(scene), scene);
-    var player = MotionPlayer.bound(bound);
+    var player = MotionPlayer.bound(bound, vsync: null);
     var seen = <Duration>[];
-    player.onPosition = seen.add;
-    player.seek(const Duration(seconds: 5));
+    player.addListener(() => seen.add(player.position));
+    player.position = const Duration(seconds: 5);
     expect(player.position, const Duration(seconds: 5));
     expect(scene.nodeNamed('headline')!.fxRendered('opacity'), 1.0);
     expect(seen, [const Duration(seconds: 5)]);
