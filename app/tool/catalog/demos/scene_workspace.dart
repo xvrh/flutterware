@@ -75,7 +75,7 @@ class _WorkspaceState extends State<_Workspace> with TickerProviderStateMixin {
     playbackFor: _playbackFor,
     sceneClassName: 'BannerScene',
     externals: describeExternals(_externals),
-    content: SceneView(
+    content: SceneView.document(
       _doc,
       onMeasured: (rects) => applyMeasuredRects(_doc, rects),
     ),

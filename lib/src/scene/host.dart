@@ -189,7 +189,7 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
                 child: SizedBox(
                   width: (_artboard ?? MediaQuery.sizeOf(context)).width,
                   height: (_artboard ?? MediaQuery.sizeOf(context)).height,
-                  child: SceneView(
+                  child: SceneView.document(
                     scene,
                     selected: _selected,
                     // Named here, at the edge the names exist on: the

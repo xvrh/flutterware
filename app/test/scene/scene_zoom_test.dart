@@ -31,7 +31,7 @@ void main() {
                 views.add(view);
                 return const SizedBox();
               },
-              content: SceneView(
+              content: SceneView.document(
                 editor.doc,
                 onMeasured: (r) => applyMeasuredRects(editor.doc, r),
               ),

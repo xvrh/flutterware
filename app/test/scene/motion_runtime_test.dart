@@ -383,7 +383,11 @@ void main() {
       headline.writeFx('m', 'translateY', 12.0);
       await tester.pumpWidget(
         MaterialApp(
-          home: SizedBox(width: 1024, height: 500, child: SceneView(scene)),
+          home: SizedBox(
+            width: 1024,
+            height: 500,
+            child: SceneView.document(scene),
+          ),
         ),
       );
       var text = find.text('Fresh coffee, faster');
@@ -436,7 +440,7 @@ void main() {
             body: Column(
               children: [
                 _TransportHost(editor),
-                Expanded(child: FittedBox(child: SceneView(scene))),
+                Expanded(child: FittedBox(child: SceneView.document(scene))),
               ],
             ),
           ),

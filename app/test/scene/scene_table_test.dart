@@ -46,7 +46,10 @@ void main() {
       MaterialApp(
         home: Align(
           alignment: Alignment.topLeft,
-          child: SceneView(doc, onMeasured: (r) => rects.addAll(namedRects(r))),
+          child: SceneView.document(
+            doc,
+            onMeasured: (r) => rects.addAll(namedRects(r)),
+          ),
         ),
       ),
     );

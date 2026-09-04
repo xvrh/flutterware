@@ -53,7 +53,7 @@ class ScenePlayerHost extends StatelessWidget {
       theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
       home: Align(
         alignment: Alignment.topLeft,
-        child: SceneView(
+        child: SceneView.document(
           pair.scene,
           motion: motion == null ? null : BoundMotion.bind(motion, pair.scene),
         ),

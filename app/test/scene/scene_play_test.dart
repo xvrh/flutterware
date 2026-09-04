@@ -2,12 +2,16 @@
 // clock — no document read from anywhere, no lookup by name, no editor.
 //
 // This is the path an app actually writes, and until now nothing pumped it:
-// the pieces were each tested apart, and `playTimeline` was only ever parked
+// the pieces were each tested apart, and the timeline was only ever parked
 // by hand at a time.
+//
+// Note the imports. `scene.dart` and the scene file, and nothing else — an
+// app has no business importing the authoring vocabulary, which is the
+// tool's. That only became true when a motion became a playable: before it,
+// starting one meant reaching for `playTimeline` in `scene_authoring.dart`.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
-import 'package:flutterware/scene_authoring.dart';
 
 import 'sample.scene.dart';
 
@@ -24,8 +28,7 @@ class _Banner extends StatefulWidget {
 class _BannerState extends State<_Banner> with SingleTickerProviderStateMixin {
   final scene = SampleScene();
   late final motion = SampleIntro(scene);
-  late final playable = playTimeline(motion.timeline);
-  late final player = MotionPlayer(playable, vsync: this);
+  late final player = MotionPlayer(motion, vsync: this);
 
   @override
   void initState() {
@@ -40,7 +43,7 @@ class _BannerState extends State<_Banner> with SingleTickerProviderStateMixin {
   }
 
   @override
-  Widget build(BuildContext context) => SceneView(scene.scene);
+  Widget build(BuildContext context) => SceneView(scene);
 }
 
 void main() {
@@ -53,7 +56,7 @@ void main() {
     );
     var state = tester.state<_BannerState>(find.byWidget(widget));
 
-    expect(state.playable.duration, const Duration(milliseconds: 360));
+    expect(state.motion.duration, const Duration(milliseconds: 360));
     expect(state.scene.title.fxRendered('opacity'), 0.0);
 
     // The clock is real: pumping frames is what moves it, and the view

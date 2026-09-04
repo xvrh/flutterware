@@ -35,7 +35,7 @@ class _SceneClipState extends State<_SceneClip> {
       color: const Color(0xFF26282C),
       child: Align(
         alignment: Alignment.topLeft,
-        child: SceneView(_scene, motion: _motion),
+        child: SceneView.document(_scene, motion: _motion),
       ),
     ),
   );

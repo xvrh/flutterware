@@ -38,7 +38,10 @@ void main() {
     var rects = <String, SceneRect>{};
     await tester.pumpWidget(
       MaterialApp(
-        home: SceneView(doc, onMeasured: (r) => rects.addAll(namedRects(r))),
+        home: SceneView.document(
+          doc,
+          onMeasured: (r) => rects.addAll(namedRects(r)),
+        ),
       ),
     );
     await tester.pump();
@@ -65,7 +68,10 @@ void main() {
     var rects = <String, SceneRect>{};
     await tester.pumpWidget(
       MaterialApp(
-        home: SceneView(doc, onMeasured: (r) => rects.addAll(namedRects(r))),
+        home: SceneView.document(
+          doc,
+          onMeasured: (r) => rects.addAll(namedRects(r)),
+        ),
       ),
     );
     await tester.pump();
@@ -91,7 +97,7 @@ void main() {
           home: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 500, maxHeight: 400),
-              child: SceneView(doc),
+              child: SceneView.document(doc),
             ),
           ),
         ),
@@ -175,7 +181,7 @@ void main() {
       MaterialApp(
         // Centred, so the scene is asked how big it is rather than told.
         home: Center(
-          child: SceneView(
+          child: SceneView.document(
             SceneDocument(root),
             onMeasured: (r) => rects.addAll(namedRects(r)),
           ),
@@ -210,7 +216,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Center(
-          child: SceneView(
+          child: SceneView.document(
             SceneDocument(root),
             onMeasured: (r) => rects.addAll(namedRects(r)),
           ),
@@ -332,7 +338,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Center(
-          child: SceneView(
+          child: SceneView.document(
             SceneDocument(root),
             onMeasured: (r) => rects.addAll(namedRects(r)),
           ),

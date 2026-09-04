@@ -40,7 +40,26 @@ Map<String, SceneRect> namedRects(Map<SceneNode, SceneRect> rects) => {
 };
 
 class SceneView extends StatefulWidget {
-  const SceneView(
+  /// Draws a scene an app COMPILED — `SceneView(BannerScene())`, which is
+  /// the whole of what mounting one takes.
+  ///
+  /// The definition holds its document (built once, `late final`), so this
+  /// costs nothing per rebuild. It does not make the definition safe to
+  /// build in `build()`: a fresh `BannerScene()` is fresh nodes, and a
+  /// player would go on writing its fx onto the ones that went away. Hold
+  /// it in a field.
+  SceneView(
+    SceneDefinition definition, {
+    super.key,
+    this.motion,
+    this.selected = const {},
+    this.onMeasured,
+  }) : scene = definition.scene;
+
+  /// Draws a document that was READ — parsed from source, or decoded off
+  /// the editor's wire. There is no definition behind one of those, which is
+  /// why it is a door of its own rather than the same one.
+  const SceneView.document(
     this.scene, {
     super.key,
     this.motion,

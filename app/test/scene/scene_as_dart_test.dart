@@ -56,7 +56,7 @@ void main() {
   testWidgets('and it mounts', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Center(child: SceneView(SampleScene(headline: 'Hello').scene)),
+        home: Center(child: SceneView(SampleScene(headline: 'Hello'))),
       ),
     );
     expect(find.text('Hello'), findsOneWidget);
@@ -92,18 +92,19 @@ void main() {
     tester,
   ) async {
     var scene = SampleScene();
+    // A motion IS a playable: nothing binds it, because the groups hold
+    // their nodes and are in the timeline expression itself.
     var motion = SampleIntro(scene);
-    var play = playTimeline(motion.timeline);
 
     // Par of a 260ms group and a 240ms one placed at 120: 360, not 500.
-    expect(play.duration, const Duration(milliseconds: 360));
-    play.apply(Duration.zero);
+    expect(motion.duration, const Duration(milliseconds: 360));
+    motion.apply(Duration.zero);
     expect(scene.title.fxRendered('opacity'), 0.0);
-    play.apply(const Duration(milliseconds: 260));
+    motion.apply(const Duration(milliseconds: 260));
     expect(scene.title.fxRendered('opacity'), 1.0);
     // The badge is placed 120ms in, so at 260 it is 140 through its 240.
     expect(scene.badge.fxRendered('scale') as double, greaterThan(0.6));
-    play.clearFx();
+    motion.clearFx();
     expect(scene.title.fxRendered('opacity'), 1.0, reason: 'back to authored');
   });
 
@@ -130,7 +131,7 @@ void main() {
 
   testWidgets('and every row of it is drawn', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: Center(child: SceneView(SampleScene().scene))),
+      MaterialApp(home: Center(child: SceneView(SampleScene()))),
     );
     expect(find.text('Beans'), findsOneWidget);
     expect(find.text('Milk'), findsOneWidget);
@@ -143,7 +144,7 @@ void main() {
     // No registry, and nothing to register: the builder is in the file, so
     // the widget and its mockup live where the compiler checks them.
     await tester.pumpWidget(
-      MaterialApp(home: Center(child: SceneView(SampleScene().scene))),
+      MaterialApp(home: Center(child: SceneView(SampleScene()))),
     );
     expect(find.byType(app.SampleChip), findsOneWidget);
     expect(find.text('new'), findsOneWidget);
@@ -171,7 +172,7 @@ void main() {
     // turn it back into a widget.
     bindExternals(arrived, sceneExternals);
     await tester.pumpWidget(
-      MaterialApp(home: Center(child: SceneView(arrived))),
+      MaterialApp(home: Center(child: SceneView.document(arrived))),
     );
     expect(find.byType(app.SampleChip), findsOneWidget);
   });
@@ -188,7 +189,7 @@ void main() {
       MaterialApp(
         home: Align(
           alignment: Alignment.topLeft,
-          child: SceneView(scene.scene, onMeasured: rects.addAll),
+          child: SceneView(scene, onMeasured: rects.addAll),
         ),
       ),
     );
@@ -241,9 +242,7 @@ void main() {
     scene.badgeRef.syncInstance();
     expect(scene.badgeRef.instance, isNotNull);
 
-    await tester.pumpWidget(
-      MaterialApp(home: Center(child: SceneView(scene.scene))),
-    );
+    await tester.pumpWidget(MaterialApp(home: Center(child: SceneView(scene))));
     // The arg reached the child's own parameter.
     expect(find.text('Open'), findsOneWidget);
   });

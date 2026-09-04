@@ -302,7 +302,7 @@ class _HostState extends State<_Host> with TickerProviderStateMixin {
         m,
         () => ScenePlayback(widget.editor, m, vsync: this),
       ),
-      content: SceneView(
+      content: SceneView.document(
         widget.editor.doc,
         onMeasured: (r) => applyMeasuredRects(widget.editor.doc, r),
       ),

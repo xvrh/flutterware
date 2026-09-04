@@ -242,7 +242,7 @@ void main() {
                       editor,
                       child: SceneCanvas(
                         editor,
-                        content: SceneView(
+                        content: SceneView.document(
                           editor.doc,
                           onMeasured: (rects) =>
                               applyMeasuredRects(editor.doc, rects),
