@@ -7,6 +7,7 @@
 
 import 'package:flutterware/scene_authoring.dart';
 
+import 'banner.scene.dart';
 import 'invoice.scene.dart';
 import 'ohoh.scene.dart';
 import 'onboarding.scene.dart';
@@ -92,6 +93,29 @@ class OrderButtonArgs extends SceneExtArgs {
 
 class OrderButtonTracks extends SceneExtTracks {
   const OrderButtonTracks();
+
+  @override
+  Map<String, MotionTrack> toMap() => {};
+}
+
+class BannerSceneArgs extends SceneRefArgs {
+  const BannerSceneArgs();
+
+  @override
+  String get entry => 'BannerScene';
+
+  @override
+  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs();
+
+  @override
+  Map<String, Object?> toMap() => {};
+
+  @override
+  SceneDefinition build() => BannerScene();
+}
+
+class BannerSceneTracks extends SceneExtTracks {
+  const BannerSceneTracks();
 
   @override
   Map<String, MotionTrack> toMap() => {};

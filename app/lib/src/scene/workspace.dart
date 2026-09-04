@@ -116,8 +116,11 @@ class SceneFile {
   /// — an agent finishing a file, a branch switching under you — can be taken
   /// without anyone having to answer a dialog about whose version wins,
   /// because yours is one undo away afterwards.
-  List<SceneRefusal> adopt(String source) {
-    var parsed = parseSceneFile(source);
+  List<SceneRefusal> adopt(
+    String source, {
+    Map<String, Set<String>> declaredArgs = const {},
+  }) {
+    var parsed = parseSceneFile(source, declaredArgs: declaredArgs);
     if (!parsed.ok) return parsed.refusals;
     className = parsed.className!;
     imports

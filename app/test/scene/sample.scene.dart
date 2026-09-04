@@ -73,8 +73,16 @@ class SampleIntro(super.scene, {final double slideFrom = 24})
       MotionKey(at: 240.ms, value: 1, curve: SceneCurves.easeOutBack),
     ]),
   );
+  late final chipGrow = scene.chip.animate(
+    args: SampleChipTracks(
+      weight: MotionTrack([
+        MotionKey(at: 0.ms, value: 0),
+        MotionKey(at: 200.ms, value: 1),
+      ]),
+    ),
+  );
   @override
-  late final timeline = ParExpr([titleIn, AtExpr(120.ms, badgePop)]);
+  late final timeline = ParExpr([titleIn, AtExpr(120.ms, badgePop), chipGrow]);
   SampleIntro copy(SampleScene scene) =>
       copyStateInto(SampleIntro(scene, slideFrom: slideFrom));
 }

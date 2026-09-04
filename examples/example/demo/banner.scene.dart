@@ -70,7 +70,7 @@ class BannerScene extends SceneDefinition {
     height: 40,
   );
   late final order = ExternalNode(
-    const OrderButtonArgs(),
+    const OrderButtonArgs(label: 'Order now'),
     x: 830,
     y: 400,
     width: 150,

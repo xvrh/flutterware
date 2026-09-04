@@ -316,20 +316,49 @@ already parses. So `PromoBadgeArgs` can be generated from
 all — the schema was always there. The same generated shape serves both, and
 `SceneRefNode`'s builder span retires with the Ext one.
 
+## Built 2026-09-04
+
+All of the above, with three answers the design did not have.
+
+**Where generation runs: on the scene scan.** `SceneCore`'s scan calls
+`generateSceneArgsIn(root)` and *then* discovers scenes, which is the load
+order the grammar needs — a scan that listed scenes without regenerating
+would hand the panel files naming classes that no longer exist. It writes
+only when the output differs, so the common scan writes nothing.
+
+**The wire kept its shape, and `SceneView.externals` really did go.** A
+compiled node reaches the declaration through its own generated class. A
+node that arrived as data — the guest's wire, a saved pair — is given its
+builder by `bindExternals(doc, declarations)`, and the app hands its
+declaration list to `SceneCanvasHost(externals: sceneExternals)` instead of
+the old `scenes: [BannerScene.new]`. One list, no instantiate-and-walk.
+
+**There are two declaration types, on purpose.** `ExternalWidget` is the
+app's, with the closure; `ExternalWidgetDecl` is the tool's, read from the
+file as text, where a default arrives as source rather than as a value.
+`describeExternals` bridges them for anything that already holds the real
+objects (the catalog demo, a test).
+
+Measured in the running studio: the file opens, the three external widgets
+draw through their declarations, the inspector shows `size 40.00` for a
+scene that overrode it and `label "Order now"` for one that never set it,
+and typing in that field wrote `const OrderButtonArgs(label: 'Order now')`
+back into the scene file, which still analyzes.
+
+### Not carried over
+
+**Emit does not skip declared defaults.** It writes every argument the node
+carries, which round-trips exactly and needs no declarations at emit time.
+The visible consequence: an argument left at its default becomes explicit
+in the file the first time somebody touches it in the inspector.
+
 ## Open
 
-- **Where generation runs**: a build step, or the tool on demand when the
-  declaration changes. The previews catalog already generates an entrypoint,
-  so there is precedent either way.
 - **What happens when a declaration changes.** Removing an arg makes every
   scene that set it invalid; renaming one silently drops its value unless
   the tool notices. Regeneration is the easy half — the migration is not,
   and it is the same question the scene grammar answers with refusals.
-- **Whether `entry` survives.** The args type identifies the widget in a
-  scene file, so the label is only needed to cross the wire and to tie a
-  declaration to its generated pair. It cannot now be derived from a type
-  argument — the declaration has none — so it stays, in the file where
-  strings live anyway.
-- **What an undeclared arg does.** Refusing it is the point; the question is
-  whether the scene file can even express one once `args:` is a typed
-  constructor call. Probably not, which is the best kind of answer.
+- **A package with no declaration file gets no second grader.** The parser
+  checks an argument only against an entry the declarations name, so a
+  project that has not written one parses exactly as before. The editor
+  should say so rather than let it read as checked.

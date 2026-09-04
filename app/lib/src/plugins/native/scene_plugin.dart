@@ -293,7 +293,7 @@ class _ScenePanelState extends State<_ScenePanel>
         );
         continue;
       }
-      var refusals = file.adopt(source);
+      var refusals = file.adopt(source, declaredArgs: _declaredArgs());
       if (refusals.isEmpty) {
         adopted.add(p.basename(file.path));
         _autosave.resume(file.path);

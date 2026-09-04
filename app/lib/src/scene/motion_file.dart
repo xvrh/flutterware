@@ -120,14 +120,18 @@ void emitMotionClass(
       out.write('$prop: ${_track(track, kind, params)}, ');
     }
     if (g.args.isNotEmpty) {
+      // The generated tracks class of whatever this animates: one slot per
+      // animatable argument, so the name is checked by the compiler as
+      // well as here.
       var keys = g.args.keys.toList()..sort();
-      out.write('args: {');
+      out.write('args: ${_entryOf(target)}Tracks(');
       for (var key in keys) {
-        out.write(
-          '${_str(key)}: ${_track(g.args[key]!, TrackKind.number, params)}, ',
-        );
+        if (!isValidNodeName(key)) {
+          throw ArgumentError('"$key" is not an argument name');
+        }
+        out.write('$key: ${_track(g.args[key]!, TrackKind.number, params)}, ');
       }
-      out.write('}, ');
+      out.write('), ');
     }
     out.writeln(');');
   }
@@ -215,6 +219,15 @@ String _num(double v) =>
 
 String _color(SceneColor c) =>
     'Color(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
+
+/// What a node's generated classes are named after: an external widget's
+/// registration entry, a nested scene's class. Empty for anything else,
+/// which is refused before it gets here.
+String _entryOf(SceneNode node) => switch (node) {
+  ExternalNode e => e.entry,
+  SceneRefNode r => r.sceneClassName,
+  _ => '',
+};
 
 String _str(String s) {
   var out = StringBuffer("'");
@@ -672,16 +685,16 @@ class _Parser {
       var prop = arg.name.lexeme;
       var value = arg.argumentExpression;
       if (prop == 'args') {
-        if (target is! ExternalNode) {
+        if (target is! ExternalNode && target is! SceneRefNode) {
           refuse(
             value.offset,
             'args',
-            'only an external node takes args — "$targetName" is a '
-                '${target.typeName}',
+            'only an external widget or a nested scene takes args — '
+                '"$targetName" is a ${target.typeName}',
           );
           continue;
         }
-        _extArgs(group, value);
+        _extArgs(group, value, _entryOf(target));
         continue;
       }
       var kind = allowed[prop];
@@ -700,23 +713,36 @@ class _Parser {
     return group;
   }
 
-  void _extArgs(AnimateGroup group, Expression e) {
-    if (e is! SetOrMapLiteral) {
-      refuse(e.offset, 'args', 'args takes a map of tracks by arg name');
+  /// `args: DrinkBadgeTracks(size: MotionTrack([…]))`.
+  ///
+  /// The class is generated from the same declaration the scene file's
+  /// arguments came from, and it carries a slot only for what has in-between
+  /// values — so a track aimed at a label, or at a parameter the widget does
+  /// not have, does not compile. This is the second grader saying the same
+  /// thing with a line number.
+  void _extArgs(AnimateGroup group, Expression e, String entry) {
+    var expected = '${entry}Tracks';
+    var call = _invocation(e);
+    if (call == null || call.$1 != expected) {
+      refuse(
+        e.offset,
+        'args',
+        'args takes the tracks of what it animates — '
+            'args: $expected(size: MotionTrack([…]))',
+      );
       return;
     }
-    for (var element in e.elements) {
-      if (element is! MapLiteralEntry) {
-        refuse(element.offset, 'args', 'expected a literal entry');
+    for (var arg in call.$2.arguments) {
+      if (arg is! NamedArgument) {
+        refuse(
+          arg.offset,
+          'positional argument',
+          'every track is named — $expected(size: MotionTrack([…]))',
+        );
         continue;
       }
-      var key = element.key;
-      if (key is! SimpleStringLiteral) {
-        refuse(key.offset, _kind(key), 'an arg name is a string literal');
-        continue;
-      }
-      var track = _trackOf(element.value, TrackKind.number);
-      if (track != null) group.args[key.value] = track;
+      var track = _trackOf(arg.argumentExpression, TrackKind.number);
+      if (track != null) group.args[arg.name.lexeme] = track;
     }
   }
 

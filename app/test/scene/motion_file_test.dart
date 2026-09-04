@@ -81,8 +81,9 @@ void main() {
     // The parameter feeds a key by name; the curve is allowlisted.
     expect(emitted, contains('value: slideFrom'));
     expect(emitted, contains('curve: SceneCurves.easeOut'));
-    // Ext args are the one stringly boundary.
-    expect(emitted, contains("'size': MotionTrack("));
+    // An external widget's own arguments, through its generated tracks
+    // class — no strings, and no slot for anything it does not declare.
+    expect(emitted, contains('args: DrinkBadgeTracks('));
     // The timeline is mandatory and arranges by reference.
     expect(emitted, contains('late final timeline = ParExpr('));
     expect(emitted, contains('AtExpr(400.ms, badgePop)'));

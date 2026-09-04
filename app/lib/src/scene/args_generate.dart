@@ -23,6 +23,7 @@ class SceneArgsResult {
     required this.path,
     required this.wrote,
     this.refusals = const [],
+    this.source,
   });
 
   /// The generated file, or null when there was nothing to generate.
@@ -36,6 +37,9 @@ class SceneArgsResult {
   /// Why the declarations could not be read. The generated file is left
   /// exactly as it was — half a vocabulary is worse than a stale one.
   final List<SceneRefusal> refusals;
+
+  /// What the generator produced, whether or not it was written.
+  final String? source;
 }
 
 /// Writes `scene_args.dart` for the scenes under [directory].
@@ -43,7 +47,7 @@ class SceneArgsResult {
 /// Both halves are read here: the app's declaration file, if it has one, and
 /// every scene class's own parameters — which need no declaration, because
 /// a scene already says what it takes in its header.
-SceneArgsResult generateSceneArgsIn(String directory) {
+SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
   var dir = Directory(directory);
   if (!dir.existsSync()) return SceneArgsResult(path: null, wrote: false);
 
@@ -90,8 +94,8 @@ SceneArgsResult generateSceneArgsIn(String directory) {
     externalsImport: externalsImport,
   );
   if (target.existsSync() && target.readAsStringSync() == source) {
-    return SceneArgsResult(path: target.path, wrote: false);
+    return SceneArgsResult(path: target.path, wrote: false, source: source);
   }
-  target.writeAsStringSync(source);
-  return SceneArgsResult(path: target.path, wrote: true);
+  if (write) target.writeAsStringSync(source);
+  return SceneArgsResult(path: target.path, wrote: write, source: source);
 }

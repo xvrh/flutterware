@@ -13,6 +13,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/args_codegen.dart';
+import 'package:flutterware_app/src/scene/args_generate.dart';
 import 'package:flutterware_app/src/scene/externals_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 
@@ -119,6 +120,20 @@ final sceneExternals = [
         contains('SceneDefinition build() => PromoBadge(label: label);'),
       );
     });
+  });
+
+  test('the vocabulary beside this test is what the generator writes', () {
+    // The guard that keeps the two halves honest: `scene_args.dart` is
+    // generated, `sample.scene.dart` imports it, and a declaration that
+    // moved without a regeneration fails here rather than in whatever the
+    // compiler says next.
+    var result = generateSceneArgsIn('test/scene', write: false);
+    expect(result.refusals, isEmpty);
+    expect(
+      result.source,
+      File('test/scene/scene_args.dart').readAsStringSync(),
+      reason: 'stale — regenerate scene_args.dart',
+    );
   });
 
   test('a scene naming an argument the widget does not declare is refused', () {
