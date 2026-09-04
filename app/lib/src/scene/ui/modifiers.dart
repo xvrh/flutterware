@@ -14,3 +14,19 @@ bool get toggleModifier {
       keys.contains(LogicalKeyboardKey.shiftLeft) ||
       keys.contains(LogicalKeyboardKey.shiftRight);
 }
+
+/// Whether a drop should move the node into the frame under the pointer.
+///
+/// Held at the moment of RELEASE, not during the drag: dragging is a
+/// position gesture and reparenting is a structural one, and their results
+/// do not even look alike — a node dropped into a row loses its position
+/// entirely, because there position *is* order. Passing over a frame must
+/// therefore mean nothing at all.
+///
+/// Alt/Option rather than the [toggleModifier] set, which cmd and shift are
+/// already spoken for in.
+bool get reparentModifier {
+  var keys = HardwareKeyboard.instance.logicalKeysPressed;
+  return keys.contains(LogicalKeyboardKey.altLeft) ||
+      keys.contains(LogicalKeyboardKey.altRight);
+}

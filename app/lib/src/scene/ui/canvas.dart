@@ -524,9 +524,10 @@ class _NodeTargetState extends State<_NodeTarget> {
   SceneDocument get doc => widget.editor.doc;
   SceneNode get node => widget.node;
 
-  /// How far outside its parent a drag must reach before the node leaves
-  /// it. Enough to survive a shaky hand, small enough to feel deliberate.
-  static const _escapeMargin = 12.0;
+  /// Where the pointer last was, in artboard coordinates — what a drop
+  /// reparents against, since a release reports no position of its own
+  /// worth trusting after the node has been moving under it.
+  var _lastPoint = Offset.zero;
 
   /// Whether [inner] is [outer] or sits inside it.
   bool _isInside(FrameNode inner, FrameNode outer) {
@@ -588,42 +589,27 @@ class _NodeTargetState extends State<_NodeTarget> {
     return index;
   }
 
-  /// A drag under an absolute parent moves the selection; under a row or a
-  /// column it reorders, because there position *is* order. Over a different
-  /// frame it changes parent, and it does so while the drag is still
-  /// running: the picture under the pointer is where the node would land,
-  /// which is the only preview worth drawing.
+  /// A drag is a POSITION gesture and never changes the hierarchy.
+  ///
+  /// Under an absolute parent it moves the selection; under a row or a
+  /// column it reorders, because there position *is* order. Passing over
+  /// another frame does nothing at all — it used to reparent on the way
+  /// past, which meant a drag across the canvas could leave the node
+  /// somewhere nobody aimed for, at a position it no longer had (into a
+  /// row, a node loses its position entirely) and with an undo entry per
+  /// frame crossed.
+  ///
+  /// Changing the parent is the tree's job, or this one with the reparent
+  /// modifier held — see [_drop].
   void _apply(Offset localPosition, Offset delta) {
     var parent = doc.parentOf(node);
     if (parent == null) return;
     var point = _pointer(localPosition);
-    var target = _dropTarget(point, parent);
+    _lastPoint = point;
+    // Proposed, not taken: the canvas outlines it so the drop is aimed
+    // rather than discovered.
+    editor.dropTarget = _proposed(point, parent);
 
-    // Leaving a parent asks for more than a wobble. Going *into* a frame is
-    // immediate, because you aimed at it; falling out of one because the
-    // drag overshot its edge by a pixel is how a node ends up somewhere
-    // nobody put it.
-    if (target != parent && !_isInside(target, parent)) {
-      var rect = parent.measured;
-      if (rect != null &&
-          point.dx > rect.left - _escapeMargin &&
-          point.dx < rect.left + rect.width + _escapeMargin &&
-          point.dy > rect.top - _escapeMargin &&
-          point.dy < rect.top + rect.height + _escapeMargin) {
-        target = parent;
-      }
-    }
-
-    if (target != parent) {
-      editor.reparent(
-        [node],
-        target,
-        index: target.layout == NodeLayout.absolute
-            ? null
-            : _indexIn(target, point),
-      );
-      return;
-    }
     if (parent.layout == NodeLayout.absolute) {
       editor.nudgeSelection(delta.dx, delta.dy, mergeKey: 'drag');
       return;
@@ -636,6 +622,36 @@ class _NodeTargetState extends State<_NodeTarget> {
         ..removeAt(from)
         ..insert(index, node);
     });
+  }
+
+  /// The frame a drop would move the node into: the one under the pointer
+  /// while the modifier is held, and null whenever that is the node's own
+  /// parent or the modifier is not down.
+  FrameNode? _proposed(Offset point, FrameNode parent) {
+    if (!reparentModifier) return null;
+    var target = _dropTarget(point, parent);
+    if (identical(target, parent) || !editor.canReparent(node, target)) {
+      return null;
+    }
+    return target;
+  }
+
+  /// The release. The modifier is read again here rather than trusted from
+  /// the last move: it is what makes the drop a hierarchy change, so it has
+  /// to be down at the moment the drop happens.
+  void _drop() {
+    var target = editor.dropTarget;
+    editor
+      ..endMerge()
+      ..dropTarget = null;
+    if (target == null || !reparentModifier) return;
+    editor.reparent(
+      [node],
+      target,
+      index: target.layout == NodeLayout.absolute
+          ? null
+          : _indexIn(target, _lastPoint),
+    );
   }
 
   @override
@@ -658,8 +674,12 @@ class _NodeTargetState extends State<_NodeTarget> {
           _apply(d.localPosition, d.localPosition - _downLocal);
         },
         onPanUpdate: (d) => _apply(d.localPosition, d.delta),
-        onPanEnd: (_) => editor.endMerge(),
-        onPanCancel: editor.endMerge,
+        onPanEnd: (_) => _drop(),
+        onPanCancel: () {
+          editor
+            ..endMerge()
+            ..dropTarget = null;
+        },
       ),
     );
   }
@@ -747,6 +767,24 @@ class _SelectionPainter extends CustomPainter {
     for (var node in editor.selectedNodes) {
       var rect = node.measured;
       if (rect != null) canvas.drawRect(rect.flutter, stroke);
+    }
+    // Where a drop would put it, while the reparent modifier is held.
+    // Filled and thick, because it is a different KIND of thing from a
+    // hover: releasing here changes the tree, and under a row or a column
+    // it takes the node's position away.
+    if (editor.dropTarget?.measured case var rect?) {
+      canvas
+        ..drawRect(
+          rect.flutter,
+          Paint()..color = accent.withValues(alpha: 0.12),
+        )
+        ..drawRect(
+          rect.flutter,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.5
+            ..color = accent,
+        );
     }
     if (marquee case var rect?) {
       canvas.drawRect(rect, Paint()..color = accent.withValues(alpha: 0.1));

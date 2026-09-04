@@ -3,6 +3,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
@@ -229,7 +230,7 @@ void main() {
     expect(rects['free']!.height, 50);
   });
 
-  testWidgets('a canvas drag reorders, and changes parent over another frame', (
+  testWidgets('a canvas drag reorders; only a modified drop changes parent', (
     tester,
   ) async {
     var doc = coffeeBannerDraft();
@@ -277,13 +278,28 @@ void main() {
     await tester.pump();
     expect(column.children.map((c) => c.name), ['second', 'first']);
 
-    // And onto the other frame moves it there — while the drag is still
-    // running, so the picture under the pointer is the preview.
+    // But dragging it over the other frame does NOT move it there. A drag
+    // is a position gesture; passing over a frame used to reparent on the
+    // way past, which left the node somewhere nobody aimed for — and at a
+    // position it no longer had, since a row takes one away.
     var first1 = centreOf('first');
     await tester.dragFrom(first1, centreOf('other') - first1);
     await tester.pump();
+    expect(editor.doc.parentOf(first)?.name, 'column');
+    expect(editor.dropTarget, isNull);
+
+    // Held at the release, the modifier is what makes the drop a hierarchy
+    // change — one entry, and only where you let go.
+    var entries = editor.undoLabel;
+    var first2 = centreOf('first');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    await tester.dragFrom(first2, centreOf('other') - first2);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+    await tester.pump();
     expect(editor.doc.parentOf(first)?.name, 'other');
     expect(column.children.map((c) => c.name), ['second']);
+    expect(editor.dropTarget, isNull, reason: 'cleared on release');
+    expect(editor.undoLabel, isNot(entries));
   });
 
   test('the new properties survive the file, the wire and the JSON', () {

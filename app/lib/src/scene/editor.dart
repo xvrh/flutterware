@@ -481,6 +481,20 @@ class SceneEditor extends SceneListenable {
 
   static double _half(double v) => (v * 2).round() / 2;
 
+  /// The frame a drop would move the dragged node into — drawn on the
+  /// canvas while the reparent modifier is held, and nothing more than
+  /// drawn. Null whenever the pointer is over the node's own parent or the
+  /// modifier is not down.
+  FrameNode? _dropTarget;
+
+  FrameNode? get dropTarget => _dropTarget;
+
+  set dropTarget(FrameNode? frame) {
+    if (identical(_dropTarget, frame)) return;
+    _dropTarget = frame;
+    notifyListeners();
+  }
+
   String? _hover;
 
   String? get hover => _hover;
