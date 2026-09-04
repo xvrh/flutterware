@@ -5,7 +5,6 @@
 // `timeline`, and may keep unplaced groups as library assets fired on events.
 import 'curves.dart';
 import 'model.dart';
-import 'motion_runtime.dart';
 import 'values.dart';
 
 /// What a track's values are. Mirrors the scene's parameter kinds minus
@@ -324,31 +323,13 @@ extension SceneMillis on int {
 /// typed reference the compiler checks: a motion pointed at a node the scene
 /// does not declare is a program that does not build, and one pointed at the
 /// wrong kind of node cannot name that kind's properties either.
-abstract class SceneMotion<T extends SceneDefinition> extends Playable {
+abstract class SceneMotion<T extends SceneDefinition> {
   SceneMotion(this.scene);
 
   final T scene;
 
   /// What plays. Groups place themselves in it, so nothing is looked up.
   TimelineExpr get timeline;
-
-  /// The timeline as a playable tree, built once.
-  ///
-  /// A motion IS one — `MotionPlayer(BannerIntro(scene))` is the whole of
-  /// starting it, and the same is true of the [BoundMotion] the editor
-  /// makes from a file it read. Nothing about a compiled motion needs
-  /// binding: the groups hold their nodes, and they are in the timeline
-  /// expression itself.
-  late final Playable _play = playTimeline(timeline);
-
-  @override
-  Duration get duration => _play.duration;
-
-  @override
-  void apply(Duration t) => _play.apply(t);
-
-  @override
-  void clearFx() => _play.clearFx();
 
   /// Carry this motion's live state into [other] and hand it back — what a
   /// generated `copy` calls to rebind onto another instance of the scene.
@@ -497,19 +478,14 @@ AnimateGroup _group(
 }
 
 /// Names a motion class member may not take: the header's super field, the
-/// mandatory arrangement, the derived copy member, and what a motion
-/// inherits from [Playable] — because a motion IS one, and a group that
-/// shadowed `duration` or `apply` would not compile.
-const motionReservedNames = {
-  'scene',
-  'timeline',
-  'copy',
-  'duration',
-  'apply',
-  'clearFx',
-  'claimDriver',
-  'releaseDriver',
-};
+/// mandatory arrangement, and the derived copy member.
+///
+/// Three, and it stays three. Every name this class owns is a group name
+/// the author cannot use, so the runtime reaches a motion from OUTSIDE —
+/// `SceneMotionPlay.playable`, an extension — rather than being inherited
+/// into their namespace. A base class that grew a member would take a name
+/// away from every motion ever written.
+const motionReservedNames = {'scene', 'timeline', 'copy'};
 
 class MotionDocument {
   MotionDocument({required this.sceneClassName});

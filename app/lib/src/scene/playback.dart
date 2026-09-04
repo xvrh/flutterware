@@ -74,7 +74,7 @@ class ScenePlayback extends ChangeNotifier {
 
   void _bind() {
     _bound = BoundMotion.bind(motion, editor.doc);
-    _player = MotionPlayer(_bound, vsync: vsync)
+    _player = MotionPlayer.bound(_bound, vsync: vsync)
       ..onPosition = (at) => editor.playhead = at;
     editor.playhead = _player.position;
   }

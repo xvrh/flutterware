@@ -3,6 +3,7 @@
 // file owns only the Ticker.
 import 'package:flutter/scheduler.dart';
 
+import 'core/motion_model.dart';
 import 'core/motion_runtime.dart';
 
 enum MotionPlayerStatus { idle, playing, paused, completed }
@@ -15,7 +16,15 @@ enum MotionPlayerStatus { idle, playing, paused, completed }
 /// callbacks and forgetting to dispose it is harmless; dispose matters
 /// exactly while it might still be playing.
 class MotionPlayer {
-  MotionPlayer(this.playable, {TickerProvider? vsync}) {
+  /// Plays a motion an app COMPILED — `MotionPlayer(BannerIntro(scene))`,
+  /// which is the whole of starting one. Nothing binds it: the groups hold
+  /// their nodes and are in the timeline expression itself.
+  MotionPlayer(SceneMotion motion, {TickerProvider? vsync})
+    : this.bound(motion.playable, vsync: vsync);
+
+  /// Plays a motion already bound to its scene — the [BoundMotion] the
+  /// editor makes from a file it read, or any playable tree.
+  MotionPlayer.bound(this.playable, {TickerProvider? vsync}) {
     _ticker = vsync?.createTicker(_tick) ?? Ticker(_tick);
   }
 

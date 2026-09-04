@@ -7,8 +7,9 @@
 //
 // Note the imports. `scene.dart` and the scene file, and nothing else — an
 // app has no business importing the authoring vocabulary, which is the
-// tool's. That only became true when a motion became a playable: before it,
-// starting one meant reaching for `playTimeline` in `scene_authoring.dart`.
+// tool's. That only became true when `MotionPlayer` learned to take a
+// motion: before it, starting one meant reaching for `playTimeline` in
+// `scene_authoring.dart`.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
@@ -56,7 +57,7 @@ void main() {
     );
     var state = tester.state<_BannerState>(find.byWidget(widget));
 
-    expect(state.motion.duration, const Duration(milliseconds: 360));
+    expect(state.player.playable.duration, const Duration(milliseconds: 360));
     expect(state.scene.title.fxRendered('opacity'), 0.0);
 
     // The clock is real: pumping frames is what moves it, and the view

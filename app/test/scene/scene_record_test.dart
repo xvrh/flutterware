@@ -14,7 +14,7 @@ void main() {
   test('the player parks past the end, at the end pose', () {
     var scene = coffeeBannerDraft();
     var bound = BoundMotion.bind(coffeeIntroDraft(scene), scene);
-    var player = MotionPlayer(bound);
+    var player = MotionPlayer.bound(bound);
     var seen = <Duration>[];
     player.onPosition = seen.add;
     player.seek(const Duration(seconds: 5));

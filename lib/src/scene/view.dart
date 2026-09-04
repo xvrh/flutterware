@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../previews/playhead.dart';
 import 'core/model.dart';
+import 'core/motion_model.dart';
 import 'core/motion_runtime.dart';
 import 'core/values.dart';
 import 'flutter_bridge.dart';
@@ -51,10 +52,11 @@ class SceneView extends StatefulWidget {
   SceneView(
     SceneDefinition definition, {
     super.key,
-    this.motion,
+    SceneMotion? motion,
     this.selected = const {},
     this.onMeasured,
-  }) : scene = definition.scene;
+  }) : scene = definition.scene,
+       motion = motion?.playable;
 
   /// Draws a document that was READ — parsed from source, or decoded off
   /// the editor's wire. There is no definition behind one of those, which is

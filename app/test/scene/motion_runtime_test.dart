@@ -278,7 +278,7 @@ void main() {
     ) async {
       var (scene, bound) = shortPair();
       var glow = scene.nodeNamed('glow')!;
-      var player = MotionPlayer(bound);
+      var player = MotionPlayer.bound(bound);
       player.play();
       expect(player.status, MotionPlayerStatus.playing);
       await tester.pump(); // the ticker's first tick stamps its start time
@@ -297,7 +297,7 @@ void main() {
       tester,
     ) async {
       var (_, bound) = shortPair();
-      var player = MotionPlayer(bound)..rate = 2;
+      var player = MotionPlayer.bound(bound)..rate = 2;
       player.play();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 110));
@@ -308,7 +308,7 @@ void main() {
     testWidgets('pause holds, seek is pure in any direction', (tester) async {
       var (scene, bound) = shortPair();
       var glow = scene.nodeNamed('glow')!;
-      var player = MotionPlayer(bound);
+      var player = MotionPlayer.bound(bound);
       player.play();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -324,7 +324,7 @@ void main() {
     testWidgets('stop is cancel: fx drops, base untouched', (tester) async {
       var (scene, bound) = shortPair();
       var glow = scene.nodeNamed('glow')!;
-      var player = MotionPlayer(bound);
+      var player = MotionPlayer.bound(bound);
       player.play();
       await tester.pump(const Duration(milliseconds: 100));
       player.stop();
@@ -338,8 +338,8 @@ void main() {
       tester,
     ) async {
       var (_, bound) = shortPair();
-      var first = MotionPlayer(bound)..play();
-      var second = MotionPlayer(bound);
+      var first = MotionPlayer.bound(bound)..play();
+      var second = MotionPlayer.bound(bound);
       expect(second.play, throwsStateError);
       first.dispose();
       // Released on stop: now the second may drive.

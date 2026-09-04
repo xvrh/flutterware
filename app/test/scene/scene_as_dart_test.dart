@@ -97,14 +97,14 @@ void main() {
     var motion = SampleIntro(scene);
 
     // Par of a 260ms group and a 240ms one placed at 120: 360, not 500.
-    expect(motion.duration, const Duration(milliseconds: 360));
-    motion.apply(Duration.zero);
+    expect(motion.playable.duration, const Duration(milliseconds: 360));
+    motion.playable.apply(Duration.zero);
     expect(scene.title.fxRendered('opacity'), 0.0);
-    motion.apply(const Duration(milliseconds: 260));
+    motion.playable.apply(const Duration(milliseconds: 260));
     expect(scene.title.fxRendered('opacity'), 1.0);
     // The badge is placed 120ms in, so at 260 it is 140 through its 240.
     expect(scene.badge.fxRendered('scale') as double, greaterThan(0.6));
-    motion.clearFx();
+    motion.playable.clearFx();
     expect(scene.title.fxRendered('opacity'), 1.0, reason: 'back to authored');
   });
 

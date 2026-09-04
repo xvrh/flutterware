@@ -6,6 +6,40 @@ import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/motion_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 
+/// A two-node scene to hang the awkward-name motion on.
+class _TinyScene extends SceneDefinition {
+  late final title = TextNode('Hi');
+  late final badge = ShapeNode(width: 10, height: 10);
+  @override
+  late final root = FrameNode(children: [title, badge]);
+}
+
+/// A motion whose groups are called what the runtime used to own.
+///
+/// This compiling is the whole point of reaching a motion from outside: a
+/// base class that owned `duration` and `apply` would take those names away
+/// from every motion anyone ever writes, and the parser would have to refuse
+/// them with a line number to explain why.
+class _AwkwardNames extends SceneMotion<_TinyScene> {
+  _AwkwardNames(super.scene);
+
+  late final duration = scene.title.animate(
+    opacity: MotionTrack([
+      MotionKey(at: Duration.zero, value: 0),
+      MotionKey(at: const Duration(milliseconds: 100), value: 1),
+    ]),
+  );
+  late final apply = scene.badge.animate(
+    scale: MotionTrack([
+      MotionKey(at: Duration.zero, value: 1),
+      MotionKey(at: const Duration(milliseconds: 100), value: 2),
+    ]),
+  );
+
+  @override
+  late final timeline = ParExpr([duration, apply]);
+}
+
 void main() {
   var scene = coffeeBannerDraft();
   const sceneClass = 'BannerScene';
@@ -15,6 +49,16 @@ void main() {
   // whole pair — [filePrefix] is the scene half the fixture appends to,
   // and the helpers below read and write the motion through that one door.
   var filePrefix = emitSceneFile(scene, className: sceneClass).trimRight();
+
+  test('a group may be called what the runtime is called', () {
+    // Both graders on the same name. The compiler: `_AwkwardNames` above
+    // declares groups called `duration` and `apply`, and it builds — a
+    // motion does not inherit the runtime's API, the runtime reaches it
+    // from outside. The tool: those names are not reserved either.
+    var motion = _AwkwardNames(_TinyScene());
+    expect(motion.playable.duration, const Duration(milliseconds: 100));
+    expect(motionReservedNames, {'scene', 'timeline', 'copy'});
+  });
 
   String emitMotionFile(
     MotionDocument doc,

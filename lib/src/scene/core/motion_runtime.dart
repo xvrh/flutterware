@@ -233,6 +233,23 @@ Playable playTimeline(
   return build(expr);
 }
 
+/// A compiled motion's timeline as a playable tree, built once per motion.
+///
+/// An EXTENSION rather than a member of [SceneMotion], and that is the
+/// point: a motion class's field names are the AUTHOR's — every name the
+/// base class owns is a group they cannot declare — so the runtime reaches
+/// a motion from outside instead of being inherited into their namespace.
+/// A group called `duration` is now merely a group called `duration`.
+///
+/// Built once because a playable tree is an fx WRITER: two trees over one
+/// motion would both contribute every frame, and stopping one would leave
+/// the other's contribution behind.
+extension SceneMotionPlay on SceneMotion {
+  Playable get playable => _plays[this] ??= playTimeline(timeline);
+}
+
+final _plays = Expando<Playable>();
+
 /// A motion document bound to one scene: the timeline built as a playable
 /// tree, and the pair guarded. Unplaced groups bind too — [group] hands
 /// them out for independent play — but only the timeline plays through
