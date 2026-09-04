@@ -434,11 +434,16 @@ class _HitLayerState extends State<_HitLayer> {
 
   static double _half(double v) => (v * 2).round() / 2;
 
+  /// The artboard's own box, so a drag can ask where the pointer is without
+  /// asking the thing it is dragging.
+  final _artboard = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
     return Positioned.fill(
       child: Stack(
+        key: _artboard,
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
@@ -486,6 +491,7 @@ class _HitLayerState extends State<_HitLayer> {
                     editor,
                     node,
                     key: ValueKey('node:${node.name}'),
+                    artboard: _artboard,
                     onEnterNested: widget.onEnterNested,
                   ),
                 ),
@@ -507,10 +513,20 @@ class _HitLayerState extends State<_HitLayer> {
 }
 
 class _NodeTarget extends StatefulWidget {
-  const _NodeTarget(this.editor, this.node, {super.key, this.onEnterNested});
+  const _NodeTarget(
+    this.editor,
+    this.node, {
+    super.key,
+    required this.artboard,
+    this.onEnterNested,
+  });
 
   final SceneEditor editor;
   final SceneNode node;
+
+  /// The artboard's box — what a drag measures the pointer against.
+  final GlobalKey artboard;
+
   final ValueChanged<SceneNode>? onEnterNested;
 
   @override
@@ -539,12 +555,16 @@ class _NodeTargetState extends State<_NodeTarget> {
 
   /// Where the pointer is, in artboard coordinates.
   ///
-  /// The target sits exactly on the node's measured rect, so the pointer's
-  /// offset inside it plus that rect's corner is the artboard point — no
-  /// walk up the transform needed.
-  Offset _pointer(Offset localPosition) {
-    var m = node.measured;
-    return (m == null ? Offset.zero : Offset(m.left, m.top)) + localPosition;
+  /// Measured against the ARTBOARD, never against the node being dragged.
+  /// That node's rect is the one thing on screen guaranteed to be moving,
+  /// and it moves on a different clock: the renderer sweeps it and reports
+  /// it back, so the rect the drag would read and the position Flutter laid
+  /// the target out at disagree by however far the node travelled in the
+  /// last round trip. Reading the two together made a drop target blink out
+  /// mid-drag while the pointer sat still inside it.
+  Offset _pointer(Offset globalPosition) {
+    var box = widget.artboard.currentContext?.findRenderObject() as RenderBox?;
+    return box == null ? Offset.zero : box.globalToLocal(globalPosition);
   }
 
   /// The frame a drop at [point] belongs in: the innermost one containing
@@ -601,14 +621,17 @@ class _NodeTargetState extends State<_NodeTarget> {
   ///
   /// Changing the parent is the tree's job, or this one with the reparent
   /// modifier held — see [_drop].
-  void _apply(Offset localPosition, Offset delta) {
+  void _apply(Offset globalPosition, Offset delta) {
     var parent = doc.parentOf(node);
     if (parent == null) return;
-    var point = _pointer(localPosition);
+    var point = _pointer(globalPosition);
     _lastPoint = point;
     // Proposed, not taken: the canvas outlines it so the drop is aimed
-    // rather than discovered.
-    editor.dropTarget = _proposed(point, parent);
+    // rather than discovered, and outlines the rest of the frames faintly
+    // so the aiming has something to aim at.
+    editor
+      ..dropTarget = _proposed(point, parent)
+      ..dropCandidates = reparentModifier ? _candidates(parent) : const {};
 
     if (parent.layout == NodeLayout.absolute) {
       editor.nudgeSelection(delta.dx, delta.dy, mergeKey: 'drag');
@@ -623,6 +646,17 @@ class _NodeTargetState extends State<_NodeTarget> {
         ..insert(index, node);
     });
   }
+
+  /// Every frame this node could be dropped into. Only a frame takes
+  /// children — a shape, a text, an external widget and a nested scene all
+  /// cannot — which is a rule you can only learn by being shown it.
+  Set<FrameNode> _candidates(FrameNode parent) => {
+    for (var (n, _) in doc.walk())
+      if (n is FrameNode &&
+          !identical(n, parent) &&
+          editor.canReparent(node, n))
+        n,
+  };
 
   /// The frame a drop would move the node into: the one under the pointer
   /// while the modifier is held, and null whenever that is the node's own
@@ -643,7 +677,8 @@ class _NodeTargetState extends State<_NodeTarget> {
     var target = editor.dropTarget;
     editor
       ..endMerge()
-      ..dropTarget = null;
+      ..dropTarget = null
+      ..dropCandidates = const {};
     if (target == null || !reparentModifier) return;
     editor.reparent(
       [node],
@@ -671,14 +706,15 @@ class _NodeTargetState extends State<_NodeTarget> {
         onPanDown: (d) => _downLocal = d.localPosition,
         onPanStart: (d) {
           if (!editor.isSelected(node)) editor.select(node);
-          _apply(d.localPosition, d.localPosition - _downLocal);
+          _apply(d.globalPosition, d.localPosition - _downLocal);
         },
-        onPanUpdate: (d) => _apply(d.localPosition, d.delta),
+        onPanUpdate: (d) => _apply(d.globalPosition, d.delta),
         onPanEnd: (_) => _drop(),
         onPanCancel: () {
           editor
             ..endMerge()
-            ..dropTarget = null;
+            ..dropTarget = null
+            ..dropCandidates = const {};
         },
       ),
     );
@@ -767,6 +803,21 @@ class _SelectionPainter extends CustomPainter {
     for (var node in editor.selectedNodes) {
       var rect = node.measured;
       if (rect != null) canvas.drawRect(rect.flutter, stroke);
+    }
+    // What could take it, while the reparent modifier is held. Faint, and
+    // the answer to "why does nothing light up here": only a frame takes
+    // children, and a scene may have very few.
+    for (var frame in editor.dropCandidates) {
+      if (frame.measured case var rect?
+          when !identical(frame, editor.dropTarget)) {
+        canvas.drawRect(
+          rect.flutter,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1
+            ..color = accent.withValues(alpha: 0.35),
+        );
+      }
     }
     // Where a drop would put it, while the reparent modifier is held.
     // Filled and thick, because it is a different KIND of thing from a

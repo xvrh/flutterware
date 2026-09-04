@@ -302,6 +302,61 @@ void main() {
     expect(editor.undoLabel, isNot(entries));
   });
 
+  testWidgets('the drop target holds while the renderer sweeps under it', (
+    tester,
+  ) async {
+    // The bug this pins: the artboard point was derived from the DRAGGED
+    // node's own measured rect, and that rect moves on the renderer's clock
+    // — swept and reported back — not on layout's. So the point the drag
+    // hit-tested and the position Flutter laid the target out at disagreed
+    // by however far the node had travelled since the last sweep, and the
+    // highlight blinked out while the pointer sat still inside a frame.
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var doc = coffeeBannerDraft();
+    var editor = SceneEditor(doc);
+    for (var (n, _) in doc.walk()) {
+      n.measured = SceneRect(n.x, n.y, n.width ?? 100, n.height ?? 40);
+    }
+    doc.root.measured = const SceneRect(0, 0, 1024, 500);
+    var copy = doc.nodeNamed('copy')! as FrameNode
+      ..measured = const SceneRect(64, 120, 500, 220);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Material(child: SceneCanvas(editor, content: const SizedBox())),
+      ),
+    );
+    await tester.pump();
+
+    var badge = doc.nodeNamed('badge')!;
+    editor.select(badge);
+    await tester.pump();
+
+    var start = tester.getCenter(find.byKey(const ValueKey('node:badge')));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+    var drag = await tester.startGesture(start);
+    await tester.pump();
+
+    var proposed = <String?>{};
+    for (var dx = -400.0; dx <= -100; dx += 20) {
+      await drag.moveTo(start + Offset(dx, -100));
+      // The renderer catching up, which is what it does the whole time.
+      badge.measured = SceneRect(badge.x, badge.y, 140, 140);
+      doc.geometryEpoch.value++;
+      await tester.pump();
+      proposed.add(editor.dropTarget?.name);
+    }
+    await drag.up();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+
+    // The pointer never left `copy`, so neither did the proposal.
+    expect(proposed, {'copy'});
+  });
+
   test('the new properties survive the file, the wire and the JSON', () {
     var label = TextNode('Amount', name: 'label')
       ..align = SceneTextAlign.right

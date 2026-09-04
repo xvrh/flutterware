@@ -487,6 +487,23 @@ class SceneEditor extends SceneListenable {
   /// modifier is not down.
   FrameNode? _dropTarget;
 
+  /// Every frame the dragged node COULD go into, while the modifier is
+  /// held. Drawn faintly, because the rule they answer is invisible
+  /// otherwise: only a frame takes children, so a scene of shapes and texts
+  /// has almost nowhere to drop and nothing said so.
+  var _dropCandidates = <FrameNode>{};
+
+  Set<FrameNode> get dropCandidates => _dropCandidates;
+
+  set dropCandidates(Set<FrameNode> frames) {
+    if (_dropCandidates.length == frames.length &&
+        _dropCandidates.containsAll(frames)) {
+      return;
+    }
+    _dropCandidates = frames;
+    notifyListeners();
+  }
+
   FrameNode? get dropTarget => _dropTarget;
 
   set dropTarget(FrameNode? frame) {
