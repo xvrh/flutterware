@@ -265,7 +265,7 @@ void main() {
         home: SizedBox(
           width: 1024,
           height: 500,
-          child: SceneView(scene, onMeasured: (r) => rects = r),
+          child: SceneView(scene, onMeasured: (r) => rects = namedRects(r)),
         ),
       ),
     );

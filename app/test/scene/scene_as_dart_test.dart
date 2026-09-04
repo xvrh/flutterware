@@ -176,6 +176,30 @@ void main() {
     expect(find.byType(app.SampleChip), findsOneWidget);
   });
 
+  testWidgets('what the layout measured comes back per node, not per name', (
+    tester,
+  ) async {
+    // A compiled scene has no names, so a name-keyed report collided every
+    // node of it onto one empty string — the whole scene measured as
+    // whatever the walk happened to visit last.
+    var scene = SampleScene();
+    var rects = <SceneNode, SceneRect>{};
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topLeft,
+          child: SceneView(scene.scene, onMeasured: rects.addAll),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(rects[scene.root]!.width, 400);
+    expect(rects[scene.title], isNotNull);
+    expect(rects[scene.badge]!.width, 24);
+    expect(namedRects(rects), isEmpty, reason: 'a compiled scene has none');
+  });
+
   test(
     'a scene the tool READ carries the label and the values, not a type',
     () {

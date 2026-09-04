@@ -192,7 +192,10 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
                   child: SceneView(
                     scene,
                     selected: _selected,
-                    onMeasured: (rects) => _rects = rects,
+                    // Named here, at the edge the names exist on: the
+                    // document arrived over the wire carrying them, and
+                    // the editor asks for its rects the same way.
+                    onMeasured: (rects) => _rects = namedRects(rects),
                   ),
                 ),
               ),

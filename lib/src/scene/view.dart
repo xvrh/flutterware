@@ -19,7 +19,25 @@ import 'flutter_bridge.dart';
 /// Reports what the layout measured, in artboard coordinates. The editor's
 /// geometry comes from here: a flex child has no authored position, so the
 /// only true answer is the one the renderer laid out.
-typedef SceneMeasured = void Function(Map<String, SceneRect> rects);
+///
+/// Keyed by the NODE, not by its name. A compiled scene has no names — the
+/// field names live in the source, where the editor reads them — so a
+/// name-keyed report would collide every node of it onto one empty string.
+/// Whoever holds names (the editor, the guest naming rects for the wire)
+/// puts them on at its own edge.
+typedef SceneMeasured = void Function(Map<SceneNode, SceneRect> rects);
+
+/// The same rects under the names the nodes carry — what the guest sends
+/// back over the wire, and what a surface holding a PARSED document asks
+/// its geometry by.
+///
+/// Meaningless for a compiled scene, whose nodes have no names: every entry
+/// would land on the empty string. That is the whole reason [SceneMeasured]
+/// hands over the nodes and this is a separate step.
+Map<String, SceneRect> namedRects(Map<SceneNode, SceneRect> rects) => {
+  for (var entry in rects.entries)
+    if (entry.key.name.isNotEmpty) entry.key.name: entry.value,
+};
 
 class SceneView extends StatefulWidget {
   const SceneView(
@@ -116,7 +134,7 @@ class _SceneViewState extends State<SceneView> {
       if (!mounted) return;
       var root = _artboard.currentContext?.findRenderObject() as RenderBox?;
       if (root == null) return;
-      var rects = <String, SceneRect>{};
+      var rects = <SceneNode, SceneRect>{};
       SceneRect? visit(SceneNode node) {
         var box = _keys[node]?.currentContext?.findRenderObject() as RenderBox?;
         SceneRect? rect;
@@ -134,7 +152,7 @@ class _SceneViewState extends State<SceneView> {
         // cells and paints the row behind them — so the row IS what its
         // cells span, which is the rect the editor selects and drops on.
         rect ??= spanned;
-        if (rect != null) rects[node.name] = rect;
+        if (rect != null) rects[node] = rect;
         return rect;
       }
 
