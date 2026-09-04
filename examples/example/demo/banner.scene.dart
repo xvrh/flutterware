@@ -8,9 +8,8 @@
 //
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_example/shop/shop_app.dart' as app;
 
-import 'promo_badge.scene.dart';
+import 'scene_args.dart';
 
 class BannerScene extends SceneDefinition {
   late final glow = ShapeNode(
@@ -57,38 +56,30 @@ class BannerScene extends SceneDefinition {
     children: [headline, subtitle, cta],
   );
   late final badge = ExternalNode(
-    'DrinkBadge',
+    const DrinkBadgeArgs(size: 140),
     x: 560,
     y: 290,
     width: 140,
     height: 140,
-    build: (a) => app.DrinkBadge(app.drinks[1], size: a.number('size') ?? 140),
-    args: {'size': 140},
   );
   late final loading = ExternalNode(
-    'Spinner',
+    const SpinnerArgs(size: 40),
     x: 950,
     y: 430,
     width: 40,
     height: 40,
-    build: (a) => app.Spinner(size: a.number('size') ?? 36),
-    args: {'size': 40},
   );
   late final order = ExternalNode(
-    'OrderButton',
+    const OrderButtonArgs(),
     x: 830,
     y: 400,
     width: 150,
     height: 44,
-    build: (a) => app.OrderButton(label: a.text('label') ?? 'Order now'),
-    args: {'label': 'Order now'},
   );
   late final promo = SceneRefNode(
-    'PromoBadge',
+    const PromoBadgeArgs(label: 'Now open'),
     x: 64,
     y: 48,
-    build: (a) => PromoBadge(label: a.text('label') ?? 'New'),
-    args: {'label': 'Now open'},
   );
   @override
   late final root = FrameNode(
@@ -123,12 +114,12 @@ class BannerIntro(super.scene, {final double slideFrom = 24})
       MotionKey(at: 0.ms, value: 0.6),
       MotionKey(at: 240.ms, value: 1, curve: SceneCurves.easeOutBack),
     ]),
-    args: {
-      'progress': MotionTrack([
-        MotionKey(at: 0.ms, value: 0),
-        MotionKey(at: 300.ms, value: 1),
+    args: DrinkBadgeTracks(
+      size: MotionTrack([
+        MotionKey(at: 0.ms, value: 110),
+        MotionKey(at: 300.ms, value: 140, curve: SceneCurves.easeOut),
       ]),
-    },
+    ),
   );
   late final tapPulse = scene.cta.animate(
     scale: MotionTrack([

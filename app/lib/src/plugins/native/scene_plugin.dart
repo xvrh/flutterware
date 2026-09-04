@@ -15,6 +15,7 @@ import '../../previews/compiler_daemon_client.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../scene/discovery.dart';
+import '../../scene/externals_file.dart';
 import '../../scene/autosave.dart';
 import '../../scene/editor.dart';
 import '../../scene/guest.dart';
@@ -221,6 +222,7 @@ class _ScenePanelState extends State<_ScenePanel>
     var opened = SceneFile.open(
       entry.path,
       File(entry.path).readAsStringSync(),
+      declaredArgs: _declaredArgs(),
     );
     if (!opened.ok) {
       setState(() {
@@ -347,6 +349,17 @@ class _ScenePanelState extends State<_ScenePanel>
       .replaceAllMapped(RegExp('([a-z0-9])([A-Z])'), (m) => '${m[1]}_${m[2]}')
       .toLowerCase();
 
+  /// The widgets this package declares — what an inspector reads a type and
+  /// a default from, and what a parse checks an argument name against.
+  List<ExternalWidgetDecl> _externals() {
+    var package = _package;
+    return package == null ? const [] : _core.externalsFor(package);
+  }
+
+  Map<String, Set<String>> _declaredArgs() => {
+    for (var w in _externals()) w.entry: {for (var a in w.args) a.name},
+  };
+
   /// A nested scene is another scene file of the same package, found by the
   /// class it declares. Opened fresh here; the workspace keeps the one copy
   /// it already holds, so edits inside a child are not lost to a re-resolve.
@@ -359,6 +372,7 @@ class _ScenePanelState extends State<_ScenePanel>
       var opened = SceneFile.open(
         entry.path,
         File(entry.path).readAsStringSync(),
+        declaredArgs: _declaredArgs(),
       );
       if (!opened.ok) {
         setState(() {
@@ -552,6 +566,7 @@ class _ScenePanelState extends State<_ScenePanel>
           child: SceneWorkspaceView(
             key: ValueKey(workspace.active.path),
             editor,
+            externals: _externals(),
             playbackFor: (motion) => _playbackFor(workspace.active, motion),
             sceneClassName: workspace.active.className,
             status: _guest?.status,

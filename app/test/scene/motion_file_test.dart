@@ -82,7 +82,7 @@ void main() {
     expect(emitted, contains('value: slideFrom'));
     expect(emitted, contains('curve: SceneCurves.easeOut'));
     // Ext args are the one stringly boundary.
-    expect(emitted, contains("'progress': MotionTrack("));
+    expect(emitted, contains("'size': MotionTrack("));
     // The timeline is mandatory and arranges by reference.
     expect(emitted, contains('late final timeline = ParExpr('));
     expect(emitted, contains('AtExpr(400.ms, badgePop)'));

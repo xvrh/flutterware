@@ -6,7 +6,7 @@
 // reports back what the layout measured, which is where the editor's selection
 // rectangles and drag targets come from.
 //
-// The app's part is small on purpose: register the widgets a scene may name,
+// The app's part is small on purpose: declare the widgets a scene may place,
 // and mount the host. Everything else is flutterware's.
 import 'dart:convert';
 import 'dart:io';
@@ -15,22 +15,11 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
-import 'banner.scene.dart';
+import 'scene_externals.dart';
 
 void main() {
   runApp(const SceneHostApp());
 }
-
-/// The app's scene classes, as constructors.
-///
-/// This is the whole registration now, and it is one line per scene rather
-/// than one per widget. The editor sends a scene as data and an external
-/// node's builder is a closure — not data, and it cannot travel — so the
-/// host learns the builders by instantiating these and walking them.
-///
-/// Each entry is compiler-checked: a renamed scene class breaks the build
-/// rather than the canvas.
-final _scenes = <SceneDefinition Function()>[BannerScene.new];
 
 /// A scene and its motion, played from the file the editor wrote — the shape
 /// an export walks.
@@ -55,6 +44,10 @@ class ScenePlayerHost extends StatelessWidget {
       jsonDecode(file.readAsStringSync()) as Map<String, Object?>,
     );
     var motion = pair.motions.values.firstOrNull;
+    // The pair came off disk as data, so its external nodes carry a label
+    // and no generated class. This is what turns the label back into a
+    // widget; a scene the app COMPILED needs none of it.
+    bindExternals(pair.scene, sceneExternals);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
@@ -63,7 +56,6 @@ class ScenePlayerHost extends StatelessWidget {
         child: SceneView(
           pair.scene,
           motion: motion == null ? null : BoundMotion.bind(motion, pair.scene),
-          externals: sceneExternalsFrom(_scenes),
         ),
       ),
     );
@@ -99,6 +91,6 @@ class SceneHostApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     // The app's own look — what the editor canvas inherits by construction.
     theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
-    home: SceneCanvasHost(scenes: _scenes),
+    home: SceneCanvasHost(externals: sceneExternals),
   );
 }

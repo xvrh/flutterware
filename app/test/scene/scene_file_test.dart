@@ -21,7 +21,7 @@ void main() {
     var emitted = emitSceneFile(coffeeBannerDraft());
     expect(emitted, contains('late final headline = TextNode('));
     expect(emitted, contains('late final badge = ExternalNode('));
-    expect(emitted, contains("'DrinkBadge'"));
+    expect(emitted, contains('const DrinkBadgeArgs(size: 140)'));
     expect(emitted, contains('children: [headline, subtitle, cta]'));
     // Canonical order: a field is declared before the field that places it.
     var root = emitted.indexOf('late final root');
@@ -135,7 +135,7 @@ class S {
     fill: SceneColor(0xff2b1b12),
     children: [badge, caption],
   );
-  final badge = ExternalNode('DrinkBadge');
+  final badge = ExternalNode(const DrinkBadgeArgs());
   final caption = TextNode("Banner");
 }
 ''');
@@ -143,7 +143,10 @@ class S {
     var emitted = emitSceneFile(parsed.doc!, className: 'S');
     expect(emitted, contains('width: 1024,'));
     expect(emitted, contains('SceneColor(0xFF2B1B12)'));
-    expect(emitted, contains("late final badge = ExternalNode('DrinkBadge')"));
+    expect(
+      emitted,
+      contains('late final badge = ExternalNode(const DrinkBadgeArgs())'),
+    );
     expect(emitted, contains("TextNode('Banner')"));
     expect(
       emitted.indexOf('late final badge'),
@@ -553,7 +556,7 @@ SceneNode _randomNode(Random r, int depth) {
     case 2:
       node = ShapeNode(name: name, circle: r.nextBool());
     default:
-      var ext = ExternalNode('Entry${r.nextInt(4)}', name: name);
+      var ext = ExternalNode.read('Entry${r.nextInt(4)}', name: name);
       for (var i = 0; i < r.nextInt(3); i++) {
         ext.args['k$i'] = switch (r.nextInt(3)) {
           0 => _randomDouble(r),

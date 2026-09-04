@@ -416,17 +416,26 @@ extension ShapeNodeAnimate on ShapeNode {
   });
 }
 
+/// The generated track object a motion carries — a slot per animatable
+/// argument, so `args: {'progress': …}` for a parameter the widget does not
+/// have is not refused but unwritable.
+abstract class SceneExtTracks {
+  const SceneExtTracks();
+
+  Map<String, MotionTrack> toMap();
+}
+
 extension ExternalNodeAnimate on ExternalNode {
-  /// [args] is the grammar's one stringly boundary: an external widget's
-  /// arguments are discovered by scan, not declared, so there is no type to
-  /// check them against.
+  /// [args] is the widget's generated tracks class — one slot per declared
+  /// argument, so a track aimed at a parameter the widget does not take
+  /// does not compile.
   AnimateGroup animate({
     MotionTrack? opacity,
     MotionTrack? translateX,
     MotionTrack? translateY,
     MotionTrack? scale,
     MotionTrack? rotate,
-    Map<String, MotionTrack>? args,
+    SceneExtTracks? args,
   }) => _group(this, {
     'opacity': opacity,
     'translateX': translateX,
@@ -443,7 +452,7 @@ extension SceneRefNodeAnimate on SceneRefNode {
     MotionTrack? translateY,
     MotionTrack? scale,
     MotionTrack? rotate,
-    Map<String, MotionTrack>? args,
+    SceneExtTracks? args,
   }) => _group(this, {
     'opacity': opacity,
     'translateX': translateX,
@@ -456,7 +465,7 @@ extension SceneRefNodeAnimate on SceneRefNode {
 AnimateGroup _group(
   SceneNode node,
   Map<String, MotionTrack?> tracks, {
-  Map<String, MotionTrack>? args,
+  SceneExtTracks? args,
 }) {
   var group = AnimateGroup(node);
   for (var entry in tracks.entries) {
@@ -464,7 +473,7 @@ AnimateGroup _group(
     // a property nobody animated is a property the group does not carry.
     if (entry.value case var track?) group.tracks[entry.key] = track;
   }
-  if (args != null) group.args.addAll(args);
+  if (args != null) group.args.addAll(args.toMap());
   return group;
 }
 

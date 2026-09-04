@@ -3,6 +3,7 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
+import 'package:flutterware_app/src/scene/externals_file.dart';
 import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/measure.dart';
 import 'package:flutterware_app/src/scene/playback.dart';
@@ -73,54 +74,64 @@ class _WorkspaceState extends State<_Workspace> with TickerProviderStateMixin {
     _editor,
     playbackFor: _playbackFor,
     sceneClassName: 'BannerScene',
+    externals: describeExternals(_externals),
     content: SceneView(
       _doc,
-      externals: (e) => _externals[e],
       onMeasured: (rects) => applyMeasuredRects(_doc, rects),
     ),
   );
 }
 
 /// Stand-ins for the app's widgets, so the fixture lays out at the sizes
-/// the real ones take.
-///
-/// A resolver rather than a registry: a real scene file holds its builders,
-/// and this is the shape the editor's canvas asks in when the scene arrived
-/// as data and the closures could not.
-final _externals = <String, SceneWidgetBuilder>{
-  'DrinkBadge': (args) {
-    var size = args.number('size') ?? 56;
-    return Container(
-      width: size,
-      height: size,
-      alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        color: Color(0xFF6B4226),
-        shape: BoxShape.circle,
-      ),
-      child: Text('☕', style: TextStyle(fontSize: size * 0.45)),
-    );
-  },
-  'Spinner': (args) {
-    var size = args.number('size') ?? 36;
-    return Container(
-      width: size,
-      height: size,
+/// the real ones take — declared exactly as an app declares its own, which
+/// is also what puts a type and a default beside each argument in the
+/// inspector this demo is for.
+final _externals = [
+  ExternalWidget(
+    'DrinkBadge',
+    args: [const Arg<double>('size', 56)],
+    build: (args) {
+      var size = args.number('size') ?? 56;
+      return Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          color: Color(0xFF6B4226),
+          shape: BoxShape.circle,
+        ),
+        child: Text('☕', style: TextStyle(fontSize: size * 0.45)),
+      );
+    },
+  ),
+  ExternalWidget(
+    'Spinner',
+    args: [const Arg<double>('size', 36)],
+    build: (args) {
+      var size = args.number('size') ?? 36;
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFFD8C9BD), width: 3),
+        ),
+      );
+    },
+  ),
+  ExternalWidget(
+    'OrderButton',
+    args: [const Arg<String>('label', 'Order now')],
+    build: (args) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFD8C9BD), width: 3),
+        color: const Color(0xFFE8632B),
+        borderRadius: BorderRadius.circular(22),
       ),
-    );
-  },
-  'OrderButton': (args) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-    decoration: BoxDecoration(
-      color: const Color(0xFFE8632B),
-      borderRadius: BorderRadius.circular(22),
-    ),
-    child: Text(
-      args.text('label') ?? 'Order now',
-      style: const TextStyle(color: Colors.white, fontSize: 15),
+      child: Text(
+        args.text('label') ?? 'Order now',
+        style: const TextStyle(color: Colors.white, fontSize: 15),
+      ),
     ),
   ),
-};
+];

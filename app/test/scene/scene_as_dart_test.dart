@@ -12,10 +12,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/src/scene/externals_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 
 import 'sample.scene.dart';
 import 'sample_widget.dart' as app;
+import 'scene_externals.dart';
 
 void main() {
   test('a scene file is a class an app can instantiate', () {
@@ -163,29 +165,47 @@ void main() {
         if (node is ExternalNode) node,
     ].single;
     expect(ext.entry, 'SampleChip');
-    expect(ext.build, isNull, reason: 'the closure did not travel');
+    expect(ext.declared, isNull, reason: 'a generated type did not travel');
 
+    // The label is all that arrived, and the app's declarations are what
+    // turn it back into a widget.
+    bindExternals(arrived, sceneExternals);
     await tester.pumpWidget(
-      MaterialApp(
-        home: Center(
-          child: SceneView(
-            arrived,
-            externals: sceneExternalsFrom([SampleScene.new]),
-          ),
-        ),
-      ),
+      MaterialApp(home: Center(child: SceneView(arrived))),
     );
     expect(find.byType(app.SampleChip), findsOneWidget);
   });
 
-  test('and the builder it could not read comes back verbatim', () {
-    var source = File('test/scene/sample.scene.dart').readAsStringSync();
+  test(
+    'a scene the tool READ carries the label and the values, not a type',
+    () {
+      var source = File('test/scene/sample.scene.dart').readAsStringSync();
+      var parsed = parseSceneFile(source);
+      var chip = parsed.doc!.nodeNamed('chip')! as ExternalNode;
+      expect(chip.entry, 'SampleChip');
+      expect(chip.args, {'label': 'new'});
+      expect(chip.declared, isNull, reason: 'read, not compiled');
+    },
+  );
+
+  test('an argument the widget does not declare is refused', () {
+    var source = File('test/scene/sample.scene.dart')
+        .readAsStringSync()
+        .replaceFirst(
+          "const SampleChipArgs(label: 'new')",
+          "const SampleChipArgs(label: 'new', progress: 1)",
+        );
+    var declared = parseExternalsFile(
+      File('test/scene/scene_externals.dart').readAsStringSync(),
+    );
+    var names = {
+      for (var w in declared.widgets) w.entry: {for (var a in w.args) a.name},
+    };
     var parsed = parseSceneFile(source);
     var chip = parsed.doc!.nodeNamed('chip')! as ExternalNode;
-    // Kept as a span, because the tool cannot author app code — and must
-    // not lose it either.
-    expect(chip.buildSource, startsWith('(a) => app.SampleChip('));
-    expect(chip.build, isNull, reason: 'read, not compiled');
+    expect(chip.args.keys.where((k) => !names[chip.entry]!.contains(k)), [
+      'progress',
+    ], reason: 'the declaration is what says the widget has no such argument');
   });
 
   testWidgets('a nested scene is a constructor call the compiler checks', (

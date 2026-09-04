@@ -173,12 +173,12 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
         ..align = _textAlign(json['align'])
         ..maxLines = (json['maxLines'] as num?)?.toInt(),
     'Shape' => ShapeNode(name: name, circle: json['circle'] == true),
-    'Ext' => ExternalNode(
+    'Ext' => ExternalNode.read(
       json['entry']! as String,
       name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
     ),
-    'Scene' => SceneRefNode(
+    'Scene' => SceneRefNode.read(
       json['scene']! as String,
       name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
@@ -428,7 +428,7 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
         ..align = _textAlign(json['align'])
         ..maxLines = (json['maxLines'] as num?)?.toInt(),
     'shape' => ShapeNode(name: name, circle: json['circle'] == true),
-    'ext' => ExternalNode(
+    'ext' => ExternalNode.read(
       '${json['entry']}',
       name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),

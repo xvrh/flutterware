@@ -91,7 +91,7 @@ void main() {
     test("a track goes; the group stays as the node's place", () {
       editor.deleteTrack(m, 'headlineIn', 'translateY');
       expect(motion.groupNamed('headlineIn')!.tracks.keys, ['opacity']);
-      editor.deleteTrack(m, 'badgePop', 'args.progress');
+      editor.deleteTrack(m, 'badgePop', 'args.size');
       expect(motion.groupNamed('badgePop')!.args, isEmpty);
       expect(motion.groupNamed('badgePop'), isNotNull);
     });

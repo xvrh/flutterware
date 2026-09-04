@@ -40,7 +40,7 @@ SceneDocument badgeTemplate() {
 SceneDocument bannerWithBadge() {
   var scene = coffeeBannerDraft();
   scene.root.children.add(
-    SceneRefNode('PromoBadge', name: 'promo', args: {'label': 'Now open'})
+    SceneRefNode.read('PromoBadge', name: 'promo', args: {'label': 'Now open'})
       ..x = 64
       ..y = 48,
   );
@@ -56,8 +56,11 @@ void main() {
   });
 
   test('syncInstance puts every parameter back, not only the overridden', () {
-    var ref = SceneRefNode('PromoBadge', name: 'promo', args: {'label': 'Hi'})
-      ..instance = instantiateScene(badgeTemplate(), {'label': 'Hi'});
+    var ref = SceneRefNode.read(
+      'PromoBadge',
+      name: 'promo',
+      args: {'label': 'Hi'},
+    )..instance = instantiateScene(badgeTemplate(), {'label': 'Hi'});
     ref.writeFx('m', 'args.tint', const SceneColor(0xFF00FF00));
     ref.syncInstance();
     expect(ref.instance!.root.fill, const SceneColor(0xFF00FF00));
@@ -68,14 +71,14 @@ void main() {
   });
 
   test('only number and color parameters animate', () {
-    var ref = SceneRefNode('PromoBadge', name: 'promo')
+    var ref = SceneRefNode.read('PromoBadge', name: 'promo')
       ..instance = instantiateScene(badgeTemplate(), const {});
     var props = animatableProps(ref).map((p) => p.name).toList();
     expect(props, contains('opacity'));
     expect(props, contains('args.tint'));
     expect(props, isNot(contains('args.label')));
     expect(
-      animatableProps(SceneRefNode('Y', name: 'x')).map((p) => p.name),
+      animatableProps(SceneRefNode.read('Y', name: 'x')).map((p) => p.name),
       isNot(contains(startsWith('args.'))),
       reason: 'unresolved: imposed only',
     );
@@ -102,7 +105,8 @@ void main() {
     expect(
       source.replaceAll(RegExp(r'\s+'), ''),
       contains(
-        "SceneRefNode('PromoBadge',x:64,y:48,args:{'label':'Nowopen','tint':SceneColor(0xFF3E7C4F)}",
+        "SceneRefNode(constPromoBadgeArgs(label:'Nowopen',"
+        'tint:SceneColor(0xFF3E7C4F)),x:64,y:48,)',
       ),
     );
     var parsed = parseSceneFile(source);
@@ -124,7 +128,7 @@ void main() {
     // The orphaned field is refused too; the one about the name teaches.
     expect(
       parsed.refusals.map((r) => r.message),
-      anyElement(contains("SceneRefNode('PromoBadge'")),
+      anyElement(contains('SceneRefNode(const PromoBadgeArgs(')),
     );
   });
 

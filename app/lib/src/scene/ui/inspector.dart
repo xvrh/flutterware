@@ -12,6 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
+import '../externals_file.dart';
+
 import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
 import '../../ui/action_button.dart';
@@ -51,9 +53,16 @@ enum _SizeMode {
 }
 
 class SceneInspector extends StatelessWidget {
-  const SceneInspector(this.editor, {super.key});
+  const SceneInspector(this.editor, {super.key, this.externals = const []});
 
   final SceneEditor editor;
+
+  /// The widgets the app declares. This is the whole of what the editor
+  /// knows about a foreign widget — nothing here resolves the app package —
+  /// and it is why an external node's arguments can be shown with their
+  /// types and their defaults rather than guessed from whatever value the
+  /// scene happens to carry.
+  final List<ExternalWidgetDecl> externals;
 
   SceneDocument get doc => editor.doc;
 
@@ -870,31 +879,60 @@ class SceneInspector extends StatelessWidget {
     ),
   ];
 
-  List<Widget> _extProps(BuildContext context, ExternalNode e) => [
-    _label(context, 'Entry'),
-    Text(e.entry, style: context.type.body),
-    const SizedBox(height: FwSpacing.md),
-    for (var arg in e.args.entries) ...[
-      if (arg.value case num number)
-        _number(
-          'args.${arg.key}',
-          arg.key,
-          number.toDouble(),
-          const SceneNumberShape(perPixel: 1, decimals: 2),
-          apply: (v) => e.args[arg.key] = v,
-        )
-      else
+  /// The widget's declared arguments, each at its override or its default —
+  /// the same shape as a nested scene's parameters, because a declaration is
+  /// the same promise a scene header makes.
+  List<Widget> _extProps(BuildContext context, ExternalNode e) {
+    var declared = externals.where((w) => w.entry == e.entry).firstOrNull;
+    return [
+      _label(context, 'Entry'),
+      Text(e.entry, style: context.type.body),
+      if (declared == null)
         Padding(
-          padding: const EdgeInsets.only(bottom: FwSpacing.md),
-          child: TextFormField(
-            key: ValueKey('${e.name}:${arg.key}'),
-            initialValue: '${arg.value}',
-            decoration: InputDecoration(labelText: arg.key, isDense: true),
-            onChanged: (v) => _door('args', () => e.args[arg.key] = v),
+          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          child: Text(
+            'Not declared in this package',
+            style: context.type.caption.copyWith(color: context.colors.red),
           ),
         ),
-    ],
-  ];
+      const SizedBox(height: FwSpacing.md),
+      for (var arg in declared?.args ?? const <ExternalArgDecl>[]) ...[
+        if (arg.typeName == 'double')
+          _number(
+            'args.${arg.name}',
+            arg.name,
+            switch (e.args[arg.name] ?? _fallback(arg)) {
+              num n => n.toDouble(),
+              _ => 0,
+            },
+            const SceneNumberShape(perPixel: 1, decimals: 2),
+            apply: (v) => e.args[arg.name] = v,
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            child: TextFormField(
+              key: ValueKey('${e.name}:${arg.name}'),
+              initialValue: '${e.args[arg.name] ?? _fallback(arg) ?? ''}',
+              decoration: InputDecoration(labelText: arg.name, isDense: true),
+              onChanged: (v) => _door('args', () => e.args[arg.name] = v),
+            ),
+          ),
+      ],
+    ];
+  }
+
+  /// The declaration's fallback, as a value. It is kept as source text —
+  /// what goes back out as the generated field's default — and only the two
+  /// spellings a field shows are read back here.
+  Object? _fallback(ExternalArgDecl arg) {
+    var text = arg.defaultSource;
+    if (text == null) return null;
+    if (arg.typeName == 'double') return double.tryParse(text);
+    return text.length >= 2 && (text.startsWith("'") || text.startsWith('"'))
+        ? text.substring(1, text.length - 1)
+        : text;
+  }
 
   /// The selected keys: one key edits time, value and curve; several share a
   /// curve and nothing else, because their values are each their own.

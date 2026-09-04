@@ -82,6 +82,10 @@ const sceneFileMarker = '//@flutterware:scene=0.8';
 const sceneAuthoringUri = 'package:flutterware/scene_authoring.dart';
 const sceneAuthoringImport = "import '$sceneAuthoringUri';";
 
+/// The generated arguments file, which lives beside the scenes it serves.
+/// One name, so a scene file's import of it never has to be worked out.
+const sceneArgsFileName = 'scene_args.dart';
+
 /// One refused construct: where it is and what to do instead.
 class SceneRefusal {
   SceneRefusal(this.offset, this.line, this.construct, this.message);
@@ -160,7 +164,7 @@ $sceneFileMarker
 //
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 $sceneAuthoringImport
-${_imports(imports)}
+${_imports(imports, needsArgs: _placesSomething(doc))}
 ''');
   var seen = <String>{};
   var params = <String, SceneParamDecl>{};
@@ -215,10 +219,31 @@ ${_imports(imports)}
   return _formatter.format(out.toString());
 }
 
+/// Whether the scene places anything whose arguments are generated — an
+/// external widget or a nested scene. Both spell a `…Args` class, and both
+/// therefore need the generated vocabulary in scope.
+bool _placesSomething(SceneDocument doc) {
+  for (var (node, _) in doc.walk()) {
+    if (node is ExternalNode || node is SceneRefNode) return true;
+  }
+  return false;
+}
+
 /// The file's other imports, canonically: package ones first, each group
 /// sorted, so the order a hand edit put them in converges in one emit.
-String _imports(List<String> imports) {
-  if (imports.isEmpty) return '';
+///
+/// The tool cannot invent an import — only the author knows where a widget
+/// lives — with one exception: the generated arguments file, whose name is
+/// fixed and whose absence would make a scene that places anything stop
+/// compiling the moment the editor added the node.
+String _imports(List<String> imports, {bool needsArgs = false}) {
+  var all = [
+    ...imports,
+    if (needsArgs && !imports.any((i) => i.contains("'$sceneArgsFileName'")))
+      "import '$sceneArgsFileName';",
+  ];
+  if (all.isEmpty) return '';
+  imports = all;
   var packages = [
     for (var i in imports)
       if (i.contains("'package:")) i,
@@ -392,35 +417,36 @@ void _emitNode(
       if (s.circle) props.add('circle: true');
       out.write('ShapeNode(${props.join(', ')})');
     case ExternalNode e:
-      if (!isValidNodeName(e.entry)) {
-        throw ArgumentError('"${e.entry}" is not a registration entry name');
-      }
-      props.add(_str(e.entry));
+      props.add(_argsLiteral(e.entry, e.args, 'a registration entry name'));
       common();
-      // Verbatim, because the tool never read it. A node with no source is
-      // one that was compiled rather than parsed, and there is nothing to
-      // write.
-      if (e.buildSource.isNotEmpty) props.add('build: ${e.buildSource}');
-      if (e.args.isNotEmpty) {
-        props.add(
-          'args: {${[for (var entry in e.args.entries) '${_str(entry.key)}: ${_argValue(entry.value)}'].join(', ')}}',
-        );
-      }
       out.write('ExternalNode(${props.join(', ')})');
     case SceneRefNode r:
-      if (!isValidNodeName(r.sceneClassName)) {
-        throw ArgumentError('"${r.sceneClassName}" is not a scene class name');
-      }
-      props.add(_str(r.sceneClassName));
+      props.add(_argsLiteral(r.sceneClassName, r.args, 'a scene class name'));
       common();
-      if (r.buildSource.isNotEmpty) props.add('build: ${r.buildSource}');
-      if (r.args.isNotEmpty) {
-        props.add(
-          'args: {${[for (var entry in r.args.entries) '${_str(entry.key)}: ${_argValue(entry.value)}'].join(', ')}}',
-        );
-      }
       out.write('SceneRefNode(${props.join(', ')})');
   }
+}
+
+/// `const DrinkBadgeArgs(size: 140)` — the whole of an external node's
+/// identity and arguments, and the reason a scene file spells no strings.
+///
+/// The class is generated from the app's declaration of that widget (or,
+/// for a nested scene, from the child's own parameter list), so a name that
+/// is not a declared argument does not compile. Every argument the node
+/// carries is written; what a caller left at the declared default was never
+/// read into the node in the first place.
+String _argsLiteral(String entry, Map<String, Object?> args, String what) {
+  if (!isValidNodeName(entry)) {
+    throw ArgumentError('"$entry" is not $what');
+  }
+  for (var name in args.keys) {
+    if (!isValidNodeName(name)) {
+      throw ArgumentError('"$name" is not an argument name');
+    }
+  }
+  var named = [for (var e in args.entries) '${e.key}: ${_argValue(e.value)}']
+      .join(', ');
+  return 'const ${entry}Args($named)';
 }
 
 /// What the closure's parameter is called. One name, because the cells it
@@ -497,8 +523,11 @@ String _argValue(Object? v) => switch (v) {
 // Parse
 // ---------------------------------------------------------------------------
 
-SceneParse parseSceneFile(String source) {
-  var p = _Parser(source);
+SceneParse parseSceneFile(
+  String source, {
+  Map<String, Set<String>> declaredArgs = const {},
+}) {
+  var p = _Parser(source, declaredArgs);
   var doc = p.parse();
   var motions = <String, MotionDocument>{};
   // A motion is half a pair and resolves its targets against the scene, so
@@ -525,9 +554,15 @@ SceneParse parseSceneFile(String source) {
 }
 
 class _Parser {
-  _Parser(this.source);
+  _Parser(this.source, this.declaredArgs);
 
   final String source;
+
+  /// Entry label to the argument names that widget declares — the app's
+  /// declaration file, read before any scene file. An entry that is absent
+  /// is not checked: a package with no declarations still parses, it just
+  /// gets no second grader.
+  final Map<String, Set<String>> declaredArgs;
   final refusals = <SceneRefusal>[];
   String? className;
 
@@ -1205,66 +1240,31 @@ class _Parser {
         _checkPositionals(positional, 0);
         return node;
       case 'ExternalNode' || 'SceneRefNode':
-        var target =
-            _entryName(
-              positional,
-              args,
-              kind == 'ExternalNode'
-                  ? 'an ExternalNode names its registration entry — '
-                        "ExternalNode('DrinkBadge', …)"
-                  : 'a SceneRefNode names the scene class it instantiates — '
-                        "SceneRefNode('PromoBadge', …)",
-            ) ??
-            '';
-        var node = kind == 'ExternalNode'
-            ? ExternalNode(target, name: name)
-            : SceneRefNode(target, name: name);
-        var nodeArgs = node is ExternalNode
-            ? node.args
-            : (node as SceneRefNode).args;
-        _applyCommon(node, named);
-        _take(named, 'build', (e) {
-          if (e is! FunctionExpression) {
+        var read = _typedArgs(
+          positional,
+          args,
+          kind == 'ExternalNode'
+              ? 'an ExternalNode takes the generated arguments of the widget '
+                    'it places — ExternalNode(const DrinkBadgeArgs(size: 140))'
+              : 'a SceneRefNode takes the generated arguments of the scene it '
+                    "instantiates — SceneRefNode(const PromoBadgeArgs(label: 'New'))",
+        );
+        var (target, nodeArgs) = read ?? ('', <String, Object?>{});
+        if (declaredArgs[target] case var declared?) {
+          for (var name in nodeArgs.keys) {
+            if (declared.contains(name)) continue;
             refuse(
-              e.offset,
-              _kind(e),
-              node is ExternalNode
-                  ? 'build makes the app widget — '
-                        "`build: (a) => app.DrinkBadge(a.number('size'))`"
-                  : 'build makes the nested scene — '
-                        "`build: (a) => PromoBadge(label: a.text('label'))`",
+              positional[0].offset,
+              'unknown argument',
+              '$target declares no "$name" — it takes '
+                  '${declared.isEmpty ? 'no arguments' : declared.join(', ')}',
             );
-            return;
           }
-          // KEPT, not read. These are the only spans in the file the tool
-          // treats as opaque: they are the author's code, the tool cannot
-          // write them, and dropping them would be the shredder.
-          var span = source.substring(e.offset, e.end);
-          if (node is ExternalNode) {
-            node.buildSource = span;
-          } else if (node is SceneRefNode) {
-            node.buildSource = span;
-          }
-        });
-        _take(named, 'args', (e) {
-          if (e is! SetOrMapLiteral) {
-            refuse(e.offset, 'args', 'args takes a map literal');
-            return;
-          }
-          for (var element in e.elements) {
-            if (element is! MapLiteralEntry) {
-              refuse(
-                element.offset,
-                _elementKind(element),
-                'expected a literal entry',
-              );
-              continue;
-            }
-            var key = _string(element.key);
-            var value = _literal(element.value);
-            if (key != null) nodeArgs[key] = value;
-          }
-        });
+        }
+        var node = kind == 'ExternalNode'
+            ? ExternalNode.read(target, name: name, args: nodeArgs)
+            : SceneRefNode.read(target, name: name, args: nodeArgs);
+        _applyCommon(node, named);
         _refuseRest(kind, named);
         _checkPositionals(positional, 1);
         return node;
@@ -1502,10 +1502,16 @@ class _Parser {
     return _stringV(positional[0], node, 'text');
   }
 
-  /// An Ext's entry is spelled as an identifier — `Ext(DrinkBadge)` — the
-  /// typed reference to a registration. A quoted spelling is accepted and
-  /// converges to the identifier on the next emit.
-  String? _entryName(
+  /// `const DrinkBadgeArgs(size: 140)` — an external node's whole identity
+  /// and arguments, as one typed constructor call.
+  ///
+  /// Three cheap things make it readable without resolving anything: the
+  /// class name gives the entry (`…Args` stripped), the named arguments
+  /// give the values, and the app's declaration of that widget — which the
+  /// generator wrote this class from — gives their types. An argument the
+  /// widget does not declare therefore fails twice: it does not compile,
+  /// and it is refused here with a line number.
+  (String, Map<String, Object?>)? _typedArgs(
     List<Expression> positional,
     ArgumentList args,
     String missing,
@@ -1515,14 +1521,29 @@ class _Parser {
       return null;
     }
     var e = positional[0];
-    if (e is SimpleIdentifier && !_params.containsKey(e.name)) return e.name;
-    if (e is SimpleStringLiteral && isValidNodeName(e.value)) return e.value;
-    refuse(
-      e.offset,
-      _kind(e),
-      'expected a registration entry name, spelled as an identifier',
-    );
-    return null;
+    var call = _invocation(e);
+    if (call == null || !call.$1.endsWith('Args') || call.$1.length < 5) {
+      refuse(e.offset, _kind(e), missing);
+      return null;
+    }
+    var entry = call.$1.substring(0, call.$1.length - 'Args'.length);
+    if (!isValidNodeName(entry)) {
+      refuse(e.offset, call.$1, missing);
+      return null;
+    }
+    var out = <String, Object?>{};
+    for (var arg in call.$2.arguments) {
+      if (arg is! NamedArgument) {
+        refuse(
+          arg.offset,
+          _kind(arg.argumentExpression),
+          'every argument is named — ${call.$1}(size: 140)',
+        );
+        continue;
+      }
+      out[arg.name.lexeme] = _literal(arg.argumentExpression);
+    }
+    return (entry, out);
   }
 
   // -- value parsers, each refusing with the construct it actually found.

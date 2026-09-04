@@ -12,7 +12,9 @@ import '../../previews/devices.dart';
 import '../../previews/discovery.dart';
 import '../../previews/test_runner.dart';
 import '../../previews/tester_renderer.dart';
+import '../../scene/args_generate.dart';
 import '../../scene/discovery.dart';
+import '../../scene/externals_file.dart';
 import '../../scene/export/video.dart';
 import '../../scene/scene_file.dart';
 import '../../utils/string/plural.dart';
@@ -61,9 +63,32 @@ class SceneCore extends PluginCore {
   );
 
   late final _cache = ScanCache<String, List<SceneEntry>>(
-    scan: (package) async => discoverScenes(rootFor(package)),
+    scan: (package) async {
+      // Declarations first, then the vocabulary they generate, then the
+      // scene files that spell it. A scene file names `DrinkBadgeArgs`,
+      // whose class is written from the app's declaration of that widget —
+      // so a scan that listed scenes without regenerating would hand the
+      // panel files naming classes that no longer exist.
+      _argsFor[package] = generateSceneArgsIn(rootFor(package));
+      return discoverScenes(rootFor(package));
+    },
     onChanged: notifyChanged,
   );
+
+  final _argsFor = <String, SceneArgsResult>{};
+
+  /// What the last generation run for [package] had to say — the refusals a
+  /// declaration file earned, and whether the vocabulary was rewritten.
+  SceneArgsResult? argsResultFor(String package) => _argsFor[package];
+
+  /// The widgets [package] declares, or an empty list when it declares
+  /// none. What an inspector shows for an external node's arguments comes
+  /// from here: name, type and default, with nothing resolved.
+  List<ExternalWidgetDecl> externalsFor(String package) {
+    var file = File(p.join(rootFor(package), sceneExternalsFileName));
+    if (!file.existsSync()) return const [];
+    return parseExternalsFile(file.readAsStringSync()).widgets;
+  }
 
   /// The scenes of [package], or null when nothing has looked yet.
   List<SceneEntry>? scenesFor(String package) => _cache[package];

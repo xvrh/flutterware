@@ -53,18 +53,24 @@ SceneDocument coffeeBannerDraft() {
 
   // External widgets — rendered as placeholders locally, natively in the
   // guest.
-  var badge = ExternalNode('DrinkBadge', name: 'badge', args: {'size': 140.0})
-    ..x = 560
-    ..y = 290
-    ..width = 140
-    ..height = 140;
-  var spinner = ExternalNode('Spinner', name: 'loading', args: {'size': 40.0})
-    ..x = 950
-    ..y = 430
-    ..width = 40
-    ..height = 40;
+  var badge =
+      ExternalNode.read('DrinkBadge', name: 'badge', args: {'size': 140.0})
+        ..x = 560
+        ..y = 290
+        ..width = 140
+        ..height = 140;
+  var spinner =
+      ExternalNode.read('Spinner', name: 'loading', args: {'size': 40.0})
+        ..x = 950
+        ..y = 430
+        ..width = 40
+        ..height = 40;
   var order =
-      ExternalNode('OrderButton', name: 'order', args: {'label': 'Order now'})
+      ExternalNode.read(
+          'OrderButton',
+          name: 'order',
+          args: {'label': 'Order now'},
+        )
         ..x = 830
         ..y = 400
         ..width = 150
@@ -119,9 +125,12 @@ MotionDocument coffeeIntroDraft([SceneDocument? of]) {
       curve: SceneCurves.easeOutBack,
     ),
   ], kind: TrackKind.number);
-  badgePop.args['progress'] = MotionTrack([
-    MotionKey(at: Duration.zero, value: 0.0),
-    MotionKey(at: const Duration(milliseconds: 300), value: 1.0),
+  // An external widget's own argument, animated. `size` and not `progress`:
+  // the widget declares one and not the other, and a fixture that animated a
+  // parameter nothing has is the hole this design closed.
+  badgePop.args['size'] = MotionTrack([
+    MotionKey(at: Duration.zero, value: 110.0),
+    MotionKey(at: const Duration(milliseconds: 300), value: 140.0),
   ], kind: TrackKind.number);
 
   // A library asset: not in the timeline, fired on events by its own player.

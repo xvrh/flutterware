@@ -531,15 +531,116 @@ class SceneArgs {
   Iterable<String> get names => _values.keys;
 }
 
+/// One parameter a widget declaration names, with the value it falls back
+/// to when a scene sets nothing.
+///
+/// The type is the type argument, and it survives to runtime as [type] —
+/// which is how an editor can be told `size` is a `double` without anything
+/// having resolved the widget's own source.
+class Arg<T> {
+  const Arg(this.name, [this.fallback]);
+
+  final String name;
+  final T? fallback;
+
+  Type get type => T;
+}
+
+/// What the app says about a widget a scene may place: its label, the
+/// arguments it takes, and how to make one.
+///
+/// This is the file that stands in for resolving the app package, and the
+/// only place in the system where an argument is named by a string. Written
+/// by hand, it must compile before anything has been generated from it —
+/// so it names nothing generated, and [build] reads its arguments by name
+/// like the untyped thing it is.
+class ExternalWidget {
+  const ExternalWidget(this.entry, {this.args = const [], required this.build});
+
+  final String entry;
+  final List<Arg<Object>> args;
+
+  /// Makes the widget. The one closure in the system, and it belongs here:
+  /// only the app knows what a mockup instance is made of.
+  ///
+  /// Returns `Object` rather than `Widget` because this half of the scene
+  /// system is pure Dart by decision; the renderer is where it becomes a
+  /// widget again.
+  final Object Function(SceneArgs args) build;
+}
+
+/// The generated argument object a node carries — one class per declared
+/// widget or nested scene, with a field per argument.
+///
+/// A scene file writes `ExternalNode(const DrinkBadgeArgs(size: 140))` and
+/// no strings at all: the class IS the widget's identity, its fields are
+/// the declared arguments, and an argument the widget does not take cannot
+/// be written down. [entry] is what crosses the editor's wire, where a
+/// generated type cannot go.
+sealed class SceneNodeArgs {
+  const SceneNodeArgs();
+
+  String get entry;
+
+  /// This, with [fx] on top — how an animated frame is built. Every
+  /// generated override narrows the return to its own type, so the whole
+  /// render path stays typed.
+  SceneNodeArgs merge(SceneArgs fx);
+
+  Map<String, Object?> toMap();
+}
+
+abstract class SceneExtArgs extends SceneNodeArgs {
+  const SceneExtArgs();
+
+  @override
+  SceneExtArgs merge(SceneArgs fx);
+
+  /// The widget, built through the declaration this class was generated
+  /// from. A node can therefore draw itself, which is why a shipped app
+  /// hands the view nothing.
+  Object build();
+}
+
+abstract class SceneRefArgs extends SceneNodeArgs {
+  const SceneRefArgs();
+
+  @override
+  SceneRefArgs merge(SceneArgs fx);
+
+  /// The nested scene, by a direct constructor call the compiler checks.
+  SceneDefinition build();
+}
+
 /// A widget from the app, placed in a scene.
 ///
-/// The file holds the BUILDER — `build: (a) => app.DrinkBadge(…)` — so the
-/// widget and its mockup data live where the compiler checks them, and the
-/// app no longer keeps a map of strings to lambdas. [entry] is the label
-/// that carries across the editor's wire, where a closure cannot go: the
-/// editor's guest resolves it against the scene classes it was given.
+/// The file holds one TYPED ARGUMENT OBJECT — `ExternalNode(const
+/// DrinkBadgeArgs(size: 140))` — generated from the app's declaration of
+/// that widget. There are no strings here and no closure: the class is the
+/// widget's identity, and an argument it does not declare cannot be
+/// written. [entry] is what crosses the editor's wire, where a generated
+/// type cannot go.
 class ExternalNode extends SceneNode {
   ExternalNode(
+    SceneExtArgs declared, {
+    super.name,
+    super.x,
+    super.y,
+    super.width,
+    super.height,
+    super.fill,
+    super.borderColor,
+    super.borderWidth,
+    super.corner,
+    super.opacity,
+  }) : declared = declared,
+       entry = declared.entry,
+       args = declared.toMap();
+
+  /// A node the tool READ — from a scene file it parsed, or from the wire.
+  /// It has the label and the values but not the generated class, because
+  /// the editor does not compile the app.
+  ExternalNode.read(
     this.entry, {
     super.name,
     super.x,
@@ -552,21 +653,21 @@ class ExternalNode extends SceneNode {
     super.corner,
     super.opacity,
     Map<String, Object?>? args,
-    this.build,
-  }) : args = args ?? {};
+  }) : declared = null,
+       args = args ?? {};
 
   final String entry;
   final Map<String, Object?> args;
 
-  /// How the widget is made, when this node was compiled rather than read.
-  /// A closure is not data, so it never crosses the editor's wire — see
-  /// [entry] for what does.
-  SceneWidgetBuilder? build;
+  /// The typed arguments, when this node was compiled rather than read.
+  /// A generated type is not data, so it never crosses the editor's wire —
+  /// see [entry] for what does.
+  SceneExtArgs? declared;
 
-  /// The builder's source text, when this node was READ. The tool rewrites
-  /// the whole file and cannot author app code, so it keeps this span
-  /// exactly as written and puts it back. Empty in a compiled scene.
-  String buildSource = '';
+  /// How the widget is made, for a node that was READ. Bound by whoever
+  /// holds the app's declarations — see `bindExternals` — because a
+  /// document that arrived as data has no class to ask.
+  SceneWidgetBuilder? builder;
 
   /// Authored args with fx contributions folded in (an ext arg's operator
   /// is replace, in stack order) — what the guest should render.
@@ -578,6 +679,16 @@ class ExternalNode extends SceneNode {
     }
     return out;
   }
+
+  /// The widget for the moment the fx plane is parked at.
+  ///
+  /// A compiled node builds through its own generated class, which reaches
+  /// the declaration itself — which is why a shipped app hands the view
+  /// nothing. A read one goes through whatever bound it.
+  Object? buildWidget() => switch (declared) {
+    var d? => d.merge(SceneArgs(renderedArgs)).build(),
+    null => builder?.call(SceneArgs(renderedArgs)),
+  };
 
   @override
   String get typeName => 'Ext';
@@ -597,6 +708,23 @@ class ExternalNode extends SceneNode {
 /// placeholder naming what it wanted.
 class SceneRefNode extends SceneNode {
   SceneRefNode(
+    SceneRefArgs declared, {
+    super.name,
+    super.x,
+    super.y,
+    super.width,
+    super.height,
+    super.fill,
+    super.borderColor,
+    super.borderWidth,
+    super.corner,
+    super.opacity,
+  }) : declared = declared,
+       sceneClassName = declared.entry,
+       args = declared.toMap();
+
+  /// A node the tool READ; see [ExternalNode.read].
+  SceneRefNode.read(
     this.sceneClassName, {
     super.name,
     super.x,
@@ -609,21 +737,16 @@ class SceneRefNode extends SceneNode {
     super.corner,
     super.opacity,
     Map<String, Object?>? args,
-    this.build,
-  }) : args = args ?? {};
+  }) : declared = null,
+       args = args ?? {};
 
   final String sceneClassName;
   final Map<String, Object?> args;
 
-  /// How the nested scene is made, when this node was compiled rather than
-  /// read — `build: (a) => PromoBadge(label: a.text('label'))`, a typed
-  /// reference to the other class that the compiler checks.
-  SceneDefinition Function(SceneArgs args)? build;
-
-  /// The builder's source text, when this node was READ; see
-  /// [ExternalNode.buildSource] for why the tool keeps a span it cannot
-  /// author.
-  String buildSource = '';
+  /// The typed arguments, when this node was compiled rather than read —
+  /// `const PromoBadgeArgs(label: 'Now open')`, whose `build` is a direct
+  /// constructor call to the other scene class that the compiler checks.
+  SceneRefArgs? declared;
 
   SceneDocument? instance;
 
@@ -644,8 +767,8 @@ class SceneRefNode extends SceneNode {
     // Compiled: the builder IS how args reach the child, so the instance is
     // rebuilt from the args of the moment. A parsed child has paramRefs and
     // takes them the other way, in place.
-    if (build case var make?) {
-      instance = make(SceneArgs(renderedArgs)).scene;
+    if (declared case var d?) {
+      instance = d.merge(SceneArgs(renderedArgs)).build().scene;
       return;
     }
     var inst = instance;
@@ -1079,14 +1202,13 @@ class SceneDocument extends SceneListenable {
             i.circle = s.circle;
           case (ExternalNode i, ExternalNode s):
             i
-              ..build = s.build
-              ..buildSource = s.buildSource
+              ..declared = s.declared
+              ..builder = s.builder
               ..args.clear();
             i.args.addAll(s.args);
           case (SceneRefNode i, SceneRefNode s):
             i
-              ..build = s.build
-              ..buildSource = s.buildSource
+              ..declared = s.declared
               ..args.clear();
             i.args.addAll(s.args);
           default:
@@ -1156,22 +1278,15 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
         ..align = t.align
         ..maxLines = t.maxLines,
     ShapeNode s => ShapeNode(name: name, circle: s.circle),
-    ExternalNode e => ExternalNode(
-      e.entry,
-      name: name,
-      args: Map.of(e.args),
-      build: e.build,
-    )..buildSource = e.buildSource,
+    ExternalNode e =>
+      ExternalNode.read(e.entry, name: name, args: Map.of(e.args))
+        ..declared = e.declared
+        ..builder = e.builder,
     // The instance is copied too, so the copy draws at once; each copy owns
     // its own, because args are applied by mutating it.
     SceneRefNode r =>
-      SceneRefNode(
-          r.sceneClassName,
-          name: name,
-          args: Map.of(r.args),
-          build: r.build,
-        )
-        ..buildSource = r.buildSource
+      SceneRefNode.read(r.sceneClassName, name: name, args: Map.of(r.args))
+        ..declared = r.declared
         ..instance = r.instance == null
             ? null
             : instantiateScene(r.instance!, r.args),

@@ -122,9 +122,13 @@ void main() {
     });
 
     test('an ext node folds arg contributions into renderedArgs', () {
-      var node = ExternalNode('DrinkBadge', name: 'e', args: {'size': 140.0});
-      node.writeFx('m', 'args.progress', 0.5);
-      expect(node.renderedArgs, {'size': 140.0, 'progress': 0.5});
+      var node = ExternalNode.read(
+        'DrinkBadge',
+        name: 'e',
+        args: {'size': 140.0},
+      );
+      node.writeFx('m', 'args.size', 0.5);
+      expect(node.renderedArgs, {'size': 0.5});
       expect(node.args, {'size': 140.0}); // authored untouched
     });
   });
@@ -151,7 +155,7 @@ void main() {
       bound.apply(const Duration(milliseconds: 700));
       expect(headline.fxRendered('opacity'), 1.0);
       expect(badge.fxRendered('scale'), 1.0); // local 300, track ended at 240
-      expect(badge.renderedArgs['progress'], 1.0);
+      expect(badge.renderedArgs['size'], 140.0);
 
       bound.apply(const Duration(milliseconds: 900));
       // glow's authored opacity is 0.7; the mood dims it to 0.85 of that.
@@ -357,11 +361,11 @@ void main() {
       var badge = (root['children'] as List)[3] as Map<String, dynamic>;
       // badgePop sits behind At(400.ms): its window has not opened, so the
       // arg holds its first key.
-      expect(badge['args'], containsPair('progress', 0.0));
+      expect(badge['args'], containsPair('size', 110.0));
       bound.apply(const Duration(milliseconds: 550));
       var later = scene.toWire()['root'] as Map<String, dynamic>;
       var badge2 = (later['children'] as List)[3] as Map<String, dynamic>;
-      expect(badge2['args'], containsPair('progress', 0.5));
+      expect(badge2['args'], containsPair('size', 125.0));
       // Cancel: the wire returns to the authored picture, no fx field.
       bound.clearFx();
       var again = scene.toWire()['root'] as Map<String, dynamic>;

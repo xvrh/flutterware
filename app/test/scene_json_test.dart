@@ -71,7 +71,7 @@ void main() {
     var track = motion.groupNamed('headlineIn')!.tracks['opacity']!;
     expect(track.keys.map((k) => k.at.inMilliseconds), [0, 260]);
     expect(track.keys.last.curve, SceneCurves.easeOut);
-    expect(motion.groupNamed('badgePop')!.args['progress'], isNotNull);
+    expect(motion.groupNamed('badgePop')!.args['size'], isNotNull);
   });
 
   test('the decoded pair binds and evaluates like the original', () {

@@ -29,8 +29,12 @@ class SceneFile {
 
   /// Read a file through the parse door. Refusals are the collecting kind,
   /// so a rejected file yields no document and every reason is listed.
-  static SceneFileOpen open(String path, String source) {
-    var parsed = parseSceneFile(source);
+  static SceneFileOpen open(
+    String path,
+    String source, {
+    Map<String, Set<String>> declaredArgs = const {},
+  }) {
+    var parsed = parseSceneFile(source, declaredArgs: declaredArgs);
     if (!parsed.ok) return SceneFileOpen._(null, parsed.refusals);
     return SceneFileOpen._(
       SceneFile(

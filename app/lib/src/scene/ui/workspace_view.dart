@@ -8,6 +8,7 @@ import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
+import '../externals_file.dart';
 import '../playback.dart';
 import 'canvas.dart';
 import 'inline_name.dart';
@@ -41,9 +42,13 @@ class SceneWorkspaceView extends StatefulWidget {
     this.onEnterNested,
     this.canvasTrailing = const [],
     this.pane,
+    this.externals = const [],
   });
 
   final SceneEditor editor;
+
+  /// The widgets the app declares — see [SceneInspector.externals].
+  final List<ExternalWidgetDecl> externals;
 
   /// The renderer, sized to the artboard — see [SceneCanvas.content].
   final Widget? content;
@@ -174,7 +179,8 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
               editor.listenable,
               editor.doc.listenable,
             ]),
-            builder: (context, _) => SceneInspector(editor),
+            builder: (context, _) =>
+                SceneInspector(editor, externals: widget.externals),
           ),
         ),
       ],
