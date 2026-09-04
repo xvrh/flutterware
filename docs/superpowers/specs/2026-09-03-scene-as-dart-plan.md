@@ -204,9 +204,24 @@ the invoice on it. Delete what §3 lists.
 2026-09-03 — see the two findings below. The prerequisite landed on its own:
 the parser now owns the import list, which it was silently dropping.)*
 
-**P5 — the runtime stops carrying the editor's machinery.**
-`applyArgs`/`_lists` out of the runtime; `SceneView` keys by identity;
-`_sweep` reports objects and the editor names them.
+**P5 — the runtime stops carrying the editor's machinery.** *(done —
+79d19a12; keys-by-identity landed earlier, forced by a duplicate-GlobalKey
+crash the moment a compiled scene mounted.)*
+
+`_sweep` reporting objects turned out to be a bug fix rather than a tidy:
+a compiled scene has no names, so the name-keyed report collided every node
+onto the empty string and anything asking what a compiled scene measured got
+one meaningless entry. `namedRects()` is the step back, taken at the edge
+that has names — the guest, whose document came over the wire carrying them.
+
+The read plane moved to `read_plane.dart`, a *part* of `model.dart` rather
+than its own library: it works on the document's private state, and the
+alternative is widening that for the editor's sake. Its STORAGE stays with
+the nodes — `paramRefs`, the list table, a repeat's `source` — because one
+`SceneDocument` serves both planes. Giving the compiled plane a thinner
+document is a real change and a bigger one than this phase scoped; what is
+true today is that a shipped app populates none of those fields and calls
+none of that code, and every one of them now says so.
 
 **P6 — the file holds its widgets, and the app registers scenes.** *(done,
 except the export lane — see below.)*
@@ -246,9 +261,10 @@ a generated entrypoint — the previews plugin already generates one that
 imports every entry, so there is precedent to copy rather than invent.
 `sceneFileToJson` retires to the editor's own wire.
 
-**P7 — every scene file compiles.**
-Remove the exclusion outright, port the remaining demos, and add a test that
-fails if a `.scene.dart` stops analyzing.
+**P7 — every scene file compiles.** *(done; the exclusion list in
+`examples/example/analysis_options.yaml` is empty and all seven demos are
+ported.)* No separate test: CI's workspace `flutter analyze` already fails
+if a `.scene.dart` stops compiling, which is the guard this asked for.
 
 ## What stays JSON, on purpose
 
