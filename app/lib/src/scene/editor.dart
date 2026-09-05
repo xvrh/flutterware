@@ -1168,8 +1168,12 @@ class SceneEditor extends SceneListenable {
       mutate();
       // A bound property that moved has moved its parameter's default, and
       // every other reader of it follows — inside the same edit, so one
-      // notification and one undo entry cover both.
+      // notification and one undo entry cover both. The motions' keys obey
+      // the same rule against their own parameters.
       reconcileBindings(doc);
+      for (var m in motions.values) {
+        reconcileMotionBindings(m);
+      }
     });
     _revision++;
     notifyListeners();

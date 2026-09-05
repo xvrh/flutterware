@@ -195,8 +195,10 @@ class M(super.scene, {final double tempo = 2}) extends SceneMotion<BannerScene> 
     expect(emitted, contains('tempo: tempo'));
   });
 
-  test('two keys of one param: the reference survives only at the default', () {
-    var parsed = parseWithScene('''
+  test(
+    'a key reading a parameter: an edit moves the default, never the reference',
+    () {
+      var parsed = parseWithScene('''
 $filePrefix
 class M(super.scene, {final double slide = 24}) extends SceneMotion<BannerScene> {
   late final headlineIn = scene.headline.animate(
@@ -205,19 +207,23 @@ class M(super.scene, {final double slide = 24}) extends SceneMotion<BannerScene>
   late final timeline = ParExpr([headlineIn]);
 }
 ''');
-    expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
-    var doc = parsed.doc!;
-    var track = doc.groups.single.tracks['translateY']!;
-    expect(track.keys.first.value, 24.0);
-    expect(track.keys.first.paramRef, 'slide');
+      expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
+      var doc = parsed.doc!;
+      var track = doc.groups.single.tracks['translateY']!;
+      expect(track.keys.first.value, 24.0);
+      expect(track.keys.first.paramRef, 'slide');
 
-    // The divergence-bakes rule: edit the key, the reference is dropped —
-    // never the edit.
-    track.keys.first.value = 40.0;
-    var emitted = emitMotionFile(doc, parsed.scene!, className: 'M');
-    expect(emitted, contains('value: 40'));
-    expect(emitted.contains('value: slide'), isFalse);
-  });
+      // The binding is the stronger of the two: edit the key, and the
+      // parameter's default follows; the file still spells the reference.
+      track.keys.first.value = 40.0;
+      expect(reconcileMotionBindings(doc), isEmpty);
+      expect(doc.params.single.defaultValue, 40.0);
+      var emitted = emitMotionFile(doc, parsed.scene!, className: 'M');
+      expect(emitted, contains('final double slide = 40'));
+      expect(emitted, contains('value: slide'));
+      expect(emitted.contains('value: 40'), isFalse);
+    },
+  );
 
   test('the track door keeps keys sorted through a drag past a neighbour', () {
     var doc = coffeeIntroDraft(scene);

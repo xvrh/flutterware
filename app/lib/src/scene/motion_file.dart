@@ -161,11 +161,12 @@ String _track(MotionTrack t, TrackKind kind, Map<String, SceneParamDecl> ps) {
   var keys = t.keys.map((k) {
     var parts = ['at: ${_dur(k.at)}'];
 
-    // A parameter reference survives a save only while the key still holds
-    // the parameter's default — an edited value bakes in and the stale
-    // reference is dropped, never the edit.
+    // A key that reads a parameter is spelled as the reference, always —
+    // the edit reached the default before this ran
+    // ([reconcileMotionBindings]). A reference to nothing declared is the
+    // one case written as a literal, and reconcile removes those too.
     var p = k.paramRef == null ? null : ps[k.paramRef];
-    if (p != null && p.defaultValue == k.value) {
+    if (p != null) {
       parts.add('value: ${k.paramRef}');
     } else {
       parts.add(

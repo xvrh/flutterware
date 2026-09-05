@@ -13,8 +13,9 @@ enum TrackKind { number, color }
 
 /// One keyframe. `value` is a double or a Color per the owning track's kind;
 /// `curve` is one of [Curves] (null = linear); `paramRef` is
-/// provenance — which motion parameter fed the value — and survives a save
-/// only while the value still equals that parameter's default.
+/// provenance — which motion parameter fed the value. The reference is the
+/// stronger of the two: an edit to the key moves the parameter's default
+/// ([reconcileMotionBindings]), and a save always spells the reference.
 class MotionKey {
   MotionKey({
     required this.at,
@@ -498,6 +499,14 @@ class MotionDocument {
   /// values.
   final params = <SceneParamDecl>[];
 
+  /// Every key reading [param] — what a rename follows and a delete names.
+  List<MotionKey> keysReading(String param) => [
+    for (var g in groups)
+      for (var t in [...g.tracks.values, ...g.args.values])
+        for (var k in t.keys)
+          if (k.paramRef == param) k,
+  ];
+
   /// Declaration order — the file's group fields.
   final groups = <AnimateGroup>[];
 
@@ -721,4 +730,36 @@ extension MotionTimelineLayout on MotionDocument {
     visit(timeline, Duration.zero);
     return out;
   }
+}
+
+/// The motion half of the binding rule: a key whose value moved off its
+/// parameter's default moves the default, and every other key reading that
+/// parameter follows. A key reading a parameter that is no longer declared
+/// loses the reference in the same edit, reported by group and property,
+/// rather than at save. Run by the editor after each mutation.
+List<String> reconcileMotionBindings(MotionDocument motion) {
+  var dropped = <String>[];
+  for (var g in motion.groups) {
+    for (var e in [...g.tracks.entries, ...g.args.entries]) {
+      for (var k in e.value.keys) {
+        var name = k.paramRef;
+        if (name == null) continue;
+        var i = motion.params.indexWhere((p) => p.name == name);
+        var decl = i < 0 ? null : motion.params[i];
+        var kind = e.value.kind == TrackKind.color
+            ? SceneParamKind.color
+            : SceneParamKind.number;
+        if (decl == null || decl.kind != kind) {
+          k.paramRef = null;
+          dropped.add('${g.name}.${e.key}');
+        } else if (decl.defaultValue != k.value) {
+          motion.params[i] = decl.withDefault(k.value);
+          for (var other in motion.keysReading(name)) {
+            if (!identical(other, k)) other.value = k.value;
+          }
+        }
+      }
+    }
+  }
+  return dropped;
 }
