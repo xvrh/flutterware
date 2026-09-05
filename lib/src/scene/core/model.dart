@@ -3,6 +3,7 @@
 // Graduated from the canvas-toy spike 2026-09-01; pure Dart by decision
 // (2026-09-01-scene-graduation-plan.md) so the headless surface can hold it.
 import 'listenable.dart';
+import 'props.dart';
 import 'values.dart';
 
 part 'read_plane.dart';
@@ -1013,18 +1014,13 @@ class SceneDocument extends SceneListenable {
     var ty = n.fxRendered('translateY') as double;
     var scale = n.fxRendered('scale') as double;
     var rotate = n.fxRendered('rotate') as double;
-    var fill = n.hasFx('fill') ? n.fxRendered('fill') as SceneColor : n.fill;
     return {
       'name': n.name,
-      'x': n.x,
-      'y': n.y,
-      'w': sizeToWire(n.width),
-      'h': sizeToWire(n.height),
-      'fill': fill?.argb,
-      if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
-      'corner': n.corner,
-      'opacity': n.fxRendered('opacity'),
-      if (!n.visible) 'visible': false,
+      // The picture: every table property off its default, the composed
+      // value where a writer moves it — a motion's opacity, a fill it tints.
+      for (var p in scenePropsOf(n))
+        if (_pictureValue(n, p) case var v when !isSceneDefault(p, v))
+          p.key: p.toWire(v),
       // The imposed transforms have no authored slots — identity is the
       // base — so they ride the wire only when a writer moves them.
       // [translateX, translateY, scale, rotate°], applied about the center.
@@ -1033,14 +1029,6 @@ class SceneDocument extends SceneListenable {
       ...switch (n) {
         FrameNode f => {
           'kind': 'frame',
-          'layout': f.layout.name,
-          'gap': f.fxRendered('gap'),
-          'padding': f.padding.toWire(),
-          if (f.columns.isNotEmpty)
-            'columns': [for (var c in f.columns) sizeToWire(c)],
-          if (!f.cellPadding.isZero) 'cellPadding': f.cellPadding.toWire(),
-          'mainAlign': f.mainAlign.index,
-          'crossAlign': f.crossAlign.index,
           // The wire is a picture, so a repeat is already spent here: the
           // host is handed the rows rather than the rule that made them.
           'children': [
@@ -1048,16 +1036,8 @@ class SceneDocument extends SceneListenable {
               for (var drawn in expand(c)) _json(drawn),
           ],
         },
-        TextNode t => {
-          'kind': 'text',
-          'align': t.align.index,
-          if (t.maxLines != null) 'maxLines': ?t.maxLines,
-          'text': t.text,
-          'fontSize': t.fxRendered('fontSize'),
-          'weight': t.weight.index,
-          'color': (t.fxRendered('color') as SceneColor).argb,
-        },
-        ShapeNode s => {'kind': 'shape', 'circle': s.circle},
+        TextNode() => {'kind': 'text'},
+        ShapeNode() => {'kind': 'shape'},
         ExternalNode e => {
           'kind': 'ext',
           'entry': e.entry,
@@ -1066,6 +1046,15 @@ class SceneDocument extends SceneListenable {
         SceneRefNode r => _refWire(r),
       },
     };
+  }
+
+  /// What the picture carries for one property: the composed value where a
+  /// writer moves it, the authored one otherwise. A fill with no writer is
+  /// its authored value, which may be no fill at all.
+  Object? _pictureValue(SceneNode n, SceneProp p) {
+    if (!p.animatable) return p.read(n);
+    if (p.name == 'fill' && !n.hasFx('fill')) return n.fill;
+    return n.fxRendered(p.name);
   }
 
   /// The instance's own picture, flattened under the ref node's box: the
@@ -1233,26 +1222,9 @@ class SceneDocument extends SceneListenable {
         switch ((into, snap)) {
           case (FrameNode i, FrameNode s):
             i
-              ..layout = s.layout
-              ..gap = s.gap
-              ..padding = s.padding
-              ..columns = [...s.columns]
-              ..cellPadding = s.cellPadding
               ..repeated = s.repeated
-              ..mainAlign = s.mainAlign
-              ..crossAlign = s.crossAlign
               ..children.clear()
               ..children.addAll([for (var c in s.children) revive(c)]);
-          case (TextNode i, TextNode s):
-            i
-              ..text = s.text
-              ..fontSize = s.fontSize
-              ..weight = s.weight
-              ..color = s.color
-              ..align = s.align
-              ..maxLines = s.maxLines;
-          case (ShapeNode i, ShapeNode s):
-            i.circle = s.circle;
           case (ExternalNode i, ExternalNode s):
             i
               ..declared = s.declared
@@ -1264,22 +1236,17 @@ class SceneDocument extends SceneListenable {
               ..declared = s.declared
               ..args.clear();
             i.args.addAll(s.args);
+          case (TextNode(), TextNode()) || (ShapeNode(), ShapeNode()):
+            break;
           default:
             throw StateError('unreachable: kinds matched above');
         }
-        into
-          ..x = snap.x
-          ..y = snap.y
-          ..width = snap.width
-          ..height = snap.height
-          ..fill = snap.fill
-          ..borderColor = snap.borderColor
-          ..borderWidth = snap.borderWidth
-          ..corner = snap.corner
-          ..opacity = snap.opacity
-          ..visible = snap.visible
-          ..bindings.clear()
-          ..bindings.addAll(snap.bindings);
+        for (var p in scenePropsOf(snap)) {
+          p.write(into, p.read(snap));
+        }
+        into.bindings
+          ..clear()
+          ..addAll(snap.bindings);
         return into;
       }
 
@@ -1311,27 +1278,15 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
   var name = rename == null ? node.name : rename(node.name);
   var copy = switch (node) {
     FrameNode f =>
-      FrameNode(name: name, layout: f.layout)
-        ..gap = f.gap
-        ..padding = f.padding
-        ..columns = [...f.columns]
-        ..cellPadding = f.cellPadding
+      FrameNode(name: name)
         // A renamed copy is one drawn ROW, not the rule that drew it —
         // carrying the repeat would make each copy repeat again.
         ..repeated = rename == null ? f.repeated : null
-        ..mainAlign = f.mainAlign
-        ..crossAlign = f.crossAlign
         ..children.addAll([
           for (var c in f.children) deepCopyNode(c, rename: rename),
         ]),
-    TextNode t =>
-      TextNode(t.text, name: name)
-        ..fontSize = t.fontSize
-        ..weight = t.weight
-        ..color = t.color
-        ..align = t.align
-        ..maxLines = t.maxLines,
-    ShapeNode s => ShapeNode(name: name, circle: s.circle),
+    TextNode() => TextNode('', name: name),
+    ShapeNode() => ShapeNode(name: name),
     ExternalNode e =>
       ExternalNode.read(e.entry, name: name, args: Map.of(e.args))
         ..declared = e.declared
@@ -1345,17 +1300,9 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
             ? null
             : instantiateScene(r.instance!, r.args),
   };
-  copy
-    ..x = node.x
-    ..y = node.y
-    ..width = node.width
-    ..height = node.height
-    ..fill = node.fill
-    ..borderColor = node.borderColor
-    ..borderWidth = node.borderWidth
-    ..corner = node.corner
-    ..opacity = node.opacity
-    ..visible = node.visible
-    ..bindings.addAll(node.bindings);
+  for (var p in scenePropsOf(node)) {
+    p.write(copy, p.read(node));
+  }
+  copy.bindings.addAll(node.bindings);
   return copy;
 }

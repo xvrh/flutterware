@@ -65,62 +65,47 @@ SceneDocument instantiateScene(
   return doc;
 }
 
-/// Read one authored property by the name a [SceneNode.bindings] entry keys
-/// it under — the inverse of [setSceneProperty], and the same table.
-Object? getSceneProperty(SceneNode node, String prop) => switch (prop) {
-  // An argument at its override, else at the child's default: what the
-  // instance shows, and what a parameter made of it starts at.
-  _ when prop.startsWith('args.') => switch (node) {
-    SceneRefNode r =>
-      r.args[prop.substring(5)] ??
-          r.instance?.paramNamed(prop.substring(5))?.defaultValue,
-    ExternalNode e => e.args[prop.substring(5)],
-    _ => null,
-  },
-  'x' => node.x,
-  'y' => node.y,
-  'width' => sizeToWire(node.width),
-  'height' => sizeToWire(node.height),
-  'corner' => node.corner,
-  'opacity' => node.opacity,
-  'visible' => node.visible,
-  'fill' => node.fill,
-  'text' => (node as TextNode).text,
-  'fontSize' => (node as TextNode).fontSize,
-  'color' => (node as TextNode).color,
-  'gap' => (node as FrameNode).gap,
-  'padding' => (node as FrameNode).padding.left,
-  _ => null,
-};
-
 /// The parameter kind [prop] of [node] can read, or null when the property
-/// cannot be bound — the same table as [getSceneProperty] and
-/// [setSceneProperty], seen as types.
-SceneParamKind? bindableKind(SceneNode node, String prop) => switch (prop) {
-  // A nested scene's argument reads a parameter of the same kind as the
-  // child declares it — a list is data and takes no binding.
-  _ when prop.startsWith('args.') => switch (node) {
-    SceneRefNode r => switch (r.instance?.paramNamed(prop.substring(5))) {
-      SceneParamDecl(kind: SceneParamKind.list) => null,
-      SceneParamDecl(:var kind) => kind,
-      null => null,
-    },
-    _ => null,
-  },
-  'x' ||
-  'y' ||
-  'width' ||
-  'height' ||
-  'corner' ||
-  'opacity' => SceneParamKind.number,
-  'fill' => SceneParamKind.color,
-  'visible' => SceneParamKind.bool,
-  'text' when node is TextNode => SceneParamKind.string,
-  'fontSize' when node is TextNode => SceneParamKind.number,
-  'color' when node is TextNode => SceneParamKind.color,
-  'gap' || 'padding' when node is FrameNode => SceneParamKind.number,
-  _ => null,
-};
+/// cannot be bound — the table's kind, seen as a parameter's. A nested
+/// scene's argument reads a parameter of the kind the child declares it;
+/// a list is data and takes no binding.
+SceneParamKind? bindableKind(SceneNode node, String prop) {
+  if (prop.startsWith('args.')) {
+    return switch (node) {
+      SceneRefNode r => switch (r.instance?.paramNamed(prop.substring(5))) {
+        SceneParamDecl(kind: SceneParamKind.list) => null,
+        SceneParamDecl(:var kind) => kind,
+        null => null,
+      },
+      _ => null,
+    };
+  }
+  return scenePropNamed(node, prop)?.paramKind;
+}
+
+/// Read one authored property by the name a [SceneNode.bindings] entry keys
+/// it under — the table's reader, with the two shapes a binding sees
+/// differently: edges as their uniform value, a nested argument at its
+/// override else the child's default.
+Object? getSceneProperty(SceneNode node, String prop) {
+  if (prop.startsWith('args.')) {
+    var name = prop.substring(5);
+    return switch (node) {
+      SceneRefNode r =>
+        r.args[name] ?? r.instance?.paramNamed(name)?.defaultValue,
+      ExternalNode e => e.args[name],
+      _ => null,
+    };
+  }
+  var p = scenePropNamed(node, prop);
+  if (p == null) return null;
+  var v = p.read(node);
+  return switch (p.kind) {
+    ScenePropKind.edges => (v! as SceneEdges).left,
+    ScenePropKind.size => sizeToWire(v as double?),
+    _ => v,
+  };
+}
 
 /// Write one authored property by the name a [SceneNode.bindings] entry
 /// keys it under. The one place that maps a property name to a slot, so an
@@ -138,40 +123,20 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
     }
     return;
   }
-  switch (prop) {
-    case 'x':
-      node.x = (value! as num).toDouble();
-    case 'y':
-      node.y = (value! as num).toDouble();
-    case 'width':
-      node.width = sizeFromWire(value);
-    case 'height':
-      node.height = sizeFromWire(value);
-    case 'corner':
-      node.corner = (value! as num).toDouble();
-    case 'opacity':
-      node.opacity = (value! as num).toDouble();
-    case 'visible':
-      node.visible = value! as bool;
-    case 'fill':
-      node.fill = value as SceneColor?;
-    case 'text':
-      // A number filling a text slot is ordinary in a repeated row — a
-      // quantity is a number and reads as one, not as "12.0".
-      (node as TextNode).text = switch (value) {
-        double d when d == d.roundToDouble() && d.abs() < 1e15 =>
-          '${d.round()}',
-        _ => '$value',
-      };
-    case 'fontSize':
-      (node as TextNode).fontSize = (value! as num).toDouble();
-    case 'color':
-      (node as TextNode).color = value! as SceneColor;
-    case 'gap':
-      (node as FrameNode).gap = (value! as num).toDouble();
-    case 'padding':
-      (node as FrameNode).padding = SceneEdges.all((value! as num).toDouble());
-  }
+  var p = scenePropNamed(node, prop);
+  if (p == null) return;
+  p.write(node, switch (p.kind) {
+    // A number filling a text slot is ordinary in a repeated row — a
+    // quantity is a number and reads as one, not as "12.0".
+    ScenePropKind.string => switch (value) {
+      double d when d == d.roundToDouble() && d.abs() < 1e15 => '${d.round()}',
+      _ => '$value',
+    },
+    ScenePropKind.number => (value! as num).toDouble(),
+    ScenePropKind.edges => SceneEdges.all((value! as num).toDouble()),
+    ScenePropKind.size => sizeFromWire(value),
+    _ => value,
+  });
 }
 
 /// Fill in one item's fields across a repeated subtree: every property

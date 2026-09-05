@@ -307,77 +307,65 @@ void _emitNode(
     props.add('$key: ${ref(key) ?? spell()}');
   }
 
-  void common() {
-    if (n.x != 0 || n.bindings.containsKey('x')) {
-      add('x', n.x, () => _num(n.x));
-    }
-    if (n.y != 0 || n.bindings.containsKey('y')) {
-      add('y', n.y, () => _num(n.y));
-    }
-    if (n.width case var w?) add('width', w, () => _size(w));
-    if (n.height case var h?) add('height', h, () => _size(h));
-    if (n.fill case var f?) add('fill', f, () => _color(f));
-    if (n.borderColor case var b?) {
-      add('borderColor', b, () => _color(b));
-      if (n.borderWidth != 1) {
-        add('borderWidth', n.borderWidth, () => _num(n.borderWidth));
+  /// Every table property of [n] off its default, or bound — a binding is
+  /// written whatever the value, because the reference IS the value. The
+  /// text and the arguments are positional and spelled by hand; children and
+  /// a repeat are structure, not values.
+  void table({Set<String> skip = const {}}) {
+    for (var p in scenePropsOf(n)) {
+      if (skip.contains(p.name)) continue;
+      var v = p.read(n);
+      var bound =
+          n.bindings.containsKey(p.name) ||
+          (p.sides ?? const []).any(n.bindings.containsKey);
+      if (isSceneDefault(p, v) && !bound) continue;
+      switch (p.kind) {
+        case ScenePropKind.edges:
+          // One number while one number says it, four names when it does
+          // not. A frame that only ever wanted `padding: 16` keeps writing
+          // that.
+          var edges = v! as SceneEdges;
+          if (edges.isUniform) {
+            add(p.name, edges.left, () => _num(edges.left));
+          } else {
+            for (var (side, value) in [
+              (p.sides![0], edges.left),
+              (p.sides![1], edges.top),
+              (p.sides![2], edges.right),
+              (p.sides![3], edges.bottom),
+            ]) {
+              if (value != 0 || n.bindings.containsKey(side)) {
+                add(side, value, () => _num(value));
+              }
+            }
+          }
+        case ScenePropKind.sizes:
+          props.add(
+            '${p.name}: [${(v! as List<double?>).map(_track).join(', ')}]',
+          );
+        case ScenePropKind.choice:
+          props.add(
+            '${p.name}: ${p.choices!.typeName}.${p.choices!.nameOf(v!)}',
+          );
+        case ScenePropKind.number:
+          add(p.name, v, () => _num(v! as double));
+        case ScenePropKind.integer:
+          add(p.name, (v! as int).toDouble(), () => '$v');
+        case ScenePropKind.size:
+          add(p.name, v, () => _size(v! as double));
+        case ScenePropKind.color:
+          add(p.name, v, () => _color(v! as SceneColor));
+        case ScenePropKind.string:
+          add(p.name, v, () => _str(v! as String));
+        case ScenePropKind.boolean:
+          add(p.name, v, () => '$v');
       }
-    }
-    if (n.corner != 0) {
-      add('corner', n.corner, () => _num(n.corner));
-    }
-    if (n.opacity != 1) add('opacity', n.opacity, () => _num(n.opacity));
-    if (!n.visible || n.bindings.containsKey('visible')) {
-      add('visible', n.visible, () => '${n.visible}');
     }
   }
 
   switch (n) {
     case FrameNode f:
-      common();
-      if (f.layout != NodeLayout.absolute) {
-        props.add('layout: NodeLayout.${f.layout.name}');
-      }
-      if (f.gap != 8) add('gap', f.gap, () => _num(f.gap));
-      // One number while one number says it, four names when it does not.
-      // A frame that only ever wanted `padding: 16` keeps writing that.
-      if (!f.padding.isZero) {
-        if (f.padding.isUniform) {
-          add('padding', f.padding.left, () => _num(f.padding.left));
-        } else {
-          for (var (name, value) in [
-            ('paddingLeft', f.padding.left),
-            ('paddingTop', f.padding.top),
-            ('paddingRight', f.padding.right),
-            ('paddingBottom', f.padding.bottom),
-          ]) {
-            if (value != 0) props.add('$name: ${_num(value)}');
-          }
-        }
-      }
-      if (f.columns.isNotEmpty) {
-        props.add('columns: [${f.columns.map(_track).join(', ')}]');
-      }
-      if (!f.cellPadding.isZero) {
-        if (f.cellPadding.isUniform) {
-          props.add('cellPadding: ${_num(f.cellPadding.left)}');
-        } else {
-          for (var (name, value) in [
-            ('cellPaddingLeft', f.cellPadding.left),
-            ('cellPaddingTop', f.cellPadding.top),
-            ('cellPaddingRight', f.cellPadding.right),
-            ('cellPaddingBottom', f.cellPadding.bottom),
-          ]) {
-            if (value != 0) props.add('$name: ${_num(value)}');
-          }
-        }
-      }
-      if (f.mainAlign != SceneMainAxisAlignment.start) {
-        props.add('mainAlign: SceneMainAxisAlignment.${f.mainAlign.name}');
-      }
-      if (f.crossAlign != SceneCrossAxisAlignment.center) {
-        props.add('crossAlign: SceneCrossAxisAlignment.${f.crossAlign.name}');
-      }
+      table();
       // A repeat writes its cells INLINE, inside the closure that binds
       // them — they are not fields, because there is no one row for them to
       // belong to.
@@ -400,36 +388,22 @@ void _emitNode(
       out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
       props.add(ref('text') ?? _str(t.text));
-      common();
-      if (t.fontSize != 16) add('fontSize', t.fontSize, () => _num(t.fontSize));
-      if (t.weight != SceneFontWeight.w400) {
-        props.add('weight: SceneFontWeight.w${t.weight.value}');
-      }
-      if (t.color != const SceneColor(0xFF1A1A1A)) {
-        add('color', t.color, () => _color(t.color));
-      }
-      if (t.align != SceneTextAlign.left) {
-        props.add('align: SceneTextAlign.${t.align.name}');
-      }
-      if (t.maxLines case var lines?) {
-        add('maxLines', lines.toDouble(), () => '$lines');
-      }
+      table(skip: const {'text'});
       out.write('TextNode(${props.join(', ')})');
-    case ShapeNode s:
-      common();
-      if (s.circle) props.add('circle: true');
+    case ShapeNode _:
+      table();
       out.write('ShapeNode(${props.join(', ')})');
     case ExternalNode e:
       props.add(
         _argsLiteral(e.entry, e.args, 'a registration entry name', ref: ref),
       );
-      common();
+      table();
       out.write('ExternalNode(${props.join(', ')})');
     case SceneRefNode r:
       props.add(
         _argsLiteral(r.sceneClassName, r.args, 'a scene class name', ref: ref),
       );
-      common();
+      table();
       out.write('SceneRefNode(${props.join(', ')})');
   }
 }
@@ -1072,95 +1046,7 @@ class _Parser {
         return _repeating(name, named, positional, args, childRefs);
       case 'FrameNode':
         var node = FrameNode(name: name);
-        _applyCommon(node, named);
-        _take(named, 'layout', (e) {
-          var v = _enum(e, 'NodeLayout', NodeLayout.values.map((v) => v.name));
-          if (v != null) {
-            node.layout = NodeLayout.values.byName(v);
-          }
-        });
-        _take(
-          named,
-          'gap',
-          (e) => node.gap = _doubleV(e, node, 'gap') ?? node.gap,
-        );
-        _take(
-          named,
-          'padding',
-          (e) =>
-              node.padding = SceneEdges.all(_doubleV(e, node, 'padding') ?? 0),
-        );
-        for (var (name, set) in <(String, SceneEdges Function(double))>[
-          ('paddingLeft', (v) => node.padding.copyWith(left: v)),
-          ('paddingTop', (v) => node.padding.copyWith(top: v)),
-          ('paddingRight', (v) => node.padding.copyWith(right: v)),
-          ('paddingBottom', (v) => node.padding.copyWith(bottom: v)),
-        ]) {
-          _take(named, name, (e) {
-            var v = _doubleV(e, node, name);
-            if (v != null) node.padding = set(v);
-          });
-        }
-        _take(named, 'columns', (e) {
-          if (e is! ListLiteral) {
-            refuse(
-              e.offset,
-              'columns',
-              'columns takes a list of sizes — '
-                  '[double.infinity, 48, null]',
-            );
-            return;
-          }
-          var tracks = <double?>[];
-          for (var element in e.elements) {
-            if (element is! Expression) {
-              refuse(
-                element.offset,
-                _elementKind(element),
-                'a table names its columns one by one',
-              );
-              continue;
-            }
-            tracks.add(element is NullLiteral ? null : _size(element));
-          }
-          node.columns = tracks;
-        });
-        _take(named, 'cellPadding', (e) {
-          node.cellPadding = SceneEdges.all(
-            _doubleV(e, node, 'cellPadding') ?? 0,
-          );
-        });
-        for (var (name, set) in <(String, SceneEdges Function(double))>[
-          ('cellPaddingLeft', (v) => node.cellPadding.copyWith(left: v)),
-          ('cellPaddingTop', (v) => node.cellPadding.copyWith(top: v)),
-          ('cellPaddingRight', (v) => node.cellPadding.copyWith(right: v)),
-          ('cellPaddingBottom', (v) => node.cellPadding.copyWith(bottom: v)),
-        ]) {
-          _take(named, name, (e) {
-            var v = _doubleV(e, node, name);
-            if (v != null) node.cellPadding = set(v);
-          });
-        }
-        _take(named, 'mainAlign', (e) {
-          var v = _enum(
-            e,
-            'SceneMainAxisAlignment',
-            SceneMainAxisAlignment.values.map((v) => v.name),
-          );
-          if (v != null) {
-            node.mainAlign = SceneMainAxisAlignment.values.byName(v);
-          }
-        });
-        _take(named, 'crossAlign', (e) {
-          var v = _enum(
-            e,
-            'SceneCrossAxisAlignment',
-            SceneCrossAxisAlignment.values.map((v) => v.name),
-          );
-          if (v != null) {
-            node.crossAlign = SceneCrossAxisAlignment.values.byName(v);
-          }
-        });
+        _applyProps(node, named);
         _take(named, 'children', (e) {
           if (e is! ListLiteral) {
             refuse(e.offset, 'children', 'children takes a list literal');
@@ -1213,45 +1099,13 @@ class _Parser {
       case 'TextNode':
         var node = TextNode('', name: name);
         node.text = _contentOf(positional, args, node) ?? '';
-        _applyCommon(node, named);
-        _take(
-          named,
-          'fontSize',
-          (e) => node.fontSize = _doubleV(e, node, 'fontSize') ?? node.fontSize,
-        );
-        _take(named, 'align', (e) {
-          var v = _enum(e, 'SceneTextAlign', [
-            for (var a in SceneTextAlign.values) a.name,
-          ]);
-          if (v != null) {
-            node.align = SceneTextAlign.values.firstWhere((a) => a.name == v);
-          }
-        });
-        _take(named, 'maxLines', (e) {
-          var v = _double(e);
-          if (v != null) node.maxLines = v.round();
-        });
-        _take(named, 'weight', (e) {
-          var v = _enum(e, 'SceneFontWeight', [
-            for (var i = 1; i <= 9; i++) 'w${i * 100}',
-          ]);
-          if (v != null) {
-            node.weight =
-                SceneFontWeight.values[int.parse(v.substring(1)) ~/ 100 - 1];
-          }
-        });
-        _take(
-          named,
-          'color',
-          (e) => node.color = _colorV(e, node, 'color') ?? node.color,
-        );
+        _applyProps(node, named, skip: const {'text'});
         _refuseRest('TextNode', named);
         _checkPositionals(positional, 1);
         return node;
       case 'ShapeNode':
         var node = ShapeNode(name: name);
-        _applyCommon(node, named);
-        _take(named, 'circle', (e) => node.circle = _bool(e) ?? false);
+        _applyProps(node, named);
         _refuseRest('ShapeNode', named);
         _checkPositionals(positional, 0);
         return node;
@@ -1284,7 +1138,7 @@ class _Parser {
         for (var e in argRefs.entries) {
           node.bindings['args.${e.key}'] = ParamRef(e.value);
         }
-        _applyCommon(node, named);
+        _applyProps(node, named);
         _refuseRest(kind, named);
         _checkPositionals(positional, 1);
         return node;
@@ -1378,44 +1232,7 @@ class _Parser {
     _itemScope = (param: item.lexeme, list: list!);
     // Common properties are read INSIDE the scope too: a row's own fill or
     // border may read the item like any cell.
-    _applyCommon(node, named);
-    _take(named, 'layout', (e) {
-      var v = _enum(e, 'NodeLayout', NodeLayout.values.map((v) => v.name));
-      if (v != null) node.layout = NodeLayout.values.byName(v);
-    });
-    _take(named, 'gap', (e) => node.gap = _doubleV(e, node, 'gap') ?? node.gap);
-    _take(
-      named,
-      'padding',
-      (e) => node.padding = SceneEdges.all(_doubleV(e, node, 'padding') ?? 0),
-    );
-    for (var (side, set) in <(String, SceneEdges Function(double))>[
-      ('paddingLeft', (v) => node.padding.copyWith(left: v)),
-      ('paddingTop', (v) => node.padding.copyWith(top: v)),
-      ('paddingRight', (v) => node.padding.copyWith(right: v)),
-      ('paddingBottom', (v) => node.padding.copyWith(bottom: v)),
-    ]) {
-      _take(named, side, (e) {
-        var v = _doubleV(e, node, side);
-        if (v != null) node.padding = set(v);
-      });
-    }
-    _take(named, 'mainAlign', (e) {
-      var v = _enum(e, 'SceneMainAxisAlignment', [
-        for (var a in SceneMainAxisAlignment.values) a.name,
-      ]);
-      if (v != null) {
-        node.mainAlign = SceneMainAxisAlignment.values.byName(v);
-      }
-    });
-    _take(named, 'crossAlign', (e) {
-      var v = _enum(e, 'SceneCrossAxisAlignment', [
-        for (var a in SceneCrossAxisAlignment.values) a.name,
-      ]);
-      if (v != null) {
-        node.crossAlign = SceneCrossAxisAlignment.values.byName(v);
-      }
-    });
+    _applyProps(node, named);
     node.children.addAll(
       _inlineCells(body.expression as ListLiteral, childRefs),
     );
@@ -1467,25 +1284,96 @@ class _Parser {
     }
   }
 
-  void _applyCommon(SceneNode n, Map<String, Expression> named) {
-    _take(named, 'x', (e) => n.x = _doubleV(e, n, 'x') ?? 0);
-    _take(named, 'y', (e) => n.y = _doubleV(e, n, 'y') ?? 0);
-    _take(named, 'width', (e) => n.width = _sizeV(e, n, 'width'));
-    _take(named, 'height', (e) => n.height = _sizeV(e, n, 'height'));
-    _take(named, 'fill', (e) => n.fill = _colorV(e, n, 'fill'));
-    _take(
-      named,
-      'borderColor',
-      (e) => n.borderColor = _colorV(e, n, 'borderColor'),
-    );
-    _take(
-      named,
-      'borderWidth',
-      (e) => n.borderWidth = _doubleV(e, n, 'borderWidth') ?? 1,
-    );
-    _take(named, 'corner', (e) => n.corner = _doubleV(e, n, 'corner') ?? 0);
-    _take(named, 'opacity', (e) => n.opacity = _doubleV(e, n, 'opacity') ?? 1);
-    _take(named, 'visible', (e) => n.visible = _boolV(e, n, 'visible') ?? true);
+  /// Every table property [n] carries, taken off [named] by kind — a
+  /// number, size, colour, string or bool may also be a parameter's name,
+  /// which binds the property; a choice is `Type.member`; edges are one
+  /// number or four named sides; sizes are a list. Whatever is left in
+  /// [named] afterwards is not a property, and the caller refuses it.
+  void _applyProps(
+    SceneNode n,
+    Map<String, Expression> named, {
+    Set<String> skip = const {},
+  }) {
+    for (var p in scenePropsOf(n)) {
+      if (skip.contains(p.name)) continue;
+      switch (p.kind) {
+        case ScenePropKind.number:
+          _take(named, p.name, (e) {
+            var v = _doubleV(e, n, p.name);
+            if (v != null) p.write(n, v);
+          });
+        case ScenePropKind.size:
+          _take(named, p.name, (e) => p.write(n, _sizeV(e, n, p.name)));
+        case ScenePropKind.color:
+          _take(named, p.name, (e) {
+            var v = _colorV(e, n, p.name);
+            if (v != null || p.defaultValue == null) p.write(n, v);
+          });
+        case ScenePropKind.string:
+          _take(named, p.name, (e) {
+            var v = _stringV(e, n, p.name);
+            if (v != null) p.write(n, v);
+          });
+        case ScenePropKind.boolean:
+          _take(named, p.name, (e) {
+            var v = _boolV(e, n, p.name);
+            if (v != null) p.write(n, v);
+          });
+        case ScenePropKind.integer:
+          _take(named, p.name, (e) {
+            var v = _double(e);
+            if (v != null) p.write(n, v.round());
+          });
+        case ScenePropKind.choice:
+          _take(named, p.name, (e) {
+            var v = _enum(e, p.choices!.typeName, p.choices!.names);
+            if (v != null) p.write(n, p.choices!.valueOf(v));
+          });
+        case ScenePropKind.edges:
+          _take(named, p.name, (e) {
+            var v = _doubleV(e, n, p.name);
+            if (v != null) p.write(n, SceneEdges.all(v));
+          });
+          for (var (k, side) in p.sides!.indexed) {
+            _take(named, side, (e) {
+              var v = _doubleV(e, n, side);
+              if (v == null) return;
+              var edges = p.read(n)! as SceneEdges;
+              p.write(n, switch (k) {
+                0 => edges.copyWith(left: v),
+                1 => edges.copyWith(top: v),
+                2 => edges.copyWith(right: v),
+                _ => edges.copyWith(bottom: v),
+              });
+            });
+          }
+        case ScenePropKind.sizes:
+          _take(named, p.name, (e) {
+            if (e is! ListLiteral) {
+              refuse(
+                e.offset,
+                p.name,
+                '${p.name} takes a list of sizes — '
+                '[double.infinity, 48, null]',
+              );
+              return;
+            }
+            var tracks = <double?>[];
+            for (var element in e.elements) {
+              if (element is! Expression) {
+                refuse(
+                  element.offset,
+                  _elementKind(element),
+                  'a table names its columns one by one',
+                );
+                continue;
+              }
+              tracks.add(element is NullLiteral ? null : _size(element));
+            }
+            p.write(n, tracks);
+          });
+      }
+    }
   }
 
   void _take(

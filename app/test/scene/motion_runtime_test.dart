@@ -366,13 +366,14 @@ void main() {
       var later = scene.toWire()['root'] as Map<String, dynamic>;
       var badge2 = (later['children'] as List)[3] as Map<String, dynamic>;
       expect(badge2['args'], containsPair('size', 125.0));
-      // Cancel: the wire returns to the authored picture, no fx field.
+      // Cancel: the wire returns to the authored picture, no fx field — and
+      // an authored opacity of 1 is the default, which the picture omits.
       bound.clearFx();
       var again = scene.toWire()['root'] as Map<String, dynamic>;
       var headline2 =
           ((((again['children'] as List)[2] as Map)['children'] as List)[0])
               as Map<String, dynamic>;
-      expect(headline2['opacity'], 1.0);
+      expect(headline2['opacity'] ?? 1.0, 1.0);
       expect(headline2.containsKey('fx'), isFalse);
     });
 

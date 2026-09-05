@@ -10,13 +10,8 @@
 import 'curves.dart';
 import 'model.dart';
 import 'motion_model.dart';
+import 'props.dart';
 import 'values.dart';
-
-SceneTextAlign _textAlign(Object? raw) => switch (raw) {
-  num i when i >= 0 && i < SceneTextAlign.values.length =>
-    SceneTextAlign.values[i.toInt()],
-  _ => SceneTextAlign.left,
-};
 
 /// A whole file as data: the scene, the class it is named after, and the
 /// motions that animate it.
@@ -85,45 +80,25 @@ SceneDocument sceneFromJson(Map<String, Object?> json) {
   return doc;
 }
 
+/// The authored plane of one node: the table's properties off their
+/// defaults, the bindings, and the structure the table does not hold —
+/// children, a repeat, an external's or a scene's arguments.
 Map<String, Object?> _nodeToJson(SceneNode n) => {
   'name': n.name,
   'kind': n.typeName,
-  if (n.x != 0) 'x': n.x,
-  if (n.y != 0) 'y': n.y,
-  if (n.width != null) 'w': sizeToWire(n.width),
-  if (n.height != null) 'h': sizeToWire(n.height),
-  if (n.fill != null) 'fill': n.fill!.argb,
-  if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
-  if (n.corner != 0) 'corner': n.corner,
-  if (n.opacity != 1) 'opacity': n.opacity,
-  if (!n.visible) 'visible': false,
+  for (var p in scenePropsOf(n))
+    if (p.read(n) case var v when !isSceneDefault(p, v)) p.key: p.toWire(v),
   if (n.bindings.isNotEmpty)
     'bindings': {for (var e in n.bindings.entries) e.key: e.value.toWire()},
   ...switch (n) {
     FrameNode f => {
-      'layout': f.layout.name,
       // Only the binding travels, never the closure: what a reader can
       // record is which parameter the rows came from.
       if (f.repeated?.source case var source? when source.isNotEmpty)
         'repeat': source,
-      'gap': f.gap,
-      'padding': f.padding.toWire(),
-      if (f.columns.isNotEmpty)
-        'columns': [for (var c in f.columns) sizeToWire(c)],
-      if (!f.cellPadding.isZero) 'cellPadding': f.cellPadding.toWire(),
-      'mainAlign': f.mainAlign.name,
-      'crossAlign': f.crossAlign.name,
       'children': [for (var c in f.children) _nodeToJson(c)],
     },
-    TextNode t => {
-      'text': t.text,
-      'fontSize': t.fontSize,
-      'weight': t.weight.index,
-      'color': t.color.argb,
-      if (t.align != SceneTextAlign.left) 'align': t.align.index,
-      if (t.maxLines != null) 'maxLines': ?t.maxLines,
-    },
-    ShapeNode s => {'circle': s.circle},
+    TextNode() || ShapeNode() => <String, Object?>{},
     ExternalNode e => {
       'entry': e.entry,
       'args': {...e.args},
@@ -137,17 +112,9 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
 
 SceneNode _nodeFromJson(Map<String, Object?> json) {
   var name = json['name']! as String;
-  double? number(String key) => (json[key] as num?)?.toDouble();
   var node = switch (json['kind']) {
     'Frame' =>
-      FrameNode(
-          name: name,
-          layout: NodeLayout.values.byName(json['layout']! as String),
-        )
-        ..gap = number('gap') ?? 8
-        ..padding = SceneEdges.fromWire(json['padding'])
-        ..columns = _columns(json['columns'])
-        ..cellPadding = SceneEdges.fromWire(json['cellPadding'])
+      FrameNode(name: name)
         ..repeated = switch (json['repeat']) {
           String source => SceneRepeat(
             items: const [],
@@ -156,25 +123,12 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
           ),
           _ => null,
         }
-        ..mainAlign = SceneMainAxisAlignment.values.byName(
-          json['mainAlign'] as String? ?? 'start',
-        )
-        ..crossAlign = SceneCrossAxisAlignment.values.byName(
-          json['crossAlign'] as String? ?? 'center',
-        )
         ..children.addAll([
           for (var c in (json['children'] as List? ?? const []))
             _nodeFromJson((c as Map).cast<String, Object?>()),
         ]),
-    'Text' =>
-      TextNode(json['text']! as String, name: name)
-        ..fontSize = number('fontSize') ?? 16
-        ..weight =
-            SceneFontWeight.values[(json['weight'] as num?)?.toInt() ?? 3]
-        ..color = SceneColor((json['color'] as num?)?.toInt() ?? 0xFF1A1A1A)
-        ..align = _textAlign(json['align'])
-        ..maxLines = (json['maxLines'] as num?)?.toInt(),
-    'Shape' => ShapeNode(name: name, circle: json['circle'] == true),
+    'Text' => TextNode('', name: name),
+    'Shape' => ShapeNode(name: name),
     'Ext' => ExternalNode.read(
       json['entry']! as String,
       name: name,
@@ -187,30 +141,40 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
     ),
     _ => throw ArgumentError('unknown node kind "${json['kind']}"'),
   };
-  return node
-    ..x = number('x') ?? 0
-    ..y = number('y') ?? 0
-    ..width = sizeFromWire(json['w'])
-    ..height = sizeFromWire(json['h'])
-    ..fill = json['fill'] == null
-        ? null
-        : SceneColor((json['fill']! as num).toInt())
-    ..borderColor = switch (json['border']) {
-      List l when l.isNotEmpty => SceneColor((l[0] as num).toInt()),
-      _ => null,
+  readSceneProps(node, json);
+  node.bindings.addAll(
+    ((json['bindings'] as Map?) ?? const {}).map(
+      (k, v) => MapEntry('$k', SceneBinding.fromWire('$v')),
+    ),
+  );
+  return node;
+}
+
+/// Every table property of [node] off [json], the default where the key is
+/// absent — shared by the authored plane and the wire, which spell values
+/// the same way and differ only in what else they carry.
+void readSceneProps(SceneNode node, Map<String, Object?> json) {
+  for (var p in scenePropsOf(node)) {
+    // A legacy payload packed the border as [argb, width].
+    if (p.name == 'borderColor' && json['border'] is List) {
+      var l = json['border']! as List;
+      node.borderColor = l.isNotEmpty
+          ? SceneColor((l[0] as num).toInt())
+          : null;
+      node.borderWidth = l.length > 1 ? (l[1] as num).toDouble() : 1;
+      continue;
     }
-    ..borderWidth = switch (json['border']) {
-      List l when l.length > 1 => (l[1] as num).toDouble(),
-      _ => 1,
+    if (p.name == 'borderWidth' && json.containsKey('border')) continue;
+    var raw = json[p.key];
+    if (raw == null && !json.containsKey(p.key)) {
+      // Missing means default — except where null IS the value.
+      if (p.kind != ScenePropKind.size && p.kind != ScenePropKind.integer) {
+        p.write(node, p.defaultValue);
+        continue;
+      }
     }
-    ..corner = number('corner') ?? 0
-    ..opacity = number('opacity') ?? 1
-    ..visible = json['visible'] != false
-    ..bindings.addAll(
-      ((json['bindings'] as Map?) ?? const {}).map(
-        (k, v) => MapEntry('$k', SceneBinding.fromWire('$v')),
-      ),
-    );
+    p.write(node, p.fromWire(raw));
+  }
 }
 
 extension MotionDocumentJson on MotionDocument {
@@ -380,12 +344,6 @@ Object? _valueToJson(Object? value) => switch (value) {
   _ => value,
 };
 
-/// Column tracks, in the same three-valued spelling as a node's size.
-List<double?> _columns(Object? raw) => switch (raw) {
-  List l => [for (var c in l) sizeFromWire(c)],
-  _ => <double?>[],
-};
-
 /// A parameter's default, read back as the kind it was declared with — an
 /// int in the file is a colour or a number depending on the hole it fills.
 Object _paramValue(SceneParamKind kind, Object? raw) => switch (kind) {
@@ -418,61 +376,22 @@ SceneDocument sceneFromWire(Map<String, Object?> root) =>
 
 SceneNode _nodeFromWire(Map<String, Object?> json) {
   var name = '${json['name']}';
-  double? number(String key) => (json[key] as num?)?.toDouble();
-  SceneColor? color(String key) =>
-      json[key] == null ? null : SceneColor((json[key]! as num).toInt());
-
   var node = switch (json['kind']) {
-    'text' =>
-      TextNode('${json['text']}', name: name)
-        ..fontSize = number('fontSize') ?? 16
-        ..weight =
-            SceneFontWeight.values[(json['weight'] as num?)?.toInt() ?? 3]
-        ..color = color('color') ?? const SceneColor(0xFF1A1A1A)
-        ..align = _textAlign(json['align'])
-        ..maxLines = (json['maxLines'] as num?)?.toInt(),
-    'shape' => ShapeNode(name: name, circle: json['circle'] == true),
+    'text' => TextNode('', name: name),
+    'shape' => ShapeNode(name: name),
     'ext' => ExternalNode.read(
       '${json['entry']}',
       name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
     ),
     _ =>
-      FrameNode(
-          name: name,
-          layout: NodeLayout.values.byName('${json['layout'] ?? 'absolute'}'),
-        )
-        ..gap = number('gap') ?? 8
-        ..padding = SceneEdges.fromWire(json['padding'])
-        ..columns = _columns(json['columns'])
-        ..cellPadding = SceneEdges.fromWire(json['cellPadding'])
-        ..mainAlign = SceneMainAxisAlignment
-            .values[(json['mainAlign'] as num?)?.toInt() ?? 0]
-        ..crossAlign = SceneCrossAxisAlignment
-            .values[(json['crossAlign'] as num?)?.toInt() ?? 2]
+      FrameNode(name: name)
         ..children.addAll([
           for (var c in (json['children'] as List? ?? const []))
             _nodeFromWire((c as Map).cast<String, Object?>()),
         ]),
   };
-
-  node
-    ..x = number('x') ?? 0
-    ..y = number('y') ?? 0
-    ..width = sizeFromWire(json['w'])
-    ..height = sizeFromWire(json['h'])
-    ..fill = color('fill')
-    ..borderColor = switch (json['border']) {
-      List l when l.isNotEmpty => SceneColor((l[0] as num).toInt()),
-      _ => null,
-    }
-    ..borderWidth = switch (json['border']) {
-      List l when l.length > 1 => (l[1] as num).toDouble(),
-      _ => 1,
-    }
-    ..corner = number('corner') ?? 0
-    ..opacity = number('opacity') ?? 1
-    ..visible = json['visible'] != false;
+  readSceneProps(node, json);
 
   if (json['fx'] case List fx when fx.length == 4) {
     double at(int i) => (fx[i] as num).toDouble();
