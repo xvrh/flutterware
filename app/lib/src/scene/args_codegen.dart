@@ -48,17 +48,45 @@ String emitSceneArgs({
   required List<SceneClassDecl> scenes,
   List<SceneTokenDecl> tokens = const [],
   String? externalsImport,
+  String? tokensImport,
+  List<String> declarationImports = const [],
 }) {
+  var hasOpaqueTokens = tokens.any((t) => t.isOpaque);
   var out = StringBuffer(_header)
     ..writeln()
     ..writeln("import 'package:flutterware/scene_authoring.dart';");
-  var imports = [
-    if (externalsImport != null && externals.isNotEmpty) externalsImport,
-    for (var s in scenes) s.importPath,
+  // The declaration files' own imports come along, because an opaque type —
+  // `ButtonStyle`, `app.Thing` — is spelled here exactly as it was spelled
+  // there. Only the ones something spelled here needs: an import nothing
+  // uses is a warning in a file nobody edits.
+  var opaqueTypes = {
+    for (var t in tokens)
+      if (t.isOpaque) t.type,
+    for (var w in externals)
+      for (var a in w.args)
+        if (!isValueArgType(a.typeName)) a.typeName,
+  };
+  var needed = _neededImports(declarationImports, opaqueTypes);
+  var packages = [
+    for (var i in needed)
+      if (i.contains("'package:")) i,
   ]..sort();
+  for (var i in packages) {
+    out.writeln(i);
+  }
+  var relative = <String, String>{
+    for (var i in needed)
+      if (!i.contains("'package:")) _importPath(i): i,
+  };
+  var imports = {
+    if (externalsImport != null && externals.isNotEmpty) externalsImport,
+    if (tokensImport != null && hasOpaqueTokens) tokensImport,
+    for (var s in scenes) s.importPath,
+    ...relative.keys,
+  }.toList()..sort();
   if (imports.isNotEmpty) out.writeln();
   for (var i in imports) {
-    out.writeln("import '$i';");
+    out.writeln(relative[i] ?? "import '$i';");
   }
 
   for (var w in externals) {
@@ -68,7 +96,12 @@ String emitSceneArgs({
       base: 'SceneExtArgs',
       fields: [
         for (var a in w.args)
-          (name: a.name, type: a.typeName, fallback: a.defaultSource),
+          (
+            name: a.name,
+            type: a.typeName,
+            fallback: a.defaultSource,
+            opaque: !isValueArgType(a.typeName),
+          ),
       ],
       build:
           '  @override\n'
@@ -80,7 +113,12 @@ String emitSceneArgs({
     var fields = [
       for (var p in s.params)
         if (p.kind != SceneParamKind.list)
-          (name: p.name, type: p.typeName, fallback: _literal(p.defaultValue)),
+          (
+            name: p.name,
+            type: p.typeName,
+            fallback: _literal(p.defaultValue),
+            opaque: false,
+          ),
     ];
     _argsClass(
       out,
@@ -110,7 +148,7 @@ String emitSceneArgs({
   return _formatter.format(out.toString());
 }
 
-typedef _Field = ({String name, String type, String? fallback});
+typedef _Field = ({String name, String type, String? fallback, bool opaque});
 
 void _argsClass(
   StringBuffer out, {
@@ -138,7 +176,11 @@ void _argsClass(
     ..writeln(
       [
         for (var f in fields)
-          "        ${f.name}: fx.${_reader(f.type)}('${f.name}') ?? ${f.name},",
+          f.opaque
+              // No fx reader: an object has no in-between values, and a
+              // track cannot name it.
+              ? '        ${f.name}: ${f.name},'
+              : "        ${f.name}: fx.${_reader(f.type)}('${f.name}') ?? ${f.name},",
       ].join('\n'),
     )
     ..writeln('      );')
@@ -185,7 +227,23 @@ void _argsClass(
 /// …}); final SceneColor brand; … }` — the declared set as a const, so a
 /// scene's formal can default to it, and another set (a mode) is the same
 /// class with other arguments.
+///
+/// An opaque token is a getter, not a field: its value is the app's object,
+/// which a const cannot hold and this file cannot spell, so it is read from
+/// the declaration list at the moment a scene asks — the same move as
+/// `_external` below.
 void _tokensClass(StringBuffer out, List<SceneTokenDecl> tokens) {
+  var values = [
+    for (var t in tokens)
+      if (!t.isOpaque) t,
+  ];
+  var opaque = [
+    for (var t in tokens)
+      if (t.isOpaque) t,
+  ];
+  var formals = values.isEmpty
+      ? ''
+      : '{${[for (var t in values) 'this.${t.name} = ${_literal(t.value!)}'].join(', ')}}';
   out
     ..writeln()
     ..writeln('/// The tokens `$sceneTokensFileName` declares, typed. A scene')
@@ -194,14 +252,60 @@ void _tokensClass(StringBuffer out, List<SceneTokenDecl> tokens) {
     )
     ..writeln('/// the bare constructor is the declared set.')
     ..writeln('class $sceneTokensClassName {')
-    ..writeln(
-      '  const $sceneTokensClassName({${[for (var t in tokens) 'this.${t.name} = ${_literal(t.value)}'].join(', ')}});',
-    )
+    ..writeln('  const $sceneTokensClassName($formals);')
     ..writeln();
-  for (var t in tokens) {
+  for (var t in values) {
     out.writeln('  final ${t.typeName} ${t.name};');
   }
+  for (var t in opaque) {
+    out
+      ..writeln()
+      ..writeln("  /// The app's own, as `$sceneTokensFileName` declares it.")
+      ..writeln(
+        "  ${t.typeName} get ${t.name} => _token('${t.name}')! as ${t.typeName};",
+      );
+  }
+  if (opaque.isNotEmpty) {
+    out
+      ..writeln()
+      ..writeln('  static Object? _token(String name) =>')
+      ..writeln(
+        '      $sceneTokensSymbol.firstWhere((t) => t.name == name).value;',
+      );
+  }
   out.writeln('}');
+}
+
+/// The declaration imports an opaque type could be spelled through: one per
+/// URI (the widest of several — a plain import over a `show`), a prefixed
+/// one only when a type carries its prefix, an unprefixed one only when a
+/// type carries none. The authoring import was never among them.
+List<String> _neededImports(List<String> directives, Set<String> types) {
+  var prefixed = {
+    for (var t in types)
+      if (t.contains('.')) t.substring(0, t.indexOf('.')),
+  };
+  var bare = types.any((t) => !t.contains('.'));
+  var byUri = <String, String>{};
+  for (var d in directives) {
+    var uri = _importPath(d);
+    var prefix = RegExp(r'\bas\s+(\w+)').firstMatch(d)?.group(1);
+    var used = prefix == null ? bare : prefixed.contains(prefix);
+    if (!used) continue;
+    var narrow = d.contains(' show ') || d.contains(' hide ');
+    var kept = byUri[uri];
+    if (kept == null ||
+        (!narrow && (kept.contains(' show ') || kept.contains(' hide ')))) {
+      byUri[uri] = d;
+    }
+  }
+  return byUri.values.toList();
+}
+
+/// `foo.dart` from `import 'foo.dart' as x;`.
+String _importPath(String directive) {
+  var q = directive.indexOf("'");
+  return directive.substring(q + 1, directive.indexOf("'", q + 1));
 }
 
 /// A class with no arguments takes no braces — `const OhohArgs()`, not

@@ -31,6 +31,7 @@ class SceneCanvasHost extends StatefulWidget {
   const SceneCanvasHost({
     super.key,
     this.externals = const [],
+    this.tokens = const [],
     this.ground = const Color(0x00000000),
   });
 
@@ -44,6 +45,10 @@ class SceneCanvasHost extends StatefulWidget {
   /// A widget the app forgets to declare shows as its label rather than
   /// blank.
   final List<ExternalWidget> externals;
+
+  /// The tokens the app declares — for the opaque ones, whose objects only
+  /// this process holds; see `bindExternals`.
+  final List<Token<Object?>> tokens;
 
   /// What shows around the artboard. Transparent by default, so the editor's
   /// own ground shows through.
@@ -111,7 +116,7 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
         // fx, so the host draws what it is given rather than evaluating
         // anything.
         var doc = sceneFromWire(decoded['root'] as Map<String, dynamic>);
-        bindExternals(doc, widget.externals);
+        bindExternals(doc, widget.externals, tokens: widget.tokens);
         _scene = doc;
         _selected = switch (decoded['selected']) {
           List names => {for (var n in names) '$n'},

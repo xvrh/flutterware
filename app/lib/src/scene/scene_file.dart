@@ -492,11 +492,14 @@ String _argsLiteral(
   var bound = false;
   var named = [
     for (var e in args.entries)
-      '${e.key}: ${() {
-        var r = ref('args.${e.key}');
-        if (r != null) bound = true;
-        return r ?? _argValue(e.value);
-      }()}',
+      // An opaque token's marker with no binding behind it has nothing to
+      // spell — the token is gone — so the argument is left out.
+      if (ref('args.${e.key}') != null || tokenMarkerName(e.value) == null)
+        '${e.key}: ${() {
+          var r = ref('args.${e.key}');
+          if (r != null) bound = true;
+          return r ?? _argValue(e.value);
+        }()}',
   ].join(', ');
   return '${bound ? '' : 'const '}${entry}Args($named)';
 }
@@ -1570,7 +1573,11 @@ class _Parser {
           _refuseUnknownToken(v);
           continue;
         }
-        out[arg.name.lexeme] = token.value;
+        // An opaque token has no value here: the argument carries the
+        // NAME, and the guest that compiled the declaration resolves it.
+        out[arg.name.lexeme] = token.isOpaque
+            ? tokenMarker(token.name)
+            : token.value;
         refs[arg.name.lexeme] = TokenRef(token.name);
         continue;
       }
@@ -1683,6 +1690,15 @@ class _Parser {
     var decl = _tokens[e.identifier.name];
     if (decl == null) {
       _refuseUnknownToken(e);
+      return _refused;
+    }
+    if (decl.isOpaque) {
+      refuse(
+        e.offset,
+        'token type',
+        '"${e.identifier.name}" is a ${decl.typeName} — the app\'s own '
+            "object, which only an external widget's argument can take",
+      );
       return _refused;
     }
     if (decl.kind != kind) {

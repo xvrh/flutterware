@@ -1232,7 +1232,9 @@ class SceneInspector extends StatelessWidget {
         ),
       const SizedBox(height: FwSpacing.md),
       for (var arg in declared?.args ?? const <ExternalArgDecl>[]) ...[
-        if (arg.typeName == 'double')
+        if (!isValueArgType(arg.typeName))
+          _opaqueArg(context, e, arg)
+        else if (arg.typeName == 'double')
           _number(
             'args.${arg.name}',
             arg.name,
@@ -1255,6 +1257,47 @@ class SceneInspector extends StatelessWidget {
           ),
       ],
     ];
+  }
+
+  /// An argument of the app's own type: nothing the editor can show a value
+  /// of, so the row is a picker over the opaque tokens of that type — the
+  /// only thing a scene can put there — with `none` for the widget's own
+  /// fallback.
+  Widget _opaqueArg(BuildContext context, ExternalNode e, ExternalArgDecl arg) {
+    var prop = 'args.${arg.name}';
+    var bound = switch (e.bindings[prop]) {
+      TokenRef(:var name) => name,
+      _ => null,
+    };
+    var tokens = [
+      for (var t in doc.tokens)
+        if (t.isOpaque && t.type == arg.typeName) t,
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: FwSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _label(context, '${arg.name} · ${arg.typeName}'),
+          FwPicker<String?>(
+            selected: bound,
+            choices: [
+              const FwChoice(
+                value: null,
+                label: 'none',
+                detail: "the widget's own",
+              ),
+              for (var t in tokens)
+                FwChoice(value: t.name, label: 'tokens.${t.name}'),
+            ],
+            empty: 'No ${arg.typeName} token declared in scene_tokens.dart',
+            onChanged: (name) => name == null
+                ? editor.unbind(e, prop)
+                : editor.bindToken(e, prop, name),
+          ),
+        ],
+      ),
+    );
   }
 
   /// The declaration's fallback, as a value. It is kept as source text —

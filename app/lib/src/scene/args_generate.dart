@@ -58,6 +58,7 @@ SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
 
   var externals = <ExternalWidgetDecl>[];
   String? externalsImport;
+  var externalsImports = <String>[];
   var declarationFile = File(p.join(directory, sceneExternalsFileName));
   if (declarationFile.existsSync()) {
     var parsed = parseExternalsFile(declarationFile.readAsStringSync());
@@ -70,9 +71,12 @@ SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
     }
     externals = parsed.widgets;
     externalsImport = sceneExternalsFileName;
+    externalsImports = parsed.imports;
   }
 
   var tokens = <SceneTokenDecl>[];
+  var tokensImports = <String>[];
+  String? tokensImport;
   var tokensFile = File(p.join(directory, sceneTokensFileName));
   if (tokensFile.existsSync()) {
     var parsed = parseTokensFile(tokensFile.readAsStringSync());
@@ -84,6 +88,8 @@ SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
       );
     }
     tokens = parsed.tokens;
+    tokensImport = sceneTokensFileName;
+    tokensImports = parsed.imports;
   }
 
   var scenes = <SceneClassDecl>[];
@@ -115,6 +121,8 @@ SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
     scenes: scenes,
     tokens: tokens,
     externalsImport: externalsImport,
+    tokensImport: tokensImport,
+    declarationImports: [...externalsImports, ...tokensImports],
   );
   if (target.existsSync() && target.readAsStringSync() == source) {
     return SceneArgsResult(path: target.path, wrote: false, source: source);

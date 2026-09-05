@@ -9,6 +9,7 @@
 // It is also the only place in the system that names an argument with a
 // string, by decision: written by hand, it has to compile before anything
 // has been generated from it, so it mentions nothing generated.
+import 'package:flutter/material.dart' show ButtonStyle;
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_example/shop/shop_app.dart' as app;
 
@@ -25,7 +26,15 @@ final sceneExternals = [
   ),
   ExternalWidget(
     'OrderButton',
-    args: [const Arg<String>('label', 'Order now')],
-    build: (a) => app.OrderButton(label: a.text('label') ?? 'Order now'),
+    // `style` is the app's own object: a scene fills it with an opaque
+    // token or leaves it to the widget, and the editor never sees inside.
+    args: [
+      const Arg<String>('label', 'Order now'),
+      const Arg<ButtonStyle>('style'),
+    ],
+    build: (a) => app.OrderButton(
+      label: a.text('label') ?? 'Order now',
+      style: a.raw('style') as ButtonStyle?,
+    ),
   ),
 ];

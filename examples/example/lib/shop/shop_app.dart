@@ -325,11 +325,15 @@ class Spinner extends StatelessWidget {
 /// The call to action, so a scene can place the real button rather than a
 /// rectangle that looks like one.
 class OrderButton extends StatelessWidget {
-  const OrderButton({super.key, this.label = 'Order now'});
+  const OrderButton({super.key, this.label = 'Order now', this.style});
 
   final String label;
 
+  /// The look, when a scene hands one over — the app's own [ButtonStyle],
+  /// declared once as a token. Null is the theme's button.
+  final ButtonStyle? style;
+
   @override
   Widget build(BuildContext context) =>
-      FilledButton(onPressed: () {}, child: Text(label));
+      FilledButton(onPressed: () {}, style: style, child: Text(label));
 }

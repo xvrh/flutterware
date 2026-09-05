@@ -16,6 +16,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import 'scene_file.dart';
+import 'tokens_file.dart';
 
 /// The symbol the declaration list must be called. One name, so nothing has
 /// to be configured and a file either declares scene externals or does not.
@@ -47,10 +48,15 @@ class ExternalWidgetDecl {
 
 /// What a read of a declaration file produced.
 class ExternalsParse {
-  ExternalsParse(this.widgets, this.refusals);
+  ExternalsParse(this.widgets, this.refusals, [this.imports = const []]);
 
   final List<ExternalWidgetDecl> widgets;
   final List<SceneRefusal> refusals;
+
+  /// The file's imports other than the authoring one, verbatim — what an
+  /// opaque argument's type is spelled with, so the generated class can
+  /// spell it too.
+  final List<String> imports;
 
   bool get ok => refusals.isEmpty;
 }
@@ -73,9 +79,15 @@ List<ExternalWidgetDecl> describeExternals(List<ExternalWidget> widgets) => [
     ]),
 ];
 
-/// The types an argument may take — the four a [SceneArgs] reader answers
-/// for, since a generated `merge` is written in terms of them.
+/// The VALUE types an argument may take — the four a [SceneArgs] reader
+/// answers for, since a generated `merge` is written in terms of them. Any
+/// other type is an OPAQUE argument: the app's own object, which a scene can
+/// only fill with an opaque token of that type (`style: tokens.cta`), and
+/// which the widget reads back with [SceneArgs.raw].
 const externalArgTypes = {'double', 'String', 'bool', 'SceneColor'};
+
+/// Whether a declared type is one the editor holds a value of.
+bool isValueArgType(String typeName) => externalArgTypes.contains(typeName);
 
 /// Reads `final sceneExternals = [ExternalWidget(…), …]`.
 ///
@@ -102,6 +114,7 @@ ExternalsParse parseExternalsFile(String source) {
   }
   if (refusals.isNotEmpty) return ExternalsParse(const [], refusals);
   var unit = result;
+  var imports = declarationImports(unit.unit, source);
 
   ListLiteral? list;
   for (var decl in unit.unit.declarations) {
@@ -194,7 +207,7 @@ ExternalsParse parseExternalsFile(String source) {
     }
     widgets.add(ExternalWidgetDecl(entry, args));
   }
-  return ExternalsParse(widgets, refusals);
+  return ExternalsParse(widgets, refusals, imports);
 }
 
 ExternalArgDecl? _arg(Expression e, void Function(int, String, String) refuse) {
@@ -218,12 +231,13 @@ ExternalArgDecl? _arg(Expression e, void Function(int, String, String) refuse) {
     refuse(e.offset, 'element', 'expected an Arg<…>(…)');
     return null;
   }
-  if (typeName == null || !externalArgTypes.contains(typeName)) {
+  if (typeName == null) {
     refuse(
       e.offset,
       'argument type',
       'an argument is typed by its type argument — '
-          "Arg<double>('size', 56); one of ${externalArgTypes.join(', ')}",
+          "Arg<double>('size', 56); one of ${externalArgTypes.join(', ')}, "
+          "or the app's own type for an argument only a token can fill",
     );
     return null;
   }
@@ -251,6 +265,17 @@ ExternalArgDecl? _arg(Expression e, void Function(int, String, String) refuse) {
   }
   if (name == null) {
     refuse(e.offset, 'missing argument', "an Arg is Arg<double>('size', 56)");
+    return null;
+  }
+  if (!isValueArgType(typeName) && fallback != null) {
+    // The generated class is const and imports nothing of the app's values;
+    // the widget's own `build` is where an absent object falls back.
+    refuse(
+      e.offset,
+      'opaque default',
+      "an $typeName argument takes no default here — Arg<$typeName>('$name'), "
+          'and fall back in build when the scene passes none',
+    );
     return null;
   }
   return ExternalArgDecl(name, typeName, fallback);

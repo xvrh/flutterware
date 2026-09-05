@@ -6,6 +6,7 @@
 // parameters change; every edit here is lost on the next save.
 
 import 'package:flutterware/scene_authoring.dart';
+import 'package:flutter/material.dart';
 
 import 'banner.scene.dart';
 import 'invoice.scene.dart';
@@ -13,6 +14,7 @@ import 'ohoh.scene.dart';
 import 'onboarding.scene.dart';
 import 'promo_badge.scene.dart';
 import 'scene_externals.dart';
+import 'scene_tokens.dart';
 import 'store_banner.scene.dart';
 import 'story_card.scene.dart';
 
@@ -73,19 +75,20 @@ class SpinnerTracks extends SceneExtTracks {
 }
 
 class OrderButtonArgs extends SceneExtArgs {
-  const OrderButtonArgs({this.label = 'Order now'});
+  const OrderButtonArgs({this.label = 'Order now', this.style});
 
   final String label;
+  final ButtonStyle? style;
 
   @override
   String get entry => 'OrderButton';
 
   @override
   OrderButtonArgs merge(SceneArgs fx) =>
-      OrderButtonArgs(label: fx.text('label') ?? label);
+      OrderButtonArgs(label: fx.text('label') ?? label, style: style);
 
   @override
-  Map<String, Object?> toMap() => {'label': label};
+  Map<String, Object?> toMap() => {'label': label, 'style': ?style};
 
   @override
   Object build() => _external('OrderButton').build(SceneArgs(toMap()));
@@ -99,26 +102,46 @@ class OrderButtonTracks extends SceneExtTracks {
 }
 
 class BannerSceneArgs extends SceneRefArgs {
-  const BannerSceneArgs();
+  const BannerSceneArgs({
+    this.test = 'COUCOU',
+    this.color = const SceneColor(0xFF3E7C4F),
+    this.agaga = 0.0,
+  });
+
+  final String test;
+  final SceneColor color;
+  final double agaga;
 
   @override
   String get entry => 'BannerScene';
 
   @override
-  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs();
+  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs(
+    test: fx.text('test') ?? test,
+    color: fx.color('color') ?? color,
+    agaga: fx.number('agaga') ?? agaga,
+  );
 
   @override
-  Map<String, Object?> toMap() => {};
+  Map<String, Object?> toMap() => {
+    'test': test,
+    'color': color,
+    'agaga': agaga,
+  };
 
   @override
-  SceneDefinition build() => BannerScene();
+  SceneDefinition build() =>
+      BannerScene(test: test, color: color, agaga: agaga);
 }
 
 class BannerSceneTracks extends SceneExtTracks {
-  const BannerSceneTracks();
+  const BannerSceneTracks({this.color, this.agaga});
+
+  final MotionTrack? color;
+  final MotionTrack? agaga;
 
   @override
-  Map<String, MotionTrack> toMap() => {};
+  Map<String, MotionTrack> toMap() => {'color': ?color, 'agaga': ?agaga};
 }
 
 class InvoiceArgs extends SceneRefArgs {
@@ -352,6 +375,12 @@ class SceneTokens {
   final SceneColor ink;
   final SceneColor espresso;
   final double radius;
+
+  /// The app's own, as `scene_tokens.dart` declares it.
+  ButtonStyle get ctaStyle => _token('ctaStyle')! as ButtonStyle;
+
+  static Object? _token(String name) =>
+      sceneTokens.firstWhere((t) => t.name == name).value;
 }
 
 /// The declaration an arguments class was generated from —

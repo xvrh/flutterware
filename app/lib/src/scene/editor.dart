@@ -649,9 +649,27 @@ class SceneEditor extends SceneListenable {
   /// takes the token's value. Unlike a parameter, a token is not moved by a
   /// later edit — the property detaches instead ([reconcileBindings]),
   /// because the declaration is the app's own file.
+  ///
+  /// An OPAQUE token — the app's own object — can only fill an external
+  /// widget's argument; the property carries the token's name for the guest
+  /// to resolve. Whether the widget's argument is of that type is the
+  /// declaration's to say, and the compiler's: this door checks the shape.
   void bindToken(SceneNode node, String prop, String token) {
     var decl = doc.tokenNamed(token);
     if (decl == null) throw ArgumentError('no token "$token"');
+    if (decl.isOpaque) {
+      if (node is! ExternalNode || !prop.startsWith('args.')) {
+        throw ArgumentError(
+          '"$token" is a ${decl.typeName} — the app\'s own object, which '
+          "only an external widget's argument can take",
+        );
+      }
+      perform('Bind $prop to tokens.$token', () {
+        node.bindings[prop] = TokenRef(token);
+        setSceneProperty(node, prop, tokenMarker(token));
+      });
+      return;
+    }
     var kind = bindableKind(node, prop);
     if (kind == null) {
       throw ArgumentError('"$prop" cannot read a token');
@@ -701,10 +719,16 @@ class SceneEditor extends SceneListenable {
     return chosen;
   }
 
-  /// Disconnects [prop] of [node]; the value stays where it is.
+  /// Disconnects [prop] of [node]; the value stays where it is. An opaque
+  /// token's argument has no value of its own to keep, so it is cleared.
   void unbind(SceneNode node, String prop) {
     if (!node.bindings.containsKey(prop)) return;
-    perform('Unbind $prop', () => node.bindings.remove(prop));
+    perform('Unbind $prop', () {
+      node.bindings.remove(prop);
+      if (tokenMarkerName(getSceneProperty(node, prop)) != null) {
+        setSceneProperty(node, prop, null);
+      }
+    });
   }
 
   static String _readerList(List<(SceneNode, String)> readers) =>

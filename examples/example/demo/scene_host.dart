@@ -16,6 +16,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import 'scene_externals.dart';
+import 'scene_tokens.dart';
 
 void main() {
   runApp(const SceneHostApp());
@@ -47,7 +48,7 @@ class ScenePlayerHost extends StatelessWidget {
     // The pair came off disk as data, so its external nodes carry a label
     // and no generated class. This is what turns the label back into a
     // widget; a scene the app COMPILED needs none of it.
-    bindExternals(pair.scene, sceneExternals);
+    bindExternals(pair.scene, sceneExternals, tokens: sceneTokens);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
@@ -91,6 +92,6 @@ class SceneHostApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     // The app's own look — what the editor canvas inherits by construction.
     theme: ThemeData(colorSchemeSeed: const Color(0xFF8C5A3C)),
-    home: SceneCanvasHost(externals: sceneExternals),
+    home: SceneCanvasHost(externals: sceneExternals, tokens: sceneTokens),
   );
 }

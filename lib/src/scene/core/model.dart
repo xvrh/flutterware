@@ -94,16 +94,36 @@ class SceneParamDecl {
 /// detaches it rather than moving the token, the way a design tool detaches
 /// a variable when you type over it. The kinds are the parameter kinds
 /// minus `list`: what a property can read.
+///
+/// Two kinds. A VALUE token — `SceneColor`, `double`, `String`, `bool` — the
+/// editor renders and any property of that kind may read. An OPAQUE token —
+/// an `InputDecoration`, a `ButtonStyle`, anything the app owns — the editor
+/// can only name and pass: it reaches an external widget's argument through
+/// `tokens.name`, and never the canvas. Its [type] is the declaration's type
+/// argument, verbatim, so the generated class can spell it back.
 class SceneTokenDecl {
-  const SceneTokenDecl(this.name, this.kind, this.value);
+  SceneTokenDecl(this.name, SceneParamKind this.kind, Object this.value)
+    : type = _typeOf(kind);
+
+  /// A token the editor cannot see into: the name and the type, no value.
+  const SceneTokenDecl.opaque(this.name, this.type) : kind = null, value = null;
 
   final String name;
-  final SceneParamKind kind;
 
-  /// String, double, bool or [SceneColor].
-  final Object value;
+  /// The value kind, or null for an opaque token.
+  final SceneParamKind? kind;
 
-  String get typeName => switch (kind) {
+  /// The Dart type the declaration spelled — `double`, or the app's own.
+  final String type;
+
+  /// String, double, bool or [SceneColor]; null for an opaque token.
+  final Object? value;
+
+  bool get isOpaque => kind == null;
+
+  String get typeName => type;
+
+  static String _typeOf(SceneParamKind kind) => switch (kind) {
     SceneParamKind.string => 'String',
     SceneParamKind.number => 'double',
     SceneParamKind.color => 'SceneColor',
@@ -111,6 +131,18 @@ class SceneTokenDecl {
     SceneParamKind.list => 'List<Object?>',
   };
 }
+
+/// The wire's stand-in for an opaque token's value in an external node's
+/// arguments — `{'token': 'ctaStyle'}`. The object itself cannot travel and
+/// the editor never holds it; the guest, which compiled the declaration,
+/// resolves the name at build time (`bindExternals`).
+Map<String, Object?> tokenMarker(String name) => {'token': name};
+
+/// The token a marker names, or null for any other value.
+String? tokenMarkerName(Object? value) => switch (value) {
+  {'token': String name} when value.length == 1 => name,
+  _ => null,
+};
 
 /// One token as the app declares it, in a `final sceneTokens = [ … ]` list
 /// beside the externals: `Token<SceneColor>('brand', SceneColor(0xFF…))`.
@@ -741,6 +773,10 @@ class SceneArgs {
     bool b => b,
     _ => null,
   };
+
+  /// The value as it is — an opaque token's object, resolved by the guest
+  /// before the builder saw it. `null` when the scene set nothing.
+  Object? raw(String name) => _values[name];
 
   /// Every name the node carries — what an editor lists.
   Iterable<String> get names => _values.keys;

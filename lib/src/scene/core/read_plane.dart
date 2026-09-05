@@ -115,11 +115,13 @@ Object? getSceneProperty(SceneNode node, String prop) {
 void setSceneProperty(SceneNode node, String prop, Object? value) {
   if (prop.startsWith('args.')) {
     var name = prop.substring(5);
+    // Null is "not written": the argument leaves the map, so the file spells
+    // nothing and the widget's own fallback answers.
     switch (node) {
       case SceneRefNode r:
-        r.args[name] = value;
+        value == null ? r.args.remove(name) : r.args[name] = value;
       case ExternalNode e:
-        e.args[name] = value;
+        value == null ? e.args.remove(name) : e.args[name] = value;
       default:
         break;
     }
@@ -260,7 +262,14 @@ List<String> reconcileBindings(SceneDocument doc) {
           }
         case TokenRef(:var name):
           var decl = doc.tokenNamed(name);
-          if (decl == null || decl.value != current) {
+          if (decl == null) {
+            node.bindings.remove(prop);
+            dropped.add('${node.name}.$prop');
+            // An opaque token has no value to keep: the argument goes too.
+            if (tokenMarkerName(current) != null) {
+              setSceneProperty(node, prop, null);
+            }
+          } else if (!decl.isOpaque && decl.value != current) {
             node.bindings.remove(prop);
             dropped.add('${node.name}.$prop');
           }

@@ -12,6 +12,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
 import 'package:flutterware_app/src/scene/args_codegen.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
+import 'package:flutterware_app/src/scene/externals_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/tokens_file.dart';
 import 'package:flutterware_app/src/scene/ui/inspector.dart';
@@ -19,13 +20,18 @@ import 'package:flutterware_app/src/scene/ui/swatches.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 const _declaration = '''
+import 'package:flutter/material.dart' show ButtonStyle, FilledButton;
 import 'package:flutterware/scene_authoring.dart';
+
+import 'shop.dart' as app;
 
 final sceneTokens = [
   const Token<SceneColor>('brand', SceneColor(0xFFE8632B)),
   const Token<double>('radius', 28),
   Token<String>('cta', 'Order now'),
   const Token<bool>('compact', false),
+  Token<ButtonStyle>('ctaStyle', FilledButton.styleFrom()),
+  Token<app.Decor>('decor', app.decor),
 ];
 ''';
 
@@ -58,13 +64,13 @@ void main() {
     test('names each token, its kind and its value', () {
       var parsed = parseTokensFile(_declaration);
       expect(parsed.refusals, isEmpty);
-      expect(parsed.tokens.map((t) => t.name), [
+      expect(parsed.tokens.map((t) => t.name).take(4), [
         'brand',
         'radius',
         'cta',
         'compact',
       ]);
-      expect(parsed.tokens.map((t) => t.kind), [
+      expect(parsed.tokens.map((t) => t.kind).take(4), [
         SceneParamKind.color,
         SceneParamKind.number,
         SceneParamKind.string,
@@ -309,6 +315,161 @@ final sceneTokens = [
     expect(editor.doc.root.bindings['fill'], const TokenRef('brand'));
     expect(find.text('fill ← tokens.brand'), findsOneWidget);
     await tester.pump(kDoubleTapTimeout);
+  });
+
+  group('an opaque token', () {
+    test('is read as a name and a type, its imports kept', () {
+      var parsed = parseTokensFile(_declaration);
+      expect(parsed.refusals, isEmpty);
+      var style = parsed.tokens.firstWhere((t) => t.name == 'ctaStyle');
+      expect(style.isOpaque, isTrue);
+      expect(style.type, 'ButtonStyle');
+      expect(style.value, isNull);
+      expect(
+        parsed.tokens.firstWhere((t) => t.name == 'decor').type,
+        'app.Decor',
+      );
+      expect(parsed.imports, [
+        "import 'package:flutter/material.dart' show ButtonStyle, FilledButton;",
+        "import 'shop.dart' as app;",
+      ]);
+    });
+
+    test('is a getter on the generated class, typed as declared', () {
+      var source = emitSceneArgs(
+        externals: [],
+        scenes: [],
+        tokens: _tokens,
+        tokensImport: 'scene_tokens.dart',
+        declarationImports: parseTokensFile(_declaration).imports,
+      );
+      expect(
+        source,
+        contains(
+          "ButtonStyle get ctaStyle => _token('ctaStyle')! as ButtonStyle;",
+        ),
+      );
+      expect(
+        source,
+        contains("app.Decor get decor => _token('decor')! as app.Decor;"),
+      );
+      expect(
+        source,
+        contains('sceneTokens.firstWhere((t) => t.name == name).value'),
+      );
+      expect(source, contains("import 'scene_tokens.dart';"));
+      expect(
+        source,
+        contains(
+          "import 'package:flutter/material.dart' show ButtonStyle, FilledButton;",
+        ),
+      );
+      expect(source, contains("import 'shop.dart' as app;"));
+      // A value token is still a const field.
+      expect(source, contains('this.radius = 28.0'));
+    });
+
+    test("fills an external argument of the app's own type", () {
+      var externals = parseExternalsFile('''
+import 'package:flutter/material.dart' show ButtonStyle;
+import 'package:flutterware/scene_authoring.dart';
+
+final sceneExternals = [
+  ExternalWidget(
+    'OrderButton',
+    args: [const Arg<String>('label', 'Go'), const Arg<ButtonStyle>('style')],
+    build: (a) => 1,
+  ),
+];
+''');
+      expect(externals.refusals, isEmpty);
+      expect(externals.widgets.single.args.last.typeName, 'ButtonStyle');
+      var source = emitSceneArgs(
+        externals: externals.widgets,
+        scenes: [],
+        externalsImport: 'scene_externals.dart',
+        declarationImports: externals.imports,
+      );
+      expect(source, contains('final ButtonStyle? style;'));
+      expect(source, contains('style: style)'), reason: 'no fx reader');
+      expect(source, isNot(contains('MotionTrack? style')));
+      expect(
+        source,
+        contains("import 'package:flutter/material.dart' show ButtonStyle;"),
+      );
+    });
+
+    test('an opaque argument with a default is refused', () {
+      var parsed = parseExternalsFile('''
+final sceneExternals = [
+  ExternalWidget('B', args: [Arg<ButtonStyle>('style', x)], build: (a) => 1),
+];
+''');
+      expect(parsed.refusals.single.construct, 'opaque default');
+    });
+
+    test('round-trips through an external argument as a name', () {
+      var source = _scene.replaceAll(
+        'late final box = FrameNode(x: 40, width: 80, height: 20, corner: t.radius);',
+        "late final box = ExternalNode(OrderButtonArgs(label: 'Go', style: t.ctaStyle), x: 40);",
+      );
+      var parsed = _parse(source);
+      expect(parsed.refusals, isEmpty);
+      var box = parsed.doc!.nodeNamed('box')! as ExternalNode;
+      expect(box.bindings['args.style'], const TokenRef('ctaStyle'));
+      expect(box.args['style'], {'token': 'ctaStyle'});
+      var out = _emit(parsed.doc!);
+      expect(out, contains("OrderButtonArgs(label: 'Go', style: t.ctaStyle)"));
+      expect(_emit(_parse(out).doc!), out);
+    });
+
+    test('cannot fill a property of the canvas', () {
+      var parsed = _parse(_scene.replaceAll('t.radius', 't.ctaStyle'));
+      expect(parsed.refusals.single.construct, 'token type');
+      expect(parsed.refusals.single.message, contains('ButtonStyle'));
+    });
+
+    test(
+      'binds and unbinds in the editor; a lost token clears the argument',
+      () {
+        var e = SceneEditor(_parse(_scene).doc!);
+        var box = ExternalNode.read('OrderButton', name: 'button', args: {});
+        e.perform('Add', () => e.doc.root.children.add(box));
+        expect(
+          () => e.bindToken(e.doc.root, 'fill', 'ctaStyle'),
+          throwsArgumentError,
+        );
+        e.bindToken(box, 'args.style', 'ctaStyle');
+        expect(box.args['style'], {'token': 'ctaStyle'});
+        expect(_emit(e.doc), contains('style: t.ctaStyle'));
+        e.unbind(box, 'args.style');
+        expect(
+          box.args.containsKey('style'),
+          isFalse,
+          reason: 'nothing to keep',
+        );
+        e.bindToken(box, 'args.style', 'ctaStyle');
+        e.doc.tokens.removeWhere((t) => t.name == 'ctaStyle');
+        e.perform('Touch', () {});
+        expect(box.bindings['args.style'], isNull);
+        expect(box.args.containsKey('style'), isFalse);
+      },
+    );
+
+    test('the guest resolves the name to the declared object', () {
+      var style = Object();
+      var args = resolveTokenArgs(
+        SceneArgs({
+          'label': 'Go',
+          'style': tokenMarker('ctaStyle'),
+          'x': tokenMarker('gone'),
+        }),
+        {'ctaStyle': style},
+      );
+      expect(args.raw('style'), same(style));
+      expect(args.text('label'), 'Go');
+      expect(args.raw('x'), isNull, reason: "the widget's own fallback");
+    });
   });
 
   test('the wire spells a token apart from an item reference', () {

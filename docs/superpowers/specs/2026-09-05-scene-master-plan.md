@@ -308,12 +308,21 @@ Each is a table row and a renderer case.
    package, so editing a token-bound property does not move the token (the
    parameter rule) — the property detaches and keeps its value, the way a
    design tool detaches a variable when you type over it; the inspector
-   offers the token back one click away. **Opaque tokens are M5b.** The
-   value half (`SceneColor`, `double`, `String`, `bool`) shipped first; the
-   opaque half — an `InputDecoration` the app owns, named in a scene and
-   passed to an external widget's argument, never drawn — needs `Arg<T>` of
-   any type on the externals and a wire that carries the reference rather
-   than the object, and is its own piece.
+   offers the token back one click away. **Opaque tokens landed as M5b**,
+   the same day. `Token<ButtonStyle>('cta', FilledButton.styleFrom(…))` is
+   read as a name and a type, never a value; the generated class gets a
+   getter (`ButtonStyle get cta => _token('cta')! as ButtonStyle`) that
+   reads the declaration list at the moment a scene asks, the way
+   `_external` does, and the generated file copies the declaration files'
+   own imports so the type is spelled as it was spelled there. An external
+   argument of any type (`Arg<ButtonStyle>('style')`, no default) is the only
+   thing an opaque token can fill; the node's argument carries the MARKER
+   `{'token': 'cta'}` over the wire and the guest — the process that compiled
+   the declaration — resolves it in `bindExternals` before the builder sees
+   it. An edit cannot detach an opaque binding (there is no value to edit);
+   unbinding clears the argument, and a token gone from the declaration
+   clears it too. The compiler stays the last grader for the type match
+   between a token and the argument it fills.
 3. **Whether the importer runs in the studio or the CLI.** It needs network and
    credentials, which is a first for this plugin.
 

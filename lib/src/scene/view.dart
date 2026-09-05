@@ -637,12 +637,39 @@ class _ScenePlayhead implements Playhead {
 /// a document that arrived as DATA — over the editor's wire, or read back
 /// from a saved pair — where the generated type could not travel and the
 /// label is all that did.
-void bindExternals(SceneDocument doc, List<ExternalWidget> declarations) {
+///
+/// [tokens] are the app's declared tokens, for the opaque ones: an argument
+/// that arrived as `{'token': 'cta'}` — the editor never held the object —
+/// becomes the declared object here, before the builder sees it. A read
+/// document is the only one that needs this; a compiled scene reads
+/// `tokens.cta` itself.
+void bindExternals(
+  SceneDocument doc,
+  List<ExternalWidget> declarations, {
+  List<Token<Object?>> tokens = const [],
+}) {
   var byEntry = {for (var w in declarations) w.entry: w};
+  var byName = {for (var t in tokens) t.name: t.value};
   for (var (node, _) in doc.walk()) {
-    if (node is ExternalNode) node.builder = byEntry[node.entry]?.build;
+    if (node is! ExternalNode) continue;
+    var build = byEntry[node.entry]?.build;
+    node.builder = build == null
+        ? null
+        : (args) => build(resolveTokenArgs(args, byName));
   }
 }
+
+/// [args] with every opaque-token marker replaced by the token's object;
+/// a marker naming nothing the app declared resolves to null, which is the
+/// widget's own fallback.
+SceneArgs resolveTokenArgs(SceneArgs args, Map<String, Object?> tokens) =>
+    SceneArgs({
+      for (var name in args.names)
+        name: switch (tokenMarkerName(args.raw(name))) {
+          var token? => tokens[token],
+          null => args.raw(name),
+        },
+    });
 
 /// A builder returns `Object`, because the half of the model that declares
 /// it is pure Dart. This is where that becomes a widget again, and where a

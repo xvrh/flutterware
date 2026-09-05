@@ -13,6 +13,13 @@
 // edited, because the file is the tool's; a token is shared by every scene
 // of the package and written by hand, so a property edited off its token
 // detaches instead.
+//
+// A token typed anything but the four value types is OPAQUE: the editor
+// records its name and its type and never its value — `Token<ButtonStyle>
+// ('cta', FilledButton.styleFrom(…))` is the app's object, reachable only
+// by an external widget's argument, and only the app that compiled this
+// file can hand it over. The file's own imports are kept for the generated
+// class, which has to spell `ButtonStyle` too.
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:flutterware/scene_authoring.dart';
@@ -32,10 +39,15 @@ const sceneTokensClassName = 'SceneTokens';
 
 /// What a read of a declaration file produced.
 class TokensParse {
-  TokensParse(this.tokens, this.refusals);
+  TokensParse(this.tokens, this.refusals, [this.imports = const []]);
 
   final List<SceneTokenDecl> tokens;
   final List<SceneRefusal> refusals;
+
+  /// The file's imports other than the authoring one, verbatim — what an
+  /// opaque token's type is spelled with, so the generated class imports the
+  /// same.
+  final List<String> imports;
 
   bool get ok => refusals.isEmpty;
 }
@@ -88,6 +100,7 @@ TokensParse parseTokensFile(String source) {
     refuse(error.offset, 'syntax error', error.message);
   }
   if (refusals.isNotEmpty) return TokensParse(const [], refusals);
+  var imports = declarationImports(result.unit, source);
 
   ListLiteral? list;
   for (var decl in result.unit.declarations) {
@@ -136,8 +149,15 @@ TokensParse parseTokensFile(String source) {
     }
     tokens.add(decl);
   }
-  return TokensParse(tokens, refusals);
+  return TokensParse(tokens, refusals, imports);
 }
+
+/// A declaration file's imports other than the authoring one, as written.
+List<String> declarationImports(CompilationUnit unit, String source) => [
+  for (var d in unit.directives)
+    if (d is ImportDirective && d.uri.stringValue != sceneAuthoringUri)
+      source.substring(d.offset, d.end),
+];
 
 SceneTokenDecl? _token(
   Expression e,
@@ -164,14 +184,13 @@ SceneTokenDecl? _token(
     refuse(e.offset, 'element', 'expected a Token<…>(…)');
     return null;
   }
-  var kind = _tokenKinds[typeName];
-  if (kind == null) {
+  if (typeName == null) {
     refuse(
       e.offset,
       'token type',
       'a token is typed by its type argument — '
-          "Token<SceneColor>('brand', SceneColor(0xFF…)); one of "
-          '${_tokenKinds.keys.join(', ')}',
+          "Token<SceneColor>('brand', SceneColor(0xFF…)) for a value the "
+          "editor renders, Token<ButtonStyle>('cta', …) for one it only names",
     );
     return null;
   }
@@ -189,12 +208,15 @@ SceneTokenDecl? _token(
     refuse(nameArg.offset, 'token name', 'a token name is an identifier');
     return null;
   }
+  var kind = _tokenKinds[typeName];
+  // Not a value type: the app's own object. Named, typed, never read.
+  if (kind == null) return SceneTokenDecl.opaque(nameArg.value, typeName);
   var value = _value(args.arguments[1].argumentExpression, kind);
   if (value == null) {
     refuse(
       args.arguments[1].offset,
       'token value',
-      "a ${typeName!} token's value is a $typeName literal",
+      "a $typeName token's value is a $typeName literal",
     );
     return null;
   }
