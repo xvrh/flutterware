@@ -115,7 +115,21 @@ class SceneEditor extends SceneListenable {
   set activeMotion(String? name) {
     if (_activeMotion == name) return;
     _activeMotion = name;
+    _drawerCollapsed = false;
     clearKeySelection();
+    notifyListeners();
+  }
+
+  /// Whether the drawer under the canvas is folded away while its motion
+  /// stays open — the header keeps naming it, the motion stays on the
+  /// picture. Not journaled: a view state, not a change. Opening anything
+  /// unfolds it.
+  bool get drawerCollapsed => _drawerCollapsed;
+  bool _drawerCollapsed = false;
+
+  set drawerCollapsed(bool value) {
+    if (_drawerCollapsed == value) return;
+    _drawerCollapsed = value;
     notifyListeners();
   }
 

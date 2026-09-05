@@ -215,7 +215,7 @@ void main() {
       await tester.pump(kDoubleTapTimeout);
     });
 
-    testWidgets('right-click on a motion chip renames the motion', (
+    testWidgets("right-click on the open motion's name renames the motion", (
       tester,
     ) async {
       await pump(tester);
@@ -252,7 +252,7 @@ void main() {
       expect(find.text('BannerReveal'), findsNWidgets(2));
     });
 
-    testWidgets('right-click on a motion chip deletes the motion', (
+    testWidgets('right-click on a motion in the tree deletes the motion', (
       tester,
     ) async {
       await pump(tester);

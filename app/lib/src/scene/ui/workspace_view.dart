@@ -3,15 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
-import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
-import '../../ui/menu.dart';
-import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../externals_file.dart';
 import '../playback.dart';
 import 'canvas.dart';
-import 'inline_name.dart';
+import 'drawer_header.dart';
 import 'inspector.dart';
 import 'shortcuts.dart';
 import 'timeline.dart';
@@ -144,10 +141,9 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                             ),
                           ),
                           Container(height: 1, color: line),
-                          _MotionStrip(
-                            editor: editor,
-                            sceneClassName: widget.sceneClassName,
-                            onClose: active == null ? null : _closeMotion,
+                          SceneDrawerHeader(
+                            editor,
+                            onClose: _closeMotion,
                             onPick: (name) {
                               editor.activeMotion = name;
                               // A motion that was closed comes back on the
@@ -155,7 +151,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                               widget.playbackFor(name).apply();
                             },
                           ),
-                          if (open) ...[
+                          if (open && !editor.drawerCollapsed) ...[
                             Container(height: 1, color: line),
                             Expanded(
                               flex: 2,
@@ -189,166 +185,6 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The scene's motions, as a strip under the canvas: pick one to open its
-/// timeline, make a new one, fold the timeline away. The static editor is
-/// the resting state; this is the door to animation.
-class _MotionStrip extends StatefulWidget {
-  const _MotionStrip({
-    required this.editor,
-    required this.sceneClassName,
-    required this.onClose,
-    required this.onPick,
-  });
-
-  final SceneEditor editor;
-  final String? sceneClassName;
-
-  /// Closes the open motion; null when none is.
-  final VoidCallback? onClose;
-  final ValueChanged<String> onPick;
-
-  @override
-  State<_MotionStrip> createState() => _MotionStripState();
-}
-
-class _MotionStripState extends State<_MotionStrip> {
-  /// The chip being renamed, by its current name.
-  String? _renaming;
-
-  SceneEditor get editor => widget.editor;
-
-  String? _rename(String name, String wanted) {
-    if (_renaming != name) return null;
-    try {
-      editor.renameMotion(name, wanted);
-      setState(() => _renaming = null);
-      return null;
-    } on ArgumentError catch (e) {
-      return e.message as String?;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var type = context.type;
-    var active = editor.activeMotion;
-    var names = editor.motions.keys.toList();
-    var sceneClassName = widget.sceneClassName;
-    var onClose = widget.onClose;
-    var onPick = widget.onPick;
-    return Container(
-      height: 32,
-      color: colors.panel,
-      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
-      child: Row(
-        spacing: FwSpacing.sm,
-        children: [
-          Tooltip(
-            message: active == null
-                ? 'Open a motion to see its timeline'
-                : 'Close the motion — the scene as authored',
-            child: Tappable(
-              onTap: onClose,
-              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-              child: Padding(
-                padding: const EdgeInsets.all(FwSpacing.xs),
-                child: Icon(
-                  active == null
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  size: FwIconSize.md,
-                  color: onClose == null ? colors.mut3 : colors.ink,
-                ),
-              ),
-            ),
-          ),
-          Text('Motions', style: type.sectionLabel),
-          if (names.isEmpty)
-            Text('none yet', style: type.caption.copyWith(color: colors.mut2)),
-          for (var name in names)
-            GestureDetector(
-              onSecondaryTapUp: (d) =>
-                  showContextMenu(context, d.globalPosition, [
-                    MenuItem(
-                      'Rename $name…',
-                      icon: Icons.edit_outlined,
-                      onSelected: () => setState(() => _renaming = name),
-                    ),
-                    MenuItem(
-                      'Delete $name',
-                      icon: Icons.close,
-                      danger: true,
-                      onSelected: () => editor.removeMotion(name),
-                    ),
-                  ]),
-              child: Tappable(
-                onTap: _renaming == name ? null : () => onPick(name),
-                borderRadius: BorderRadius.circular(context.radii.pill),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FwSpacing.md,
-                    vertical: FwSpacing.xxs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: name == active ? colors.accentSoft : null,
-                    border: Border.all(
-                      color: name == active ? colors.accent : colors.line,
-                    ),
-                    borderRadius: BorderRadius.circular(context.radii.pill),
-                  ),
-                  child: _renaming == name
-                      ? SizedBox(
-                          width: 160,
-                          child: InlineNameField(
-                            initial: name,
-                            dense: true,
-                            style: type.caption,
-                            onCommit: (wanted) => _rename(name, wanted),
-                            onCancel: () => setState(() => _renaming = null),
-                          ),
-                        )
-                      : Text(
-                          name,
-                          style: type.caption.copyWith(
-                            color: name == active
-                                ? colors.accentDark
-                                : colors.ink,
-                          ),
-                        ),
-                ),
-              ),
-            ),
-          if (sceneClassName case var className?)
-            Tooltip(
-              message: 'A new, empty motion on this scene',
-              child: Tappable(
-                onTap: () => onPick(editor.addMotion(className)),
-                borderRadius: BorderRadius.circular(context.radii.pill),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FwSpacing.sm,
-                    vertical: FwSpacing.xxs,
-                  ),
-                  child: Row(
-                    spacing: FwSpacing.xxs,
-                    children: [
-                      Icon(Icons.add, size: FwIconSize.xs, color: colors.mut),
-                      Text(
-                        'New motion',
-                        style: type.caption.copyWith(color: colors.mut),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

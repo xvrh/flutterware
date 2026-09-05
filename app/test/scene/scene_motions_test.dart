@@ -156,15 +156,26 @@ void main() {
     await tester.pumpWidget(MaterialApp(theme: appTheme, home: _Host(editor)));
     await tester.pump();
     expect(find.byType(SceneTimeline), findsNothing, reason: 'static first');
-    // Listed twice: once in the tree's outline, once as the strip's chip.
-    expect(find.text('BannerIntro'), findsNWidgets(2));
+    // Nothing open: the motion is a row in the tree's outline, and the
+    // drawer header says where to go.
+    expect(find.text('BannerIntro'), findsOneWidget);
+    expect(find.textContaining('Open a motion or a parameter'), findsOneWidget);
 
-    await tester.tap(find.text('BannerIntro').last);
+    // A click selects it — the inspector describes it — and the row's
+    // chevron opens it below.
+    await tester.tap(find.text('BannerIntro'));
+    await tester.pump();
+    expect(editor.aside, const MotionAside('BannerIntro'));
+    expect(editor.activeMotion, isNull, reason: 'selected, not opened');
+    await tester.tap(find.byTooltip('Open below the canvas'));
     await tester.pump();
     expect(editor.activeMotion, 'BannerIntro');
     expect(find.byType(SceneTimeline), findsOneWidget);
+    // Named twice now: the tree row and the drawer header.
+    expect(find.text('BannerIntro'), findsNWidgets(2));
+    expect(find.text('1.80s · 4 groups'), findsOneWidget);
 
-    await tester.tap(find.text('New motion'));
+    await tester.tap(find.byTooltip('New motion'));
     await tester.pump();
     expect(editor.activeMotion, 'BannerSceneMotion');
     expect(find.text('BannerSceneMotion'), findsWidgets);
@@ -173,8 +184,25 @@ void main() {
       findsOneWidget,
     );
 
-    // Collapsing the panel is leaving the motion: the scene is static again,
-    // recording is off, no chip is active.
+    // The chevron folds the timeline away and keeps the motion open: the
+    // header still names it, the picture still plays it.
+    await tester.tap(
+      find.byTooltip('Fold the timeline away — the motion stays open'),
+    );
+    await tester.pump();
+    expect(find.byType(SceneTimeline), findsNothing);
+    expect(
+      editor.activeMotion,
+      'BannerSceneMotion',
+      reason: 'folded, not closed',
+    );
+    expect(find.text('BannerSceneMotion'), findsWidgets);
+    await tester.tap(find.byTooltip('Show the timeline'));
+    await tester.pump();
+    expect(find.byType(SceneTimeline), findsOneWidget);
+
+    // The cross is leaving the motion: the scene is static again, recording
+    // is off, nothing is open.
     editor.autoKey = true;
     await tester.tap(
       find.byTooltip('Close the motion — the scene as authored'),

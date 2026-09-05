@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene_authoring.dart';
 
@@ -49,6 +50,12 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
 
   /// The row being renamed in place, if any.
   SceneAside? _renaming;
+
+  /// The last row tapped and when: a second tap on it within the double-tap
+  /// window renames. Detected by hand rather than with a double-tap
+  /// recognizer, which would hold every single tap for 300ms — selection
+  /// has to be instant. The same rule as the layers above.
+  (SceneAside, DateTime)? _lastTap;
 
   @override
   Widget build(BuildContext context) {
@@ -236,12 +243,22 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
         editor.aside = aside;
         showContextMenu(context, d.globalPosition, menu());
       },
-      onDoubleTap: () => setState(() => _renaming = aside),
       child: FwTreeRow(
         depth: 1,
         density: TreeRowDensity.roomy,
         selected: selected,
-        onTap: () => editor.aside = aside,
+        onTap: () {
+          var now = DateTime.now();
+          var again =
+              _lastTap?.$1 == aside &&
+              now.difference(_lastTap!.$2) < kDoubleTapTimeout;
+          _lastTap = (aside, now);
+          if (again) {
+            setState(() => _renaming = aside);
+            return;
+          }
+          editor.aside = aside;
+        },
         label: Row(
           spacing: FwSpacing.sm,
           children: [
