@@ -5,6 +5,7 @@ import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../editor.dart';
+import '../../ui/tappable.dart';
 import 'inline_name.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
@@ -37,12 +38,14 @@ class _SceneParamsPanelState extends State<SceneParamsPanel> {
     (SceneParamKind.string, 'Text', 'String'),
     (SceneParamKind.number, 'Number', 'double'),
     (SceneParamKind.color, 'Colour', 'SceneColor'),
+    (SceneParamKind.bool, 'Toggle', 'bool'),
   ];
 
   static String _kindLabel(SceneParamKind kind) => switch (kind) {
     SceneParamKind.string => 'text',
     SceneParamKind.number => 'number',
     SceneParamKind.color => 'colour',
+    SceneParamKind.bool => 'toggle',
     SceneParamKind.list => 'list',
   };
 
@@ -170,6 +173,22 @@ class _SceneParamsPanelState extends State<SceneParamsPanel> {
           current: p.defaultValue as SceneColor,
           allowNone: false,
           onPick: (c) => editor.setParamDefault(p.name, c!),
+        );
+      case SceneParamKind.bool:
+        var on = p.defaultValue as bool;
+        return Tappable(
+          onTap: () => editor.setParamDefault(p.name, !on),
+          child: Row(
+            children: [
+              Icon(
+                on ? Icons.check_box : Icons.check_box_outline_blank,
+                size: FwIconSize.md,
+                color: on ? context.colors.accent : context.colors.mut2,
+              ),
+              const SizedBox(width: FwSpacing.sm),
+              Text(on ? 'on' : 'off', style: context.type.body),
+            ],
+          ),
         );
       case SceneParamKind.list:
         var items = p.items;

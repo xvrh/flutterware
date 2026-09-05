@@ -227,6 +227,18 @@ class SceneInspector extends StatelessWidget {
             apply: (v) => node.opacity = v.clamp(0, 1),
           ),
         ]),
+        if (node != doc.root)
+          _bindable(
+            context,
+            node,
+            'visible',
+            _check(
+              context,
+              'Visible',
+              node.visible,
+              () => _door('visible', () => node.visible = !node.visible),
+            ),
+          ),
         if (node != doc.root) ..._repeat(context, node),
         const Divider(height: FwSpacing.xxl),
         ...switch (node) {
@@ -979,21 +991,34 @@ class SceneInspector extends StatelessWidget {
   }
 
   List<Widget> _shapeProps(BuildContext context, ShapeNode s) => [
-    Tappable(
-      onTap: () => _door('circle', () => s.circle = !s.circle),
-      child: Row(
-        children: [
-          Icon(
-            s.circle ? Icons.check_box : Icons.check_box_outline_blank,
-            size: FwIconSize.md,
-            color: s.circle ? context.colors.accent : context.colors.mut2,
-          ),
-          const SizedBox(width: FwSpacing.sm),
-          Text('Circle', style: context.type.body),
-        ],
-      ),
+    _check(
+      context,
+      'Circle',
+      s.circle,
+      () => _door('circle', () => s.circle = !s.circle),
     ),
   ];
+
+  /// A boolean as a row you tap: the box and its word.
+  Widget _check(
+    BuildContext context,
+    String label,
+    bool value,
+    VoidCallback onTap,
+  ) => Tappable(
+    onTap: onTap,
+    child: Row(
+      children: [
+        Icon(
+          value ? Icons.check_box : Icons.check_box_outline_blank,
+          size: FwIconSize.md,
+          color: value ? context.colors.accent : context.colors.mut2,
+        ),
+        const SizedBox(width: FwSpacing.sm),
+        Text(label, style: context.type.body),
+      ],
+    ),
+  );
 
   /// The widget's declared arguments, each at its override or its default —
   /// the same shape as a nested scene's parameters, because a declaration is
@@ -1183,6 +1208,19 @@ class SceneInspector extends StatelessWidget {
             ((r.args[p.name] ?? p.defaultValue) as num).toDouble(),
             const SceneNumberShape(perPixel: 1, decimals: 2),
             apply: (v) => r.args[p.name] = v,
+          ),
+          SceneParamKind.bool => Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            child: _check(
+              context,
+              p.name,
+              (r.args[p.name] ?? p.defaultValue) as bool,
+              () => _door(
+                'args',
+                () => r.args[p.name] =
+                    !((r.args[p.name] ?? p.defaultValue) as bool),
+              ),
+            ),
           ),
           SceneParamKind.string => Padding(
             padding: const EdgeInsets.only(bottom: FwSpacing.md),

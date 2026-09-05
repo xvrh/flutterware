@@ -74,6 +74,7 @@ Object? getSceneProperty(SceneNode node, String prop) => switch (prop) {
   'height' => sizeToWire(node.height),
   'corner' => node.corner,
   'opacity' => node.opacity,
+  'visible' => node.visible,
   'fill' => node.fill,
   'text' => (node as TextNode).text,
   'fontSize' => (node as TextNode).fontSize,
@@ -94,6 +95,7 @@ SceneParamKind? bindableKind(SceneNode node, String prop) => switch (prop) {
   'corner' ||
   'opacity' => SceneParamKind.number,
   'fill' => SceneParamKind.color,
+  'visible' => SceneParamKind.bool,
   'text' when node is TextNode => SceneParamKind.string,
   'fontSize' when node is TextNode => SceneParamKind.number,
   'color' when node is TextNode => SceneParamKind.color,
@@ -118,6 +120,8 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
       node.corner = (value! as num).toDouble();
     case 'opacity':
       node.opacity = (value! as num).toDouble();
+    case 'visible':
+      node.visible = value! as bool;
     case 'fill':
       node.fill = value as SceneColor?;
     case 'text':

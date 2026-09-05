@@ -96,6 +96,7 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
   if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
   if (n.corner != 0) 'corner': n.corner,
   if (n.opacity != 1) 'opacity': n.opacity,
+  if (!n.visible) 'visible': false,
   if (n.bindings.isNotEmpty)
     'bindings': {for (var e in n.bindings.entries) e.key: e.value.toWire()},
   ...switch (n) {
@@ -204,6 +205,7 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
     }
     ..corner = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1
+    ..visible = json['visible'] != false
     ..bindings.addAll(
       ((json['bindings'] as Map?) ?? const {}).map(
         (k, v) => MapEntry('$k', SceneBinding.fromWire('$v')),
@@ -390,6 +392,7 @@ Object _paramValue(SceneParamKind kind, Object? raw) => switch (kind) {
   SceneParamKind.color => SceneColor((raw! as num).toInt()),
   SceneParamKind.number => (raw! as num).toDouble(),
   SceneParamKind.string => raw! as String,
+  SceneParamKind.bool => raw! as bool,
   // A list's items are string and number fields only, so JSON carries them
   // as they are — the one parameter default that needs no reviving.
   SceneParamKind.list => [
@@ -468,7 +471,8 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
       _ => 1,
     }
     ..corner = number('corner') ?? 0
-    ..opacity = number('opacity') ?? 1;
+    ..opacity = number('opacity') ?? 1
+    ..visible = json['visible'] != false;
 
   if (json['fx'] case List fx when fx.length == 4) {
     double at(int i) => (fx[i] as num).toDouble();

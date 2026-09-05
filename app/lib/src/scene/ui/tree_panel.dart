@@ -160,6 +160,14 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
         ),
       if (node != doc.root)
         MenuItem(
+          node.visible ? 'Hide $what' : 'Show $what',
+          icon: node.visible
+              ? Icons.visibility_off_outlined
+              : Icons.visibility_outlined,
+          onSelected: () => editor.setVisible(!node.visible),
+        ),
+      if (node != doc.root)
+        MenuItem(
           'Duplicate $what',
           icon: Icons.copy_outlined,
           shortcut: '⌘D',
@@ -234,7 +242,11 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
                     node.name,
                     overflow: TextOverflow.ellipsis,
                     style: context.type.body.copyWith(
-                      color: hovered ? colors.accentDark : colors.ink,
+                      color: !node.visible
+                          ? colors.mut2
+                          : hovered
+                          ? colors.accentDark
+                          : colors.ink,
                     ),
                   ),
           ),

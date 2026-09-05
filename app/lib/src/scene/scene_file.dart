@@ -259,6 +259,7 @@ String _paramDefault(SceneParamDecl p) => switch (p.kind) {
   SceneParamKind.string => _str(p.defaultValue as String),
   SceneParamKind.number => _num(p.defaultValue as double),
   SceneParamKind.color => 'const ${_color(p.defaultValue as SceneColor)}',
+  SceneParamKind.bool => '${p.defaultValue}',
   SceneParamKind.list => 'const [${p.items.map(_item).join(', ')}]',
 };
 
@@ -326,6 +327,9 @@ void _emitNode(
       add('corner', n.corner, () => _num(n.corner));
     }
     if (n.opacity != 1) add('opacity', n.opacity, () => _num(n.opacity));
+    if (!n.visible || n.bindings.containsKey('visible')) {
+      add('visible', n.visible, () => '${n.visible}');
+    }
   }
 
   switch (n) {
@@ -882,7 +886,7 @@ class _Parser {
         refuse(
           dflt.offset,
           'parameter default',
-          'a default is a string, number or SceneColor(0x…) literal',
+          'a default is a string, number, bool or SceneColor(0x…) literal',
         );
         continue;
       }
@@ -913,6 +917,8 @@ class _Parser {
     switch (inner) {
       case SimpleStringLiteral(:var value):
         return (SceneParamKind.string, value);
+      case BooleanLiteral(:var value):
+        return (SceneParamKind.bool, value);
       case IntegerLiteral(:var value?):
         return (SceneParamKind.number, (negate ? -value : value).toDouble());
       case DoubleLiteral(:var value):
@@ -1456,6 +1462,7 @@ class _Parser {
     );
     _take(named, 'corner', (e) => n.corner = _doubleV(e, n, 'corner') ?? 0);
     _take(named, 'opacity', (e) => n.opacity = _doubleV(e, n, 'opacity') ?? 1);
+    _take(named, 'visible', (e) => n.visible = _boolV(e, n, 'visible') ?? true);
   }
 
   void _take(
@@ -1559,6 +1566,7 @@ class _Parser {
         SceneParamKind.string => 'String',
         SceneParamKind.number => 'double',
         SceneParamKind.color => 'SceneColor',
+        SceneParamKind.bool => 'bool',
         SceneParamKind.list => 'List<Map<String, Object>>',
       };
       refuse(
@@ -1646,6 +1654,13 @@ class _Parser {
     if (identical(v, _refused)) return null;
     if (v != null) return v as double;
     return _double(e);
+  }
+
+  bool? _boolV(Expression e, SceneNode n, String prop) {
+    var v = _paramRef(e, SceneParamKind.bool, n, prop);
+    if (identical(v, _refused)) return null;
+    if (v != null) return v as bool;
+    return _bool(e);
   }
 
   String? _stringV(Expression e, SceneNode n, String prop) {

@@ -40,7 +40,7 @@ bool isValidNodeName(String name) =>
 /// is a list of items, and what reads it is a node's [SceneNode.repeat]
 /// rather than a property. Substitution and repetition are the same
 /// mechanism seen from two sides, which is why they share this table.
-enum SceneParamKind { string, number, color, list }
+enum SceneParamKind { string, number, color, bool, list }
 
 /// One item of a list parameter: field name to value, and a value is a
 /// string or a number — the two kinds a bound property can take.
@@ -66,6 +66,7 @@ class SceneParamDecl {
     SceneParamKind.string => 'String',
     SceneParamKind.number => 'double',
     SceneParamKind.color => 'SceneColor',
+    SceneParamKind.bool => 'bool',
     // A record type, so `line.item` inside a repeat's closure is checked
     // against the fields the data actually has.
     SceneParamKind.list =>
@@ -156,7 +157,10 @@ sealed class SceneNode {
     this.borderWidth = 1,
     this.corner = 0,
     this.opacity = 1,
-  });
+    bool visible = true,
+    // A setter with a side effect (below) cannot be an initializing formal.
+    // ignore: prefer_initializing_formals
+  }) : _visible = visible;
 
   /// The node's identity — the field name in the file, and SOURCE-LEVEL
   /// ONLY. A compiled scene leaves it empty: Dart has no field-name
@@ -204,6 +208,19 @@ sealed class SceneNode {
 
   double corner;
   double opacity;
+
+  /// Whether the node is drawn and laid out at all. Not opacity zero: a
+  /// hidden node takes no room in a row, and a column closes over it. The
+  /// boolean a component most often exposes — show the badge, hide the
+  /// footer — which is why it is a property and not an effect.
+  bool get visible => _visible;
+  bool _visible;
+  set visible(bool value) {
+    _visible = value;
+    // A node that is not laid out keeps no rect: the last one it had would
+    // otherwise still catch a click and draw a selection box over nothing.
+    if (!value) measured = null;
+  }
 
   /// Laid-out rect in artboard coordinates, swept after each frame by
   /// whichever renderer measured it.
@@ -379,6 +396,7 @@ class FrameNode extends SceneNode {
     super.borderWidth,
     super.corner,
     super.opacity,
+    super.visible,
     this.layout = NodeLayout.absolute,
     this.gap = 8,
     double? padding,
@@ -513,6 +531,7 @@ class TextNode extends SceneNode {
     super.borderWidth,
     super.corner,
     super.opacity,
+    super.visible,
     this.fontSize = 16,
     this.weight = SceneFontWeight.w400,
     this.color = const SceneColor(0xFF1A1A1A),
@@ -547,6 +566,7 @@ class ShapeNode extends SceneNode {
     super.borderWidth,
     super.corner,
     super.opacity,
+    super.visible,
     this.circle = false,
   });
 
@@ -704,6 +724,7 @@ class ExternalNode extends SceneNode {
     super.borderWidth,
     super.corner,
     super.opacity,
+    super.visible,
   }) : declared = declared,
        entry = declared.entry,
        args = declared.toMap();
@@ -723,6 +744,7 @@ class ExternalNode extends SceneNode {
     super.borderWidth,
     super.corner,
     super.opacity,
+    super.visible,
     Map<String, Object?>? args,
   }) : declared = null,
        args = args ?? {};
@@ -790,6 +812,7 @@ class SceneRefNode extends SceneNode {
     super.borderWidth,
     super.corner,
     super.opacity,
+    super.visible,
   }) : declared = declared,
        sceneClassName = declared.entry,
        args = declared.toMap();
@@ -807,6 +830,7 @@ class SceneRefNode extends SceneNode {
     super.borderWidth,
     super.corner,
     super.opacity,
+    super.visible,
     Map<String, Object?>? args,
   }) : declared = null,
        args = args ?? {};
@@ -1000,6 +1024,7 @@ class SceneDocument extends SceneListenable {
       if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
       'corner': n.corner,
       'opacity': n.fxRendered('opacity'),
+      if (!n.visible) 'visible': false,
       // The imposed transforms have no authored slots — identity is the
       // base — so they ride the wire only when a writer moves them.
       // [translateX, translateY, scale, rotate°], applied about the center.
@@ -1156,7 +1181,7 @@ class SceneDocument extends SceneListenable {
     var frame = scope ?? root;
     for (var c in frame.children.reversed) {
       var rect = c.measured;
-      if (rect != null && rect.contains(x, y)) return c;
+      if (c.visible && rect != null && rect.contains(x, y)) return c;
     }
     return null;
   }
@@ -1165,7 +1190,7 @@ class SceneDocument extends SceneListenable {
   SceneNode? hitDeep(double x, double y) {
     SceneNode? visit(SceneNode n) {
       var rect = n.measured;
-      if (rect == null || !rect.contains(x, y)) return null;
+      if (!n.visible || rect == null || !rect.contains(x, y)) return null;
       for (var c in n.children.reversed) {
         var hit = visit(c);
         if (hit != null) return hit;
@@ -1252,6 +1277,7 @@ class SceneDocument extends SceneListenable {
           ..borderWidth = snap.borderWidth
           ..corner = snap.corner
           ..opacity = snap.opacity
+          ..visible = snap.visible
           ..bindings.clear()
           ..bindings.addAll(snap.bindings);
         return into;
@@ -1329,6 +1355,7 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     ..borderWidth = node.borderWidth
     ..corner = node.corner
     ..opacity = node.opacity
+    ..visible = node.visible
     ..bindings.addAll(node.bindings);
   return copy;
 }

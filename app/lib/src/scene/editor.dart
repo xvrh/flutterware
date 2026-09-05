@@ -603,6 +603,7 @@ class SceneEditor extends SceneListenable {
     SceneParamKind.string => value is String,
     SceneParamKind.number => value is double,
     SceneParamKind.color => value is SceneColor,
+    SceneParamKind.bool => value is bool,
     SceneParamKind.list => value is List,
   };
 
@@ -611,8 +612,21 @@ class SceneEditor extends SceneListenable {
     SceneParamKind.string => '',
     SceneParamKind.number => 0.0,
     SceneParamKind.color => const SceneColor(0xFF000000),
+    SceneParamKind.bool => false,
     SceneParamKind.list => const <SceneItem>[],
   };
+
+  /// Shows or hides every selected node — one entry, whatever the count.
+  void setVisible(bool visible) {
+    var nodes = selectedNodes.where((n) => n != doc.root).toList();
+    if (nodes.isEmpty) return;
+    var what = nodes.length == 1 ? nodes.single.name : '${nodes.length} nodes';
+    perform(visible ? 'Show $what' : 'Hide $what', () {
+      for (var n in nodes) {
+        n.visible = visible;
+      }
+    });
+  }
 
   /// Renames [node]. A name is a Dart identifier and the field name in the
   /// file, so it must be free among the scene's nodes and parameters; every

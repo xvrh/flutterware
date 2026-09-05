@@ -208,6 +208,7 @@ String _paramDefault(SceneParamDecl p) => switch (p.kind) {
   SceneParamKind.string => _str(p.defaultValue as String),
   SceneParamKind.number => _num(p.defaultValue as double),
   SceneParamKind.color => 'const ${_color(p.defaultValue as SceneColor)}',
+  SceneParamKind.bool => '${p.defaultValue}',
   // A track interpolates between two values; a list is not one.
   SceneParamKind.list => throw ArgumentError(
     'a motion parameter cannot be a list — "${p.name}"',

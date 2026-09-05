@@ -303,8 +303,9 @@ class _SceneViewState extends State<SceneView> {
             clipBehavior: Clip.none,
             children: [
               for (var c in f.children)
-                for (var drawn in widget.scene.expand(c))
-                  _child(context, f, drawn, prefix),
+                if (c.visible)
+                  for (var drawn in widget.scene.expand(c))
+                    _child(context, f, drawn, prefix),
             ],
           );
           // A stack cannot lay out under an unbounded constraint, and a
@@ -333,8 +334,9 @@ class _SceneViewState extends State<SceneView> {
         Widget flex({required bool expand}) {
           var children = [
             for (var c in f.children)
-              for (var drawn in widget.scene.expand(c))
-                _child(context, f, drawn, prefix, expand: expand),
+              if (c.visible)
+                for (var drawn in widget.scene.expand(c))
+                  _child(context, f, drawn, prefix, expand: expand),
           ];
           return row
               ? Row(
@@ -439,7 +441,8 @@ class _SceneViewState extends State<SceneView> {
   Widget _table(BuildContext context, FrameNode f, String prefix) {
     var rows = [
       for (var c in f.children)
-        for (var drawn in widget.scene.expand(c)) drawn,
+        if (c.visible)
+          for (var drawn in widget.scene.expand(c)) drawn,
     ];
     List<SceneNode> cellsOf(SceneNode row) =>
         row is FrameNode ? row.children : [row];
