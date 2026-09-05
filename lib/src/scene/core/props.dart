@@ -98,6 +98,7 @@ class SceneProp {
     this.animatable = false,
     this.choices,
     this.sides,
+    this.quad,
   });
 
   /// The file's named argument, the read plane's key, the motion's track
@@ -120,9 +121,12 @@ class SceneProp {
   /// For a [ScenePropKind.choice].
   final SceneChoices? choices;
 
-  /// For a [ScenePropKind.edges]: the four file names of the sides, in
-  /// left-top-right-bottom order — `paddingLeft`, `paddingTop`…
+  /// For a [ScenePropKind.edges]: the four file names of the parts, in the
+  /// quad's own order — `paddingLeft`, `paddingTop`…; `cornerTopLeft`…
   final List<String>? sides;
+
+  /// For a [ScenePropKind.edges]: which quad it is, off the wire.
+  final SceneQuad Function(Object? wire)? quad;
 
   final Object? Function(SceneNode node) read;
   final void Function(SceneNode node, Object? value) write;
@@ -152,7 +156,7 @@ class SceneProp {
     ScenePropKind.sizes => [
       for (var c in value! as List<double?>) sizeToWire(c),
     ],
-    ScenePropKind.edges => (value! as SceneEdges).toWire(),
+    ScenePropKind.edges => (value! as SceneQuad).toWire(),
     ScenePropKind.choice => value == null ? null : choices!.toWire(value),
     _ => value,
   };
@@ -169,7 +173,7 @@ class SceneProp {
       List l => [for (var c in l) sizeFromWire(c)],
       _ => <double?>[],
     },
-    ScenePropKind.edges => SceneEdges.fromWire(raw),
+    ScenePropKind.edges => quad!(raw),
     ScenePropKind.choice => switch (raw) {
       String name => choices!.valueOf(name) ?? defaultValue,
       // Older payloads carried the index.
@@ -263,10 +267,17 @@ const sceneCommonProps = <SceneProp>[
   ),
   SceneProp(
     'corner',
-    ScenePropKind.number,
-    defaultValue: 0.0,
-    read: _corner,
-    write: _setCorner,
+    ScenePropKind.edges,
+    defaultValue: SceneCorners.zero,
+    sides: [
+      'cornerTopLeft',
+      'cornerTopRight',
+      'cornerBottomRight',
+      'cornerBottomLeft',
+    ],
+    quad: SceneCorners.fromWire,
+    read: _corners,
+    write: _setCorners,
   ),
   SceneProp(
     'opacity',
@@ -283,6 +294,30 @@ const sceneCommonProps = <SceneProp>[
     read: _visible,
     write: _setVisible,
   ),
+  SceneProp(
+    'minWidth',
+    ScenePropKind.number,
+    read: _minWidth,
+    write: _setMinWidth,
+  ),
+  SceneProp(
+    'maxWidth',
+    ScenePropKind.number,
+    read: _maxWidth,
+    write: _setMaxWidth,
+  ),
+  SceneProp(
+    'minHeight',
+    ScenePropKind.number,
+    read: _minHeight,
+    write: _setMinHeight,
+  ),
+  SceneProp(
+    'maxHeight',
+    ScenePropKind.number,
+    read: _maxHeight,
+    write: _setMaxHeight,
+  ),
 ];
 
 /// A frame's own properties, after the common ones. `children` and the
@@ -296,6 +331,14 @@ const sceneFrameProps = <SceneProp>[
     choices: _layouts,
     read: _layout,
     write: _setLayout,
+  ),
+  SceneProp(
+    'clip',
+    ScenePropKind.boolean,
+    owner: ScenePropOwner.frame,
+    defaultValue: false,
+    read: _clip,
+    write: _setClip,
   ),
   SceneProp(
     'gap',
@@ -312,6 +355,7 @@ const sceneFrameProps = <SceneProp>[
     owner: ScenePropOwner.frame,
     defaultValue: SceneEdges.zero,
     sides: ['paddingLeft', 'paddingTop', 'paddingRight', 'paddingBottom'],
+    quad: SceneEdges.fromWire,
     read: _padding,
     write: _setPadding,
   ),
@@ -334,6 +378,7 @@ const sceneFrameProps = <SceneProp>[
       'cellPaddingRight',
       'cellPaddingBottom',
     ],
+    quad: SceneEdges.fromWire,
     read: _cellPadding,
     write: _setCellPadding,
   ),
@@ -474,13 +519,27 @@ void _setBorderColor(SceneNode n, Object? v) =>
 Object? _borderWidth(SceneNode n) => n.borderWidth;
 void _setBorderWidth(SceneNode n, Object? v) =>
     n.borderWidth = (v! as num).toDouble();
-Object? _corner(SceneNode n) => n.corner;
-void _setCorner(SceneNode n, Object? v) => n.corner = (v! as num).toDouble();
+Object? _corners(SceneNode n) => n.corners;
+void _setCorners(SceneNode n, Object? v) => n.corners = v! as SceneCorners;
+Object? _minWidth(SceneNode n) => n.minWidth;
+void _setMinWidth(SceneNode n, Object? v) =>
+    n.minWidth = (v as num?)?.toDouble();
+Object? _maxWidth(SceneNode n) => n.maxWidth;
+void _setMaxWidth(SceneNode n, Object? v) =>
+    n.maxWidth = (v as num?)?.toDouble();
+Object? _minHeight(SceneNode n) => n.minHeight;
+void _setMinHeight(SceneNode n, Object? v) =>
+    n.minHeight = (v as num?)?.toDouble();
+Object? _maxHeight(SceneNode n) => n.maxHeight;
+void _setMaxHeight(SceneNode n, Object? v) =>
+    n.maxHeight = (v as num?)?.toDouble();
 Object? _opacity(SceneNode n) => n.opacity;
 void _setOpacity(SceneNode n, Object? v) => n.opacity = (v! as num).toDouble();
 Object? _visible(SceneNode n) => n.visible;
 void _setVisible(SceneNode n, Object? v) => n.visible = v! as bool;
 
+Object? _clip(SceneNode n) => (n as FrameNode).clip;
+void _setClip(SceneNode n, Object? v) => (n as FrameNode).clip = v! as bool;
 Object? _layout(SceneNode n) => (n as FrameNode).layout;
 void _setLayout(SceneNode n, Object? v) =>
     (n as FrameNode).layout = v! as NodeLayout;

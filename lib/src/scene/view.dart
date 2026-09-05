@@ -240,10 +240,10 @@ class _SceneViewState extends State<SceneView> {
         color: root.fill?.flutter ?? const Color(0x00000000),
         // The root's corner lives here with its fill, since its decoration
         // is skipped below — a nested scene's root is often a pill.
-        borderRadius: root.corner == 0
-            ? null
-            : BorderRadius.circular(root.corner),
-        clipBehavior: root.corner == 0 ? Clip.none : Clip.antiAlias,
+        borderRadius: root.corners.isZero ? null : root.corners.flutter,
+        clipBehavior: root.corners.isZero && !root.clip
+            ? Clip.none
+            : Clip.antiAlias,
         child: _node(context, root, root: true),
       ),
     );
@@ -393,7 +393,7 @@ class _SceneViewState extends State<SceneView> {
       // The root's own fill is painted by the Material above, so a nested
       // decoration would double it.
       decoration:
-          !root && (fill != null || n.borderColor != null || n.corner > 0)
+          !root && (fill != null || n.borderColor != null || !n.corners.isZero)
           ? BoxDecoration(
               color: fill?.flutter,
               border: n.borderColor == null
@@ -403,13 +403,32 @@ class _SceneViewState extends State<SceneView> {
                       width: n.borderWidth,
                     ),
               shape: circle ? BoxShape.circle : BoxShape.rectangle,
-              borderRadius: circle || n.corner == 0
+              borderRadius: circle || n.corners.isZero
                   ? null
-                  : BorderRadius.circular(n.corner),
+                  : n.corners.flutter,
             )
           : null,
       child: inner,
     );
+    // A clipping frame cuts its children at its own corners; a bounded node
+    // is held between its bounds whatever its parent hands it.
+    if (n is FrameNode && n.clip && !root) {
+      result = ClipRRect(borderRadius: n.corners.flutter, child: result);
+    }
+    if (n.minWidth != null ||
+        n.maxWidth != null ||
+        n.minHeight != null ||
+        n.maxHeight != null) {
+      result = ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: n.minWidth ?? 0,
+          maxWidth: n.maxWidth ?? double.infinity,
+          minHeight: n.minHeight ?? 0,
+          maxHeight: n.maxHeight ?? double.infinity,
+        ),
+        child: result,
+      );
+    }
 
     var opacity = (n.fxRendered('opacity') as double).clamp(0.0, 1.0);
     if (opacity < 1) result = Opacity(opacity: opacity, child: result);
@@ -530,7 +549,7 @@ class _SceneViewState extends State<SceneView> {
               ),
               width: r.borderWidth,
             ),
-      borderRadius: r.corner == 0 ? null : BorderRadius.circular(r.corner),
+      borderRadius: r.corners.isZero ? null : r.corners.flutter,
     );
   }
 

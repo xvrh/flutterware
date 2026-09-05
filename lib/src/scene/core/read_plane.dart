@@ -101,7 +101,7 @@ Object? getSceneProperty(SceneNode node, String prop) {
   if (p == null) return null;
   var v = p.read(node);
   return switch (p.kind) {
-    ScenePropKind.edges => (v! as SceneEdges).left,
+    ScenePropKind.edges => (v! as SceneQuad).sides.first,
     ScenePropKind.size => sizeToWire(v as double?),
     _ => v,
   };
@@ -133,7 +133,7 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
       _ => '$value',
     },
     ScenePropKind.number => (value! as num).toDouble(),
-    ScenePropKind.edges => SceneEdges.all((value! as num).toDouble()),
+    ScenePropKind.edges => p.quad!(value),
     ScenePropKind.size => sizeFromWire(value),
     _ => value,
   });

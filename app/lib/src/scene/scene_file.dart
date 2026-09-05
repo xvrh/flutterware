@@ -324,16 +324,13 @@ void _emitNode(
           // One number while one number says it, four names when it does
           // not. A frame that only ever wanted `padding: 16` keeps writing
           // that.
-          var edges = v! as SceneEdges;
-          if (edges.isUniform) {
-            add(p.name, edges.left, () => _num(edges.left));
+          var quad = v! as SceneQuad;
+          if (quad.isUniform) {
+            var one = quad.sides.first;
+            add(p.name, one, () => _num(one));
           } else {
-            for (var (side, value) in [
-              (p.sides![0], edges.left),
-              (p.sides![1], edges.top),
-              (p.sides![2], edges.right),
-              (p.sides![3], edges.bottom),
-            ]) {
+            for (var (k, value) in quad.sides.indexed) {
+              var side = p.sides![k];
               if (value != 0 || n.bindings.containsKey(side)) {
                 add(side, value, () => _num(value));
               }
@@ -1332,19 +1329,13 @@ class _Parser {
         case ScenePropKind.edges:
           _take(named, p.name, (e) {
             var v = _doubleV(e, n, p.name);
-            if (v != null) p.write(n, SceneEdges.all(v));
+            if (v != null) p.write(n, p.quad!(v));
           });
           for (var (k, side) in p.sides!.indexed) {
             _take(named, side, (e) {
               var v = _doubleV(e, n, side);
               if (v == null) return;
-              var edges = p.read(n)! as SceneEdges;
-              p.write(n, switch (k) {
-                0 => edges.copyWith(left: v),
-                1 => edges.copyWith(top: v),
-                2 => edges.copyWith(right: v),
-                _ => edges.copyWith(bottom: v),
-              });
+              p.write(n, (p.read(n)! as SceneQuad).withSide(k, v));
             });
           }
         case ScenePropKind.sizes:

@@ -156,12 +156,26 @@ sealed class SceneNode {
     this.fill,
     this.borderColor,
     this.borderWidth = 1,
-    this.corner = 0,
+    double corner = 0,
+    double? cornerTopLeft,
+    double? cornerTopRight,
+    double? cornerBottomRight,
+    double? cornerBottomLeft,
     this.opacity = 1,
+    this.minWidth,
+    this.maxWidth,
+    this.minHeight,
+    this.maxHeight,
     bool visible = true,
     // A setter with a side effect (below) cannot be an initializing formal.
     // ignore: prefer_initializing_formals
-  }) : _visible = visible;
+  }) : _visible = visible,
+       corners = SceneCorners(
+         topLeft: cornerTopLeft ?? corner,
+         topRight: cornerTopRight ?? corner,
+         bottomRight: cornerBottomRight ?? corner,
+         bottomLeft: cornerBottomLeft ?? corner,
+       );
 
   /// The node's identity — the field name in the file, and SOURCE-LEVEL
   /// ONLY. A compiled scene leaves it empty: Dart has no field-name
@@ -207,8 +221,21 @@ sealed class SceneNode {
   SceneColor? borderColor;
   double borderWidth;
 
-  double corner;
+  /// The corner radii. `corner` reads and writes them as one number — what
+  /// they are for most nodes.
+  SceneCorners corners;
+  double get corner => corners.topLeft;
+  set corner(double value) => corners = SceneCorners.all(value);
+
   double opacity;
+
+  /// Bounds on the laid-out size, when a node has them: a card no narrower
+  /// than its title, a column no wider than a line of reading. Null is no
+  /// bound.
+  double? minWidth;
+  double? maxWidth;
+  double? minHeight;
+  double? maxHeight;
 
   /// Whether the node is drawn and laid out at all. Not opacity zero: a
   /// hidden node takes no room in a row, and a column closes over it. The
@@ -396,9 +423,18 @@ class FrameNode extends SceneNode {
     super.borderColor,
     super.borderWidth,
     super.corner,
+    super.cornerTopLeft,
+    super.cornerTopRight,
+    super.cornerBottomRight,
+    super.cornerBottomLeft,
+    super.minWidth,
+    super.maxWidth,
+    super.minHeight,
+    super.maxHeight,
     super.opacity,
     super.visible,
     this.layout = NodeLayout.absolute,
+    this.clip = false,
     this.gap = 8,
     double? padding,
     double? paddingLeft,
@@ -438,6 +474,11 @@ class FrameNode extends SceneNode {
   SceneRepeat? repeated;
 
   NodeLayout layout;
+
+  /// Whether children are cut at the frame's edge and corners rather than
+  /// drawn past them — a viewport, a thumbnail's mask.
+  bool clip;
+
   double gap;
   SceneEdges padding;
 
@@ -531,6 +572,14 @@ class TextNode extends SceneNode {
     super.borderColor,
     super.borderWidth,
     super.corner,
+    super.cornerTopLeft,
+    super.cornerTopRight,
+    super.cornerBottomRight,
+    super.cornerBottomLeft,
+    super.minWidth,
+    super.maxWidth,
+    super.minHeight,
+    super.maxHeight,
     super.opacity,
     super.visible,
     this.fontSize = 16,
@@ -566,6 +615,14 @@ class ShapeNode extends SceneNode {
     super.borderColor,
     super.borderWidth,
     super.corner,
+    super.cornerTopLeft,
+    super.cornerTopRight,
+    super.cornerBottomRight,
+    super.cornerBottomLeft,
+    super.minWidth,
+    super.maxWidth,
+    super.minHeight,
+    super.maxHeight,
     super.opacity,
     super.visible,
     this.circle = false,
@@ -724,6 +781,14 @@ class ExternalNode extends SceneNode {
     super.borderColor,
     super.borderWidth,
     super.corner,
+    super.cornerTopLeft,
+    super.cornerTopRight,
+    super.cornerBottomRight,
+    super.cornerBottomLeft,
+    super.minWidth,
+    super.maxWidth,
+    super.minHeight,
+    super.maxHeight,
     super.opacity,
     super.visible,
   }) : declared = declared,
@@ -744,6 +809,14 @@ class ExternalNode extends SceneNode {
     super.borderColor,
     super.borderWidth,
     super.corner,
+    super.cornerTopLeft,
+    super.cornerTopRight,
+    super.cornerBottomRight,
+    super.cornerBottomLeft,
+    super.minWidth,
+    super.maxWidth,
+    super.minHeight,
+    super.maxHeight,
     super.opacity,
     super.visible,
     Map<String, Object?>? args,
@@ -812,6 +885,14 @@ class SceneRefNode extends SceneNode {
     super.borderColor,
     super.borderWidth,
     super.corner,
+    super.cornerTopLeft,
+    super.cornerTopRight,
+    super.cornerBottomRight,
+    super.cornerBottomLeft,
+    super.minWidth,
+    super.maxWidth,
+    super.minHeight,
+    super.maxHeight,
     super.opacity,
     super.visible,
   }) : declared = declared,
@@ -830,6 +911,14 @@ class SceneRefNode extends SceneNode {
     super.borderColor,
     super.borderWidth,
     super.corner,
+    super.cornerTopLeft,
+    super.cornerTopRight,
+    super.cornerBottomRight,
+    super.cornerBottomLeft,
+    super.minWidth,
+    super.maxWidth,
+    super.minHeight,
+    super.maxHeight,
     super.opacity,
     super.visible,
     Map<String, Object?>? args,
@@ -1093,7 +1182,7 @@ class SceneDocument extends SceneListenable {
       'w': sizeToWire(r.width) ?? picture['w'],
       'h': r.height ?? picture['h'],
       if (r.fill == null && !r.hasFx('fill')) 'fill': picture['fill'],
-      if (r.corner == 0) 'corner': picture['corner'],
+      if (r.corners.isZero) 'corner': picture['corner'],
       'opacity':
           (r.fxRendered('opacity') as double) *
           ((picture['opacity'] as num?)?.toDouble() ?? 1),

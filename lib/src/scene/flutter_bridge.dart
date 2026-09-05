@@ -28,6 +28,15 @@ extension SceneEdgesToFlutter on SceneEdges {
   EdgeInsets get flutter => EdgeInsets.fromLTRB(left, top, right, bottom);
 }
 
+extension SceneCornersToFlutter on SceneCorners {
+  BorderRadius get flutter => BorderRadius.only(
+    topLeft: Radius.circular(topLeft),
+    topRight: Radius.circular(topRight),
+    bottomRight: Radius.circular(bottomRight),
+    bottomLeft: Radius.circular(bottomLeft),
+  );
+}
+
 extension SceneCrossAxisAlignmentToFlutter on SceneCrossAxisAlignment {
   CrossAxisAlignment get flutter => CrossAxisAlignment.values[index];
 }

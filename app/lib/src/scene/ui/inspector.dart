@@ -232,8 +232,8 @@ class SceneInspector extends StatelessWidget {
         _row([
           _number(
             'corner',
-            'Corner',
-            node.corner,
+            node.corners.isUniform ? 'Corner' : 'Corners · all',
+            node.corners.isUniform ? node.corner : 0,
             SceneNumberShape.pixels,
             apply: (v) => node.corner = v,
           ),
@@ -245,6 +245,27 @@ class SceneInspector extends StatelessWidget {
             apply: (v) => node.opacity = v.clamp(0, 1),
           ),
         ]),
+        // One number for most nodes; four when a corner has to differ, the
+        // way a padding names its sides. Bounds likewise: behind a word
+        // until a node has any, because most never will. Both words share a
+        // line, so the folded state costs one row.
+        if (node.corners.isUniform && !_hasBounds(node))
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            // A Wrap, not a Row: two short words in the app's font, and a
+            // second line rather than an overflow under a wider one.
+            child: Wrap(
+              spacing: FwSpacing.md,
+              children: [
+                _cornersWord(context, node),
+                _boundsWord(context, node),
+              ],
+            ),
+          )
+        else ...[
+          ..._corners(context, node),
+          ..._bounds(context, node),
+        ],
         if (node != doc.root)
           _bindable(
             context,
@@ -659,6 +680,15 @@ class SceneInspector extends StatelessWidget {
   ];
 
   List<Widget> _frameProps(BuildContext context, FrameNode f) => [
+    Padding(
+      padding: const EdgeInsets.only(bottom: FwSpacing.md),
+      child: _check(
+        context,
+        'Clip children at the edge',
+        f.clip,
+        () => _door('clip', () => f.clip = !f.clip),
+      ),
+    ),
     _label(context, 'Layout'),
     FwPicker<NodeLayout>(
       selected: f.layout,
@@ -1017,6 +1047,125 @@ class SceneInspector extends StatelessWidget {
     ),
   ];
 
+  static bool _hasBounds(SceneNode node) =>
+      node.minWidth != null ||
+      node.maxWidth != null ||
+      node.minHeight != null ||
+      node.maxHeight != null;
+
+  Widget _boundsWord(BuildContext context, SceneNode node) => Tappable(
+    onTap: () =>
+        _door('minWidth', () => node.minWidth = node.measured?.width ?? 100),
+    child: Text(
+      'bounds',
+      style: context.type.caption.copyWith(color: context.colors.accent),
+    ),
+  );
+
+  /// Min and max width and height, behind a word until any is set.
+  List<Widget> _bounds(BuildContext context, SceneNode node) {
+    if (!_hasBounds(node)) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(bottom: FwSpacing.md),
+          child: _boundsWord(context, node),
+        ),
+      ];
+    }
+    Widget bound(
+      String prop,
+      String label,
+      double? value,
+      void Function(double?) set,
+    ) => _number(
+      prop,
+      '$label (0 = none)',
+      value ?? 0,
+      SceneNumberShape.pixels,
+      apply: (v) => set(v <= 0 ? null : v),
+    );
+    return [
+      _row([
+        bound('minWidth', 'Min W', node.minWidth, (v) => node.minWidth = v),
+        bound('maxWidth', 'Max W', node.maxWidth, (v) => node.maxWidth = v),
+      ]),
+      _row([
+        bound('minHeight', 'Min H', node.minHeight, (v) => node.minHeight = v),
+        bound('maxHeight', 'Max H', node.maxHeight, (v) => node.maxHeight = v),
+      ]),
+    ];
+  }
+
+  Widget _cornersWord(BuildContext context, SceneNode node) => Tappable(
+    onTap: () => _door(
+      'corner',
+      // Nudged apart so the four fields appear; back together is a number
+      // in any one of them matching the rest.
+      () => node.corners = node.corners.copyWith(
+        bottomRight: node.corners.topLeft + 0.5,
+      ),
+    ),
+    child: Text(
+      'corners one by one',
+      style: context.type.caption.copyWith(color: context.colors.accent),
+    ),
+  );
+
+  /// The corners one by one, behind a word: most nodes never open it.
+  List<Widget> _corners(BuildContext context, SceneNode node) {
+    var c = node.corners;
+    if (c.isUniform) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(bottom: FwSpacing.md),
+          child: _cornersWord(context, node),
+        ),
+      ];
+    }
+    Widget corner(
+      String prop,
+      String label,
+      double value,
+      SceneCorners Function(double) set,
+    ) => _number(
+      prop,
+      label,
+      value,
+      SceneNumberShape.pixels,
+      apply: (v) => node.corners = set(v),
+    );
+    return [
+      _row([
+        corner(
+          'cornerTopLeft',
+          'Top left',
+          c.topLeft,
+          (v) => c.copyWith(topLeft: v),
+        ),
+        corner(
+          'cornerTopRight',
+          'Top right',
+          c.topRight,
+          (v) => c.copyWith(topRight: v),
+        ),
+      ]),
+      _row([
+        corner(
+          'cornerBottomLeft',
+          'Bottom left',
+          c.bottomLeft,
+          (v) => c.copyWith(bottomLeft: v),
+        ),
+        corner(
+          'cornerBottomRight',
+          'Bottom right',
+          c.bottomRight,
+          (v) => c.copyWith(bottomRight: v),
+        ),
+      ]),
+    ];
+  }
+
   /// A boolean as a row you tap: the box and its word.
   Widget _check(
     BuildContext context,
@@ -1033,7 +1182,9 @@ class SceneInspector extends StatelessWidget {
           color: value ? context.colors.accent : context.colors.mut2,
         ),
         const SizedBox(width: FwSpacing.sm),
-        Text(label, style: context.type.body),
+        // Flexible: a label is a sentence in one place, and the test font
+        // is a box per glyph, so a fixed one overflows there first.
+        Flexible(child: Text(label, style: context.type.body)),
       ],
     ),
   );

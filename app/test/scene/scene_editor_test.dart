@@ -16,6 +16,20 @@ import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/ui/inspector.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
+/// The inspector is a list and the content field sits below the geometry;
+/// the outermost Scrollable in it is the list (a text field has one too).
+Future<void> scrollInspectorTo(WidgetTester tester, Finder target) =>
+    tester.scrollUntilVisible(
+      target,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byType(SceneInspector),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+
 void main() {
   bindingDoorTests();
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -306,6 +320,8 @@ void main() {
       await tester.pump();
       editor.select(editor.doc.nodeNamed('headline'));
       await tester.pump();
+      // The content field sits below the geometry; the inspector scrolls.
+      await scrollInspectorTo(tester, find.byType(TextFormField));
       await tester.enterText(
         find.byType(TextFormField),
         'Fresh coffee, sooner',
@@ -339,6 +355,7 @@ void main() {
       );
       await tester.tap(find.text('headline'));
       await tester.pump();
+      await scrollInspectorTo(tester, find.byType(TextFormField));
       await tester.enterText(
         find.byType(TextFormField),
         'Fresh coffee, sooner',

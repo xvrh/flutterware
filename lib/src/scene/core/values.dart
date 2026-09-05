@@ -75,13 +75,26 @@ enum SceneCrossAxisAlignment { start, end, center, stretch, baseline }
 /// that is what the file spells and what it becomes.
 enum SceneTextAlign { left, right, center, justify }
 
+/// Four numbers that are one when they agree: edges, corners. What the
+/// property table needs to spell either as one number or four named parts.
+abstract interface class SceneQuad {
+  /// The four parts, in the order the file names them.
+  List<double> get sides;
+  bool get isUniform;
+  bool get isZero;
+  SceneQuad withSide(int index, double value);
+
+  /// The one number when they agree, the four otherwise.
+  Object toWire();
+}
+
 /// Space inside a frame, per side.
 ///
 /// One value where there used to be a number, because the number could only
 /// ever be uniform and the renderer was quietly making the vertical inset
 /// six tenths of the horizontal one — a guess that looked deliberate and was
 /// not. A cell in a table wants a different top from its left.
-class SceneEdges {
+class SceneEdges implements SceneQuad {
   const SceneEdges({
     this.left = 0,
     this.top = 0,
@@ -102,11 +115,24 @@ class SceneEdges {
   final double right;
   final double bottom;
 
+  @override
   bool get isZero => left == 0 && top == 0 && right == 0 && bottom == 0;
 
   /// Whether one number says all of it — what the file and the inspector
   /// offer first, because it is what most frames want.
+  @override
   bool get isUniform => left == top && top == right && right == bottom;
+
+  @override
+  List<double> get sides => [left, top, right, bottom];
+
+  @override
+  SceneEdges withSide(int index, double value) => switch (index) {
+    0 => copyWith(left: value),
+    1 => copyWith(top: value),
+    2 => copyWith(right: value),
+    _ => copyWith(bottom: value),
+  };
 
   SceneEdges copyWith({
     double? left,
@@ -121,6 +147,7 @@ class SceneEdges {
   );
 
   /// `[l, t, r, b]`, or the one number when they agree.
+  @override
   Object toWire() => isUniform ? left : [left, top, right, bottom];
 
   /// Reads [toWire], and the plain number older payloads carried.
@@ -148,6 +175,96 @@ class SceneEdges {
 
   @override
   String toString() => 'SceneEdges($left, $top, $right, $bottom)';
+}
+
+/// A node's corner radii, one per corner, clockwise from the top left.
+///
+/// `corner: 16` is still what most nodes want and still what the file
+/// spells for them; a tab that is square along its bottom names its
+/// corners, the way a padding names its sides.
+class SceneCorners implements SceneQuad {
+  const SceneCorners({
+    this.topLeft = 0,
+    this.topRight = 0,
+    this.bottomRight = 0,
+    this.bottomLeft = 0,
+  });
+
+  const SceneCorners.all(double value)
+    : topLeft = value,
+      topRight = value,
+      bottomRight = value,
+      bottomLeft = value;
+
+  static const zero = SceneCorners();
+
+  final double topLeft;
+  final double topRight;
+  final double bottomRight;
+  final double bottomLeft;
+
+  @override
+  bool get isZero =>
+      topLeft == 0 && topRight == 0 && bottomRight == 0 && bottomLeft == 0;
+
+  @override
+  bool get isUniform =>
+      topLeft == topRight &&
+      topRight == bottomRight &&
+      bottomRight == bottomLeft;
+
+  @override
+  List<double> get sides => [topLeft, topRight, bottomRight, bottomLeft];
+
+  SceneCorners copyWith({
+    double? topLeft,
+    double? topRight,
+    double? bottomRight,
+    double? bottomLeft,
+  }) => SceneCorners(
+    topLeft: topLeft ?? this.topLeft,
+    topRight: topRight ?? this.topRight,
+    bottomRight: bottomRight ?? this.bottomRight,
+    bottomLeft: bottomLeft ?? this.bottomLeft,
+  );
+
+  @override
+  SceneCorners withSide(int index, double value) => switch (index) {
+    0 => copyWith(topLeft: value),
+    1 => copyWith(topRight: value),
+    2 => copyWith(bottomRight: value),
+    _ => copyWith(bottomLeft: value),
+  };
+
+  @override
+  Object toWire() =>
+      isUniform ? topLeft : [topLeft, topRight, bottomRight, bottomLeft];
+
+  static SceneCorners fromWire(Object? value) => switch (value) {
+    num n => SceneCorners.all(n.toDouble()),
+    List l when l.length == 4 => SceneCorners(
+      topLeft: (l[0] as num).toDouble(),
+      topRight: (l[1] as num).toDouble(),
+      bottomRight: (l[2] as num).toDouble(),
+      bottomLeft: (l[3] as num).toDouble(),
+    ),
+    _ => zero,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SceneCorners &&
+      other.topLeft == topLeft &&
+      other.topRight == topRight &&
+      other.bottomRight == bottomRight &&
+      other.bottomLeft == bottomLeft;
+
+  @override
+  int get hashCode => Object.hash(topLeft, topRight, bottomRight, bottomLeft);
+
+  @override
+  String toString() =>
+      'SceneCorners($topLeft, $topRight, $bottomRight, $bottomLeft)';
 }
 
 /// A size on its way out to the wire or a file.

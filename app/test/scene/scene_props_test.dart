@@ -14,7 +14,7 @@ Object? sample(SceneProp p) => switch (p.kind) {
   ScenePropKind.color => const SceneColor(0xFF123456),
   ScenePropKind.size => p.name == 'width' ? double.infinity : 42.0,
   ScenePropKind.sizes => <double?>[double.infinity, 48, null],
-  ScenePropKind.edges => const SceneEdges(left: 1, top: 2, right: 3, bottom: 4),
+  ScenePropKind.edges => p.quad!([1.0, 2.0, 3.0, 4.0]),
   ScenePropKind.choice => p.choices!.values.firstWhere(
     (v) => v != p.defaultValue,
   ),
