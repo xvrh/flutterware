@@ -503,8 +503,12 @@ class SceneEditor extends SceneListenable {
     return null;
   }
 
-  /// A free parameter name off [base]: `title`, `title2`, `title3`…
+  /// A free parameter name off [base]: `title`, `title2`, `title3`… A
+  /// property key that is not itself a name — `args.label` — contributes
+  /// its last segment.
   String freeParamName(String base) {
+    base = base.split('.').last;
+    if (!isValidNodeName(base)) base = 'value';
     if (paramNameProblem(base) == null) return base;
     for (var i = 2; ; i++) {
       if (paramNameProblem('$base$i') == null) return '$base$i';
@@ -685,6 +689,9 @@ class SceneEditor extends SceneListenable {
     perform('Make parameter $chosen', () {
       doc.params.add(SceneParamDecl(chosen, kind, value));
       node.bindings[prop] = ParamRef(chosen);
+      // A nested argument at its child's default is not written anywhere
+      // yet; bound, it has to be, so the file can spell the reference.
+      setSceneProperty(node, prop, value);
     });
     return chosen;
   }

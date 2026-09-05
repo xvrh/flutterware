@@ -231,6 +231,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
               editor,
               externals: widget.externals,
               onOpenParam: _openParam,
+              onEnterNested: widget.onEnterNested,
             ),
           ),
         ),

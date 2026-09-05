@@ -34,6 +34,7 @@ void main() {
   motionKeyTests();
   asideTests();
   drawerTests();
+  nestedArgTests();
   test("add declares a parameter at the kind's zero, or a chosen mockup", () {
     var e = open();
     e.addParam('slide', SceneParamKind.number);
@@ -421,6 +422,83 @@ void drawerTests() {
       expect(e.drawer, const ParamAside('lines'));
       e.activeMotion = 'BannerIntro';
       expect(e.drawerCollapsed, isFalse);
+    });
+  });
+}
+
+void nestedArgTests() {
+  group('a parent parameter reaches a nested argument', () {
+    SceneDocument badge() {
+      var text = TextNode('New', name: 'text')
+        ..bindings['text'] = const ParamRef('label');
+      var root = FrameNode(name: 'root', layout: NodeLayout.row)
+        ..width = 96
+        ..height = 32
+        ..children.add(text);
+      return SceneDocument(root)
+        ..params.add(SceneParamDecl('label', SceneParamKind.string, 'New'));
+    }
+
+    SceneEditor host() {
+      var scene = coffeeBannerDraft();
+      var promo = SceneRefNode.read('PromoBadge', name: 'promo')
+        ..instance = instantiateScene(badge(), {});
+      scene.root.children.add(promo);
+      return SceneEditor(scene)
+        ..addParam('title', SceneParamKind.string, defaultValue: 'Hello');
+    }
+
+    test('bind writes the parent default into the argument', () {
+      var e = host();
+      var promo = e.doc.nodeNamed('promo')! as SceneRefNode;
+      expect(bindableKind(promo, 'args.label'), SceneParamKind.string);
+      e.bind(promo, 'args.label', 'title');
+      expect(promo.args['label'], 'Hello');
+      expect(promo.bindings['args.label'], const ParamRef('title'));
+      // The argument follows the parameter, and an edit to the argument
+      // moves the parameter — the same rule as any bound property.
+      e.setParamDefault('title', 'Hi');
+      expect(promo.args['label'], 'Hi');
+      e.perform('Edit', () => promo.args['label'] = 'Yo');
+      expect(e.doc.paramNamed('title')!.defaultValue, 'Yo');
+      expect(() => e.bind(promo, 'args.label', 'slide'), throwsArgumentError);
+    });
+
+    test('promote makes a parameter of an argument at the child default', () {
+      var e = host();
+      var promo = e.doc.nodeNamed('promo')! as SceneRefNode;
+      expect(e.promote(promo, 'args.label'), 'label');
+      expect(e.doc.paramNamed('label')!.defaultValue, 'New');
+      expect(promo.args['label'], 'New');
+      expect(promo.bindings['args.label'], const ParamRef('label'));
+    });
+
+    test('the file spells the reference, and drops const for it', () {
+      var source =
+          '''
+$sceneFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+class Host({final String title = 'Hello'}) extends SceneDefinition {
+  late final promo = SceneRefNode(PromoBadgeArgs(label: title), x: 10, y: 10);
+  late final other = SceneRefNode(const PromoBadgeArgs(label: 'Fixed'), x: 10, y: 60);
+  @override
+  late final root = FrameNode(width: 200, height: 100, children: [promo, other]);
+}
+''';
+      var parsed = parseSceneFile(source);
+      expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
+      var doc = parsed.doc!;
+      var promo = doc.nodeNamed('promo')! as SceneRefNode;
+      expect(promo.args['label'], 'Hello');
+      expect(promo.bindings['args.label'], const ParamRef('title'));
+      var other = doc.nodeNamed('other')! as SceneRefNode;
+      expect(other.bindings, isEmpty);
+      var out = emitSceneFile(doc, className: 'Host');
+      expect(out, contains('PromoBadgeArgs(label: title)'));
+      expect(out, isNot(contains('const PromoBadgeArgs(label: title)')));
+      expect(out, contains("const PromoBadgeArgs(label: 'Fixed')"));
+      expect(emitSceneFile(parseSceneFile(out).doc!, className: 'Host'), out);
     });
   });
 }

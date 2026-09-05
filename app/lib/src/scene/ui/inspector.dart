@@ -42,12 +42,16 @@ class SceneInspector extends StatelessWidget {
     super.key,
     this.externals = const [],
     this.onOpenParam,
+    this.onEnterNested,
   });
 
   final SceneEditor editor;
 
   /// Opens a list parameter's table below the canvas.
   final ValueChanged<String>? onOpenParam;
+
+  /// Drills into the scene a nested instance stands for — its main.
+  final ValueChanged<SceneNode>? onEnterNested;
 
   /// The widgets the app declares. This is the whole of what the editor
   /// knows about a foreign widget — nothing here resolves the app package —
@@ -1200,11 +1204,61 @@ class SceneInspector extends StatelessWidget {
   /// The child's declared parameters, each at its override or its default.
   /// A parameter the child does not declare cannot be set here — the args
   /// map is the child's contract, not a free bag.
+  /// An instance of another scene: its arguments, each at one of three
+  /// places in the cascade — the child's default, an override written here,
+  /// or a parameter of THIS scene it reads. Editing here writes the
+  /// override (or the parameter it reads, the M1 rule); the child's own
+  /// mockup is edited in its main, one door away.
   List<Widget> _sceneProps(BuildContext context, SceneRefNode r) {
     var inst = r.instance;
+    var caption = context.type.caption.copyWith(color: context.colors.mut2);
+    Widget state(SceneParamDecl p) {
+      var prop = 'args.${p.name}';
+      if (r.bindings[prop] case var b?) {
+        return Text(
+          '← $b',
+          style: caption.copyWith(color: context.colors.accentDark),
+        );
+      }
+      if (r.args.containsKey(p.name)) {
+        return Tappable(
+          onTap: () => _door('args', () => r.args.remove(p.name)),
+          child: Tooltip(
+            message: 'Back to the default: ${p.defaultValue}',
+            child: Text(
+              'overridden · reset',
+              style: caption.copyWith(color: context.colors.accent),
+            ),
+          ),
+        );
+      }
+      return Text('default', style: caption);
+    }
+
+    Widget head(SceneParamDecl p) => Padding(
+      padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+      child: Row(
+        children: [
+          Expanded(child: Text(p.name, style: caption)),
+          state(p),
+        ],
+      ),
+    );
+    Object? value(SceneParamDecl p) => r.args[p.name] ?? p.defaultValue;
     return [
-      _label(context, 'Scene'),
-      Text(r.sceneClassName, style: context.type.body),
+      Row(
+        children: [
+          Expanded(child: _label(context, 'Instance of ${r.sceneClassName}')),
+          if (inst != null && onEnterNested != null)
+            Tappable(
+              onTap: () => onEnterNested!(r),
+              child: Text(
+                'go to main ›',
+                style: caption.copyWith(color: context.colors.accent),
+              ),
+            ),
+        ],
+      ),
       if (inst == null)
         Padding(
           padding: const EdgeInsets.only(top: FwSpacing.xs),
@@ -1212,66 +1266,66 @@ class SceneInspector extends StatelessWidget {
             'No scene file by that name in this package',
             style: context.type.caption.copyWith(color: context.colors.red),
           ),
-        ),
+        )
+      else if (inst.params.isEmpty)
+        Text('${r.sceneClassName} takes no arguments', style: caption),
       const SizedBox(height: FwSpacing.md),
-      for (var p in inst?.params ?? const <SceneParamDecl>[]) ...[
-        switch (p.kind) {
-          SceneParamKind.number => _number(
+      for (var p in inst?.params ?? const <SceneParamDecl>[])
+        Padding(
+          padding: const EdgeInsets.only(bottom: FwSpacing.md),
+          child: _bindable(
+            context,
+            r,
             'args.${p.name}',
-            p.name,
-            ((r.args[p.name] ?? p.defaultValue) as num).toDouble(),
-            const SceneNumberShape(perPixel: 1, decimals: 2),
-            apply: (v) => r.args[p.name] = v,
-          ),
-          SceneParamKind.bool => Padding(
-            padding: const EdgeInsets.only(bottom: FwSpacing.md),
-            child: _check(
-              context,
-              p.name,
-              (r.args[p.name] ?? p.defaultValue) as bool,
-              () => _door(
-                'args',
-                () => r.args[p.name] =
-                    !((r.args[p.name] ?? p.defaultValue) as bool),
-              ),
-            ),
-          ),
-          SceneParamKind.string => Padding(
-            padding: const EdgeInsets.only(bottom: FwSpacing.md),
-            child: TextFormField(
-              key: ValueKey('${r.name}:${p.name}'),
-              initialValue: '${r.args[p.name] ?? p.defaultValue}',
-              decoration: InputDecoration(labelText: p.name, isDense: true),
-              onChanged: (v) => _door('args', () => r.args[p.name] = v),
-            ),
-          ),
-          SceneParamKind.color => Padding(
-            padding: const EdgeInsets.only(bottom: FwSpacing.md),
-            child: Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: FwSpacing.sm,
               children: [
-                _label(context, p.name),
-                SceneSwatches(
-                  current: (r.args[p.name] ?? p.defaultValue) as SceneColor?,
-                  allowNone: false,
-                  onPick: (c) => _door('args', () => r.args[p.name] = c),
-                ),
+                head(p),
+                switch (p.kind) {
+                  SceneParamKind.number => SceneNumberField(
+                    value: (value(p)! as num).toDouble(),
+                    shape: const SceneNumberShape(perPixel: 1, decimals: 2),
+                    onChanged: (v) =>
+                        _set('args.${p.name}', v, () => r.args[p.name] = v),
+                    onCommit: (v) {
+                      _set('args.${p.name}', v, () => r.args[p.name] = v);
+                      editor.endMerge();
+                    },
+                  ),
+                  SceneParamKind.bool => _check(
+                    context,
+                    value(p)! as bool ? 'on' : 'off',
+                    value(p)! as bool,
+                    () => _door(
+                      'args',
+                      () => r.args[p.name] = !(value(p)! as bool),
+                    ),
+                  ),
+                  SceneParamKind.string => TextFormField(
+                    key: ValueKey(
+                      '${r.name}:${p.name}:${r.bindings['args.${p.name}']}',
+                    ),
+                    initialValue: '${value(p)}',
+                    onChanged: (v) => _door('args', () => r.args[p.name] = v),
+                  ),
+                  SceneParamKind.color => SceneSwatches(
+                    current: value(p) as SceneColor?,
+                    allowNone: false,
+                    onPick: (c) =>
+                        _set('args.${p.name}', c!, () => r.args[p.name] = c),
+                  ),
+                  // A list is data, not a value with a field: the nested
+                  // scene repeats over whatever it declares, and passing a
+                  // different one is the caller's job.
+                  SceneParamKind.list => Text(
+                    '${p.items.length} items, from the scene itself',
+                    style: caption,
+                  ),
+                },
               ],
             ),
           ),
-          // A list is data, not a value with a field: the nested scene
-          // repeats over whatever it declares, and passing a different one
-          // is the caller's job until there is an editor for it.
-          SceneParamKind.list => Padding(
-            padding: const EdgeInsets.only(bottom: FwSpacing.md),
-            child: Text(
-              '${p.name} — ${p.items.length} items, from the scene itself',
-              style: context.type.caption.copyWith(color: context.colors.mut),
-            ),
-          ),
-        },
-      ],
+        ),
     ];
   }
 }

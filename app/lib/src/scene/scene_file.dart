@@ -420,11 +420,15 @@ void _emitNode(
       if (s.circle) props.add('circle: true');
       out.write('ShapeNode(${props.join(', ')})');
     case ExternalNode e:
-      props.add(_argsLiteral(e.entry, e.args, 'a registration entry name'));
+      props.add(
+        _argsLiteral(e.entry, e.args, 'a registration entry name', ref: ref),
+      );
       common();
       out.write('ExternalNode(${props.join(', ')})');
     case SceneRefNode r:
-      props.add(_argsLiteral(r.sceneClassName, r.args, 'a scene class name'));
+      props.add(
+        _argsLiteral(r.sceneClassName, r.args, 'a scene class name', ref: ref),
+      );
       common();
       out.write('SceneRefNode(${props.join(', ')})');
   }
@@ -438,7 +442,15 @@ void _emitNode(
 /// is not a declared argument does not compile. Every argument the node
 /// carries is written; what a caller left at the declared default was never
 /// read into the node in the first place.
-String _argsLiteral(String entry, Map<String, Object?> args, String what) {
+/// `const PromoBadgeArgs(label: 'New')` — or, when an argument reads one of
+/// this scene's parameters, `PromoBadgeArgs(label: title)`: a reference is
+/// not a constant, so the `const` goes the moment one appears.
+String _argsLiteral(
+  String entry,
+  Map<String, Object?> args,
+  String what, {
+  required String? Function(String prop) ref,
+}) {
   if (!isValidNodeName(entry)) {
     throw ArgumentError('"$entry" is not $what');
   }
@@ -447,9 +459,16 @@ String _argsLiteral(String entry, Map<String, Object?> args, String what) {
       throw ArgumentError('"$name" is not an argument name');
     }
   }
-  var named = [for (var e in args.entries) '${e.key}: ${_argValue(e.value)}']
-      .join(', ');
-  return 'const ${entry}Args($named)';
+  var bound = false;
+  var named = [
+    for (var e in args.entries)
+      '${e.key}: ${() {
+        var r = ref('args.${e.key}');
+        if (r != null) bound = true;
+        return r ?? _argValue(e.value);
+      }()}',
+  ].join(', ');
+  return '${bound ? '' : 'const '}${entry}Args($named)';
 }
 
 /// What the closure's parameter is called. One name, because the cells it
@@ -1246,7 +1265,8 @@ class _Parser {
               : 'a SceneRefNode takes the generated arguments of the scene it '
                     "instantiates — SceneRefNode(const PromoBadgeArgs(label: 'New'))",
         );
-        var (target, nodeArgs) = read ?? ('', <String, Object?>{});
+        var (target, nodeArgs, argRefs) =
+            read ?? ('', <String, Object?>{}, <String, String>{});
         if (declaredArgs[target] case var declared?) {
           for (var name in nodeArgs.keys) {
             if (declared.contains(name)) continue;
@@ -1261,6 +1281,9 @@ class _Parser {
         var node = kind == 'ExternalNode'
             ? ExternalNode.read(target, name: name, args: nodeArgs)
             : SceneRefNode.read(target, name: name, args: nodeArgs);
+        for (var e in argRefs.entries) {
+          node.bindings['args.${e.key}'] = ParamRef(e.value);
+        }
         _applyCommon(node, named);
         _refuseRest(kind, named);
         _checkPositionals(positional, 1);
@@ -1509,7 +1532,10 @@ class _Parser {
   /// generator wrote this class from — gives their types. An argument the
   /// widget does not declare therefore fails twice: it does not compile,
   /// and it is refused here with a line number.
-  (String, Map<String, Object?>)? _typedArgs(
+  /// The typed arguments a node is given, and which of them read one of
+  /// this scene's parameters — `PromoBadgeArgs(label: title)` yields
+  /// `title`'s default as the value and records the reference.
+  (String, Map<String, Object?>, Map<String, String>)? _typedArgs(
     List<Expression> positional,
     ArgumentList args,
     String missing,
@@ -1530,6 +1556,7 @@ class _Parser {
       return null;
     }
     var out = <String, Object?>{};
+    var refs = <String, String>{};
     for (var arg in call.$2.arguments) {
       if (arg is! NamedArgument) {
         refuse(
@@ -1539,9 +1566,20 @@ class _Parser {
         );
         continue;
       }
-      out[arg.name.lexeme] = _literal(arg.argumentExpression);
+      var v = arg.argumentExpression;
+      var decl = v is SimpleIdentifier ? _params[v.name] : null;
+      if (v is SimpleIdentifier && decl != null) {
+        if (decl.kind == SceneParamKind.list) {
+          refuse(v.offset, 'parameter type', 'a list cannot be an argument');
+          continue;
+        }
+        out[arg.name.lexeme] = decl.defaultValue;
+        refs[arg.name.lexeme] = v.name;
+        continue;
+      }
+      out[arg.name.lexeme] = _literal(v);
     }
-    return (entry, out);
+    return (entry, out, refs);
   }
 
   // -- value parsers, each refusing with the construct it actually found.

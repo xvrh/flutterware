@@ -68,6 +68,15 @@ SceneDocument instantiateScene(
 /// Read one authored property by the name a [SceneNode.bindings] entry keys
 /// it under — the inverse of [setSceneProperty], and the same table.
 Object? getSceneProperty(SceneNode node, String prop) => switch (prop) {
+  // An argument at its override, else at the child's default: what the
+  // instance shows, and what a parameter made of it starts at.
+  _ when prop.startsWith('args.') => switch (node) {
+    SceneRefNode r =>
+      r.args[prop.substring(5)] ??
+          r.instance?.paramNamed(prop.substring(5))?.defaultValue,
+    ExternalNode e => e.args[prop.substring(5)],
+    _ => null,
+  },
   'x' => node.x,
   'y' => node.y,
   'width' => sizeToWire(node.width),
@@ -88,6 +97,16 @@ Object? getSceneProperty(SceneNode node, String prop) => switch (prop) {
 /// cannot be bound — the same table as [getSceneProperty] and
 /// [setSceneProperty], seen as types.
 SceneParamKind? bindableKind(SceneNode node, String prop) => switch (prop) {
+  // A nested scene's argument reads a parameter of the same kind as the
+  // child declares it — a list is data and takes no binding.
+  _ when prop.startsWith('args.') => switch (node) {
+    SceneRefNode r => switch (r.instance?.paramNamed(prop.substring(5))) {
+      SceneParamDecl(kind: SceneParamKind.list) => null,
+      SceneParamDecl(:var kind) => kind,
+      null => null,
+    },
+    _ => null,
+  },
   'x' ||
   'y' ||
   'width' ||
@@ -107,6 +126,18 @@ SceneParamKind? bindableKind(SceneNode node, String prop) => switch (prop) {
 /// keys it under. The one place that maps a property name to a slot, so an
 /// argument and a repeated item's field land the same way.
 void setSceneProperty(SceneNode node, String prop, Object? value) {
+  if (prop.startsWith('args.')) {
+    var name = prop.substring(5);
+    switch (node) {
+      case SceneRefNode r:
+        r.args[name] = value;
+      case ExternalNode e:
+        e.args[name] = value;
+      default:
+        break;
+    }
+    return;
+  }
   switch (prop) {
     case 'x':
       node.x = (value! as num).toDouble();
