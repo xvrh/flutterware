@@ -60,7 +60,9 @@ SceneDocument instantiateScene(
   Map<String, Object?> args,
 ) {
   var doc = SceneDocument(deepCopyNode(template.root) as FrameNode)
-    ..params.addAll(template.params);
+    ..params.addAll(template.params)
+    ..tokens.addAll(template.tokens)
+    ..tokensFormal = template.tokensFormal;
   doc.applyArgs(args);
   return doc;
 }
@@ -217,6 +219,13 @@ void recordRepeat(FrameNode frame, String source) {
 /// is removed here, in the same edit, rather than dropped silently at save.
 /// Returns the names of the properties whose binding was removed, so the
 /// editor can say so.
+///
+/// A TOKEN is the exception to "the edit reaches the source": tokens are
+/// declared by hand in a file the tool only reads, and shared by every scene
+/// of the package, so a property edited off its token's value DETACHES —
+/// the value stays, local now — rather than moving the token under every
+/// other scene. That is what a design tool does when you type over a
+/// variable, and the inspector offers the token back one click away.
 List<String> reconcileBindings(SceneDocument doc) {
   var dropped = <String>[];
   var listChanged = false;
@@ -248,6 +257,12 @@ List<String> reconcileBindings(SceneDocument doc) {
                 }
               }
             }
+          }
+        case TokenRef(:var name):
+          var decl = doc.tokenNamed(name);
+          if (decl == null || decl.value != current) {
+            node.bindings.remove(prop);
+            dropped.add('${node.name}.$prop');
           }
         case ItemRef(:var list, :var field):
           var decl = doc.paramNamed(list);

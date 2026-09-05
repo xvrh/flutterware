@@ -337,6 +337,23 @@ class StoryCardTracks extends SceneExtTracks {
   Map<String, MotionTrack> toMap() => {};
 }
 
+/// The tokens `scene_tokens.dart` declares, typed. A scene
+/// reads them through its tokens formal — `fill: tokens.brand`;
+/// the bare constructor is the declared set.
+class SceneTokens {
+  const SceneTokens({
+    this.brand = const SceneColor(0xFFE8632B),
+    this.ink = const SceneColor(0xFFFFFFFF),
+    this.espresso = const SceneColor(0xFF2B1B12),
+    this.radius = 28.0,
+  });
+
+  final SceneColor brand;
+  final SceneColor ink;
+  final SceneColor espresso;
+  final double radius;
+}
+
 /// The declaration an arguments class was generated from —
 /// how a node builds itself, and why a shipped app hands
 /// the view nothing.

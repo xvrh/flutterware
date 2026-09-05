@@ -332,6 +332,10 @@ class SceneInspector extends StatelessWidget {
           for (var p in doc.params)
             if (p.kind == kind) p,
         ];
+        var tokens = [
+          for (var t in doc.tokens)
+            if (t.kind == kind) t,
+        ];
         showContextMenu(context, d.globalPosition, [
           MenuHeader(_propLabel(prop)),
           if (bound != null) ...[
@@ -358,12 +362,35 @@ class SceneInspector extends StatelessWidget {
                   onSelected: () => editor.bind(node, prop, p.name),
                 ),
             ],
+            // The package's shared values, of this property's kind. The
+            // value rides along as the shortcut, so a colour can be picked
+            // by what it is and not only by what it is called.
+            if (tokens.isNotEmpty) ...[
+              const MenuDivider(),
+              const MenuHeader('Tokens'),
+              for (var t in tokens)
+                MenuItem(
+                  t.name,
+                  icon: Icons.style_outlined,
+                  shortcut: _tokenValue(t),
+                  onSelected: () => editor.bindToken(node, prop, t.name),
+                ),
+            ],
           ],
         ]);
       },
       child: child,
     );
   }
+
+  /// A token's value, short enough for a menu's right edge.
+  static String _tokenValue(SceneTokenDecl t) => switch (t.value) {
+    SceneColor c =>
+      '#${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0').substring(2)}',
+    double d => d == d.roundToDouble() ? '${d.round()}' : '$d',
+    String s => s.length > 16 ? "'${s.substring(0, 15)}…'" : "'$s'",
+    var v => '$v',
+  };
 
   /// A size, in the three states one can be in: a number, hug, or fill.
   ///

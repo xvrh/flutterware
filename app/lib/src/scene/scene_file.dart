@@ -70,9 +70,10 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
 import 'package:dart_style/dart_style.dart';
-import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware/scene_authoring.dart' hide Token;
 
 import 'motion_file.dart';
+import 'tokens_file.dart';
 
 const sceneFileMarker = '//@flutterware:scene=0.8';
 
@@ -153,6 +154,11 @@ String emitSceneFile(
       'must be "root" — got "${doc.root.name}"',
     );
   }
+  // The tokens formal is written when the scene reads a token, or when the
+  // author declared one; its name is the author's, else `tokens`.
+  var readsTokens = _readsTokens(doc);
+  var tokensFormal = doc.tokensFormal ?? _freeFormal(doc, 'tokens');
+  var hasTokensFormal = readsTokens || doc.tokensFormal != null;
   var out = StringBuffer('''
 $sceneFileMarker
 // Owned by the flutterware scene editor, which reads and writes this whole
@@ -164,7 +170,7 @@ $sceneFileMarker
 //
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 $sceneAuthoringImport
-${_imports(imports, needsArgs: _placesSomething(doc))}
+${_imports(imports, needsArgs: _placesSomething(doc) || hasTokensFormal)}
 ''');
   var seen = <String>{};
   var params = <String, SceneParamDecl>{};
@@ -174,14 +180,27 @@ ${_imports(imports, needsArgs: _placesSomething(doc))}
     }
     params[p.name] = p;
   }
-  if (doc.params.isEmpty) {
+  if (hasTokensFormal && !seen.add(tokensFormal)) {
+    throw ArgumentError('"$tokensFormal" is not a usable tokens formal name');
+  }
+  var scope = _Scope(params, {
+    for (var t in doc.tokens) t.name: t,
+  }, tokensFormal);
+  if (doc.params.isEmpty && !hasTokensFormal) {
     out.writeln('class $className extends SceneDefinition {');
   } else {
     // The primary constructor: formal, field and default in one spelling,
-    // in scope for every node initializer below.
+    // in scope for every node initializer below. The tokens formal comes
+    // last, recognised by its type rather than its name.
     out.write('class $className({');
     for (var p in doc.params) {
       out.write('final ${p.typeName} ${p.name} = ${_paramDefault(p)}, ');
+    }
+    if (hasTokensFormal) {
+      out.write(
+        'final $sceneTokensClassName $tokensFormal = '
+        'const $sceneTokensClassName(), ',
+      );
     }
     out.writeln('}) extends SceneDefinition {');
   }
@@ -204,7 +223,7 @@ ${_imports(imports, needsArgs: _placesSomething(doc))}
     // override like any other member that does.
     if (n.name == 'root') out.writeln('  @override');
     out.write('  late final ${n.name} = ');
-    _emitNode(out, n, params);
+    _emitNode(out, n, scope);
     out.writeln(';');
   }
 
@@ -227,6 +246,41 @@ bool _placesSomething(SceneDocument doc) {
     if (node is ExternalNode || node is SceneRefNode) return true;
   }
   return false;
+}
+
+/// Whether any property reads a declared token — what puts the tokens
+/// formal in the header and the generated vocabulary in scope.
+bool _readsTokens(SceneDocument doc) {
+  for (var (node, _) in doc.walk()) {
+    for (var b in node.bindings.values) {
+      if (b case TokenRef(:var name) when doc.tokenNamed(name) != null) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/// [base], or the first `base2`, `base3`… no parameter or node already has.
+String _freeFormal(SceneDocument doc, String base) {
+  var taken = {
+    for (var p in doc.params) p.name,
+    for (var (n, _) in doc.walk()) n.name,
+  };
+  if (!taken.contains(base)) return base;
+  for (var i = 2; ; i++) {
+    if (!taken.contains('$base$i')) return '$base$i';
+  }
+}
+
+/// What a node initializer may name: the parameters, the tokens and what
+/// the tokens formal is called.
+class _Scope {
+  _Scope(this.params, this.tokens, this.tokensFormal);
+
+  final Map<String, SceneParamDecl> params;
+  final Map<String, SceneTokenDecl> tokens;
+  final String tokensFormal;
 }
 
 /// The file's other imports, canonically: package ones first, each group
@@ -270,12 +324,13 @@ String _item(SceneItem item) =>
 void _emitNode(
   StringBuffer out,
   SceneNode n,
-  Map<String, SceneParamDecl> ps, {
+  _Scope scope, {
   String? list,
   bool inline = false,
 }) {
   var props = <String>[];
   var scopeList = list;
+  var ps = scope.params;
 
   /// A bound property is spelled as its reference, always: the binding is
   /// the stronger of the two, and an edit reached the parameter's default
@@ -291,6 +346,10 @@ void _emitNode(
       case ParamRef(:var name):
         var p = ps[name];
         return p == null || p.kind == SceneParamKind.list ? null : name;
+      case TokenRef(:var name):
+        return scope.tokens.containsKey(name)
+            ? '${scope.tokensFormal}.$name'
+            : null;
       case ItemRef(:var list, :var field):
         // Spelled with the closure's own parameter rather than the list's
         // name, and only inside the closure.
@@ -367,7 +426,7 @@ void _emitNode(
       // them — they are not fields, because there is no one row for them to
       // belong to.
       if (f.repeated?.source case var list? when list.isNotEmpty) {
-        var cells = [for (var c in f.children) _emitCell(c, ps, list)];
+        var cells = [for (var c in f.children) _emitCell(c, scope, list)];
         out.write(
           'FrameNode.repeating(over: $list, '
           'row: ($_rowParam) => [${cells.join(', ')}], '
@@ -378,7 +437,7 @@ void _emitNode(
       if (f.children.isNotEmpty) {
         props.add(
           inline
-              ? 'children: [${[for (var c in f.children) _emitCell(c, ps, list!)].join(', ')}]'
+              ? 'children: [${[for (var c in f.children) _emitCell(c, scope, list!)].join(', ')}]'
               : 'children: [${f.children.map((c) => c.name).join(', ')}]',
         );
       }
@@ -449,9 +508,9 @@ const _rowParam = 'line';
 
 /// One cell of a repeated row, written inline. Its own children are written
 /// inline too — the whole subtree is anonymous.
-String _emitCell(SceneNode cell, Map<String, SceneParamDecl> ps, String list) {
+String _emitCell(SceneNode cell, _Scope scope, String list) {
   var out = StringBuffer();
-  _emitNode(out, cell, ps, list: list, inline: true);
+  _emitNode(out, cell, scope, list: list, inline: true);
   return '$out';
 }
 
@@ -511,8 +570,9 @@ String _argValue(Object? v) => switch (v) {
 SceneParse parseSceneFile(
   String source, {
   Map<String, Set<String>> declaredArgs = const {},
+  List<SceneTokenDecl> tokens = const [],
 }) {
-  var p = _Parser(source, declaredArgs);
+  var p = _Parser(source, declaredArgs, {for (var t in tokens) t.name: t});
   var doc = p.parse();
   var motions = <String, MotionDocument>{};
   // A motion is half a pair and resolves its targets against the scene, so
@@ -539,9 +599,19 @@ SceneParse parseSceneFile(
 }
 
 class _Parser {
-  _Parser(this.source, this.declaredArgs);
+  _Parser(this.source, this.declaredArgs, this._tokens);
 
   final String source;
+
+  /// The package's tokens, by name — the declaration file, read before any
+  /// scene file. What `tokens.brand` is checked against; a scene that reads
+  /// a token nobody declared is refused, the way the compiler would refuse
+  /// the generated class's missing field.
+  final Map<String, SceneTokenDecl> _tokens;
+
+  /// The header formal typed [sceneTokensClassName], if any — the author's
+  /// name for it, kept so the emitter writes it back.
+  String? _tokensFormal;
 
   /// Entry label to the argument names that widget declares — the app's
   /// declaration file, read before any scene file. An entry that is absent
@@ -775,6 +845,8 @@ class _Parser {
     }
     var doc = SceneDocument(root);
     doc.params.addAll(_params.values);
+    doc.tokens.addAll(_tokens.values);
+    doc.tokensFormal = _tokensFormal;
     // An item reference cannot escape its closure — the grammar has no way
     // to write one outside a `row:` — so there is nothing to check here any
     // more. What is left is turning each recorded binding into the closure
@@ -867,8 +939,44 @@ class _Parser {
         );
         continue;
       }
-      if (_params.containsKey(name)) {
+      if (_params.containsKey(name) || name == _tokensFormal) {
         refuse(p.offset, 'duplicate name', '"$name" is declared twice');
+        continue;
+      }
+      // The tokens formal: recognised by its TYPE, never by its name, so
+      // the author may call it what they like and the framework claims no
+      // identifier. Its default is the declared set.
+      if (p is RegularFormalParameter && '${p.type}' == sceneTokensClassName) {
+        if (_tokensFormal != null) {
+          refuse(
+            p.offset,
+            'tokens formal',
+            'a scene takes one $sceneTokensClassName — "$_tokensFormal" '
+                'already does',
+          );
+          continue;
+        }
+        if (_tokens.isEmpty) {
+          refuse(
+            p.type!.offset,
+            'tokens formal',
+            'this package declares no tokens — add $sceneTokensFileName '
+                'beside the scene, `final $sceneTokensSymbol = [Token<…>(…)]`',
+          );
+          continue;
+        }
+        if (_invocation(dflt) case (sceneTokensClassName, var args)
+            when args.arguments.isEmpty) {
+          _tokensFormal = name;
+          declared[name] = p.offset;
+        } else {
+          refuse(
+            dflt.offset,
+            'tokens default',
+            'the tokens formal defaults to the declared set — '
+                '`final $sceneTokensClassName $name = const $sceneTokensClassName()`',
+          );
+        }
         continue;
       }
       var parsed = _paramDefaultOf(dflt);
@@ -1117,7 +1225,7 @@ class _Parser {
                     "instantiates — SceneRefNode(const PromoBadgeArgs(label: 'New'))",
         );
         var (target, nodeArgs, argRefs) =
-            read ?? ('', <String, Object?>{}, <String, String>{});
+            read ?? ('', <String, Object?>{}, <String, SceneBinding>{});
         if (declaredArgs[target] case var declared?) {
           for (var name in nodeArgs.keys) {
             if (declared.contains(name)) continue;
@@ -1133,7 +1241,7 @@ class _Parser {
             ? ExternalNode.read(target, name: name, args: nodeArgs)
             : SceneRefNode.read(target, name: name, args: nodeArgs);
         for (var e in argRefs.entries) {
-          node.bindings['args.${e.key}'] = ParamRef(e.value);
+          node.bindings['args.${e.key}'] = e.value;
         }
         _applyProps(node, named);
         _refuseRest(kind, named);
@@ -1414,7 +1522,7 @@ class _Parser {
   /// The typed arguments a node is given, and which of them read one of
   /// this scene's parameters — `PromoBadgeArgs(label: title)` yields
   /// `title`'s default as the value and records the reference.
-  (String, Map<String, Object?>, Map<String, String>)? _typedArgs(
+  (String, Map<String, Object?>, Map<String, SceneBinding>)? _typedArgs(
     List<Expression> positional,
     ArgumentList args,
     String missing,
@@ -1435,7 +1543,7 @@ class _Parser {
       return null;
     }
     var out = <String, Object?>{};
-    var refs = <String, String>{};
+    var refs = <String, SceneBinding>{};
     for (var arg in call.$2.arguments) {
       if (arg is! NamedArgument) {
         refuse(
@@ -1453,7 +1561,17 @@ class _Parser {
           continue;
         }
         out[arg.name.lexeme] = decl.defaultValue;
-        refs[arg.name.lexeme] = v.name;
+        refs[arg.name.lexeme] = ParamRef(v.name);
+        continue;
+      }
+      if (v is PrefixedIdentifier && v.prefix.name == _tokensFormal) {
+        var token = _tokens[v.identifier.name];
+        if (token == null) {
+          _refuseUnknownToken(v);
+          continue;
+        }
+        out[arg.name.lexeme] = token.value;
+        refs[arg.name.lexeme] = TokenRef(token.name);
         continue;
       }
       out[arg.name.lexeme] = _literal(v);
@@ -1474,7 +1592,11 @@ class _Parser {
     SceneNode n,
     String prop,
   ) {
-    if (e is PrefixedIdentifier) return _itemRef(e, kind, n, prop);
+    if (e is PrefixedIdentifier) {
+      return e.prefix.name == _tokensFormal
+          ? _tokenRef(e, kind, n, prop)
+          : _itemRef(e, kind, n, prop);
+    }
     if (e is! SimpleIdentifier) return null;
     var decl = _params[e.name];
     if (decl == null) return null;
@@ -1547,6 +1669,42 @@ class _Parser {
     // is a local name and the binding has to outlive it.
     n.bindings[prop] = ItemRef(scope.list, field);
     return converted;
+  }
+
+  /// `tokens.brand` — one of the package's shared values, through the
+  /// scene's tokens formal. Yields the declared value; the property is
+  /// bound so the emitter writes the reference back.
+  Object? _tokenRef(
+    PrefixedIdentifier e,
+    SceneParamKind kind,
+    SceneNode n,
+    String prop,
+  ) {
+    var decl = _tokens[e.identifier.name];
+    if (decl == null) {
+      _refuseUnknownToken(e);
+      return _refused;
+    }
+    if (decl.kind != kind) {
+      refuse(
+        e.offset,
+        'token type',
+        '"${e.identifier.name}" is a ${decl.typeName} token — this property '
+            'takes a ${SceneTokenDecl('', kind, '').typeName}',
+      );
+      return _refused;
+    }
+    n.bindings[prop] = TokenRef(decl.name);
+    return decl.value;
+  }
+
+  void _refuseUnknownToken(PrefixedIdentifier e) {
+    refuse(
+      e.identifier.offset,
+      'unknown token',
+      '$sceneTokensFileName declares no "${e.identifier.name}" — it has '
+          '${_tokens.keys.map((k) => '"$k"').join(', ')}',
+    );
   }
 
   static final _refused = Object();

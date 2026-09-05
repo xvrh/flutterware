@@ -33,8 +33,13 @@ class SceneFile {
     String path,
     String source, {
     Map<String, Set<String>> declaredArgs = const {},
+    List<SceneTokenDecl> tokens = const [],
   }) {
-    var parsed = parseSceneFile(source, declaredArgs: declaredArgs);
+    var parsed = parseSceneFile(
+      source,
+      declaredArgs: declaredArgs,
+      tokens: tokens,
+    );
     if (!parsed.ok) return SceneFileOpen._(null, parsed.refusals);
     return SceneFileOpen._(
       SceneFile(
@@ -96,7 +101,10 @@ class SceneFile {
   /// text to [write]. Returns the refusals — empty on success.
   List<SceneRefusal> save(void Function(String path, String source) write) {
     var source = emit();
-    var check = parseSceneFile(source);
+    // The check parses against the tokens the document was read with: the
+    // emitted file spells `tokens.brand`, and only that list says what it
+    // names.
+    var check = parseSceneFile(source, tokens: scene.tokens);
     if (!check.ok) return check.refusals;
     // Nothing to write when the bytes are already there. This is what keeps
     // an editor that saves by itself out of your diff: opening a canonical
@@ -119,8 +127,13 @@ class SceneFile {
   List<SceneRefusal> adopt(
     String source, {
     Map<String, Set<String>> declaredArgs = const {},
+    List<SceneTokenDecl> tokens = const [],
   }) {
-    var parsed = parseSceneFile(source, declaredArgs: declaredArgs);
+    var parsed = parseSceneFile(
+      source,
+      declaredArgs: declaredArgs,
+      tokens: tokens,
+    );
     if (!parsed.ok) return parsed.refusals;
     className = parsed.className!;
     imports

@@ -84,6 +84,49 @@ class SceneParamDecl {
   };
 }
 
+/// One shared value the package declares, as the editor reads it — the
+/// name, the kind, and the value the declaration gives.
+///
+/// Tokens are declared once per package, by hand, in `scene_tokens.dart`
+/// (`Token<SceneColor>('brand', SceneColor(0xFF…))`), and every scene of the
+/// package may read them: `fill: tokens.brand`. The tool only READS that
+/// file, so a token has no door here — editing a property bound to one
+/// detaches it rather than moving the token, the way a design tool detaches
+/// a variable when you type over it. The kinds are the parameter kinds
+/// minus `list`: what a property can read.
+class SceneTokenDecl {
+  const SceneTokenDecl(this.name, this.kind, this.value);
+
+  final String name;
+  final SceneParamKind kind;
+
+  /// String, double, bool or [SceneColor].
+  final Object value;
+
+  String get typeName => switch (kind) {
+    SceneParamKind.string => 'String',
+    SceneParamKind.number => 'double',
+    SceneParamKind.color => 'SceneColor',
+    SceneParamKind.bool => 'bool',
+    SceneParamKind.list => 'List<Object?>',
+  };
+}
+
+/// One token as the app declares it, in a `final sceneTokens = [ … ]` list
+/// beside the externals: `Token<SceneColor>('brand', SceneColor(0xFF…))`.
+/// The type argument is what the generated `SceneTokens`
+/// class types the field as, and the value is its default — so the
+/// declaration file compiles before anything has been generated from it,
+/// and the generated class is derived from it, never the other way round.
+class Token<T> {
+  const Token(this.name, this.value);
+
+  final String name;
+  final T value;
+
+  Type get type => T;
+}
+
 /// Where a property's value comes from, when it is not a literal in the
 /// file. One entry per bound property in [SceneNode.bindings].
 ///
@@ -100,6 +143,9 @@ sealed class SceneBinding {
   String toWire();
 
   static SceneBinding fromWire(String wire) {
+    if (wire.startsWith(TokenRef.prefix)) {
+      return TokenRef(wire.substring(TokenRef.prefix.length));
+    }
     var dot = wire.indexOf('.');
     return dot < 0
         ? ParamRef(wire)
@@ -140,6 +186,26 @@ class ItemRef extends SceneBinding {
 
   @override
   String toWire() => '$list.$field';
+}
+
+/// The property reads one of the package's shared tokens, by name — the
+/// file spells `tokens.brand` through the scene's tokens formal.
+class TokenRef extends SceneBinding {
+  const TokenRef(this.name);
+
+  final String name;
+
+  /// The wire's marker for a token: a colon, which no identifier carries,
+  /// so `token:brand` can never be read as an item reference `list.field`.
+  static const prefix = 'token:';
+
+  @override
+  String toWire() => '$prefix$name';
+
+  /// How a reader sees it — the canonical formal's spelling, whatever the
+  /// author actually called the formal.
+  @override
+  String toString() => 'tokens.$name';
 }
 
 sealed class SceneNode {
@@ -1029,6 +1095,22 @@ class SceneDocument extends SceneListenable {
   SceneParamDecl? paramNamed(String name) {
     for (var p in params) {
       if (p.name == name) return p;
+    }
+    return null;
+  }
+
+  /// The package's shared tokens, as declared when this document was read —
+  /// what a [TokenRef] resolves against. Storage for the read plane; a
+  /// compiled scene reads its tokens formal instead.
+  final tokens = <SceneTokenDecl>[];
+
+  /// What the file calls its tokens formal, or null when it declares none.
+  /// Recognised by type, so the author's own name is kept and written back.
+  String? tokensFormal;
+
+  SceneTokenDecl? tokenNamed(String name) {
+    for (var t in tokens) {
+      if (t.name == name) return t;
     }
     return null;
   }

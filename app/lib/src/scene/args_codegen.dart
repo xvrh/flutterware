@@ -10,10 +10,16 @@
 // Only `double` and `SceneColor` arguments get a track slot. A label has no
 // in-between values, so animating it is not a refusal here but a name that
 // does not exist.
+//
+// The package's tokens get a class too — `SceneTokens`, a const with one
+// typed field per declared token and the declared value as its default —
+// so `tokens.brand` in a scene file is a field the compiler checks, and a
+// token nobody declared is a name that does not exist.
 import 'package:dart_style/dart_style.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import 'externals_file.dart';
+import 'tokens_file.dart';
 
 /// One scene class the generator writes arguments for, and where it lives
 /// relative to the generated file.
@@ -40,6 +46,7 @@ const _header = '''
 String emitSceneArgs({
   required List<ExternalWidgetDecl> externals,
   required List<SceneClassDecl> scenes,
+  List<SceneTokenDecl> tokens = const [],
   String? externalsImport,
 }) {
   var out = StringBuffer(_header)
@@ -86,6 +93,8 @@ String emitSceneArgs({
           '${[for (var f in fields) '${f.name}: ${f.name}'].join(', ')});\n',
     );
   }
+
+  if (tokens.isNotEmpty) _tokensClass(out, tokens);
 
   if (externals.isNotEmpty) {
     out
@@ -170,6 +179,29 @@ void _argsClass(
     )
     ..writeln('      };')
     ..writeln('}');
+}
+
+/// `class SceneTokens { const SceneTokens({this.brand = const SceneColor(…)
+/// …}); final SceneColor brand; … }` — the declared set as a const, so a
+/// scene's formal can default to it, and another set (a mode) is the same
+/// class with other arguments.
+void _tokensClass(StringBuffer out, List<SceneTokenDecl> tokens) {
+  out
+    ..writeln()
+    ..writeln('/// The tokens `$sceneTokensFileName` declares, typed. A scene')
+    ..writeln(
+      '/// reads them through its tokens formal — `fill: tokens.brand`;',
+    )
+    ..writeln('/// the bare constructor is the declared set.')
+    ..writeln('class $sceneTokensClassName {')
+    ..writeln(
+      '  const $sceneTokensClassName({${[for (var t in tokens) 'this.${t.name} = ${_literal(t.value)}'].join(', ')}});',
+    )
+    ..writeln();
+  for (var t in tokens) {
+    out.writeln('  final ${t.typeName} ${t.name};');
+  }
+  out.writeln('}');
 }
 
 /// A class with no arguments takes no braces — `const OhohArgs()`, not

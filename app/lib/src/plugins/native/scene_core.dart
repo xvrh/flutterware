@@ -17,6 +17,7 @@ import '../../scene/discovery.dart';
 import '../../scene/externals_file.dart';
 import '../../scene/export/video.dart';
 import '../../scene/scene_file.dart';
+import '../../scene/tokens_file.dart';
 import '../../utils/string/plural.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -90,6 +91,15 @@ class SceneCore extends PluginCore {
     return parseExternalsFile(file.readAsStringSync()).widgets;
   }
 
+  /// The tokens [package] declares, or an empty list when it declares none
+  /// — what `tokens.brand` in a scene file is checked against, and what the
+  /// inspector's picker offers.
+  List<SceneTokenDecl> tokensFor(String package) {
+    var file = File(p.join(rootFor(package), sceneTokensFileName));
+    if (!file.existsSync()) return const [];
+    return parseTokensFile(file.readAsStringSync()).tokens;
+  }
+
   /// The scenes of [package], or null when nothing has looked yet.
   List<SceneEntry>? scenesFor(String package) => _cache[package];
 
@@ -134,7 +144,10 @@ class SceneCore extends PluginCore {
     required String scenePath,
     int fps = 30,
   }) async {
-    var opened = parseSceneFile(File(scenePath).readAsStringSync());
+    var opened = parseSceneFile(
+      File(scenePath).readAsStringSync(),
+      tokens: tokensFor(package),
+    );
     if (!opened.ok) {
       throw StateError(
         'that scene does not parse, so there is nothing to render:\n'

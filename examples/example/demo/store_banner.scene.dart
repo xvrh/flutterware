@@ -9,11 +9,14 @@
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 import 'package:flutterware/scene_authoring.dart';
 
+import 'scene_args.dart';
+
 class StoreBanner({
   final String headline = 'Fresh coffee, faster',
   final String subtitle = 'Order ahead. Skip the line. Earn rewards.',
   final String cta = 'Get the app',
   final SceneColor tint = const SceneColor(0xFFE8632B),
+  final SceneTokens tokens = const SceneTokens(),
 }) extends SceneDefinition {
   late final glow = ShapeNode(
     x: 620,
@@ -29,7 +32,7 @@ class StoreBanner({
     headline,
     fontSize: 54,
     weight: SceneFontWeight.w700,
-    color: SceneColor(0xFFFFFFFF),
+    color: tokens.ink,
   );
   late final sub = TextNode(
     subtitle,
@@ -40,11 +43,11 @@ class StoreBanner({
     cta,
     fontSize: 17,
     weight: SceneFontWeight.w600,
-    color: SceneColor(0xFFFFFFFF),
+    color: tokens.ink,
   );
   late final ctaBox = FrameNode(
     fill: tint,
-    corner: 28,
+    corner: tokens.radius,
     layout: NodeLayout.row,
     padding: 16,
     children: [ctaLabel],
@@ -62,7 +65,7 @@ class StoreBanner({
   late final root = FrameNode(
     width: 1024,
     height: 500,
-    fill: SceneColor(0xFF2B1B12),
+    fill: tokens.espresso,
     children: [glow, cup, copy],
   );
 }

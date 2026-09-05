@@ -5,10 +5,17 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
+import 'package:flutterware_app/src/scene/tokens_file.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
   var dir = Directory(p.join('..', 'examples', 'example', 'demo'));
+  // The demos read the package's tokens, declared beside them — parsed the
+  // way the studio parses them, declaration first.
+  var tokens = parseTokensFile(
+    File(p.join(dir.path, sceneTokensFileName)).readAsStringSync(),
+  ).tokens;
+  SceneParse parse(String source) => parseSceneFile(source, tokens: tokens);
   var files =
       dir
           .listSync()
@@ -22,10 +29,10 @@ void main() {
   for (var file in files) {
     test('${p.basename(file.path)} re-emits as it was read', () {
       var source = file.readAsStringSync();
-      var parsed = parseSceneFile(source);
+      var parsed = parse(source);
       expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
       var emitted = emitSceneFile(parsed.doc!, className: parsed.className!);
-      var again = parseSceneFile(emitted);
+      var again = parse(emitted);
       expect(again.refusals, isEmpty, reason: again.refusals.join('\n'));
       expect(
         emitSceneFile(again.doc!, className: again.className!),

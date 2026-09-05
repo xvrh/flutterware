@@ -1,0 +1,247 @@
+// The app's declaration of the values its scenes share, read without
+// resolving anything.
+//
+// The same shape as the externals file, for the same reason: the editor
+// never compiles the app, so a token's name, type and value are told to it
+// here, in one list the app writes once — and everything downstream follows.
+// The generated `SceneTokens` class a scene file spells `tokens.brand`
+// against, the value the canvas renders for it, the picker the inspector
+// offers, and the refusal for a token nobody declared.
+//
+// The tool only ever READS this file. That is what makes a token different
+// from a parameter: a parameter's default moves when a bound property is
+// edited, because the file is the tool's; a token is shared by every scene
+// of the package and written by hand, so a property edited off its token
+// detaches instead.
+import 'package:analyzer/dart/analysis/utilities.dart';
+import 'package:analyzer/dart/ast/ast.dart';
+import 'package:flutterware/scene_authoring.dart';
+
+import 'scene_file.dart';
+
+/// The symbol the declaration list must be called.
+const sceneTokensSymbol = 'sceneTokens';
+
+/// Where a package declares its tokens — beside its externals.
+const sceneTokensFileName = 'scene_tokens.dart';
+
+/// What the generated class is called, and therefore the TYPE a scene's
+/// tokens formal is recognised by: `class Banner({final SceneTokens tokens =
+/// const SceneTokens()})`. The formal's name is the author's own.
+const sceneTokensClassName = 'SceneTokens';
+
+/// What a read of a declaration file produced.
+class TokensParse {
+  TokensParse(this.tokens, this.refusals);
+
+  final List<SceneTokenDecl> tokens;
+  final List<SceneRefusal> refusals;
+
+  bool get ok => refusals.isEmpty;
+}
+
+/// The same declarations, as the tool describes them — for a demo or a test
+/// that already holds the real objects.
+List<SceneTokenDecl> describeTokens(List<Token<Object>> tokens) => [
+  for (var t in tokens)
+    SceneTokenDecl(t.name, switch (t.value) {
+      String() => SceneParamKind.string,
+      bool() => SceneParamKind.bool,
+      SceneColor() => SceneParamKind.color,
+      num() => SceneParamKind.number,
+      var v => throw ArgumentError(
+        'a token is a String, double, bool or SceneColor — '
+        '"${t.name}" is a ${v.runtimeType}',
+      ),
+    }, t.value is num ? (t.value as num).toDouble() : t.value),
+];
+
+/// The kinds a token may have, by the type argument the declaration spells.
+const _tokenKinds = {
+  'double': SceneParamKind.number,
+  'String': SceneParamKind.string,
+  'bool': SceneParamKind.bool,
+  'SceneColor': SceneParamKind.color,
+};
+
+/// Reads `final sceneTokens = [Token<SceneColor>('brand', SceneColor(…)), …]`.
+///
+/// Everything outside that shape is refused with a line number rather than
+/// skipped, the externals rule: a token silently half-read is a scene that
+/// silently loses a colour.
+TokensParse parseTokensFile(String source) {
+  var refusals = <SceneRefusal>[];
+  var lines = source.split('\n');
+  void refuse(int offset, String construct, String message) {
+    var line = 1;
+    var seen = 0;
+    for (var l in lines) {
+      if (offset <= seen + l.length) break;
+      seen += l.length + 1;
+      line++;
+    }
+    refusals.add(SceneRefusal(offset, line, construct, message));
+  }
+
+  var result = parseString(content: source, throwIfDiagnostics: false);
+  for (var error in result.errors) {
+    refuse(error.offset, 'syntax error', error.message);
+  }
+  if (refusals.isNotEmpty) return TokensParse(const [], refusals);
+
+  ListLiteral? list;
+  for (var decl in result.unit.declarations) {
+    if (decl is! TopLevelVariableDeclaration) continue;
+    for (var v in decl.variables.variables) {
+      if (v.name.lexeme != sceneTokensSymbol) continue;
+      if (v.initializer case ListLiteral l) {
+        list = l;
+      } else {
+        refuse(
+          v.offset,
+          'declaration',
+          '$sceneTokensSymbol is a list literal of Token<…>(…)',
+        );
+      }
+    }
+  }
+  if (list == null) {
+    if (refusals.isEmpty) {
+      refuse(
+        0,
+        'no declarations',
+        'a token file holds `final $sceneTokensSymbol = '
+            "[Token<SceneColor>('brand', SceneColor(0xFF…)), …]`",
+      );
+    }
+    return TokensParse(const [], refusals);
+  }
+
+  var tokens = <SceneTokenDecl>[];
+  var names = <String>{};
+  for (var element in list.elements) {
+    if (element is! Expression) {
+      refuse(element.offset, 'element', 'expected a Token<…>(…)');
+      continue;
+    }
+    var decl = _token(element, refuse);
+    if (decl == null) continue;
+    if (!names.add(decl.name)) {
+      refuse(
+        element.offset,
+        'duplicate name',
+        '"${decl.name}" is declared twice',
+      );
+      continue;
+    }
+    tokens.add(decl);
+  }
+  return TokensParse(tokens, refusals);
+}
+
+SceneTokenDecl? _token(
+  Expression e,
+  void Function(int, String, String) refuse,
+) {
+  String? typeName;
+  ArgumentList? args;
+  switch (e) {
+    case InstanceCreationExpression(:var constructorName, :var argumentList)
+        when constructorName.type.name.lexeme == 'Token':
+      typeName = _typeArgument(constructorName.type.typeArguments);
+      args = argumentList;
+    case MethodInvocation(
+          :var methodName,
+          :var typeArguments,
+          :var argumentList,
+        )
+        when methodName.name == 'Token':
+      typeName = _typeArgument(typeArguments);
+      args = argumentList;
+    default:
+  }
+  if (args == null) {
+    refuse(e.offset, 'element', 'expected a Token<…>(…)');
+    return null;
+  }
+  var kind = _tokenKinds[typeName];
+  if (kind == null) {
+    refuse(
+      e.offset,
+      'token type',
+      'a token is typed by its type argument — '
+          "Token<SceneColor>('brand', SceneColor(0xFF…)); one of "
+          '${_tokenKinds.keys.join(', ')}',
+    );
+    return null;
+  }
+  if (args.arguments.length != 2 ||
+      args.arguments.any((a) => a is NamedArgument)) {
+    refuse(
+      e.offset,
+      'arguments',
+      "a token is Token<double>('radius', 16) — a name and its value",
+    );
+    return null;
+  }
+  var nameArg = args.arguments[0].argumentExpression;
+  if (nameArg is! SimpleStringLiteral || !isValidNodeName(nameArg.value)) {
+    refuse(nameArg.offset, 'token name', 'a token name is an identifier');
+    return null;
+  }
+  var value = _value(args.arguments[1].argumentExpression, kind);
+  if (value == null) {
+    refuse(
+      args.arguments[1].offset,
+      'token value',
+      "a ${typeName!} token's value is a $typeName literal",
+    );
+    return null;
+  }
+  return SceneTokenDecl(nameArg.value, kind, value);
+}
+
+Object? _value(Expression e, SceneParamKind kind) {
+  var inner = e;
+  var negate = false;
+  if (inner is PrefixExpression && inner.operator.lexeme == '-') {
+    negate = true;
+    inner = inner.operand;
+  }
+  switch ((kind, inner)) {
+    case (SceneParamKind.string, SimpleStringLiteral(:var value)):
+      return value;
+    case (SceneParamKind.bool, BooleanLiteral(:var value)):
+      return value;
+    case (SceneParamKind.number, IntegerLiteral(:var value?)):
+      return (negate ? -value : value).toDouble();
+    case (SceneParamKind.number, DoubleLiteral(:var value)):
+      return negate ? -value : value;
+    case (SceneParamKind.color, _):
+      ArgumentList? args;
+      switch (inner) {
+        case InstanceCreationExpression(:var constructorName, :var argumentList)
+            when constructorName.type.name.lexeme == 'SceneColor':
+          args = argumentList;
+        case MethodInvocation(:var methodName, :var argumentList)
+            when methodName.name == 'SceneColor':
+          args = argumentList;
+        default:
+      }
+      if (args != null && args.arguments.length == 1) {
+        if (args.arguments.single.argumentExpression case IntegerLiteral(
+          :var value?,
+        )) {
+          return SceneColor(value);
+        }
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
+String? _typeArgument(TypeArgumentList? types) =>
+    types != null && types.arguments.length == 1
+    ? types.arguments.single.toSource()
+    : null;

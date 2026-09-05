@@ -41,7 +41,7 @@
 // emit; every hostile construct is refused with an offset and a name.
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/token.dart';
-import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware/scene_authoring.dart' hide Token;
 
 import 'scene_file.dart' show SceneRefusal;
 

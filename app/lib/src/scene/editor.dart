@@ -498,6 +498,7 @@ class SceneEditor extends SceneListenable {
         if (switch (e.value) {
           ParamRef(:var name) => name == param,
           ItemRef(:var list) => list == param,
+          TokenRef() => false,
         })
           (n, e.key),
     for (var (n, _) in doc.walk())
@@ -643,6 +644,36 @@ class SceneEditor extends SceneListenable {
       setSceneProperty(node, prop, decl.defaultValue);
     });
   }
+
+  /// Connects [prop] of [node] to the package's token [token]. The property
+  /// takes the token's value. Unlike a parameter, a token is not moved by a
+  /// later edit — the property detaches instead ([reconcileBindings]),
+  /// because the declaration is the app's own file.
+  void bindToken(SceneNode node, String prop, String token) {
+    var decl = doc.tokenNamed(token);
+    if (decl == null) throw ArgumentError('no token "$token"');
+    var kind = bindableKind(node, prop);
+    if (kind == null) {
+      throw ArgumentError('"$prop" cannot read a token');
+    }
+    if (decl.kind != kind) {
+      throw ArgumentError(
+        '"$token" is a ${decl.typeName} token — "$prop" takes a '
+        '${SceneTokenDecl(token, kind, '').typeName}',
+      );
+    }
+    perform('Bind $prop to tokens.$token', () {
+      node.bindings[prop] = TokenRef(token);
+      setSceneProperty(node, prop, decl.value);
+    });
+  }
+
+  /// The properties reading [token], as (node, property) pairs.
+  List<(SceneNode, String)> readersOfToken(String token) => [
+    for (var (n, _) in doc.walk())
+      for (var e in n.bindings.entries)
+        if (e.value case TokenRef(:var name) when name == token) (n, e.key),
+  ];
 
   /// Declares a parameter whose default is what [prop] of [node] holds now,
   /// and binds the property to it — one edit, one undo entry. Returns the

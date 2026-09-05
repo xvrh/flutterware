@@ -289,9 +289,31 @@ Each is a table row and a renderer case.
 
 1. **How a style with one property overridden is spelled in the file**, such
    that it round-trips. M7's design owes this.
-2. **Whether a token set is a class or a map.** A class is typed and generated;
-   a map is late-bound and lets an app carry tokens the scenes do not know.
-   M5 decides.
+2. ~~**Whether a token set is a class or a map.**~~ Decided in M5, 2026-09-05:
+   **a class**, generated. `scene_tokens.dart` declares `final sceneTokens =
+   [Token<SceneColor>('brand', SceneColor(0xFF…)), …]`; the generator writes a
+   const `SceneTokens` into `scene_args.dart` with one typed field per token
+   and the declared value as its default. A scene reads them through a header
+   formal **recognised by its type** — `final SceneTokens tokens = const
+   SceneTokens()`, called whatever the author likes — so `tokens.brand` is a
+   field the compiler checks and an undeclared name does not compile. That is
+   the north star applied (a Dart file that compiles); a map would be
+   late-bound and lose it. The formal therefore lands in M5 rather than M6:
+   without it there is no spelling for a token read that M6 would not have to
+   migrate. M6 adds the modes (other argument lists of the same class), the
+   canvas switch, and the parent passing its set down.
+
+   Two more things M5 settled. **An edit detaches.** Tokens are declared by
+   hand in a file the tool only reads and shared by every scene of the
+   package, so editing a token-bound property does not move the token (the
+   parameter rule) — the property detaches and keeps its value, the way a
+   design tool detaches a variable when you type over it; the inspector
+   offers the token back one click away. **Opaque tokens are M5b.** The
+   value half (`SceneColor`, `double`, `String`, `bool`) shipped first; the
+   opaque half — an `InputDecoration` the app owns, named in a scene and
+   passed to an external widget's argument, never drawn — needs `Arg<T>` of
+   any type on the externals and a wire that carries the reference rather
+   than the object, and is its own piece.
 3. **Whether the importer runs in the studio or the CLI.** It needs network and
    credentials, which is a first for this plugin.
 

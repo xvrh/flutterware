@@ -7,12 +7,14 @@
 // parse a scene.
 import 'dart:io';
 
+import 'package:flutterware/scene_authoring.dart';
 import 'package:path/path.dart' as p;
 
 import 'args_codegen.dart';
 import 'discovery.dart';
 import 'externals_file.dart';
 import 'scene_file.dart';
+import 'tokens_file.dart';
 
 /// Where a package declares the widgets its scenes may place.
 const sceneExternalsFileName = 'scene_externals.dart';
@@ -44,9 +46,12 @@ class SceneArgsResult {
 
 /// Writes `scene_args.dart` for the scenes under [directory].
 ///
-/// Both halves are read here: the app's declaration file, if it has one, and
-/// every scene class's own parameters — which need no declaration, because
-/// a scene already says what it takes in its header.
+/// Three things are read here: the app's declaration files, if it has them
+/// — the widgets, then the tokens — and every scene class's own parameters,
+/// which need no declaration because a scene already says what it takes in
+/// its header. Tokens come before the scenes for the same reason the
+/// widgets do: a scene file spells `tokens.brand`, and the parser has to know
+/// what that names.
 SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
   var dir = Directory(directory);
   if (!dir.existsSync()) return SceneArgsResult(path: null, wrote: false);
@@ -67,9 +72,26 @@ SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
     externalsImport = sceneExternalsFileName;
   }
 
+  var tokens = <SceneTokenDecl>[];
+  var tokensFile = File(p.join(directory, sceneTokensFileName));
+  if (tokensFile.existsSync()) {
+    var parsed = parseTokensFile(tokensFile.readAsStringSync());
+    if (!parsed.ok) {
+      return SceneArgsResult(
+        path: null,
+        wrote: false,
+        refusals: parsed.refusals,
+      );
+    }
+    tokens = parsed.tokens;
+  }
+
   var scenes = <SceneClassDecl>[];
   for (var entry in discoverScenes(directory)) {
-    var parsed = parseSceneFile(File(entry.path).readAsStringSync());
+    var parsed = parseSceneFile(
+      File(entry.path).readAsStringSync(),
+      tokens: tokens,
+    );
     // A scene that does not parse is the panel's problem to report with line
     // numbers; here it simply contributes no arguments class, and the one it
     // had last time stays until it parses again.
@@ -85,12 +107,13 @@ SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
   scenes.sort((a, b) => a.className.compareTo(b.className));
 
   var target = File(p.join(directory, sceneArgsFileName));
-  if (externals.isEmpty && scenes.isEmpty) {
+  if (externals.isEmpty && scenes.isEmpty && tokens.isEmpty) {
     return SceneArgsResult(path: target.path, wrote: false);
   }
   var source = emitSceneArgs(
     externals: externals,
     scenes: scenes,
+    tokens: tokens,
     externalsImport: externalsImport,
   );
   if (target.existsSync() && target.readAsStringSync() == source) {

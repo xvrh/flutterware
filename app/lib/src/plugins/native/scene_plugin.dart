@@ -223,6 +223,7 @@ class _ScenePanelState extends State<_ScenePanel>
       entry.path,
       File(entry.path).readAsStringSync(),
       declaredArgs: _declaredArgs(),
+      tokens: _tokens(),
     );
     if (!opened.ok) {
       setState(() {
@@ -293,7 +294,11 @@ class _ScenePanelState extends State<_ScenePanel>
         );
         continue;
       }
-      var refusals = file.adopt(source, declaredArgs: _declaredArgs());
+      var refusals = file.adopt(
+        source,
+        declaredArgs: _declaredArgs(),
+        tokens: _tokens(),
+      );
       if (refusals.isEmpty) {
         adopted.add(p.basename(file.path));
         _autosave.resume(file.path);
@@ -360,6 +365,11 @@ class _ScenePanelState extends State<_ScenePanel>
     for (var w in _externals()) w.entry: {for (var a in w.args) a.name},
   };
 
+  List<SceneTokenDecl> _tokens() {
+    var package = _package;
+    return package == null ? const [] : _core.tokensFor(package);
+  }
+
   /// A nested scene is another scene file of the same package, found by the
   /// class it declares. Opened fresh here; the workspace keeps the one copy
   /// it already holds, so edits inside a child are not lost to a re-resolve.
@@ -373,6 +383,7 @@ class _ScenePanelState extends State<_ScenePanel>
         entry.path,
         File(entry.path).readAsStringSync(),
         declaredArgs: _declaredArgs(),
+        tokens: _tokens(),
       );
       if (!opened.ok) {
         setState(() {
