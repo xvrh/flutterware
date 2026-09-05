@@ -7,15 +7,16 @@ import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import 'inline_name.dart';
+import 'param_pane.dart';
 
 /// The line above the drawer under the canvas, naming the one thing that is
-/// open there — a motion's timeline, a list parameter's table — and nothing
-/// else.
+/// open there — a motion's timeline, a parameter's pane or table — and
+/// nothing else.
 ///
 /// Left, the chevron folds the drawer away without closing it: the header
 /// stays as a one-line reminder, the motion stays on the picture. Then the
 /// kind, the name with a switcher among its siblings, and the item's own
-/// facts. Right, the drawer's actions and the cross that closes it. Nothing
+/// facts. Right, the item's menu and the cross that closes it. Nothing
 /// open, it says where to go. Never chips: twelve motions are twelve rows in
 /// the tree, and one name here.
 class SceneDrawerHeader extends StatefulWidget {
@@ -31,7 +32,7 @@ class SceneDrawerHeader extends StatefulWidget {
   /// Closes whatever is open — for a motion, the scene as authored.
   final VoidCallback onClose;
 
-  /// Opens a motion (starting its playback) or a list parameter.
+  /// Opens a motion (starting its playback) or a parameter.
   final ValueChanged<SceneAside> onPick;
 
   @override
@@ -49,7 +50,13 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
     var open = editor.drawer;
     var active = open?.name;
     var isMotion = open is MotionAside;
-    var thing = isMotion ? 'timeline' : 'table';
+    var thing = switch (open) {
+      MotionAside() => 'timeline',
+      ParamAside(:var name)
+          when editor.doc.paramNamed(name)?.kind == SceneParamKind.list =>
+        'table',
+      _ => 'parameter',
+    };
     var collapsed = editor.drawerCollapsed;
     return Container(
       height: 32,
@@ -58,29 +65,21 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
       child: Row(
         spacing: FwSpacing.sm,
         children: [
-          Tooltip(
-            message: open == null
+          _HeaderButton(
+            tooltip: open == null
                 ? 'Open a motion to see its timeline'
                 : collapsed
                 ? 'Show the $thing'
                 : 'Fold the $thing away — the '
                       '${isMotion ? 'motion' : 'parameter'} stays open',
-            child: Tappable(
-              onTap: active == null
-                  ? null
-                  : () => editor.drawerCollapsed = !collapsed,
-              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-              child: Padding(
-                padding: const EdgeInsets.all(FwSpacing.xs),
-                child: Icon(
-                  active == null || collapsed
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
-                  size: FwIconSize.md,
-                  color: active == null ? colors.mut3 : colors.ink,
-                ),
-              ),
-            ),
+            icon: active == null || collapsed
+                ? Icons.keyboard_arrow_up
+                : Icons.keyboard_arrow_down,
+            size: FwIconSize.md,
+            color: active == null ? colors.mut3 : colors.ink,
+            onTap: active == null
+                ? null
+                : (_) => editor.drawerCollapsed = !collapsed,
           ),
           if (open == null || active == null)
             Text(
@@ -94,7 +93,8 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
             ),
             GestureDetector(
               onDoubleTap: () => setState(() => _renaming = true),
-              onSecondaryTapUp: (d) => _menu(context, d.globalPosition, open),
+              onSecondaryTapUp: (d) =>
+                  showContextMenu(context, d.globalPosition, _menu(open)),
               child: _renaming
                   ? SizedBox(
                       width: 160,
@@ -109,16 +109,12 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
                   : Text(active, style: type.bodyStrong),
             ),
             if (_openable().length > 1)
-              Tooltip(
-                message: 'Switch to another motion or parameter',
-                child: GestureDetector(
-                  onTapDown: (d) => _switcher(context, d.globalPosition),
-                  child: Icon(
-                    Icons.arrow_drop_down,
-                    size: FwIconSize.md,
-                    color: colors.mut,
-                  ),
-                ),
+              _HeaderButton(
+                tooltip: 'Switch to another motion or parameter',
+                icon: Icons.arrow_drop_down,
+                size: FwIconSize.md,
+                color: colors.mut,
+                onTap: (at) => showContextMenu(context, at, _switcher(open)),
               ),
             const SizedBox(width: FwSpacing.sm),
             Text(
@@ -126,30 +122,21 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
               style: type.caption.copyWith(color: colors.mut2),
             ),
             const Spacer(),
-            if (open is ParamAside)
-              Tappable(
-                onTap: () => _addRow(open.name),
-                child: Text(
-                  'add row',
-                  style: type.caption.copyWith(color: colors.accent),
-                ),
-              ),
-            Tooltip(
-              message: isMotion
+            _HeaderButton(
+              tooltip: isMotion ? 'Motion menu' : 'Parameter menu',
+              icon: Icons.more_horiz,
+              size: FwIconSize.md,
+              color: colors.mut,
+              onTap: (at) => showContextMenu(context, at, _menu(open)),
+            ),
+            _HeaderButton(
+              tooltip: isMotion
                   ? 'Close the motion — the scene as authored'
-                  : 'Close the table',
-              child: Tappable(
-                onTap: widget.onClose,
-                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-                child: Padding(
-                  padding: const EdgeInsets.all(FwSpacing.xs),
-                  child: Icon(
-                    Icons.close,
-                    size: FwIconSize.sm,
-                    color: colors.mut,
-                  ),
-                ),
-              ),
+                  : 'Close the parameter',
+              icon: Icons.close,
+              size: FwIconSize.sm,
+              color: colors.mut,
+              onTap: (_) => widget.onClose(),
             ),
           ],
         ],
@@ -168,18 +155,11 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
       case ParamAside(:var name):
         var p = editor.doc.paramNamed(name)!;
         var readers = editor.readersOf(name).length;
-        return '${p.items.length} ${p.items.length == 1 ? 'item' : 'items'}'
-            ' · read by $readers';
+        var what = p.kind == SceneParamKind.list
+            ? '${p.items.length} ${p.items.length == 1 ? 'item' : 'items'}'
+            : '${paramKindLabel(p.kind)} · ${p.typeName}';
+        return '$what · read by $readers';
     }
-  }
-
-  void _addRow(String name) {
-    var items = editor.doc.paramNamed(name)!.items;
-    if (items.isEmpty) return;
-    editor.setParamDefault(name, [
-      ...items,
-      {...items.last},
-    ]);
   }
 
   String? _rename(SceneAside open, String wanted) {
@@ -197,39 +177,46 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
     return null;
   }
 
-  void _menu(BuildContext context, Offset at, SceneAside open) {
-    var name = open.name;
-    showContextMenu(context, at, [
-      MenuItem(
-        'Rename $name…',
-        icon: Icons.edit_outlined,
-        shortcut: 'double-click',
-        onSelected: () => setState(() => _renaming = true),
-      ),
-      if (open is MotionAside)
-        MenuItem(
-          'Delete $name',
-          icon: Icons.close,
-          danger: true,
-          onSelected: () => editor.removeMotion(name),
-        ),
-    ]);
+  /// The open item's own menu — the same one its row in the tree offers.
+  List<MenuEntry> _menu(SceneAside open) {
+    void rename() => setState(() => _renaming = true);
+    switch (open) {
+      case ParamAside(:var name):
+        return paramMenu(
+          editor,
+          editor.doc.paramNamed(name)!,
+          onRename: rename,
+        );
+      case MotionAside(:var name):
+        return [
+          MenuItem(
+            'Rename',
+            icon: Icons.edit_outlined,
+            shortcut: 'double-click',
+            onSelected: rename,
+          ),
+          const MenuDivider(),
+          MenuItem(
+            'Delete $name',
+            icon: Icons.close,
+            danger: true,
+            onSelected: () => editor.removeMotion(name),
+          ),
+        ];
+    }
   }
 
-  /// Everything that can be open here: the motions, then the list
-  /// parameters.
+  /// Everything that can be open here: the motions, then the parameters.
   List<SceneAside> _openable() => [
     for (var name in editor.motions.keys) MotionAside(name),
-    for (var p in editor.doc.params)
-      if (p.kind == SceneParamKind.list) ParamAside(p.name),
+    for (var p in editor.doc.params) ParamAside(p.name),
   ];
 
-  void _switcher(BuildContext context, Offset at) {
-    var open = editor.drawer;
+  List<MenuEntry> _switcher(SceneAside open) {
     var all = _openable();
     var motions = all.whereType<MotionAside>().toList();
     var params = all.whereType<ParamAside>().toList();
-    showContextMenu(context, at, [
+    return [
       if (motions.isNotEmpty) const MenuHeader('Motions'),
       for (var m in motions)
         MenuItem(
@@ -244,6 +231,48 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
           icon: p == open ? Icons.check : null,
           onSelected: p == open ? null : () => widget.onPick(p),
         ),
-    ]);
+    ];
   }
+}
+
+/// An icon that answers the pointer: hover wash, click cursor, a tooltip,
+/// and — for the ones that open a menu — where its bottom-left corner is,
+/// so the menu drops from the button rather than from wherever the pointer
+/// happened to be. A bare icon in a [GestureDetector] had none of that, and
+/// sat inside the name's double-tap detector, which held every press until
+/// it was sure it was not the first half of a double.
+class _HeaderButton extends StatelessWidget {
+  const _HeaderButton({
+    required this.tooltip,
+    required this.icon,
+    required this.size,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final double size;
+  final Color color;
+
+  /// Called with the global position of the button's bottom-left corner.
+  final void Function(Offset at)? onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: Tappable(
+      onTap: onTap == null
+          ? null
+          : () {
+              var box = context.findRenderObject()! as RenderBox;
+              onTap!(box.localToGlobal(Offset(0, box.size.height)));
+            },
+      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+      child: Padding(
+        padding: const EdgeInsets.all(FwSpacing.xs),
+        child: Icon(icon, size: size, color: color),
+      ),
+    ),
+  );
 }

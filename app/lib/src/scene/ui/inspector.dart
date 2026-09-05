@@ -23,7 +23,6 @@ import '../editor.dart';
 import 'curve_picker.dart';
 import 'number_shape.dart';
 import 'number_field.dart';
-import 'param_inspector.dart';
 import 'swatches.dart';
 
 /// The three states a size can be in, in the order the menu offers them.
@@ -47,7 +46,8 @@ class SceneInspector extends StatelessWidget {
 
   final SceneEditor editor;
 
-  /// Opens a list parameter's table below the canvas.
+  /// Opens a parameter below the canvas — where a bound property's row
+  /// leads.
   final ValueChanged<String>? onOpenParam;
 
   /// Drills into the scene a nested instance stands for — its main.
@@ -91,18 +91,6 @@ class SceneInspector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (editor.selectedKeys.isNotEmpty) return _keys(context);
-    switch (editor.aside) {
-      case ParamAside(:var name):
-        return SceneParamInspector(editor, name, onOpen: onOpenParam);
-      case MotionAside(:var name):
-        return SceneMotionInspector(
-          editor,
-          name,
-          onOpen: (m) => editor.activeMotion = m,
-        );
-      case null:
-        break;
-    }
     var node = editor.primary ?? doc.root;
     var parent = node == doc.root ? null : doc.parentOf(node);
     var inFlex = parent != null && parent.layout != NodeLayout.absolute;
@@ -564,10 +552,20 @@ class SceneInspector extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                '${_propLabel(e.key)} ← ${e.value}',
-                style: context.type.mono,
-                overflow: TextOverflow.ellipsis,
+              child: Tappable(
+                // A step to the parameter: it opens below, where its
+                // mockup and its other readers are.
+                onTap: switch (e.value) {
+                  ParamRef(:var name) when onOpenParam != null =>
+                    () => onOpenParam!(name),
+                  _ => null,
+                },
+                feedback: TapFeedback.none,
+                child: Text(
+                  '${_propLabel(e.key)} ← ${e.value}',
+                  style: context.type.mono,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
             Tappable(

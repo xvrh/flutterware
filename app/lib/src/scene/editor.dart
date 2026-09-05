@@ -67,10 +67,12 @@ class MotionKeyRef {
 /// Drawing returns to [select] once the node exists.
 enum SceneTool { select, frame, text, shape }
 
-/// A thing the file declares that is not a node, selected in the tree's
-/// outline: the inspector describes it the way it describes a node. One at
-/// a time, and never together with a node selection — the inspector shows
-/// one thing.
+/// A thing the file declares that is not a node — a parameter, a motion —
+/// named by the tree's outline and OPEN in the drawer under the canvas: a
+/// motion as its timeline, a parameter as its pane or its table. One at a
+/// time, and independent of the node selection: the drawer stays put while
+/// nodes are clicked on the canvas, which is how a timeline gets its keys
+/// and how a parameter is bound to them.
 sealed class SceneAside {
   const SceneAside(this.name);
 
@@ -121,13 +123,11 @@ class SceneEditor extends SceneListenable {
     notifyListeners();
   }
 
-  /// The list parameter whose table is open in the drawer, or null. The
-  /// drawer holds one thing: opening a parameter closes the motion and the
-  /// other way round.
-  String? get openParam => switch (doc.paramNamed(_openParam ?? '')) {
-    SceneParamDecl(kind: SceneParamKind.list) => _openParam,
-    _ => null,
-  };
+  /// The parameter open in the drawer, or null — a list as its table, any
+  /// other kind as its pane. The drawer holds one thing: opening a parameter
+  /// closes the motion and the other way round.
+  String? get openParam =>
+      doc.paramNamed(_openParam ?? '') == null ? null : _openParam;
   String? _openParam;
 
   set openParam(String? name) {
@@ -141,8 +141,8 @@ class SceneEditor extends SceneListenable {
     notifyListeners();
   }
 
-  /// What the drawer under the canvas is showing, as the same kind of thing
-  /// the outline selects — a motion or a list parameter — or null.
+  /// What the drawer under the canvas is showing — a motion or a parameter
+  /// — or null. The outline highlights exactly this row.
   SceneAside? get drawer => switch ((activeMotion, openParam)) {
     (var m?, _) => MotionAside(m),
     (_, var p?) => ParamAside(p),
@@ -230,7 +230,6 @@ class SceneEditor extends SceneListenable {
     if (motions.containsKey(wanted)) {
       throw ArgumentError('"$wanted" is already taken');
     }
-    if (_aside == MotionAside(name)) _aside = MotionAside(wanted);
     perform('Rename motion $name', () {
       // Rebuilt rather than removed and re-added: the map's order is the
       // strip's order, and a rename must not move the chip.
@@ -296,25 +295,6 @@ class SceneEditor extends SceneListenable {
 
   bool isSelected(SceneNode node) => _selection.contains(node.name);
 
-  /// The non-node thing selected in the outline, or null. Setting one
-  /// clears the node and key selections; selecting a node clears this.
-  SceneAside? get aside => switch (_aside) {
-    ParamAside(:var name) when doc.paramNamed(name) == null => null,
-    MotionAside(:var name) when !motions.containsKey(name) => null,
-    var a => a,
-  };
-  SceneAside? _aside;
-
-  set aside(SceneAside? value) {
-    if (_aside == value) return;
-    _aside = value;
-    if (value != null) {
-      _selection.clear();
-      _keySelection.clear();
-    }
-    notifyListeners();
-  }
-
   /// The node the inspector shows: the most recently selected live one.
   SceneNode? get primary {
     SceneNode? last;
@@ -346,7 +326,6 @@ class SceneEditor extends SceneListenable {
         ..add(node.name);
     }
     _keySelection.clear();
-    _aside = null;
     notifyListeners();
   }
 
@@ -364,17 +343,13 @@ class SceneEditor extends SceneListenable {
     _selection
       ..clear()
       ..addAll(names);
-    if (_selection.isNotEmpty) {
-      _keySelection.clear();
-      _aside = null;
-    }
+    if (_selection.isNotEmpty) _keySelection.clear();
     notifyListeners();
   }
 
   void clearSelection() {
-    if (_selection.isEmpty && _aside == null) return;
+    if (_selection.isEmpty) return;
     _selection.clear();
-    _aside = null;
     notifyListeners();
   }
 
@@ -551,7 +526,6 @@ class SceneEditor extends SceneListenable {
     if (paramNameProblem(wanted) case var problem?) {
       throw ArgumentError(problem);
     }
-    if (_aside == ParamAside(name)) _aside = ParamAside(wanted);
     if (_openParam == name) _openParam = wanted;
     perform('Rename parameter $name', () {
       var decl = doc.params[i];

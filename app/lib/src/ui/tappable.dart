@@ -140,6 +140,25 @@ class _TappableState extends State<Tappable> {
   bool _pressed = false;
   bool _focused = false;
 
+  FocusNode? _ownNode;
+  FocusNode get _node =>
+      widget.focusNode ?? (_ownNode ??= FocusNode(debugLabel: 'Tappable'));
+
+  @override
+  void dispose() {
+    _ownNode?.dispose();
+    super.dispose();
+  }
+
+  /// The ring is for the target itself, never for a field inside it. A tree
+  /// row whose inline rename field has focus is not the focused thing — and
+  /// Flutter tells no ancestor when a focused descendant is disposed, so a
+  /// ring keyed on `hasFocus` stayed on the row after the rename landed.
+  void _onFocusChange(bool _) {
+    var focused = _node.hasPrimaryFocus;
+    if (focused != _focused) setState(() => _focused = focused);
+  }
+
   bool get _enabled => widget.onTap != null;
 
   // Only repaint when something consumes the flag. The flag itself is kept
@@ -234,10 +253,10 @@ class _TappableState extends State<Tappable> {
     }
 
     return Focus(
-      focusNode: widget.focusNode,
+      focusNode: _node,
       canRequestFocus: _enabled && widget.focusable,
       skipTraversal: !widget.focusable,
-      onFocusChange: (value) => setState(() => _focused = value),
+      onFocusChange: _onFocusChange,
       onKeyEvent: _onKey,
       child: MouseRegion(
         cursor: cursor,

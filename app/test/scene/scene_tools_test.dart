@@ -201,11 +201,11 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.pump();
-      expect(find.text('Rename BannerIntro…'), findsOneWidget);
+      expect(find.text('Rename'), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
       await tester.pump();
-      expect(find.text('Rename BannerIntro…'), findsNothing);
+      expect(find.text('Rename'), findsNothing);
       expect(
         editor.activeMotion,
         'BannerIntro',
@@ -229,7 +229,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       await tester.pump();
-      await tester.tap(find.text('Rename BannerIntro…'));
+      await tester.tap(find.text('Rename'));
       await tester.pump();
       await tester.pump();
       var field = find.descendant(

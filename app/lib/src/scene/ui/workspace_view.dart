@@ -11,6 +11,7 @@ import 'canvas.dart';
 import 'drawer_header.dart';
 import 'inspector.dart';
 import 'list_table.dart';
+import 'param_pane.dart';
 import 'shortcuts.dart';
 import 'timeline.dart';
 import 'tree_panel.dart';
@@ -94,8 +95,8 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
     editor.activeMotion = null;
   }
 
-  /// Opens a list parameter's table: the motion, if one is open, closes
-  /// first — the drawer holds one thing.
+  /// Opens a parameter — its pane, or a list's table: the motion, if one is
+  /// open, closes first — the drawer holds one thing.
   void _openParam(String name) {
     _closeMotion();
     editor.openParam = name;
@@ -200,10 +201,11 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                                     editor,
                                     widget.playbackFor(name),
                                   ),
-                                  ParamAside(:var name) => SceneListTable(
-                                    editor,
-                                    name,
-                                  ),
+                                  ParamAside(:var name) =>
+                                    editor.doc.paramNamed(name)?.kind ==
+                                            SceneParamKind.list
+                                        ? SceneListTable(editor, name)
+                                        : SceneParamPane(editor, name),
                                 },
                               ),
                             ],

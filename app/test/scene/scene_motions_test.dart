@@ -161,13 +161,8 @@ void main() {
     expect(find.text('BannerIntro'), findsOneWidget);
     expect(find.textContaining('Open a motion or a parameter'), findsOneWidget);
 
-    // A click selects it — the inspector describes it — and the row's
-    // chevron opens it below.
+    // One click opens it below.
     await tester.tap(find.text('BannerIntro'));
-    await tester.pump();
-    expect(editor.aside, const MotionAside('BannerIntro'));
-    expect(editor.activeMotion, isNull, reason: 'selected, not opened');
-    await tester.tap(find.byTooltip('Open below the canvas'));
     await tester.pump();
     expect(editor.activeMotion, 'BannerIntro');
     expect(find.byType(SceneTimeline), findsOneWidget);

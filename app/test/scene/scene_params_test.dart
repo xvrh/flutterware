@@ -32,7 +32,6 @@ void main() {
   visibleTests();
   listTests();
   motionKeyTests();
-  asideTests();
   drawerTests();
   nestedArgTests();
   test("add declares a parameter at the kind's zero, or a chosen mockup", () {
@@ -330,53 +329,6 @@ void motionKeyTests() {
   });
 }
 
-void asideTests() {
-  group('the outline selection', () {
-    test(
-      'a parameter or a motion is selected instead of a node, never with',
-      () {
-        var scene = coffeeBannerDraft();
-        var e = SceneEditor(
-          scene,
-          motions: {'BannerIntro': coffeeIntroDraft(scene)},
-        )..addParam('title', SceneParamKind.string, defaultValue: 'Hi');
-        e.select(scene.nodeNamed('headline'));
-        e.aside = const ParamAside('title');
-        expect(e.aside, const ParamAside('title'));
-        expect(e.selectedNodes, isEmpty);
-        e.select(scene.nodeNamed('glow'));
-        expect(e.aside, isNull);
-        e.aside = const MotionAside('BannerIntro');
-        expect(e.primary, isNull);
-        e.clearSelection();
-        expect(e.aside, isNull);
-      },
-    );
-
-    test('the selection follows a rename and drops with a delete', () {
-      var e = SceneEditor(coffeeBannerDraft())
-        ..addParam('title', SceneParamKind.string)
-        ..aside = const ParamAside('title');
-      e.renameParam('title', 'heading');
-      expect(e.aside, const ParamAside('heading'));
-      e.deleteParam('heading');
-      expect(e.aside, isNull);
-    });
-
-    test('a motion selection follows its rename too', () {
-      var scene = coffeeBannerDraft();
-      var e = SceneEditor(
-        scene,
-        motions: {'BannerIntro': coffeeIntroDraft(scene)},
-      )..aside = const MotionAside('BannerIntro');
-      e.renameMotion('BannerIntro', 'Intro');
-      expect(e.aside, const MotionAside('Intro'));
-      e.removeMotion('Intro');
-      expect(e.aside, isNull);
-    });
-  });
-}
-
 void drawerTests() {
   group('the drawer holds one thing', () {
     SceneEditor withList() {
@@ -406,14 +358,33 @@ void drawerTests() {
       expect(e.drawer, const MotionAside('BannerIntro'));
     });
 
-    test('only a list parameter can be open, and it follows a rename', () {
+    test('any parameter can be open, and it follows a rename', () {
       var e = withList()..addParam('title', SceneParamKind.string);
       e.openParam = 'title';
-      expect(e.openParam, isNull, reason: 'a text has no table');
+      expect(e.drawer, const ParamAside('title'));
       e.openParam = 'lines';
       e.renameParam('lines', 'rows');
       expect(e.openParam, 'rows');
       expect(e.drawer, const ParamAside('rows'));
+      e.deleteParam('rows');
+      expect(e.drawer, isNull);
+    });
+
+    test('the drawer is independent of the node selection', () {
+      var e = withList()..openParam = 'lines';
+      e.select(e.doc.nodeNamed('headline'));
+      expect(e.drawer, const ParamAside('lines'), reason: 'still open');
+      expect(e.selectedNodes.single.name, 'headline');
+      e.clearSelection();
+      expect(e.drawer, const ParamAside('lines'));
+    });
+
+    test('a motion follows its rename and drops with its delete', () {
+      var e = withList()..activeMotion = 'BannerIntro';
+      e.renameMotion('BannerIntro', 'Intro');
+      expect(e.drawer, const MotionAside('Intro'));
+      e.removeMotion('Intro');
+      expect(e.drawer, isNull);
     });
 
     test('folding keeps it open; opening anything unfolds', () {
