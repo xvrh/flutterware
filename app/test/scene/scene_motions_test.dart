@@ -156,9 +156,10 @@ void main() {
     await tester.pumpWidget(MaterialApp(theme: appTheme, home: _Host(editor)));
     await tester.pump();
     expect(find.byType(SceneTimeline), findsNothing, reason: 'static first');
-    expect(find.text('BannerIntro'), findsOneWidget);
+    // Listed twice: once in the tree's outline, once as the strip's chip.
+    expect(find.text('BannerIntro'), findsNWidgets(2));
 
-    await tester.tap(find.text('BannerIntro'));
+    await tester.tap(find.text('BannerIntro').last);
     await tester.pump();
     expect(editor.activeMotion, 'BannerIntro');
     expect(find.byType(SceneTimeline), findsOneWidget);

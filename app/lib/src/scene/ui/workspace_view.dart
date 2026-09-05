@@ -115,6 +115,11 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                   child: SceneTreePanel(
                     editor,
                     onEnterNested: widget.onEnterNested,
+                    sceneClassName: widget.sceneClassName,
+                    onOpenMotion: (name) {
+                      editor.activeMotion = name;
+                      widget.playbackFor(name).apply();
+                    },
                   ),
                 ),
                 Container(width: 1, color: line),

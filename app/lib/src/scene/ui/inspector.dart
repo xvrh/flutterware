@@ -23,7 +23,7 @@ import '../editor.dart';
 import 'curve_picker.dart';
 import 'number_shape.dart';
 import 'number_field.dart';
-import 'params_panel.dart';
+import 'param_inspector.dart';
 import 'swatches.dart';
 
 /// The three states a size can be in, in the order the menu offers them.
@@ -79,6 +79,18 @@ class SceneInspector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (editor.selectedKeys.isNotEmpty) return _keys(context);
+    switch (editor.aside) {
+      case ParamAside(:var name):
+        return SceneParamInspector(editor, name);
+      case MotionAside(:var name):
+        return SceneMotionInspector(
+          editor,
+          name,
+          onOpen: (m) => editor.activeMotion = m,
+        );
+      case null:
+        break;
+    }
     var node = editor.primary ?? doc.root;
     var parent = node == doc.root ? null : doc.parentOf(node);
     var inFlex = parent != null && parent.layout != NodeLayout.absolute;
@@ -107,12 +119,6 @@ class SceneInspector extends StatelessWidget {
             ),
           ),
         const SizedBox(height: FwSpacing.lg),
-        // The artboard is the scene: its parameters are edited here, where
-        // a design tool puts a component's properties.
-        if (node == doc.root) ...[
-          SceneParamsPanel(editor),
-          const Divider(height: FwSpacing.xxl),
-        ],
         if (node.bindings.isNotEmpty) ..._bindings(context, node),
         if (isRow)
           // A row under a table is not laid out at all: the table places the

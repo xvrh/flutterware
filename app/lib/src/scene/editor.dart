@@ -67,6 +67,35 @@ class MotionKeyRef {
 /// Drawing returns to [select] once the node exists.
 enum SceneTool { select, frame, text, shape }
 
+/// A thing the file declares that is not a node, selected in the tree's
+/// outline: the inspector describes it the way it describes a node. One at
+/// a time, and never together with a node selection — the inspector shows
+/// one thing.
+sealed class SceneAside {
+  const SceneAside(this.name);
+
+  final String name;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SceneAside &&
+      other.runtimeType == runtimeType &&
+      other.name == name;
+
+  @override
+  int get hashCode => Object.hash(runtimeType, name);
+}
+
+/// A parameter of the scene, by name.
+class ParamAside extends SceneAside {
+  const ParamAside(super.name);
+}
+
+/// A motion of the file, by name.
+class MotionAside extends SceneAside {
+  const MotionAside(super.name);
+}
+
 class SceneEditor extends SceneListenable {
   SceneEditor(this.doc, {Map<String, MotionDocument> motions = const {}})
     : motions = {...motions};
@@ -158,6 +187,7 @@ class SceneEditor extends SceneListenable {
     if (motions.containsKey(wanted)) {
       throw ArgumentError('"$wanted" is already taken');
     }
+    if (_aside == MotionAside(name)) _aside = MotionAside(wanted);
     perform('Rename motion $name', () {
       // Rebuilt rather than removed and re-added: the map's order is the
       // strip's order, and a rename must not move the chip.
@@ -223,6 +253,25 @@ class SceneEditor extends SceneListenable {
 
   bool isSelected(SceneNode node) => _selection.contains(node.name);
 
+  /// The non-node thing selected in the outline, or null. Setting one
+  /// clears the node and key selections; selecting a node clears this.
+  SceneAside? get aside => switch (_aside) {
+    ParamAside(:var name) when doc.paramNamed(name) == null => null,
+    MotionAside(:var name) when !motions.containsKey(name) => null,
+    var a => a,
+  };
+  SceneAside? _aside;
+
+  set aside(SceneAside? value) {
+    if (_aside == value) return;
+    _aside = value;
+    if (value != null) {
+      _selection.clear();
+      _keySelection.clear();
+    }
+    notifyListeners();
+  }
+
   /// The node the inspector shows: the most recently selected live one.
   SceneNode? get primary {
     SceneNode? last;
@@ -254,6 +303,7 @@ class SceneEditor extends SceneListenable {
         ..add(node.name);
     }
     _keySelection.clear();
+    _aside = null;
     notifyListeners();
   }
 
@@ -271,13 +321,17 @@ class SceneEditor extends SceneListenable {
     _selection
       ..clear()
       ..addAll(names);
-    if (_selection.isNotEmpty) _keySelection.clear();
+    if (_selection.isNotEmpty) {
+      _keySelection.clear();
+      _aside = null;
+    }
     notifyListeners();
   }
 
   void clearSelection() {
-    if (_selection.isEmpty) return;
+    if (_selection.isEmpty && _aside == null) return;
     _selection.clear();
+    _aside = null;
     notifyListeners();
   }
 
@@ -450,6 +504,7 @@ class SceneEditor extends SceneListenable {
     if (paramNameProblem(wanted) case var problem?) {
       throw ArgumentError(problem);
     }
+    if (_aside == ParamAside(name)) _aside = ParamAside(wanted);
     perform('Rename parameter $name', () {
       var decl = doc.params[i];
       doc.params[i] = SceneParamDecl(wanted, decl.kind, decl.defaultValue);

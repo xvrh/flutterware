@@ -32,6 +32,7 @@ void main() {
   visibleTests();
   listTests();
   motionKeyTests();
+  asideTests();
   test("add declares a parameter at the kind's zero, or a chosen mockup", () {
     var e = open();
     e.addParam('slide', SceneParamKind.number);
@@ -323,6 +324,53 @@ void motionKeyTests() {
           .first;
       expect(key.paramRef, isNull);
       expect(key.value, 24.0);
+    });
+  });
+}
+
+void asideTests() {
+  group('the outline selection', () {
+    test(
+      'a parameter or a motion is selected instead of a node, never with',
+      () {
+        var scene = coffeeBannerDraft();
+        var e = SceneEditor(
+          scene,
+          motions: {'BannerIntro': coffeeIntroDraft(scene)},
+        )..addParam('title', SceneParamKind.string, defaultValue: 'Hi');
+        e.select(scene.nodeNamed('headline'));
+        e.aside = const ParamAside('title');
+        expect(e.aside, const ParamAside('title'));
+        expect(e.selectedNodes, isEmpty);
+        e.select(scene.nodeNamed('glow'));
+        expect(e.aside, isNull);
+        e.aside = const MotionAside('BannerIntro');
+        expect(e.primary, isNull);
+        e.clearSelection();
+        expect(e.aside, isNull);
+      },
+    );
+
+    test('the selection follows a rename and drops with a delete', () {
+      var e = SceneEditor(coffeeBannerDraft())
+        ..addParam('title', SceneParamKind.string)
+        ..aside = const ParamAside('title');
+      e.renameParam('title', 'heading');
+      expect(e.aside, const ParamAside('heading'));
+      e.deleteParam('heading');
+      expect(e.aside, isNull);
+    });
+
+    test('a motion selection follows its rename too', () {
+      var scene = coffeeBannerDraft();
+      var e = SceneEditor(
+        scene,
+        motions: {'BannerIntro': coffeeIntroDraft(scene)},
+      )..aside = const MotionAside('BannerIntro');
+      e.renameMotion('BannerIntro', 'Intro');
+      expect(e.aside, const MotionAside('Intro'));
+      e.removeMotion('Intro');
+      expect(e.aside, isNull);
     });
   });
 }

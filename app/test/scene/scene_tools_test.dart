@@ -194,7 +194,7 @@ void main() {
       await tester.pump();
       var before = FocusManager.instance.primaryFocus;
       await tester.tapAt(
-        tester.getCenter(find.text('BannerIntro')),
+        tester.getCenter(find.text('BannerIntro').last),
         buttons: kSecondaryButton,
         kind: PointerDeviceKind.mouse,
       );
@@ -222,7 +222,7 @@ void main() {
       editor.activeMotion = 'BannerIntro';
       await tester.pump();
       await tester.tapAt(
-        tester.getCenter(find.text('BannerIntro')),
+        tester.getCenter(find.text('BannerIntro').last),
         buttons: kSecondaryButton,
         kind: PointerDeviceKind.mouse,
       );
@@ -249,7 +249,7 @@ void main() {
       expect(find.byType(InlineNameField), findsNothing);
       expect(editor.motions.keys, ['BannerReveal']);
       expect(editor.activeMotion, 'BannerReveal');
-      expect(find.text('BannerReveal'), findsOneWidget);
+      expect(find.text('BannerReveal'), findsNWidgets(2));
     });
 
     testWidgets('right-click on a motion chip deletes the motion', (
@@ -257,7 +257,7 @@ void main() {
     ) async {
       await pump(tester);
       await tester.tapAt(
-        tester.getCenter(find.text('BannerIntro')),
+        tester.getCenter(find.text('BannerIntro').last),
         buttons: kSecondaryButton,
       );
       await tester.pump();

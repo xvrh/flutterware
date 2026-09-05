@@ -11,6 +11,7 @@ import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../../ui/tree_row.dart';
 import '../editor.dart';
+import 'outline_sections.dart';
 import 'modifiers.dart';
 
 /// The scene's nodes as a tree: one row per node, folded per frame, selected
@@ -22,12 +23,24 @@ import 'modifiers.dart';
 /// click renames; a right-click offers the rest. Adding is the canvas's job
 /// — the tools on its bar — so there is no second way here.
 class SceneTreePanel extends StatefulWidget {
-  const SceneTreePanel(this.editor, {super.key, this.onEnterNested});
+  const SceneTreePanel(
+    this.editor, {
+    super.key,
+    this.onEnterNested,
+    this.sceneClassName,
+    this.onOpenMotion,
+  });
 
   final SceneEditor editor;
 
   /// Opening a nested scene drills into it; null leaves the row plain.
   final ValueChanged<SceneNode>? onEnterNested;
+
+  /// See [SceneOutlineSections.sceneClassName].
+  final String? sceneClassName;
+
+  /// See [SceneOutlineSections.onOpenMotion].
+  final ValueChanged<String>? onOpenMotion;
 
   @override
   State<SceneTreePanel> createState() => _SceneTreePanelState();
@@ -190,11 +203,36 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: Listenable.merge([doc.listenable, editor.listenable]),
-      builder: (context, _) => ListView(
-        padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
-        children: [
-          for (var (node, depth) in _rows()) _row(context, node, depth),
-        ],
+      // The layers take what the outline sections leave; the sections are
+      // capped so a scene with many parameters cannot push the layers out,
+      // and scroll on their own past the cap.
+      builder: (context, _) => LayoutBuilder(
+        builder: (context, constraints) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
+                children: [
+                  for (var (node, depth) in _rows()) _row(context, node, depth),
+                ],
+              ),
+            ),
+            Container(height: 1, color: context.colors.line),
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: constraints.maxHeight * 0.45,
+              ),
+              child: SingleChildScrollView(
+                child: SceneOutlineSections(
+                  editor,
+                  sceneClassName: widget.sceneClassName,
+                  onOpenMotion: widget.onOpenMotion,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
