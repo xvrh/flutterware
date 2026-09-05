@@ -123,6 +123,7 @@ class SceneInspector extends StatelessWidget {
             ),
           ),
         const SizedBox(height: FwSpacing.lg),
+        if (node.bindings.isNotEmpty) ..._bindings(context, node),
         if (isRow)
           // A row under a table is not laid out at all: the table places the
           // cells, and the row is what paints behind them. Saying so beats
@@ -433,6 +434,43 @@ class SceneInspector extends StatelessWidget {
       ],
     ),
   );
+
+  /// What this node reads rather than holds: one line per bound property,
+  /// and the way out. Editing a bound field edits the parameter's default,
+  /// so this is where a reader learns why a sibling moved too — and unbind
+  /// is the only way to keep a value of one's own, which is why it is here
+  /// and not a side effect of typing.
+  List<Widget> _bindings(BuildContext context, SceneNode node) => [
+    _label(context, 'Bound'),
+    for (var e in node.bindings.entries)
+      Padding(
+        padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${_propLabel(e.key)} ← ${e.value}',
+                style: context.type.mono,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Tappable(
+              onTap: () => editor.perform(
+                'Unbind ${e.key}',
+                () => node.bindings.remove(e.key),
+              ),
+              child: Text(
+                'unbind',
+                style: context.type.caption.copyWith(
+                  color: context.colors.accent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    const SizedBox(height: FwSpacing.md),
+  ];
 
   Widget _label(BuildContext context, String text) => Padding(
     padding: const EdgeInsets.only(bottom: FwSpacing.xs),

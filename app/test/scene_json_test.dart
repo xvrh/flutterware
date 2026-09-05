@@ -37,7 +37,7 @@ void main() {
         const SceneColor(0xFFE8632B),
       ),
     );
-    scene.nodeNamed('cta')!.paramRefs['fill'] = 'accent';
+    scene.nodeNamed('cta')!.bindings['fill'] = const ParamRef('accent');
     var encoded = jsonEncode(
       sceneFileToJson(
         scene,
@@ -56,7 +56,10 @@ void main() {
     expect(headline.color, const SceneColor(0xFFFFFFFF));
     expect(back.scene.nodeNamed('glow')!.fill, const SceneColor(0xFF4A2F1F));
     expect((back.scene.nodeNamed('glow')! as ShapeNode).circle, true);
-    expect(back.scene.nodeNamed('cta')!.paramRefs['fill'], 'accent');
+    expect(
+      back.scene.nodeNamed('cta')!.bindings['fill'],
+      const ParamRef('accent'),
+    );
     // A colour parameter comes back a colour, not the int it travelled as.
     expect(back.scene.params.single.defaultValue, isA<SceneColor>());
 

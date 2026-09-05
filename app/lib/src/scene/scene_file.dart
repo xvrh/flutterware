@@ -274,44 +274,43 @@ void _emitNode(
   bool inline = false,
 }) {
   var props = <String>[];
+  var scopeList = list;
 
-  /// A parameter reference survives a save only while the property still
-  /// holds the parameter's default — an edited value bakes in and the
-  /// stale reference is dropped, never the edit. For an item reference the
-  /// default is the FIRST item's field, which is the rule the whole
-  /// repeater rests on.
-  String? ref(String key, Object? current) {
-    var name = n.paramRefs[key];
-    if (name == null) return null;
-    var dot = name.indexOf('.');
-    if (dot < 0) {
-      var p = ps[name];
-      if (p == null || p.defaultValue != current) return null;
-      return name;
+  /// A bound property is spelled as its reference, always: the binding is
+  /// the stronger of the two, and an edit reached the parameter's default
+  /// before this ran ([reconcileBindings]), so the reference IS the value.
+  /// The only reason to write a literal instead is a binding with nothing
+  /// behind it — a parameter not declared, an item reference outside the
+  /// closure that gives it a name — and [reconcileBindings] removes those
+  /// too, so here it is a guard, not a rule.
+  String? ref(String key) {
+    switch (n.bindings[key]) {
+      case null:
+        return null;
+      case ParamRef(:var name):
+        var p = ps[name];
+        return p == null || p.kind == SceneParamKind.list ? null : name;
+      case ItemRef(:var list, :var field):
+        // Spelled with the closure's own parameter rather than the list's
+        // name, and only inside the closure.
+        if (scopeList != list) return null;
+        var decl = ps[list];
+        if (decl == null || decl.kind != SceneParamKind.list) return null;
+        var items = decl.items;
+        if (items.isEmpty || !items.first.containsKey(field)) return null;
+        return '$_rowParam.$field';
     }
-    // An item reference: legal only inside the closure that binds it, and
-    // spelled with the closure's own parameter rather than the list's name.
-    if (list == null || name.substring(0, dot) != list) return null;
-    var decl = ps[list];
-    if (decl == null || decl.kind != SceneParamKind.list) return null;
-    var items = decl.items;
-    if (items.isEmpty) return null;
-    var fieldName = name.substring(dot + 1);
-    var field = items.first[fieldName];
-    return field != null && _sameValue(current, field)
-        ? '$_rowParam.$fieldName'
-        : null;
   }
 
   void add(String key, Object? current, String Function() spell) {
-    props.add('$key: ${ref(key, current) ?? spell()}');
+    props.add('$key: ${ref(key) ?? spell()}');
   }
 
   void common() {
-    if (n.x != 0 || n.paramRefs.containsKey('x')) {
+    if (n.x != 0 || n.bindings.containsKey('x')) {
       add('x', n.x, () => _num(n.x));
     }
-    if (n.y != 0 || n.paramRefs.containsKey('y')) {
+    if (n.y != 0 || n.bindings.containsKey('y')) {
       add('y', n.y, () => _num(n.y));
     }
     if (n.width case var w?) add('width', w, () => _size(w));
@@ -396,7 +395,7 @@ void _emitNode(
       }
       out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
-      props.add(ref('text', t.text) ?? _str(t.text));
+      props.add(ref('text') ?? _str(t.text));
       common();
       if (t.fontSize != 16) add('fontSize', t.fontSize, () => _num(t.fontSize));
       if (t.weight != SceneFontWeight.w400) {
@@ -474,14 +473,6 @@ String _size(double v) => v.isInfinite ? 'double.infinity' : _num(v);
 
 /// A column track: a size, or the word for "as wide as the widest cell".
 String _track(double? v) => v == null ? 'null' : _size(v);
-
-/// Whether a property still holds what an item's field would put there —
-/// the same widening [setSceneProperty] does, so a number filling a text
-/// slot compares as the text it becomes.
-bool _sameValue(Object? current, Object field) {
-  if (current == field) return true;
-  return current is String && field is double && current == _num(field);
-}
 
 String _color(SceneColor c) =>
     'SceneColor(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
@@ -1578,7 +1569,7 @@ class _Parser {
       );
       return _refused;
     }
-    n.paramRefs[prop] = e.name;
+    n.bindings[prop] = ParamRef(e.name);
     return decl.defaultValue;
   }
 
@@ -1629,7 +1620,7 @@ class _Parser {
     }
     // Recorded against the LIST, not the closure's parameter: the parameter
     // is a local name and the binding has to outlive it.
-    n.paramRefs[prop] = '${scope.list}.$field';
+    n.bindings[prop] = ItemRef(scope.list, field);
     return converted;
   }
 

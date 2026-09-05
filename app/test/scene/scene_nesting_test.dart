@@ -18,13 +18,13 @@ SceneDocument badgeTemplate() {
     ..fontSize = 14
     ..weight = SceneFontWeight.w700
     ..color = const SceneColor(0xFFFFFFFF)
-    ..paramRefs['text'] = 'label';
+    ..bindings['text'] = const ParamRef('label');
   var root = FrameNode(name: 'root', layout: NodeLayout.row)
     ..width = 140
     ..height = 32
     ..fill = const SceneColor(0xFFE8632B)
     ..corner = 16
-    ..paramRefs['fill'] = 'tint'
+    ..bindings['fill'] = const ParamRef('tint')
     ..children.add(text);
   return SceneDocument(root)
     ..params.addAll([

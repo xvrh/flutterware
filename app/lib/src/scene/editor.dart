@@ -917,7 +917,13 @@ class SceneEditor extends SceneListenable {
       if (_undo.length > _journalCap) _undo.removeAt(0);
       _redo.clear();
     }
-    doc.edit(mutate);
+    doc.edit(() {
+      mutate();
+      // A bound property that moved has moved its parameter's default, and
+      // every other reader of it follows — inside the same edit, so one
+      // notification and one undo entry cover both.
+      reconcileBindings(doc);
+    });
     _revision++;
     notifyListeners();
   }

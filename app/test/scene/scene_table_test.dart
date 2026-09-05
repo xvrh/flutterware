@@ -116,12 +116,13 @@ void main() {
   // ---------------------------------------------------------------------
 
   /// The rule as a READ document has it: the cells carry the binding as
-  /// paramRefs and the frame records which parameter it draws from, which
+  /// bindings and the frame records which parameter it draws from, which
   /// is what [bindRepeats] turns into the closure everything draws through.
   SceneDocument repeated({List<SceneItem>? items}) {
     var cell = text('cell', 'Espresso beans, 1kg')
-      ..paramRefs['text'] = 'lines.item';
-    var qty = text('qty', '12')..paramRefs['text'] = 'lines.qty';
+      ..bindings['text'] = const ItemRef('lines', 'item');
+    var qty = text('qty', '12')
+      ..bindings['text'] = const ItemRef('lines', 'qty');
     var row = FrameNode(name: 'row', layout: NodeLayout.row)
       ..children.addAll([cell, qty]);
     recordRepeat(row, 'lines');
@@ -411,16 +412,30 @@ class Ledger({
     expect(parsed.refusals.first.construct, 'named cell');
   });
 
-  test('an edited cell bakes in and drops its stale reference', () {
+  test('an edited cell rewrites the first item, and keeps its reference', () {
     var parsed = parseSceneFile(source);
     var doc = parsed.doc!;
     var row = doc.nodeNamed('row')! as FrameNode;
     (row.children.first as TextNode).text = 'Something else';
+    expect(reconcileBindings(doc), isEmpty);
 
+    // The first item IS the cell: editing the cell edited the mockup data.
+    expect(doc.paramNamed('lines')!.items.first['item'], 'Something else');
     var out = emitSceneFile(doc, className: parsed.className!);
-    expect(out, contains("TextNode('Something else'"));
-    expect(out, isNot(contains('TextNode(line.item')));
-    // The edit survives; the reference is what goes.
+    expect(out, contains("(item: 'Something else'"));
+    expect(out, contains('TextNode(line.item'));
+    expect(out, isNot(contains("TextNode('Something else'")));
     expect(parseSceneFile(out).refusals, isEmpty);
+  });
+
+  test('a cell dragged out of its repeat loses the item binding', () {
+    var parsed = parseSceneFile(source);
+    var doc = parsed.doc!;
+    var row = doc.nodeNamed('row')! as FrameNode;
+    var cell = row.children.first;
+    row.children.remove(cell);
+    doc.root.children.add(cell);
+    expect(reconcileBindings(doc), ['${cell.name}.text']);
+    expect(cell.bindings, isEmpty);
   });
 }

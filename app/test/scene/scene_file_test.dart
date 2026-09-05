@@ -199,7 +199,7 @@ class BannerScene({
       // The default is the mockup: properties hold resolved values.
       var headline = doc.root.children[0] as TextNode;
       expect(headline.text, 'Fresh coffee, faster');
-      expect(headline.paramRefs['text'], 'title');
+      expect(headline.bindings['text'], const ParamRef('title'));
       var cta = doc.root.children[1] as FrameNode;
       expect(cta.x, 24);
       expect(cta.fill, const SceneColor(0xFFE8632B));
@@ -236,16 +236,71 @@ class BannerScene({
       expect((french.root.children[1] as FrameNode).x, 24);
     });
 
+    test('an edit to a bound property moves the default, not the binding', () {
+      var doc = parseSceneFile(banner).doc!;
+      (doc.root.children[0] as TextNode).text = 'Hand-tuned headline';
+      expect(reconcileBindings(doc), isEmpty);
+      // The default IS the mockup: the file now declares the edited text
+      // as the parameter's default and the property still reads it.
+      expect(doc.paramNamed('title')!.defaultValue, 'Hand-tuned headline');
+      var emitted = emitSceneFile(doc, className: 'BannerScene');
+      expect(emitted, contains("final String title = 'Hand-tuned headline'"));
+      expect(emitted, contains('TextNode(title'));
+      expect(emitted, isNot(contains("TextNode('Hand-tuned headline'")));
+      // And the untouched references survive.
+      expect(emitted, contains('x: slide'));
+    });
+
+    test('a save spells the reference even when nothing reconciled', () {
+      // The binding is the stronger of the two: a value written behind the
+      // editor's back is what gets lost, never the reference.
+      var doc = parseSceneFile(banner).doc!;
+      (doc.root.children[1] as FrameNode).x = 99;
+      var emitted = emitSceneFile(doc, className: 'BannerScene');
+      expect(emitted, contains('x: slide'));
+      expect(emitted, contains('final double slide = 24'));
+    });
+
+    test('every reader of a parameter follows an edit to one of them', () {
+      var source =
+          '''
+$sceneFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+class Twins({final SceneColor accent = const SceneColor(0xFF112233)})
+    extends SceneDefinition {
+  late final a = FrameNode(width: 10, height: 10, fill: accent);
+  late final b = FrameNode(x: 20, width: 10, height: 10, fill: accent);
+  @override
+  late final root = FrameNode(width: 100, height: 100, children: [a, b]);
+}
+''';
+      var doc = parseSceneFile(source).doc!;
+      var a = doc.root.children[0] as FrameNode;
+      var b = doc.root.children[1] as FrameNode;
+      a.fill = const SceneColor(0xFFABCDEF);
+      reconcileBindings(doc);
+      expect(b.fill, const SceneColor(0xFFABCDEF));
+      expect(
+        doc.paramNamed('accent')!.defaultValue,
+        const SceneColor(0xFFABCDEF),
+      );
+      expect(a.bindings['fill'], const ParamRef('accent'));
+      expect(b.bindings['fill'], const ParamRef('accent'));
+    });
+
     test(
-      'an edited value bakes in; the stale reference is dropped, not the edit',
+      'a cleared property, or a parameter that is gone, drops its binding',
       () {
         var doc = parseSceneFile(banner).doc!;
-        (doc.root.children[0] as TextNode).text = 'Hand-tuned headline';
-        var emitted = emitSceneFile(doc, className: 'BannerScene');
-        expect(emitted, contains("TextNode('Hand-tuned headline'"));
-        expect(emitted, isNot(contains('TextNode(title')));
-        // And the untouched references survive.
-        expect(emitted, contains('x: slide'));
+        var cta = doc.root.children[1] as FrameNode;
+        cta.fill = null;
+        doc.params.removeWhere((p) => p.name == 'slide');
+        expect(reconcileBindings(doc), unorderedEquals(['cta.fill', 'cta.x']));
+        expect(cta.bindings, isEmpty);
+        // The value the node had is what the file now says — baked in, but
+        // by an explicit step that reported it, not by a save.
+        expect(emitSceneFile(doc, className: 'BannerScene'), contains('x: 24'));
       },
     );
 
@@ -603,7 +658,7 @@ SceneDocument _randomDoc(Random r) {
         if (texts.isNotEmpty) {
           var t = texts[r.nextInt(texts.length)];
           t.text = decl.defaultValue as String;
-          t.paramRefs['text'] = name;
+          t.bindings['text'] = ParamRef(name);
         }
       case 1:
         var decl = SceneParamDecl(
@@ -614,13 +669,13 @@ SceneDocument _randomDoc(Random r) {
         doc.params.add(decl);
         var n = nodes[r.nextInt(nodes.length)];
         n.x = decl.defaultValue as double;
-        n.paramRefs['x'] = name;
+        n.bindings['x'] = ParamRef(name);
       default:
         var decl = SceneParamDecl(name, SceneParamKind.color, _randomColor(r));
         doc.params.add(decl);
         var n = nodes[r.nextInt(nodes.length)];
         n.fill = decl.defaultValue as SceneColor;
-        n.paramRefs['fill'] = name;
+        n.bindings['fill'] = ParamRef(name);
     }
   }
   return doc;

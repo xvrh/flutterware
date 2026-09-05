@@ -57,6 +57,11 @@ class SceneParamDecl {
   /// point).
   final Object defaultValue;
 
+  /// The same declaration with a new mockup. A declaration is immutable so
+  /// that an undo snapshot can hold the list of them as it was; changing a
+  /// default replaces the entry.
+  SceneParamDecl withDefault(Object value) => SceneParamDecl(name, kind, value);
+
   String get typeName => switch (kind) {
     SceneParamKind.string => 'String',
     SceneParamKind.number => 'double',
@@ -75,6 +80,64 @@ class SceneParamDecl {
     SceneParamKind.list => (defaultValue as List).cast<SceneItem>(),
     _ => const [],
   };
+}
+
+/// Where a property's value comes from, when it is not a literal in the
+/// file. One entry per bound property in [SceneNode.bindings].
+///
+/// A binding is provenance, not a value: the node still holds the resolved
+/// value, and the binding says what that value is a copy of — so an edit can
+/// be routed to the source and a save can spell the reference. Sealed, so
+/// every place that reads one has to say what it does with each kind, and a
+/// kind added later (a shared token, a style) is refused nowhere silently.
+sealed class SceneBinding {
+  const SceneBinding();
+
+  /// The one-string wire spelling — `title`, or `lines.qty` — which is also
+  /// what a `.scene.dart` writes as the value.
+  String toWire();
+
+  static SceneBinding fromWire(String wire) {
+    var dot = wire.indexOf('.');
+    return dot < 0
+        ? ParamRef(wire)
+        : ItemRef(wire.substring(0, dot), wire.substring(dot + 1));
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is SceneBinding &&
+      other.runtimeType == runtimeType &&
+      other.toWire() == toWire();
+
+  @override
+  int get hashCode => Object.hash(runtimeType, toWire());
+
+  @override
+  String toString() => toWire();
+}
+
+/// The property reads one of the scene's own parameters, by name.
+class ParamRef extends SceneBinding {
+  const ParamRef(this.name);
+
+  final String name;
+
+  @override
+  String toWire() => name;
+}
+
+/// The property reads one field of the item a repeat is drawing. Recorded
+/// against the LIST parameter rather than the closure's own name, because
+/// the closure's name is local and the binding has to outlive it.
+class ItemRef extends SceneBinding {
+  const ItemRef(this.list, this.field);
+
+  final String list;
+  final String field;
+
+  @override
+  String toWire() => '$list.$field';
 }
 
 sealed class SceneNode {
@@ -146,15 +209,17 @@ sealed class SceneNode {
   /// whichever renderer measured it.
   SceneRect? measured;
 
-  /// Which properties read a parameter: property key → parameter name.
+  /// Where each property's value comes from, when it is not a literal:
+  /// property key → [SceneBinding].
   ///
   /// The READ plane's provenance, and empty in a compiled scene — there a
   /// property that reads a parameter reads a Dart variable, and nothing has
   /// to be recorded about it. The property here still holds the resolved
-  /// value (the default, until [SceneReadPlane.applyArgs]); the ref
-  /// survives a save only while that value still equals the parameter's
-  /// default. See `read_plane.dart`.
-  final paramRefs = <String, String>{};
+  /// value, and the binding is the stronger of the two: an edit to a bound
+  /// property is written to what it is bound to
+  /// ([reconcileBindings]), so a save always spells the reference and never
+  /// silently bakes a value in. See `read_plane.dart`.
+  final bindings = <String, SceneBinding>{};
 
   /// The evaluated plane: per-frame contributions composed OVER the
   /// authored values above, keyed by (writer, property) in writer-stack
@@ -771,7 +836,7 @@ class SceneRefNode extends SceneNode {
   /// than staying wherever the last frame left it.
   void syncInstance() {
     // Compiled: the builder IS how args reach the child, so the instance is
-    // rebuilt from the args of the moment. A parsed child has paramRefs and
+    // rebuilt from the args of the moment. A parsed child has bindings and
     // takes them the other way, in place.
     if (declared case var d?) {
       instance = d.merge(SceneArgs(renderedArgs)).build().scene;
@@ -1187,8 +1252,8 @@ class SceneDocument extends SceneListenable {
           ..borderWidth = snap.borderWidth
           ..corner = snap.corner
           ..opacity = snap.opacity
-          ..paramRefs.clear()
-          ..paramRefs.addAll(snap.paramRefs);
+          ..bindings.clear()
+          ..bindings.addAll(snap.bindings);
         return into;
       }
 
@@ -1212,7 +1277,7 @@ class SceneSnapshot {
 }
 
 /// A deep copy of [node]'s authored plane — every authored property,
-/// paramRefs and children; never fx, measured geometry or the document
+/// bindings and children; never fx, measured geometry or the document
 /// pointer. [rename] maps every name in the subtree (a duplicate needs
 /// fresh names — names are field identity, unique per scene); a snapshot
 /// passes nothing and keeps them.
@@ -1264,6 +1329,6 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     ..borderWidth = node.borderWidth
     ..corner = node.corner
     ..opacity = node.opacity
-    ..paramRefs.addAll(node.paramRefs);
+    ..bindings.addAll(node.bindings);
   return copy;
 }

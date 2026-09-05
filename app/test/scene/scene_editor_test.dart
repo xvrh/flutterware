@@ -17,6 +17,7 @@ import 'package:flutterware_app/src/scene/ui/inspector.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 void main() {
+  bindingDoorTests();
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('selection is a set of names', () {
@@ -377,6 +378,82 @@ void main() {
       await tester.pump();
       expect(editor.doc.nodeNamed('glow'), isNotNull);
       expect(editor.doc.walk().length, nodes);
+    });
+  });
+}
+
+/// A binding is the stronger of the two: an edit through a door reaches the
+/// parameter's default, every other reader follows, and undo brings the
+/// default back with the node.
+void bindingDoorTests() {
+  group('bound properties', () {
+    SceneEditor twins() {
+      var a = FrameNode(name: 'a')
+        ..width = 10
+        ..height = 10
+        ..fill = const SceneColor(0xFF112233)
+        ..bindings['fill'] = const ParamRef('accent');
+      var b = FrameNode(name: 'b')
+        ..x = 20
+        ..width = 10
+        ..height = 10
+        ..fill = const SceneColor(0xFF112233)
+        ..bindings['fill'] = const ParamRef('accent');
+      var root = FrameNode(name: 'root')
+        ..width = 100
+        ..height = 100
+        ..children.addAll([a, b]);
+      var doc = SceneDocument(root)
+        ..params.add(
+          SceneParamDecl(
+            'accent',
+            SceneParamKind.color,
+            const SceneColor(0xFF112233),
+          ),
+        );
+      return SceneEditor(doc);
+    }
+
+    test('a door on one reader moves the default and the other reader', () {
+      var editor = twins();
+      var a = editor.doc.nodeNamed('a')!;
+      var b = editor.doc.nodeNamed('b')!;
+      editor.perform('Edit fill', () => a.fill = const SceneColor(0xFFABCDEF));
+      expect(b.fill, const SceneColor(0xFFABCDEF));
+      expect(
+        editor.doc.paramNamed('accent')!.defaultValue,
+        const SceneColor(0xFFABCDEF),
+      );
+      expect(a.bindings['fill'], const ParamRef('accent'));
+    });
+
+    test('undo restores the default with the node, in one entry', () {
+      var editor = twins();
+      var a = editor.doc.nodeNamed('a')!;
+      var b = editor.doc.nodeNamed('b')!;
+      editor.perform('Edit fill', () => a.fill = const SceneColor(0xFFABCDEF));
+      editor.undo();
+      expect(a.fill, const SceneColor(0xFF112233));
+      expect(b.fill, const SceneColor(0xFF112233));
+      expect(
+        editor.doc.paramNamed('accent')!.defaultValue,
+        const SceneColor(0xFF112233),
+      );
+      expect(editor.canUndo, isFalse);
+    });
+
+    test('unbind keeps the value and frees the node from the parameter', () {
+      var editor = twins();
+      var a = editor.doc.nodeNamed('a')!;
+      var b = editor.doc.nodeNamed('b')!;
+      editor.perform('Unbind fill', () => a.bindings.remove('fill'));
+      editor.perform('Edit fill', () => a.fill = const SceneColor(0xFFABCDEF));
+      expect(a.bindings, isEmpty);
+      expect(b.fill, const SceneColor(0xFF112233));
+      expect(
+        editor.doc.paramNamed('accent')!.defaultValue,
+        const SceneColor(0xFF112233),
+      );
     });
   });
 }

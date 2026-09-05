@@ -50,8 +50,8 @@ sceneFileFromJson(Map<String, Object?> json) {
 }
 
 extension SceneDocumentJson on SceneDocument {
-  /// The authored plane, complete: parameters, nodes, and which properties
-  /// read which parameter. Never the fx plane, which belongs to its writers.
+  /// The authored plane, complete: parameters, nodes, and what each bound
+  /// property reads. Never the fx plane, which belongs to its writers.
   Map<String, Object?> toJson() => {
     'params': [
       for (var p in params)
@@ -96,7 +96,8 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
   if (n.borderColor case var b?) 'border': [b.argb, n.borderWidth],
   if (n.corner != 0) 'corner': n.corner,
   if (n.opacity != 1) 'opacity': n.opacity,
-  if (n.paramRefs.isNotEmpty) 'paramRefs': {...n.paramRefs},
+  if (n.bindings.isNotEmpty)
+    'bindings': {for (var e in n.bindings.entries) e.key: e.value.toWire()},
   ...switch (n) {
     FrameNode f => {
       'layout': f.layout.name,
@@ -203,9 +204,9 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
     }
     ..corner = number('corner') ?? 0
     ..opacity = number('opacity') ?? 1
-    ..paramRefs.addAll(
-      ((json['paramRefs'] as Map?) ?? const {}).map(
-        (k, v) => MapEntry('$k', '$v'),
+    ..bindings.addAll(
+      ((json['bindings'] as Map?) ?? const {}).map(
+        (k, v) => MapEntry('$k', SceneBinding.fromWire('$v')),
       ),
     );
 }

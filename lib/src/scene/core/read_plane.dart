@@ -7,7 +7,7 @@
 // PARSED from source, or decoded from the wire.
 //
 // So nothing here is on a shipped app's path. What a read document keeps to
-// make it possible — [SceneNode.paramRefs], [SceneDocument.params] and its
+// make it possible — [SceneNode.bindings], [SceneDocument.params] and its
 // list table, [SceneRepeat.source] — is storage and stays declared with the
 // nodes; the behaviour is all here.
 //
@@ -37,9 +37,12 @@ extension SceneReadPlane on SceneDocument {
         }
       }
       for (var (node, _) in walk()) {
-        for (var entry in node.paramRefs.entries) {
-          if (!args.containsKey(entry.value)) continue;
-          setSceneProperty(node, entry.key, args[entry.value]);
+        for (var entry in node.bindings.entries) {
+          // An item binding takes its value from the repeat, below.
+          if (entry.value case ParamRef(:var name)
+              when args.containsKey(name)) {
+            setSceneProperty(node, entry.key, args[name]);
+          }
         }
       }
       // A repeat over data that just changed is a new rule: rebuilt from
@@ -51,7 +54,7 @@ extension SceneReadPlane on SceneDocument {
 
 /// A fresh copy of [template] with [args] applied to its parameters — what a
 /// [SceneRefNode.instance] is. The copy keeps the template's parameter
-/// declarations and `paramRefs`, so it can take new args later.
+/// declarations and bindings, so it can take new args later.
 SceneDocument instantiateScene(
   SceneDocument template,
   Map<String, Object?> args,
@@ -62,7 +65,25 @@ SceneDocument instantiateScene(
   return doc;
 }
 
-/// Write one authored property by the name a [SceneNode.paramRefs] entry
+/// Read one authored property by the name a [SceneNode.bindings] entry keys
+/// it under — the inverse of [setSceneProperty], and the same table.
+Object? getSceneProperty(SceneNode node, String prop) => switch (prop) {
+  'x' => node.x,
+  'y' => node.y,
+  'width' => sizeToWire(node.width),
+  'height' => sizeToWire(node.height),
+  'corner' => node.corner,
+  'opacity' => node.opacity,
+  'fill' => node.fill,
+  'text' => (node as TextNode).text,
+  'fontSize' => (node as TextNode).fontSize,
+  'color' => (node as TextNode).color,
+  'gap' => (node as FrameNode).gap,
+  'padding' => (node as FrameNode).padding.left,
+  _ => null,
+};
+
+/// Write one authored property by the name a [SceneNode.bindings] entry
 /// keys it under. The one place that maps a property name to a slot, so an
 /// argument and a repeated item's field land the same way.
 void setSceneProperty(SceneNode node, String prop, Object? value) {
@@ -104,13 +125,11 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
 /// bound to `<list>.<field>` takes that field's value. Returns [node], so a
 /// copy can be made and filled in one expression.
 SceneNode applySceneItem(SceneNode node, String list, SceneItem item) {
-  var prefix = '$list.';
   void visit(SceneNode n) {
-    for (var ref in n.paramRefs.entries) {
-      if (!ref.value.startsWith(prefix)) continue;
-      var field = ref.value.substring(prefix.length);
-      if (!item.containsKey(field)) continue;
-      setSceneProperty(n, ref.key, item[field]);
+    for (var ref in n.bindings.entries) {
+      if (ref.value case ItemRef(list: var l, :var field) when l == list) {
+        if (item.containsKey(field)) setSceneProperty(n, ref.key, item[field]);
+      }
     }
     n.children.forEach(visit);
   }
@@ -124,8 +143,8 @@ SceneNode applySceneItem(SceneNode node, String list, SceneItem item) {
 ///
 /// A compiled scene's binding is the closure the file wrote. A read one has
 /// only what the reader could record: which parameter the items came from,
-/// and which property of which cell reads which field ([SceneNode.paramRefs],
-/// spelled `<list>.<field>`). This turns that back into the same closure, so
+/// and which property of which cell reads which field ([SceneNode.bindings],
+/// an [ItemRef]). This turns that back into the same closure, so
 /// there is one way to draw a repeat and not two.
 ///
 /// Safe to call again whenever the items change or the tree is restored —
@@ -163,4 +182,109 @@ void bindRepeats(SceneDocument doc) {
 /// the cells already in place. [bindRepeats] turns it into the closure.
 void recordRepeat(FrameNode frame, String source) {
   frame.repeated = SceneRepeat(items: const [], source: source, row: (_) => []);
+}
+
+/// Route every edit of a bound property to what it is bound to — the other
+/// half of a binding, run by the editor after each mutation.
+///
+/// The default IS the mockup: dragging a text whose `x` reads `slide` is
+/// editing `slide`, because that is the value every caller who passes
+/// nothing will get. So a node whose value has moved off its parameter's
+/// default moves the default, and every other node reading that parameter
+/// follows. For an item binding the default is the FIRST item's field, which
+/// is the rule the whole repeater rests on; the rows are then redrawn.
+///
+/// A binding whose source is gone — a parameter no longer declared, an item
+/// field no longer carried, a cell dragged out of the repeat it reads from —
+/// is removed here, in the same edit, rather than dropped silently at save.
+/// Returns the names of the properties whose binding was removed, so the
+/// editor can say so.
+List<String> reconcileBindings(SceneDocument doc) {
+  var dropped = <String>[];
+  var listChanged = false;
+  for (var (node, _) in doc.walk()) {
+    for (var entry in node.bindings.entries.toList()) {
+      var prop = entry.key;
+      var current = getSceneProperty(node, prop);
+      // A property that was cleared — a fill removed, a size set to hug —
+      // no longer reads anything.
+      if (current == null) {
+        node.bindings.remove(prop);
+        dropped.add('${node.name}.$prop');
+        continue;
+      }
+      switch (entry.value) {
+        case ParamRef(:var name):
+          var decl = doc.paramNamed(name);
+          if (decl == null || decl.kind == SceneParamKind.list) {
+            node.bindings.remove(prop);
+            dropped.add('${node.name}.$prop');
+          } else if (decl.defaultValue != current) {
+            var i = doc.params.indexOf(decl);
+            doc.params[i] = decl.withDefault(current);
+            for (var (other, _) in doc.walk()) {
+              if (identical(other, node)) continue;
+              for (var e in other.bindings.entries) {
+                if (e.value == entry.value) {
+                  setSceneProperty(other, e.key, current);
+                }
+              }
+            }
+          }
+        case ItemRef(:var list, :var field):
+          var decl = doc.paramNamed(list);
+          var scope = _repeatScope(doc, node);
+          var items = decl?.items ?? const <SceneItem>[];
+          if (decl == null ||
+              decl.kind != SceneParamKind.list ||
+              scope != list ||
+              items.isEmpty ||
+              !items.first.containsKey(field)) {
+            node.bindings.remove(prop);
+            dropped.add('${node.name}.$prop');
+          } else {
+            var was = items.first[field]!;
+            var next = _itemValue(was, current);
+            if (next != was) {
+              var i = doc.params.indexOf(decl);
+              doc.params[i] = decl.withDefault([
+                {...items.first, field: next},
+                ...items.skip(1),
+              ]);
+              listChanged = true;
+            }
+          }
+      }
+    }
+  }
+  if (listChanged) bindRepeats(doc);
+  return dropped;
+}
+
+/// The list parameter of the nearest repeated frame enclosing [node], or
+/// null when no repeat draws it — the scope inside which an [ItemRef] means
+/// something.
+String? _repeatScope(SceneDocument doc, SceneNode node) {
+  for (var f = doc.parentOf(node); f != null; f = doc.parentOf(f)) {
+    if (f.repeated?.source case var source? when source.isNotEmpty) {
+      return source;
+    }
+  }
+  return null;
+}
+
+/// What an edited cell writes back into its item: the field keeps its kind.
+/// A quantity that was a number stays a number when the text still reads as
+/// one, and a text that was `12` and became `12` again is unchanged.
+Object _itemValue(Object was, Object current) {
+  if (was is double && current is String) {
+    var n = double.tryParse(current);
+    if (n != null) return n;
+  }
+  if (was is String && current is double) {
+    return current == current.roundToDouble() && current.abs() < 1e15
+        ? '${current.round()}'
+        : '$current';
+  }
+  return current;
 }
