@@ -9,7 +9,6 @@
 // key). And every colour, weight and alignment goes through the studio's own
 // controls rather than stock Material.
 import 'package:flutter/material.dart';
-import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../externals_file.dart';
@@ -24,23 +23,8 @@ import '../editor.dart';
 import 'curve_picker.dart';
 import 'number_shape.dart';
 import 'number_field.dart';
-
-/// The palette a scene's colours are picked from. A scene's own palette will
-/// come from the project (its theme, its tokens); until then this is the
-/// spike's, kept so the panel is usable.
-const _palette = <SceneColor?>[
-  null,
-  SceneColor(0xFFFFFFFF),
-  SceneColor(0xFF1A1A1A),
-  SceneColor(0xFF2B1B12),
-  SceneColor(0xFF4A2F1F),
-  SceneColor(0xFF6B4226),
-  SceneColor(0xFFD8C9BD),
-  SceneColor(0xFFE8632B),
-  SceneColor(0xFFF2B705),
-  SceneColor(0xFF3E7C4F),
-  SceneColor(0xFF4A64D0),
-];
+import 'params_panel.dart';
+import 'swatches.dart';
 
 /// The three states a size can be in, in the order the menu offers them.
 enum _SizeMode {
@@ -123,6 +107,12 @@ class SceneInspector extends StatelessWidget {
             ),
           ),
         const SizedBox(height: FwSpacing.lg),
+        // The artboard is the scene: its parameters are edited here, where
+        // a design tool puts a component's properties.
+        if (node == doc.root) ...[
+          SceneParamsPanel(editor),
+          const Divider(height: FwSpacing.xxl),
+        ],
         if (node.bindings.isNotEmpty) ..._bindings(context, node),
         if (isRow)
           // A row under a table is not laid out at all: the table places the
@@ -163,38 +153,54 @@ class SceneInspector extends StatelessWidget {
           ),
         ]),
         _row([
-          _size(
-            'W',
+          _bindable(
+            context,
             node,
-            node.width,
-            horizontal: true,
-            onChanged: (v) => node.width = v,
+            'width',
+            _size(
+              'W',
+              node,
+              node.width,
+              horizontal: true,
+              onChanged: (v) => node.width = v,
+            ),
           ),
-          _size(
-            'H',
+          _bindable(
+            context,
             node,
-            node.height,
-            horizontal: false,
-            onChanged: (v) => node.height = v,
+            'height',
+            _size(
+              'H',
+              node,
+              node.height,
+              horizontal: false,
+              onChanged: (v) => node.height = v,
+            ),
           ),
         ]),
         const SizedBox(height: FwSpacing.md),
         _label(context, 'Fill'),
-        _swatches(
+        _bindable(
           context,
-          editor.records(node, 'fill') && node.hasFx('fill')
-              ? node.fxRendered('fill') as SceneColor
-              : node.fill,
-          // No fill is not a colour a key can hold: that one edits the node.
-          (c) => c == null
-              ? _door('fill', () => node.fill = null)
-              : _set('fill', c, () => node.fill = c),
+          node,
+          'fill',
+          SceneSwatches(
+            current: editor.records(node, 'fill') && node.hasFx('fill')
+                ? node.fxRendered('fill') as SceneColor
+                : node.fill,
+            // No fill is not a colour a key can hold: that one edits the
+            // node.
+            onPick: (c) => c == null
+                ? _door('fill', () => node.fill = null)
+                : _set('fill', c, () => node.fill = c),
+          ),
         ),
         const SizedBox(height: FwSpacing.md),
         _label(context, 'Border'),
-        _swatches(context, node.borderColor, (c) {
-          _door('borderColor', () => node.borderColor = c);
-        }),
+        SceneSwatches(
+          current: node.borderColor,
+          onPick: (c) => _door('borderColor', () => node.borderColor = c),
+        ),
         if (node.borderColor != null)
           _row([
             _number(
@@ -244,22 +250,81 @@ class SceneInspector extends StatelessWidget {
     SceneNumberShape shape, {
     required void Function(double) apply,
     bool enabled = true,
-  }) => Opacity(
-    opacity: enabled ? 1 : 0.4,
-    child: IgnorePointer(
-      ignoring: !enabled,
-      child: SceneNumberField(
-        label: label,
-        value: value,
-        shape: shape,
-        onChanged: (v) => _set(prop, v, () => apply(v)),
-        onCommit: (v) {
-          _set(prop, v, () => apply(v));
-          editor.endMerge();
-        },
+  }) => Builder(
+    builder: (context) => _bindable(
+      context,
+      editor.primary ?? doc.root,
+      prop,
+      Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: IgnorePointer(
+          ignoring: !enabled,
+          child: SceneNumberField(
+            label: label,
+            value: value,
+            shape: shape,
+            onChanged: (v) => _set(prop, v, () => apply(v)),
+            onCommit: (v) {
+              _set(prop, v, () => apply(v));
+              editor.endMerge();
+            },
+          ),
+        ),
       ),
     ),
   );
+
+  /// Right-click on a property: make a parameter of it, bind it to one that
+  /// exists, or unbind it. Nothing for a property no parameter can fill —
+  /// the menu simply is not there.
+  Widget _bindable(
+    BuildContext context,
+    SceneNode node,
+    String prop,
+    Widget child,
+  ) {
+    var kind = bindableKind(node, prop);
+    if (kind == null) return child;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onSecondaryTapDown: (d) {
+        var bound = node.bindings[prop];
+        var candidates = [
+          for (var p in doc.params)
+            if (p.kind == kind) p,
+        ];
+        showContextMenu(context, d.globalPosition, [
+          MenuHeader(_propLabel(prop)),
+          if (bound != null) ...[
+            MenuItem('Reads $bound', icon: Icons.link),
+            MenuItem(
+              'Unbind',
+              icon: Icons.link_off,
+              onSelected: () => editor.unbind(node, prop),
+            ),
+          ] else ...[
+            MenuItem(
+              'Make a parameter',
+              icon: Icons.add,
+              shortcut: editor.freeParamName(prop),
+              onSelected: () => editor.promote(node, prop),
+            ),
+            if (candidates.isNotEmpty) ...[
+              const MenuDivider(),
+              const MenuHeader('Bind to'),
+              for (var p in candidates)
+                MenuItem(
+                  p.name,
+                  icon: Icons.link,
+                  onSelected: () => editor.bind(node, prop, p.name),
+                ),
+            ],
+          ],
+        ]);
+      },
+      child: child,
+    );
+  }
 
   /// A size, in the three states one can be in: a number, hug, or fill.
   ///
@@ -482,12 +547,19 @@ class SceneInspector extends StatelessWidget {
 
   List<Widget> _textProps(BuildContext context, TextNode t) => [
     _label(context, 'Content'),
-    TextFormField(
-      key: ValueKey('text:${t.name}'),
-      initialValue: t.text,
-      maxLines: 3,
-      minLines: 1,
-      onChanged: (v) => _door('text', () => t.text = v),
+    _bindable(
+      context,
+      t,
+      'text',
+      TextFormField(
+        // Keyed on the binding too: binding rewrites the text from outside
+        // this field, and a field keeps its own buffer otherwise.
+        key: ValueKey('text:${t.name}:${t.bindings['text']}'),
+        initialValue: t.text,
+        maxLines: 3,
+        minLines: 1,
+        onChanged: (v) => _door('text', () => t.text = v),
+      ),
     ),
     const SizedBox(height: FwSpacing.md),
     _row([
@@ -544,10 +616,16 @@ class SceneInspector extends StatelessWidget {
       ),
     ]),
     _label(context, 'Color'),
-    _swatches(context, _shown(t, 'color', t.color), (c) {
-      var color = c ?? const SceneColor(0xFF000000);
-      _set('color', color, () => t.color = color);
-    }),
+    _bindable(
+      context,
+      t,
+      'color',
+      SceneSwatches(
+        current: _shown(t, 'color', t.color),
+        allowNone: false,
+        onPick: (c) => _set('color', c!, () => t.color = c),
+      ),
+    ),
   ];
 
   List<Widget> _frameProps(BuildContext context, FrameNode f) => [
@@ -1036,10 +1114,10 @@ class SceneInspector extends StatelessWidget {
             )
           else if (key.value case SceneColor color) ...[
             _label(context, 'Value'),
-            _swatches(
-              context,
-              color,
-              (c) => editor.setKeyValue(single, c ?? const SceneColor(0)),
+            SceneSwatches(
+              current: color,
+              allowNone: false,
+              onPick: (c) => editor.setKeyValue(single, c!),
             ),
           ],
           const SizedBox(height: FwSpacing.md),
@@ -1122,10 +1200,10 @@ class SceneInspector extends StatelessWidget {
               spacing: FwSpacing.sm,
               children: [
                 _label(context, p.name),
-                _swatches(
-                  context,
-                  (r.args[p.name] ?? p.defaultValue) as SceneColor?,
-                  (c) => _door('args', () => r.args[p.name] = c),
+                SceneSwatches(
+                  current: (r.args[p.name] ?? p.defaultValue) as SceneColor?,
+                  allowNone: false,
+                  onPick: (c) => _door('args', () => r.args[p.name] = c),
                 ),
               ],
             ),
@@ -1144,40 +1222,4 @@ class SceneInspector extends StatelessWidget {
       ],
     ];
   }
-
-  Widget _swatches(
-    BuildContext context,
-    SceneColor? current,
-    void Function(SceneColor?) onPick,
-  ) => Wrap(
-    spacing: FwSpacing.sm,
-    runSpacing: FwSpacing.sm,
-    children: [
-      for (var color in _palette)
-        Tappable(
-          onTap: () => onPick(color),
-          child: Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
-              color: color?.flutter,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: current == color
-                    ? context.colors.accent
-                    : context.colors.line,
-                width: current == color ? 2 : 1,
-              ),
-            ),
-            child: color == null
-                ? Icon(
-                    Icons.block,
-                    size: FwIconSize.sm,
-                    color: context.colors.mut2,
-                  )
-                : null,
-          ),
-        ),
-    ],
-  );
 }

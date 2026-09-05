@@ -83,6 +83,24 @@ Object? getSceneProperty(SceneNode node, String prop) => switch (prop) {
   _ => null,
 };
 
+/// The parameter kind [prop] of [node] can read, or null when the property
+/// cannot be bound — the same table as [getSceneProperty] and
+/// [setSceneProperty], seen as types.
+SceneParamKind? bindableKind(SceneNode node, String prop) => switch (prop) {
+  'x' ||
+  'y' ||
+  'width' ||
+  'height' ||
+  'corner' ||
+  'opacity' => SceneParamKind.number,
+  'fill' => SceneParamKind.color,
+  'text' when node is TextNode => SceneParamKind.string,
+  'fontSize' when node is TextNode => SceneParamKind.number,
+  'color' when node is TextNode => SceneParamKind.color,
+  'gap' || 'padding' when node is FrameNode => SceneParamKind.number,
+  _ => null,
+};
+
 /// Write one authored property by the name a [SceneNode.bindings] entry
 /// keys it under. The one place that maps a property name to a slot, so an
 /// argument and a repeated item's field land the same way.

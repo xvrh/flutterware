@@ -381,6 +381,239 @@ class SceneEditor extends SceneListenable {
     return best;
   }
 
+  // ---------------------------------------------------------------------
+  // Parameters
+  //
+  // A parameter is a typed hole in the scene's constructor whose default is
+  // the mockup. These are the doors that declare, rename, retype and delete
+  // one, set its mockup, and connect a node's property to it. Every one is
+  // journaled through [perform] like any other edit, and every one refuses
+  // rather than guessing — the file has to compile afterwards.
+  // ---------------------------------------------------------------------
+
+  /// Why [wanted] cannot be a parameter's name, or null when it can. Nodes
+  /// and parameters share the class namespace, so a node's name is taken.
+  String? paramNameProblem(String wanted, {String? renaming}) {
+    if (!isValidNodeName(wanted)) {
+      return '"$wanted" is not a valid name — a Dart identifier: letters, '
+          'digits and underscores, not starting with a digit';
+    }
+    if (wanted == renaming) return null;
+    if (doc.nodeNamed(wanted) != null ||
+        doc.params.any((p) => p.name == wanted)) {
+      return '"$wanted" is already taken';
+    }
+    return null;
+  }
+
+  /// A free parameter name off [base]: `title`, `title2`, `title3`…
+  String freeParamName(String base) {
+    if (paramNameProblem(base) == null) return base;
+    for (var i = 2; ; i++) {
+      if (paramNameProblem('$base$i') == null) return '$base$i';
+    }
+  }
+
+  /// The properties reading [param], as (node, property) pairs — what a
+  /// delete has to name, and what a rename has to follow.
+  List<(SceneNode, String)> readersOf(String param) => [
+    for (var (n, _) in doc.walk())
+      for (var e in n.bindings.entries)
+        if (switch (e.value) {
+          ParamRef(:var name) => name == param,
+          ItemRef(:var list) => list == param,
+        })
+          (n, e.key),
+    for (var (n, _) in doc.walk())
+      if (n is FrameNode && n.repeated?.source == param) (n, 'repeat'),
+  ];
+
+  /// Declares a parameter. With no [defaultValue] the mockup is the kind's
+  /// zero — an empty string, 0, black, no items.
+  void addParam(String name, SceneParamKind kind, {Object? defaultValue}) {
+    if (paramNameProblem(name) case var problem?) {
+      throw ArgumentError(problem);
+    }
+    var value = defaultValue ?? zeroOf(kind);
+    perform('Add parameter $name', () {
+      doc.params.add(SceneParamDecl(name, kind, value));
+    });
+  }
+
+  /// Renames a parameter; every binding and repeat reading it follows, so
+  /// the file still compiles.
+  void renameParam(String name, String wanted) {
+    wanted = wanted.trim();
+    if (wanted == name) return;
+    var i = doc.params.indexWhere((p) => p.name == name);
+    if (i < 0) throw ArgumentError('no parameter "$name"');
+    if (paramNameProblem(wanted) case var problem?) {
+      throw ArgumentError(problem);
+    }
+    perform('Rename parameter $name', () {
+      var decl = doc.params[i];
+      doc.params[i] = SceneParamDecl(wanted, decl.kind, decl.defaultValue);
+      for (var (n, _) in doc.walk()) {
+        for (var e in n.bindings.entries.toList()) {
+          n.bindings[e.key] = switch (e.value) {
+            ParamRef(name: var p) when p == name => ParamRef(wanted),
+            ItemRef(:var list, :var field) when list == name => ItemRef(
+              wanted,
+              field,
+            ),
+            var other => other,
+          };
+        }
+        if (n is FrameNode && n.repeated?.source == name) {
+          recordRepeat(n, wanted);
+        }
+      }
+      bindRepeats(doc);
+    });
+  }
+
+  /// Sets a parameter's mockup. Every property reading it takes the value —
+  /// the other direction of [reconcileBindings], which moves the default
+  /// when a reader moves.
+  void setParamDefault(String name, Object value, {String? mergeKey}) {
+    var i = doc.params.indexWhere((p) => p.name == name);
+    if (i < 0) throw ArgumentError('no parameter "$name"');
+    var decl = doc.params[i];
+    if (!_holds(decl.kind, value)) {
+      throw ArgumentError(
+        '"$name" is a ${decl.typeName} parameter — '
+        'a ${value.runtimeType} is not one',
+      );
+    }
+    perform('Edit parameter $name', mergeKey: mergeKey, () {
+      doc.params[i] = decl.withDefault(value);
+      if (decl.kind == SceneParamKind.list) {
+        bindRepeats(doc);
+        return;
+      }
+      for (var (n, _) in doc.walk()) {
+        for (var e in n.bindings.entries) {
+          if (e.value case ParamRef(name: var p) when p == name) {
+            setSceneProperty(n, e.key, value);
+          }
+        }
+      }
+    });
+  }
+
+  /// Changes a parameter's kind. Refused while anything reads it: a text
+  /// cannot start reading a colour, and choosing which reader to drop is
+  /// not this door's call.
+  void retypeParam(String name, SceneParamKind kind) {
+    var i = doc.params.indexWhere((p) => p.name == name);
+    if (i < 0) throw ArgumentError('no parameter "$name"');
+    if (doc.params[i].kind == kind) return;
+    var readers = readersOf(name);
+    if (readers.isNotEmpty) {
+      throw ArgumentError(
+        '"$name" is read by ${_readerList(readers)} — unbind them first',
+      );
+    }
+    perform('Retype parameter $name', () {
+      doc.params[i] = SceneParamDecl(name, kind, zeroOf(kind));
+    });
+  }
+
+  /// Deletes a parameter. Refused while anything reads it, naming the
+  /// readers, so nothing is silently unbound.
+  void deleteParam(String name) {
+    var i = doc.params.indexWhere((p) => p.name == name);
+    if (i < 0) throw ArgumentError('no parameter "$name"');
+    var readers = readersOf(name);
+    if (readers.isNotEmpty) {
+      throw ArgumentError(
+        '"$name" is read by ${_readerList(readers)} — unbind them first',
+      );
+    }
+    perform('Delete parameter $name', () => doc.params.removeAt(i));
+  }
+
+  /// Moves a parameter in the declaration order — the order of the
+  /// constructor's formals, and of the panel.
+  void moveParam(String name, int to) {
+    var i = doc.params.indexWhere((p) => p.name == name);
+    if (i < 0) throw ArgumentError('no parameter "$name"');
+    to = to.clamp(0, doc.params.length - 1);
+    if (to == i) return;
+    perform('Move parameter $name', () {
+      var decl = doc.params.removeAt(i);
+      doc.params.insert(to, decl);
+    });
+  }
+
+  /// Connects [prop] of [node] to the parameter [param]. The property takes
+  /// the parameter's default — the binding is the stronger of the two.
+  void bind(SceneNode node, String prop, String param) {
+    var decl = doc.paramNamed(param);
+    if (decl == null) throw ArgumentError('no parameter "$param"');
+    var kind = bindableKind(node, prop);
+    if (kind == null) {
+      throw ArgumentError('"$prop" cannot read a parameter');
+    }
+    if (decl.kind != kind) {
+      throw ArgumentError(
+        '"$param" is a ${decl.typeName} parameter — "$prop" takes a '
+        '${SceneParamDecl(param, kind, zeroOf(kind)).typeName}',
+      );
+    }
+    perform('Bind $prop to $param', () {
+      node.bindings[prop] = ParamRef(param);
+      setSceneProperty(node, prop, decl.defaultValue);
+    });
+  }
+
+  /// Declares a parameter whose default is what [prop] of [node] holds now,
+  /// and binds the property to it — one edit, one undo entry. Returns the
+  /// name it took.
+  String promote(SceneNode node, String prop, {String? name}) {
+    var kind = bindableKind(node, prop);
+    if (kind == null) {
+      throw ArgumentError('"$prop" cannot become a parameter');
+    }
+    var value = getSceneProperty(node, prop);
+    if (value == null || !_holds(kind, value)) {
+      throw ArgumentError('"$prop" holds nothing a parameter can carry');
+    }
+    var chosen = name?.trim() ?? freeParamName(prop);
+    if (paramNameProblem(chosen) case var problem?) {
+      throw ArgumentError(problem);
+    }
+    perform('Make parameter $chosen', () {
+      doc.params.add(SceneParamDecl(chosen, kind, value));
+      node.bindings[prop] = ParamRef(chosen);
+    });
+    return chosen;
+  }
+
+  /// Disconnects [prop] of [node]; the value stays where it is.
+  void unbind(SceneNode node, String prop) {
+    if (!node.bindings.containsKey(prop)) return;
+    perform('Unbind $prop', () => node.bindings.remove(prop));
+  }
+
+  static String _readerList(List<(SceneNode, String)> readers) =>
+      readers.map((r) => '${r.$1.name}.${r.$2}').join(', ');
+
+  static bool _holds(SceneParamKind kind, Object value) => switch (kind) {
+    SceneParamKind.string => value is String,
+    SceneParamKind.number => value is double,
+    SceneParamKind.color => value is SceneColor,
+    SceneParamKind.list => value is List,
+  };
+
+  /// The kind's zero — the mockup a fresh parameter starts with.
+  static Object zeroOf(SceneParamKind kind) => switch (kind) {
+    SceneParamKind.string => '',
+    SceneParamKind.number => 0.0,
+    SceneParamKind.color => const SceneColor(0xFF000000),
+    SceneParamKind.list => const <SceneItem>[],
+  };
+
   /// Renames [node]. A name is a Dart identifier and the field name in the
   /// file, so it must be free among the scene's nodes and parameters; every
   /// group animating the node follows. Refuses rather than guessing.
