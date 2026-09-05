@@ -4,6 +4,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
+import 'package:flutterware_app/src/scene/fixtures.dart';
+import 'package:flutterware_app/src/scene/motion_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 
 const _source =
@@ -28,6 +30,8 @@ String emit(SceneEditor e) => emitSceneFile(e.doc, className: 'Card');
 
 void main() {
   visibleTests();
+  listTests();
+  motionKeyTests();
   test("add declares a parameter at the kind's zero, or a chosen mockup", () {
     var e = open();
     e.addParam('slide', SceneParamKind.number);
@@ -209,6 +213,116 @@ class Card({final bool showFooter = true}) extends SceneDefinition {
       e.setVisible(true);
       expect(body.visible, isTrue);
       expect(e.doc.paramNamed('showBody')!.defaultValue, true);
+    });
+  });
+}
+
+void listTests() {
+  group('list parameters', () {
+    SceneEditor repeated() {
+      var cell = TextNode('Espresso', name: 'cell')
+        ..bindings['text'] = const ItemRef('lines', 'item');
+      var qty = TextNode('12', name: 'qty')
+        ..bindings['text'] = const ItemRef('lines', 'qty');
+      var row = FrameNode(name: 'row', layout: NodeLayout.row)
+        ..children.addAll([cell, qty]);
+      recordRepeat(row, 'lines');
+      var root = FrameNode(name: 'root', layout: NodeLayout.column)
+        ..width = 400
+        ..height = 300
+        ..children.add(row);
+      var doc = SceneDocument(root)
+        ..params.add(
+          SceneParamDecl('lines', SceneParamKind.list, <SceneItem>[
+            {'item': 'Espresso', 'qty': 12.0},
+            {'item': 'Filter', 'qty': 3.0},
+          ]),
+        );
+      bindRepeats(doc);
+      return SceneEditor(doc);
+    }
+
+    test('setting the items redraws the repeat and rewrites the first row', () {
+      var e = repeated();
+      e.setParamDefault('lines', <SceneItem>[
+        {'item': 'Latte', 'qty': 7.0},
+        {'item': 'Filter', 'qty': 3.0},
+        {'item': 'Mocha', 'qty': 1.0},
+      ]);
+      var row = e.doc.nodeNamed('row')! as FrameNode;
+      expect((row.children[0] as TextNode).text, 'Latte');
+      expect((row.children[1] as TextNode).text, '7');
+      expect(e.doc.expand(row).length, 3);
+      e.undo();
+      expect((row.children[0] as TextNode).text, 'Espresso');
+      expect(e.doc.expand(row).length, 2);
+    });
+
+    test('a list cannot be bound to a property, or given a scalar', () {
+      var e = repeated();
+      expect(
+        () => e.bind(e.doc.nodeNamed('cell')!, 'text', 'lines'),
+        throwsArgumentError,
+      );
+      expect(() => e.setParamDefault('lines', 'x'), throwsArgumentError);
+      expect(e.readersOf('lines').map((r) => '${r.$1.name}.${r.$2}'), [
+        'cell.text',
+        'qty.text',
+        'row.repeat',
+      ]);
+      expect(() => e.deleteParam('lines'), throwsArgumentError);
+    });
+
+    test('rename follows the item bindings and the repeat', () {
+      var e = repeated();
+      e.renameParam('lines', 'rows');
+      var row = e.doc.nodeNamed('row')! as FrameNode;
+      expect(row.repeated!.source, 'rows');
+      expect(
+        e.doc.nodeNamed('cell')!.bindings['text'],
+        const ItemRef('rows', 'item'),
+      );
+      expect(e.doc.expand(row).length, 2);
+    });
+  });
+}
+
+void motionKeyTests() {
+  group('motion keys reading a parameter', () {
+    test('an edit to the key moves the default and every other reader', () {
+      var scene = coffeeBannerDraft();
+      var motion = coffeeIntroDraft(scene);
+      var e = SceneEditor(scene, motions: {'BannerIntro': motion});
+      var key = motion
+          .groupNamed('headlineIn')!
+          .tracks['translateY']!
+          .keys
+          .first;
+      expect(key.paramRef, 'slideFrom');
+      e.perform('Edit key', () => key.value = 40.0);
+      expect(motion.params.single.defaultValue, 40.0);
+      expect(key.paramRef, 'slideFrom');
+      var out = StringBuffer();
+      emitMotionClass(out, motion, scene, className: 'BannerIntro');
+      expect('$out', contains('final double slideFrom = 40'));
+      expect('$out', contains('value: slideFrom'));
+      e.undo();
+      expect(motion.params.single.defaultValue, 24.0);
+      expect(key.value, 24.0);
+    });
+
+    test('a key reading a parameter that is gone loses the reference', () {
+      var scene = coffeeBannerDraft();
+      var motion = coffeeIntroDraft(scene);
+      motion.params.clear();
+      expect(reconcileMotionBindings(motion), ['headlineIn.translateY']);
+      var key = motion
+          .groupNamed('headlineIn')!
+          .tracks['translateY']!
+          .keys
+          .first;
+      expect(key.paramRef, isNull);
+      expect(key.value, 24.0);
     });
   });
 }

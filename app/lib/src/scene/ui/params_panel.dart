@@ -191,14 +191,7 @@ class _SceneParamsPanelState extends State<SceneParamsPanel> {
           ),
         );
       case SceneParamKind.list:
-        var items = p.items;
-        return Text(
-          items.isEmpty
-              ? 'no items'
-              : '${items.length} items · ${items.first.keys.join(' · ')}'
-                    ' — edited in the file for now',
-          style: context.type.micro.copyWith(color: context.colors.mut2),
-        );
+        return _ListEditor(editor, p);
     }
   }
 
@@ -285,5 +278,113 @@ class _SceneParamsPanelState extends State<SceneParamsPanel> {
         onSelected: readBy != null ? null : () => editor.deleteParam(p.name),
       ),
     ]);
+  }
+}
+
+/// A list parameter's mockup as a small table: one column per field, one
+/// row per item, each cell in its own control. Rows are added (a copy of
+/// the last, so the shape is kept) and removed here; the FIELDS are the
+/// record type every row shares and every cell binding names, so they are
+/// still edited in the file. Every change is one door on the parameter, and
+/// the repeat that draws the list redraws.
+class _ListEditor extends StatelessWidget {
+  const _ListEditor(this.editor, this.param);
+
+  final SceneEditor editor;
+  final SceneParamDecl param;
+
+  List<SceneItem> get items => param.items;
+
+  void _set(List<SceneItem> next, {String? mergeKey}) =>
+      editor.setParamDefault(param.name, next, mergeKey: mergeKey);
+
+  void _cell(int row, String field, Object value, {String? mergeKey}) => _set([
+    for (var (i, item) in items.indexed)
+      i == row ? {...item, field: value} : item,
+  ], mergeKey: mergeKey);
+
+  @override
+  Widget build(BuildContext context) {
+    var fields = items.isEmpty ? const <String>[] : items.first.keys.toList();
+    var caption = context.type.micro.copyWith(color: context.colors.mut2);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (items.isEmpty)
+          Text('no items — the repeat draws nothing', style: caption)
+        else ...[
+          Row(
+            children: [
+              for (var f in fields) Expanded(child: Text(f, style: caption)),
+              const SizedBox(width: FwIconSize.sm + FwSpacing.xs),
+            ],
+          ),
+          for (var (i, item) in items.indexed)
+            Padding(
+              padding: const EdgeInsets.only(top: FwSpacing.xs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  for (var (j, f) in fields.indexed) ...[
+                    if (j > 0) const SizedBox(width: FwSpacing.xs),
+                    Expanded(child: _cellControl(context, i, f, item[f])),
+                  ],
+                  const SizedBox(width: FwSpacing.xs),
+                  Tappable(
+                    onTap: () => _set([
+                      for (var (k, it) in items.indexed)
+                        if (k != i) it,
+                    ]),
+                    child: Icon(
+                      Icons.close,
+                      size: FwIconSize.sm,
+                      color: context.colors.mut2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          child: Tappable(
+            onTap: items.isEmpty
+                ? null
+                : () => _set([
+                    ...items,
+                    {...items.last},
+                  ]),
+            child: Text(
+              items.isEmpty ? 'add a first item in the file' : 'add row',
+              style: context.type.caption.copyWith(
+                color: items.isEmpty
+                    ? context.colors.mut2
+                    : context.colors.accent,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _cellControl(BuildContext context, int row, String field, Object? v) {
+    var key = 'param:${param.name}:$row:$field';
+    return switch (v) {
+      double d => SceneNumberField(
+        value: d,
+        shape: const SceneNumberShape(perPixel: 1, decimals: 2),
+        onChanged: (n) => _cell(row, field, n, mergeKey: key),
+        onCommit: (n) {
+          _cell(row, field, n, mergeKey: key);
+          editor.endMerge();
+        },
+      ),
+      _ => TextFormField(
+        key: ValueKey(key),
+        initialValue: '$v',
+        onChanged: (t) => _cell(row, field, t, mergeKey: key),
+      ),
+    };
   }
 }
