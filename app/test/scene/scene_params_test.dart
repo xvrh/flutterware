@@ -33,6 +33,7 @@ void main() {
   listTests();
   motionKeyTests();
   asideTests();
+  drawerTests();
   test("add declares a parameter at the kind's zero, or a chosen mockup", () {
     var e = open();
     e.addParam('slide', SceneParamKind.number);
@@ -371,6 +372,55 @@ void asideTests() {
       expect(e.aside, const MotionAside('Intro'));
       e.removeMotion('Intro');
       expect(e.aside, isNull);
+    });
+  });
+}
+
+void drawerTests() {
+  group('the drawer holds one thing', () {
+    SceneEditor withList() {
+      var scene = coffeeBannerDraft();
+      var e = SceneEditor(
+        scene,
+        motions: {'BannerIntro': coffeeIntroDraft(scene)},
+      );
+      e.addParam(
+        'lines',
+        SceneParamKind.list,
+        defaultValue: <SceneItem>[
+          {'item': 'Espresso', 'qty': 12.0},
+        ],
+      );
+      return e;
+    }
+
+    test('opening a parameter closes the motion, and the other way round', () {
+      var e = withList()..activeMotion = 'BannerIntro';
+      expect(e.drawer, const MotionAside('BannerIntro'));
+      e.openParam = 'lines';
+      expect(e.drawer, const ParamAside('lines'));
+      expect(e.activeMotion, isNull);
+      e.activeMotion = 'BannerIntro';
+      expect(e.openParam, isNull);
+      expect(e.drawer, const MotionAside('BannerIntro'));
+    });
+
+    test('only a list parameter can be open, and it follows a rename', () {
+      var e = withList()..addParam('title', SceneParamKind.string);
+      e.openParam = 'title';
+      expect(e.openParam, isNull, reason: 'a text has no table');
+      e.openParam = 'lines';
+      e.renameParam('lines', 'rows');
+      expect(e.openParam, 'rows');
+      expect(e.drawer, const ParamAside('rows'));
+    });
+
+    test('folding keeps it open; opening anything unfolds', () {
+      var e = withList()..openParam = 'lines';
+      e.drawerCollapsed = true;
+      expect(e.drawer, const ParamAside('lines'));
+      e.activeMotion = 'BannerIntro';
+      expect(e.drawerCollapsed, isFalse);
     });
   });
 }

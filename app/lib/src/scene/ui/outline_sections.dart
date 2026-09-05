@@ -26,6 +26,7 @@ class SceneOutlineSections extends StatefulWidget {
     super.key,
     this.sceneClassName,
     this.onOpenMotion,
+    this.onOpenParam,
   });
 
   final SceneEditor editor;
@@ -36,6 +37,9 @@ class SceneOutlineSections extends StatefulWidget {
   /// Opens a motion's timeline — the workspace's door, which also starts
   /// its playback.
   final ValueChanged<String>? onOpenMotion;
+
+  /// Opens a list parameter's table below the canvas.
+  final ValueChanged<String>? onOpenParam;
 
   @override
   State<SceneOutlineSections> createState() => _SceneOutlineSectionsState();
@@ -162,8 +166,16 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
       name: p.name,
       trailing: readers == 0 ? '' : '· $readers',
       openable: p.kind == SceneParamKind.list,
+      opened: editor.openParam == p.name,
       tooltip: '${paramKindLabel(p.kind)} · ${p.typeName}',
-      onOpen: () => editor.aside = aside,
+      onOpen: () {
+        editor.aside = aside;
+        if (widget.onOpenParam case var open?) {
+          open(p.name);
+        } else {
+          editor.openParam = p.name;
+        }
+      },
       menu: () => paramMenu(
         editor,
         p,

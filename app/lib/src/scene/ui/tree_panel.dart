@@ -29,6 +29,7 @@ class SceneTreePanel extends StatefulWidget {
     this.onEnterNested,
     this.sceneClassName,
     this.onOpenMotion,
+    this.onOpenParam,
   });
 
   final SceneEditor editor;
@@ -41,6 +42,9 @@ class SceneTreePanel extends StatefulWidget {
 
   /// See [SceneOutlineSections.onOpenMotion].
   final ValueChanged<String>? onOpenMotion;
+
+  /// See [SceneOutlineSections.onOpenParam].
+  final ValueChanged<String>? onOpenParam;
 
   @override
   State<SceneTreePanel> createState() => _SceneTreePanelState();
@@ -228,6 +232,7 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
                   editor,
                   sceneClassName: widget.sceneClassName,
                   onOpenMotion: widget.onOpenMotion,
+                  onOpenParam: widget.onOpenParam,
                 ),
               ),
             ),

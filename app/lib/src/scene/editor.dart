@@ -115,10 +115,39 @@ class SceneEditor extends SceneListenable {
   set activeMotion(String? name) {
     if (_activeMotion == name) return;
     _activeMotion = name;
+    if (name != null) _openParam = null;
     _drawerCollapsed = false;
     clearKeySelection();
     notifyListeners();
   }
+
+  /// The list parameter whose table is open in the drawer, or null. The
+  /// drawer holds one thing: opening a parameter closes the motion and the
+  /// other way round.
+  String? get openParam => switch (doc.paramNamed(_openParam ?? '')) {
+    SceneParamDecl(kind: SceneParamKind.list) => _openParam,
+    _ => null,
+  };
+  String? _openParam;
+
+  set openParam(String? name) {
+    if (_openParam == name) return;
+    _openParam = name;
+    if (name != null) {
+      _activeMotion = null;
+      clearKeySelection();
+    }
+    _drawerCollapsed = false;
+    notifyListeners();
+  }
+
+  /// What the drawer under the canvas is showing, as the same kind of thing
+  /// the outline selects — a motion or a list parameter — or null.
+  SceneAside? get drawer => switch ((activeMotion, openParam)) {
+    (var m?, _) => MotionAside(m),
+    (_, var p?) => ParamAside(p),
+    _ => null,
+  };
 
   /// Whether the drawer under the canvas is folded away while its motion
   /// stays open — the header keeps naming it, the motion stays on the
@@ -519,6 +548,7 @@ class SceneEditor extends SceneListenable {
       throw ArgumentError(problem);
     }
     if (_aside == ParamAside(name)) _aside = ParamAside(wanted);
+    if (_openParam == name) _openParam = wanted;
     perform('Rename parameter $name', () {
       var decl = doc.params[i];
       doc.params[i] = SceneParamDecl(wanted, decl.kind, decl.defaultValue);

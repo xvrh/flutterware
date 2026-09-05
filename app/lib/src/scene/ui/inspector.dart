@@ -37,9 +37,17 @@ enum _SizeMode {
 }
 
 class SceneInspector extends StatelessWidget {
-  const SceneInspector(this.editor, {super.key, this.externals = const []});
+  const SceneInspector(
+    this.editor, {
+    super.key,
+    this.externals = const [],
+    this.onOpenParam,
+  });
 
   final SceneEditor editor;
+
+  /// Opens a list parameter's table below the canvas.
+  final ValueChanged<String>? onOpenParam;
 
   /// The widgets the app declares. This is the whole of what the editor
   /// knows about a foreign widget — nothing here resolves the app package —
@@ -81,7 +89,7 @@ class SceneInspector extends StatelessWidget {
     if (editor.selectedKeys.isNotEmpty) return _keys(context);
     switch (editor.aside) {
       case ParamAside(:var name):
-        return SceneParamInspector(editor, name);
+        return SceneParamInspector(editor, name, onOpen: onOpenParam);
       case MotionAside(:var name):
         return SceneMotionInspector(
           editor,

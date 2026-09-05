@@ -98,10 +98,13 @@ List<MenuEntry> paramMenu(
 /// IS the mockup and every node reading it follows — and what reads it,
 /// each a step to that node.
 class SceneParamInspector extends StatefulWidget {
-  const SceneParamInspector(this.editor, this.name, {super.key});
+  const SceneParamInspector(this.editor, this.name, {super.key, this.onOpen});
 
   final SceneEditor editor;
   final String name;
+
+  /// Opens a list parameter's table below the canvas.
+  final ValueChanged<String>? onOpen;
 
   @override
   State<SceneParamInspector> createState() => _SceneParamInspectorState();
@@ -270,7 +273,21 @@ class _SceneParamInspectorState extends State<SceneParamInspector> {
           ),
         );
       case SceneParamKind.list:
-        return _ListEditor(editor, p);
+        var open = editor.openParam == p.name;
+        return Tappable(
+          onTap: open || widget.onOpen == null
+              ? null
+              : () => widget.onOpen!(p.name),
+          child: Text(
+            '${p.items.length} ${p.items.length == 1 ? 'item' : 'items'} — '
+            '${open ? 'the table is open below' : 'open the table below ›'}',
+            style: context.type.caption.copyWith(
+              color: open || widget.onOpen == null
+                  ? context.colors.mut2
+                  : context.colors.accent,
+            ),
+          ),
+        );
     }
   }
 }
@@ -355,113 +372,5 @@ class SceneMotionInspector extends StatelessWidget {
           ),
       ],
     );
-  }
-}
-
-/// A list parameter's mockup as a small table: one column per field, one
-/// row per item, each cell in its own control. Rows are added (a copy of
-/// the last, so the shape is kept) and removed here; the FIELDS are the
-/// record type every row shares and every cell binding names, so they are
-/// still edited in the file. Every change is one door on the parameter, and
-/// the repeat that draws the list redraws.
-class _ListEditor extends StatelessWidget {
-  const _ListEditor(this.editor, this.param);
-
-  final SceneEditor editor;
-  final SceneParamDecl param;
-
-  List<SceneItem> get items => param.items;
-
-  void _set(List<SceneItem> next, {String? mergeKey}) =>
-      editor.setParamDefault(param.name, next, mergeKey: mergeKey);
-
-  void _cell(int row, String field, Object value, {String? mergeKey}) => _set([
-    for (var (i, item) in items.indexed)
-      i == row ? {...item, field: value} : item,
-  ], mergeKey: mergeKey);
-
-  @override
-  Widget build(BuildContext context) {
-    var fields = items.isEmpty ? const <String>[] : items.first.keys.toList();
-    var caption = context.type.micro.copyWith(color: context.colors.mut2);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (items.isEmpty)
-          Text('no items — the repeat draws nothing', style: caption)
-        else ...[
-          Row(
-            children: [
-              for (var f in fields) Expanded(child: Text(f, style: caption)),
-              const SizedBox(width: FwIconSize.sm + FwSpacing.xs),
-            ],
-          ),
-          for (var (i, item) in items.indexed)
-            Padding(
-              padding: const EdgeInsets.only(top: FwSpacing.xs),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  for (var (j, f) in fields.indexed) ...[
-                    if (j > 0) const SizedBox(width: FwSpacing.xs),
-                    Expanded(child: _cellControl(context, i, f, item[f])),
-                  ],
-                  const SizedBox(width: FwSpacing.xs),
-                  Tappable(
-                    onTap: () => _set([
-                      for (var (k, it) in items.indexed)
-                        if (k != i) it,
-                    ]),
-                    child: Icon(
-                      Icons.close,
-                      size: FwIconSize.sm,
-                      color: context.colors.mut2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-        Padding(
-          padding: const EdgeInsets.only(top: FwSpacing.xs),
-          child: Tappable(
-            onTap: items.isEmpty
-                ? null
-                : () => _set([
-                    ...items,
-                    {...items.last},
-                  ]),
-            child: Text(
-              items.isEmpty ? 'add a first item in the file' : 'add row',
-              style: context.type.caption.copyWith(
-                color: items.isEmpty
-                    ? context.colors.mut2
-                    : context.colors.accent,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _cellControl(BuildContext context, int row, String field, Object? v) {
-    var key = 'param:${param.name}:$row:$field';
-    return switch (v) {
-      double d => SceneNumberField(
-        value: d,
-        shape: const SceneNumberShape(perPixel: 1, decimals: 2),
-        onChanged: (n) => _cell(row, field, n, mergeKey: key),
-        onCommit: (n) {
-          _cell(row, field, n, mergeKey: key);
-          editor.endMerge();
-        },
-      ),
-      _ => TextFormField(
-        key: ValueKey(key),
-        initialValue: '$v',
-        onChanged: (t) => _cell(row, field, t, mergeKey: key),
-      ),
-    };
   }
 }

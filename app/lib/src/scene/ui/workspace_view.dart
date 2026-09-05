@@ -10,6 +10,7 @@ import '../playback.dart';
 import 'canvas.dart';
 import 'drawer_header.dart';
 import 'inspector.dart';
+import 'list_table.dart';
 import 'shortcuts.dart';
 import 'timeline.dart';
 import 'tree_panel.dart';
@@ -93,6 +94,30 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
     editor.activeMotion = null;
   }
 
+  /// Opens a list parameter's table: the motion, if one is open, closes
+  /// first — the drawer holds one thing.
+  void _openParam(String name) {
+    _closeMotion();
+    editor.openParam = name;
+  }
+
+  void _openMotion(String name) {
+    editor.openParam = null;
+    editor.activeMotion = name;
+    // A motion that was closed comes back on the picture; one already open
+    // is unchanged.
+    widget.playbackFor(name).apply();
+  }
+
+  void _closeDrawer() {
+    _closeMotion();
+    editor.openParam = null;
+  }
+
+  /// How tall the drawer is, dragged by hand. Null until dragged: two fifths
+  /// of the column, which is where the timeline always sat.
+  double? _drawerHeight;
+
   SceneEditor get editor => widget.editor;
 
   @override
@@ -113,57 +138,79 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                     editor,
                     onEnterNested: widget.onEnterNested,
                     sceneClassName: widget.sceneClassName,
-                    onOpenMotion: (name) {
-                      editor.activeMotion = name;
-                      widget.playbackFor(name).apply();
-                    },
+                    onOpenMotion: _openMotion,
+                    onOpenParam: _openParam,
                   ),
                 ),
                 Container(width: 1, color: line),
                 Expanded(
                   child: AnimatedBuilder(
                     animation: editor.listenable,
-                    builder: (context, _) {
-                      var active = editor.activeMotion;
-                      var open = active != null;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: SceneCanvas(
-                              editor,
-                              content: widget.content,
-                              status: widget.status,
-                              onEnterNested: widget.onEnterNested,
-                              trailing: widget.canvasTrailing,
-                              pane: widget.pane,
-                            ),
-                          ),
-                          Container(height: 1, color: line),
-                          SceneDrawerHeader(
-                            editor,
-                            onClose: _closeMotion,
-                            onPick: (name) {
-                              editor.activeMotion = name;
-                              // A motion that was closed comes back on the
-                              // picture; one already open is unchanged.
-                              widget.playbackFor(name).apply();
-                            },
-                          ),
-                          if (open && !editor.drawerCollapsed) ...[
-                            Container(height: 1, color: line),
+                    builder: (context, _) => LayoutBuilder(
+                      builder: (context, constraints) {
+                        var open = editor.drawer;
+                        var shown = open != null && !editor.drawerCollapsed;
+                        var height =
+                            (_drawerHeight ?? constraints.maxHeight * 0.4)
+                                .clamp(120.0, constraints.maxHeight - 160);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                             Expanded(
-                              flex: 2,
-                              child: SceneTimeline(
+                              child: SceneCanvas(
                                 editor,
-                                widget.playbackFor(active),
+                                content: widget.content,
+                                status: widget.status,
+                                onEnterNested: widget.onEnterNested,
+                                trailing: widget.canvasTrailing,
+                                pane: widget.pane,
                               ),
                             ),
+                            Container(height: 1, color: line),
+                            SceneDrawerHeader(
+                              editor,
+                              onClose: _closeDrawer,
+                              onPick: (pick) => switch (pick) {
+                                MotionAside(:var name) => _openMotion(name),
+                                ParamAside(:var name) => _openParam(name),
+                              },
+                            ),
+                            if (shown) ...[
+                              // The divider is the handle: drag it to trade
+                              // canvas for drawer, which is how twelve rows
+                              // or a long timeline get their room.
+                              MouseRegion(
+                                cursor: SystemMouseCursors.resizeRow,
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onVerticalDragUpdate: (d) => setState(() {
+                                    _drawerHeight = height - d.delta.dy;
+                                  }),
+                                  child: Container(
+                                    height: 5,
+                                    alignment: Alignment.center,
+                                    child: Container(height: 1, color: line),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                height: height,
+                                child: switch (open) {
+                                  MotionAside(:var name) => SceneTimeline(
+                                    editor,
+                                    widget.playbackFor(name),
+                                  ),
+                                  ParamAside(:var name) => SceneListTable(
+                                    editor,
+                                    name,
+                                  ),
+                                },
+                              ),
+                            ],
                           ],
-                        ],
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],
@@ -180,8 +227,11 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
               editor.listenable,
               editor.doc.listenable,
             ]),
-            builder: (context, _) =>
-                SceneInspector(editor, externals: widget.externals),
+            builder: (context, _) => SceneInspector(
+              editor,
+              externals: widget.externals,
+              onOpenParam: _openParam,
+            ),
           ),
         ),
       ],
