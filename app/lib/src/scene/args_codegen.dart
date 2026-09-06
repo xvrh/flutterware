@@ -24,10 +24,20 @@ import 'tokens_file.dart';
 /// One scene class the generator writes arguments for, and where it lives
 /// relative to the generated file.
 class SceneClassDecl {
-  SceneClassDecl(this.className, this.params, this.importPath);
+  SceneClassDecl(
+    this.className,
+    this.params,
+    this.importPath, {
+    this.tokensFormal,
+  });
 
   final String className;
   final List<SceneParamDecl> params;
+
+  /// The scene's tokens formal, when it declares one — the generated
+  /// arguments class carries the set under that name, so a parent hands
+  /// its own down without the author threading anything.
+  final String? tokensFormal;
 
   /// The scene file, relative to the generated file's directory.
   final String importPath;
@@ -119,6 +129,13 @@ String emitSceneArgs({
             fallback: _literal(p.defaultValue),
             opaque: false,
           ),
+      if (s.tokensFormal case var formal?)
+        (
+          name: formal,
+          type: sceneTokensClassName,
+          fallback: 'const $sceneTokensClassName()',
+          opaque: true,
+        ),
     ];
     _argsClass(
       out,
@@ -189,10 +206,15 @@ void _argsClass(
     ..writeln('  Map<String, Object?> toMap() => {')
     ..writeln(
       [
+        // A tokens set is not an argument the editor holds: it stays
+        // between the two compiled classes and never reaches the map.
         for (var f in fields)
-          f.fallback == null
-              ? "        '${f.name}': ?${f.name},"
-              : "        '${f.name}': ${f.name},",
+          if (f.type == sceneTokensClassName)
+            ''
+          else if (f.fallback == null)
+            "        '${f.name}': ?${f.name},"
+          else
+            "        '${f.name}': ${f.name},",
       ].join('\n'),
     )
     ..writeln('      };')

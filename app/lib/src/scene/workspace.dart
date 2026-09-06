@@ -225,15 +225,22 @@ class SceneWorkspace extends SceneListenable {
   void resolveInstances(SceneFile file) {
     if (resolveNested == null) return;
     var changed = false;
-    for (var (node, _) in file.scene.walk()) {
+    var parent = file.scene;
+    for (var (node, _) in parent.walk()) {
       if (node is! SceneRefNode) continue;
       var child = _fileFor(node);
       node.instance = child == null
           ? null
           : instantiateScene(child.scene, node.args);
+      // A child that takes a set receives the parent's, threaded here and
+      // never by the author: the parent grows a formal on its next save if
+      // it had none, and the child's formal name is what the file spells.
+      node.tokensArg = child?.scene.tokensFormal;
       changed = true;
     }
-    if (changed) file.scene.edit(() {});
+    if (changed) {
+      parent.edit(() => applyTokenMode(parent));
+    }
   }
 
   /// Drills into the scene [node] stands for. The surface switches to that

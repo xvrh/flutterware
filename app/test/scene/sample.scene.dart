@@ -18,13 +18,14 @@ class SampleScene({
     (label: 'Beans', value: '1kg'),
     (label: 'Milk', value: '12L'),
   ],
+  final SceneTokens tokens = const SceneTokens(),
 }) extends SceneDefinition {
   late final badge = ShapeNode(width: 24, height: 24, fill: tint, circle: true);
   late final title = TextNode(
     headline,
     fontSize: 32,
     weight: SceneFontWeight.w700,
-    color: SceneColor(0xFFFFFFFF),
+    color: tokens.ink,
   );
   late final bar = FrameNode(
     layout: NodeLayout.row,
@@ -45,12 +46,14 @@ class SampleScene({
     width: 60,
     height: 20,
   );
-  late final badgeRef = SceneRefNode(const SampleBadgeArgs(label: 'Open'));
+  late final badgeRef = SceneRefNode(
+    SampleBadgeArgs(label: 'Open', tokens: tokens),
+  );
   @override
   late final root = FrameNode(
     width: 400,
     height: 120,
-    fill: SceneColor(0xFF2B1B12),
+    fill: tokens.surface,
     children: [bar, table, chip, badgeRef],
   );
 }

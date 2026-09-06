@@ -9,12 +9,17 @@
 // This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 import 'package:flutterware/scene_authoring.dart';
 
-class SampleBadge({final String label = 'New'}) extends SceneDefinition {
+import 'scene_args.dart';
+
+class SampleBadge({
+  final String label = 'New',
+  final SceneTokens tokens = const SceneTokens(),
+}) extends SceneDefinition {
   late final text = TextNode(
     label,
     fontSize: 11,
     weight: SceneFontWeight.w700,
-    color: SceneColor(0xFFFFFFFF),
+    color: tokens.ink,
   );
   @override
   late final root = FrameNode(

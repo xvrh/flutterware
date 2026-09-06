@@ -339,6 +339,23 @@ Each is a table row and a renderer case.
    variables endpoint's documented answer, not a captured one — the first
    real export is the acceptance test the plan promised, still owed.
 
+   **M6 landed 2026-09-06.** A mode is view state on the document
+   (`tokenMode`), never written: the canvas bar's `mode ▾` puts the mode's
+   values behind every token reference (`applyTokenMode`), reconcile compares
+   against the mode's value so an edit in dark mode keeps its binding, and
+   undo re-applies the mode over the snapshot it restores. A nested scene
+   receives the parent's set as `BadgeArgs(label: title, tk: t)` — the
+   child's own formal name — threaded by the workspace whenever both sides
+   declare a formal and never by the author; the generated `…Args` carries
+   the set as a field that never reaches the wire. The runtime demonstration:
+   a theme change is a fresh instance (`SampleScene(tokens:
+   SceneTokens.dark)`), the motion's generated `copy(scene)` rebinds, and
+   `MotionPlayer.retarget` carries the playhead across at the same moment;
+   `SceneView` follows a new definition through `didUpdateWidget`. What M6
+   did NOT build: an app-side widget that watches `Theme.of(context)` and
+   does the copy for you — the pieces are public and one app will show the
+   idiom before it is framed.
+
 ## 8. What the second pass changed
 
 Read against the code on 2026-09-05, after the first draft. Kept here so the

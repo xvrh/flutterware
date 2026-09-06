@@ -43,22 +43,26 @@ class SampleChipTracks extends SceneExtTracks {
 }
 
 class SampleBadgeArgs extends SceneRefArgs {
-  const SampleBadgeArgs({this.label = 'New'});
+  const SampleBadgeArgs({
+    this.label = 'New',
+    this.tokens = const SceneTokens(),
+  });
 
   final String label;
+  final SceneTokens tokens;
 
   @override
   String get entry => 'SampleBadge';
 
   @override
   SampleBadgeArgs merge(SceneArgs fx) =>
-      SampleBadgeArgs(label: fx.text('label') ?? label);
+      SampleBadgeArgs(label: fx.text('label') ?? label, tokens: tokens);
 
   @override
   Map<String, Object?> toMap() => {'label': label};
 
   @override
-  SceneDefinition build() => SampleBadge(label: label);
+  SceneDefinition build() => SampleBadge(label: label, tokens: tokens);
 }
 
 class SampleBadgeTracks extends SceneExtTracks {
@@ -72,10 +76,12 @@ class SampleSceneArgs extends SceneRefArgs {
   const SampleSceneArgs({
     this.headline = 'Fresh coffee, faster',
     this.tint = const SceneColor(0xFFE8632B),
+    this.tokens = const SceneTokens(),
   });
 
   final String headline;
   final SceneColor tint;
+  final SceneTokens tokens;
 
   @override
   String get entry => 'SampleScene';
@@ -84,13 +90,15 @@ class SampleSceneArgs extends SceneRefArgs {
   SampleSceneArgs merge(SceneArgs fx) => SampleSceneArgs(
     headline: fx.text('headline') ?? headline,
     tint: fx.color('tint') ?? tint,
+    tokens: tokens,
   );
 
   @override
   Map<String, Object?> toMap() => {'headline': headline, 'tint': tint};
 
   @override
-  SceneDefinition build() => SampleScene(headline: headline, tint: tint);
+  SceneDefinition build() =>
+      SampleScene(headline: headline, tint: tint, tokens: tokens);
 }
 
 class SampleSceneTracks extends SceneExtTracks {
@@ -100,6 +108,27 @@ class SampleSceneTracks extends SceneExtTracks {
 
   @override
   Map<String, MotionTrack> toMap() => {'tint': ?tint};
+}
+
+/// The tokens `scene_tokens.dart` declares, typed. A scene
+/// reads them through its tokens formal — `fill: tokens.brand`;
+/// the bare constructor is the declared set.
+class SceneTokens {
+  const SceneTokens({
+    this.surface = const SceneColor(0xFF2B1B12),
+    this.ink = const SceneColor(0xFFFFFFFF),
+  });
+
+  final SceneColor surface;
+  final SceneColor ink;
+
+  static const dark = SceneTokens(
+    surface: SceneColor(0xFF111111),
+    ink: SceneColor(0xFFEEEEEE),
+  );
+
+  /// Every mode the declaration names, by name.
+  static const modes = <String, SceneTokens>{'dark': dark};
 }
 
 /// The declaration an arguments class was generated from —

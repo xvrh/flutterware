@@ -248,10 +248,12 @@ bool _placesSomething(SceneDocument doc) {
   return false;
 }
 
-/// Whether any property reads a declared token — what puts the tokens
-/// formal in the header and the generated vocabulary in scope.
+/// Whether any property reads a declared token, or a nested instance is
+/// handed the set — what puts the tokens formal in the header and the
+/// generated vocabulary in scope.
 bool _readsTokens(SceneDocument doc) {
   for (var (node, _) in doc.walk()) {
+    if (node is SceneRefNode && node.tokensArg != null) return true;
     for (var b in node.bindings.values) {
       if (b case TokenRef(:var name) when doc.tokenNamed(name) != null) {
         return true;
@@ -457,7 +459,16 @@ void _emitNode(
       out.write('ExternalNode(${props.join(', ')})');
     case SceneRefNode r:
       props.add(
-        _argsLiteral(r.sceneClassName, r.args, 'a scene class name', ref: ref),
+        _argsLiteral(
+          r.sceneClassName,
+          r.args,
+          'a scene class name',
+          ref: ref,
+          // The parent's set, under the child's own name for its formal.
+          extra: r.tokensArg == null
+              ? null
+              : '${r.tokensArg}: ${scope.tokensFormal}',
+        ),
       );
       table();
       out.write('SceneRefNode(${props.join(', ')})');
@@ -480,6 +491,7 @@ String _argsLiteral(
   Map<String, Object?> args,
   String what, {
   required String? Function(String prop) ref,
+  String? extra,
 }) {
   if (!isValidNodeName(entry)) {
     throw ArgumentError('"$entry" is not $what');
@@ -489,7 +501,7 @@ String _argsLiteral(
       throw ArgumentError('"$name" is not an argument name');
     }
   }
-  var bound = false;
+  var bound = extra != null;
   var named = [
     for (var e in args.entries)
       // An opaque token's marker with no binding behind it has nothing to
@@ -500,6 +512,7 @@ String _argsLiteral(
           if (r != null) bound = true;
           return r ?? _argValue(e.value);
         }()}',
+    ?extra,
   ].join(', ');
   return '${bound ? '' : 'const '}${entry}Args($named)';
 }
@@ -1227,8 +1240,8 @@ class _Parser {
               : 'a SceneRefNode takes the generated arguments of the scene it '
                     "instantiates — SceneRefNode(const PromoBadgeArgs(label: 'New'))",
         );
-        var (target, nodeArgs, argRefs) =
-            read ?? ('', <String, Object?>{}, <String, SceneBinding>{});
+        var (target, nodeArgs, argRefs, tokensArg) =
+            read ?? ('', <String, Object?>{}, <String, SceneBinding>{}, null);
         if (declaredArgs[target] case var declared?) {
           for (var name in nodeArgs.keys) {
             if (declared.contains(name)) continue;
@@ -1240,9 +1253,17 @@ class _Parser {
             );
           }
         }
+        if (tokensArg != null && kind == 'ExternalNode') {
+          refuse(
+            positional[0].offset,
+            'tokens argument',
+            'a widget takes no tokens set — a nested scene does',
+          );
+        }
         var node = kind == 'ExternalNode'
             ? ExternalNode.read(target, name: name, args: nodeArgs)
-            : SceneRefNode.read(target, name: name, args: nodeArgs);
+            : (SceneRefNode.read(target, name: name, args: nodeArgs)
+                ..tokensArg = tokensArg);
         for (var e in argRefs.entries) {
           node.bindings['args.${e.key}'] = e.value;
         }
@@ -1525,11 +1546,8 @@ class _Parser {
   /// The typed arguments a node is given, and which of them read one of
   /// this scene's parameters — `PromoBadgeArgs(label: title)` yields
   /// `title`'s default as the value and records the reference.
-  (String, Map<String, Object?>, Map<String, SceneBinding>)? _typedArgs(
-    List<Expression> positional,
-    ArgumentList args,
-    String missing,
-  ) {
+  (String, Map<String, Object?>, Map<String, SceneBinding>, String?)?
+  _typedArgs(List<Expression> positional, ArgumentList args, String missing) {
     if (positional.isEmpty) {
       refuse(args.offset, 'missing argument', missing);
       return null;
@@ -1547,6 +1565,7 @@ class _Parser {
     }
     var out = <String, Object?>{};
     var refs = <String, SceneBinding>{};
+    String? tokensArg;
     for (var arg in call.$2.arguments) {
       if (arg is! NamedArgument) {
         refuse(
@@ -1557,6 +1576,14 @@ class _Parser {
         continue;
       }
       var v = arg.argumentExpression;
+      // The parent's whole set, handed to a nested scene under the child's
+      // formal name: `PromoBadgeArgs(label: title, tokens: tokens)`.
+      if (v is SimpleIdentifier &&
+          _tokensFormal != null &&
+          v.name == _tokensFormal) {
+        tokensArg = arg.name.lexeme;
+        continue;
+      }
       var decl = v is SimpleIdentifier ? _params[v.name] : null;
       if (v is SimpleIdentifier && decl != null) {
         if (decl.kind == SceneParamKind.list) {
@@ -1583,7 +1610,7 @@ class _Parser {
       }
       out[arg.name.lexeme] = _literal(v);
     }
-    return (entry, out, refs);
+    return (entry, out, refs, tokensArg);
   }
 
   // -- value parsers, each refusing with the construct it actually found.

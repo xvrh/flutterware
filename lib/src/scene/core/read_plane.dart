@@ -67,6 +67,30 @@ SceneDocument instantiateScene(
   return doc;
 }
 
+/// Puts the document's [SceneDocument.tokenMode] onto every token-bound
+/// property: the mode's value where the token names it, the default
+/// elsewhere. Reaches into every nested instance that receives the set
+/// ([SceneRefNode.tokensArg]); one that does not shows its own default.
+///
+/// The canvas's mode switch and the editor's undo both end here — undo
+/// restores the values a snapshot held, which may have been another mode's,
+/// and the mode is view state that outlives the snapshot.
+void applyTokenMode(SceneDocument doc) {
+  for (var (node, _) in doc.walk()) {
+    for (var entry in node.bindings.entries) {
+      if (entry.value case TokenRef(:var name)) {
+        var decl = doc.tokenNamed(name);
+        if (decl == null || decl.isOpaque) continue;
+        setSceneProperty(node, entry.key, decl.valueIn(doc.tokenMode));
+      }
+    }
+    if (node case SceneRefNode(instance: var inst?, :var tokensArg)) {
+      inst.tokenMode = tokensArg == null ? null : doc.tokenMode;
+      applyTokenMode(inst);
+    }
+  }
+}
+
 /// The parameter kind [prop] of [node] can read, or null when the property
 /// cannot be bound — the table's kind, seen as a parameter's. A nested
 /// scene's argument reads a parameter of the kind the child declares it;
@@ -269,7 +293,7 @@ List<String> reconcileBindings(SceneDocument doc) {
             if (tokenMarkerName(current) != null) {
               setSceneProperty(node, prop, null);
             }
-          } else if (!decl.isOpaque && decl.value != current) {
+          } else if (!decl.isOpaque && decl.valueIn(doc.tokenMode) != current) {
             node.bindings.remove(prop);
             dropped.add('${node.name}.$prop');
           }

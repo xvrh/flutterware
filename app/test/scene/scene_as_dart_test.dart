@@ -14,10 +14,17 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/externals_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
+import 'package:flutterware_app/src/scene/tokens_file.dart';
 
 import 'sample.scene.dart';
 import 'sample_widget.dart' as app;
 import 'scene_externals.dart';
+
+/// The fixture package's tokens, read the way the studio reads them —
+/// declaration first, so `tokens.ink` in the sample names something.
+final _tokens = parseTokensFile(
+  File('test/scene/scene_tokens.dart').readAsStringSync(),
+).tokens;
 
 void main() {
   test('a scene file is a class an app can instantiate', () {
@@ -205,7 +212,7 @@ void main() {
     'a scene the tool READ carries the label and the values, not a type',
     () {
       var source = File('test/scene/sample.scene.dart').readAsStringSync();
-      var parsed = parseSceneFile(source);
+      var parsed = parseSceneFile(source, tokens: _tokens);
       var chip = parsed.doc!.nodeNamed('chip')! as ExternalNode;
       expect(chip.entry, 'SampleChip');
       expect(chip.args, {'label': 'new'});
@@ -226,7 +233,7 @@ void main() {
     var names = {
       for (var w in declared.widgets) w.entry: {for (var a in w.args) a.name},
     };
-    var parsed = parseSceneFile(source);
+    var parsed = parseSceneFile(source, tokens: _tokens);
     var chip = parsed.doc!.nodeNamed('chip')! as ExternalNode;
     expect(chip.args.keys.where((k) => !names[chip.entry]!.contains(k)), [
       'progress',
@@ -262,7 +269,7 @@ void main() {
   test('and the parser reads the same file back, unchanged', () {
     var path = 'test/scene/sample.scene.dart';
     var source = File(path).readAsStringSync();
-    var parsed = parseSceneFile(source);
+    var parsed = parseSceneFile(source, tokens: _tokens);
     expect(parsed.refusals, isEmpty, reason: '$path must satisfy the grammar');
     expect(
       emitSceneFile(

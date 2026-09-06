@@ -149,6 +149,26 @@ class SceneEditor extends SceneListenable {
     _ => null,
   };
 
+  /// The token mode the artboard shows — a mode name from the declaration,
+  /// or null for the default set. View state: not journaled, not written.
+  /// Setting it puts the mode's values behind every token reference, in
+  /// this document and every nested instance that receives the set.
+  String? get tokenMode => doc.tokenMode;
+
+  set tokenMode(String? mode) {
+    if (mode != null && !tokenModes.contains(mode)) {
+      throw ArgumentError('no token mode "$mode" — ${tokenModes.join(', ')}');
+    }
+    if (doc.tokenMode == mode) return;
+    doc.tokenMode = mode;
+    doc.edit(() => applyTokenMode(doc));
+    notifyListeners();
+  }
+
+  /// Every mode the declaration names, sorted.
+  List<String> get tokenModes =>
+      {for (var t in doc.tokens) ...t.modes.keys}.toList()..sort();
+
   /// Whether the drawer under the canvas is folded away while its motion
   /// stays open — the header keeps naming it, the motion stays on the
   /// picture. Not journaled: a view state, not a change. Opening anything
@@ -191,6 +211,7 @@ class SceneEditor extends SceneListenable {
     clearKeySelection();
     perform('Reload from disk', () {
       doc.restore(incoming.snapshot());
+      applyTokenMode(doc);
       motions
         ..clear()
         ..addAll(incomingMotions);
@@ -682,7 +703,7 @@ class SceneEditor extends SceneListenable {
     }
     perform('Bind $prop to tokens.$token', () {
       node.bindings[prop] = TokenRef(token);
-      setSceneProperty(node, prop, decl.value);
+      setSceneProperty(node, prop, decl.valueIn(doc.tokenMode));
     });
   }
 
@@ -1366,6 +1387,9 @@ class SceneEditor extends SceneListenable {
   void _restore(_JournalEntry entry) {
     _openMerge = null;
     doc.restore(entry.scene);
+    // A snapshot holds the values of the mode it was taken in; the mode is
+    // view state and outlives it.
+    applyTokenMode(doc);
     // The set of motions is part of the state: one added since is dropped,
     // one removed since comes back — revived into a fresh document, since
     // the old object is gone with whoever held it.

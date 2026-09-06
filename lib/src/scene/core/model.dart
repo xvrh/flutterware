@@ -134,6 +134,10 @@ class SceneTokenDecl {
 
   bool get isOpaque => kind == null;
 
+  /// The value in [mode], or the default when the token does not name it —
+  /// which is the rule the generated `SceneTokens.<mode>` set follows.
+  Object? valueIn(String? mode) => mode == null ? value : modes[mode] ?? value;
+
   String get typeName => type;
 
   static String _typeOf(SceneParamKind kind) => switch (kind) {
@@ -1056,6 +1060,13 @@ class SceneRefNode extends SceneNode {
 
   SceneDocument? instance;
 
+  /// The child's tokens formal, when this instance receives the parent's
+  /// set — the file spells `PromoBadgeArgs(label: title, tokens: tokens)`,
+  /// and the name is the child's own for its formal. Null when the child
+  /// declares none, or the parent has no set to hand down. Threaded by the
+  /// tool whenever both sides have a formal, never by the author.
+  String? tokensArg;
+
   /// The authored args with the motion's `args.*` writes on top.
   Map<String, Object?> get renderedArgs {
     var out = Map.of(args);
@@ -1162,6 +1173,12 @@ class SceneDocument extends SceneListenable {
   /// What the file calls its tokens formal, or null when it declares none.
   /// Recognised by type, so the author's own name is kept and written back.
   String? tokensFormal;
+
+  /// The mode the token-bound properties currently show — a name from the
+  /// declaration's modes, or null for the default set. View state, never
+  /// written: the file spells the reference, and the mode is what the canvas
+  /// (or the app's `tokens:` argument) puts behind it. See `applyTokenMode`.
+  String? tokenMode;
 
   SceneTokenDecl? tokenNamed(String name) {
     for (var t in tokens) {
@@ -1460,6 +1477,7 @@ class SceneDocument extends SceneListenable {
           case (SceneRefNode i, SceneRefNode s):
             i
               ..declared = s.declared
+              ..tokensArg = s.tokensArg
               ..args.clear();
             i.args.addAll(s.args);
           case (TextNode(), TextNode()) || (ShapeNode(), ShapeNode()):
@@ -1522,6 +1540,7 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
     SceneRefNode r =>
       SceneRefNode.read(r.sceneClassName, name: name, args: Map.of(r.args))
         ..declared = r.declared
+        ..tokensArg = r.tokensArg
         ..instance = r.instance == null
             ? null
             : instantiateScene(r.instance!, r.args),

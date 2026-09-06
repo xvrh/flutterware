@@ -107,6 +107,7 @@ SceneArgsResult generateSceneArgsIn(String directory, {bool write = true}) {
         entry.className,
         parsed.doc!.params.toList(),
         p.url.joinAll(p.split(p.relative(entry.path, from: directory))),
+        tokensFormal: parsed.doc!.tokensFormal,
       ),
     );
   }

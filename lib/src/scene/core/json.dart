@@ -105,6 +105,7 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
     },
     SceneRefNode r => {
       'scene': r.sceneClassName,
+      'tokensArg': ?r.tokensArg,
       'args': {...r.args},
     },
   },
@@ -138,7 +139,7 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
       json['scene']! as String,
       name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
-    ),
+    )..tokensArg = json['tokensArg'] as String?,
     _ => throw ArgumentError('unknown node kind "${json['kind']}"'),
   };
   readSceneProps(node, json);

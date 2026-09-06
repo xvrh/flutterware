@@ -46,7 +46,26 @@ class MotionPlayer with ChangeNotifier {
     _ticker = vsync?.createTicker(_tick) ?? Ticker(_tick);
   }
 
-  final Playable playable;
+  /// What plays. Replaced by [retarget] when the scene it animates is
+  /// rebuilt under it — a theme flipped while an intro plays.
+  Playable playable;
+
+  /// Continues this playback on [next] — the same motion bound to a fresh
+  /// instance of the scene, which is what a token set that changed calls
+  /// for: `late final` read its tokens once, so a mode is a new instance,
+  /// and the intro that was halfway through should be halfway through on
+  /// the new one too. The playhead keeps its place and its direction; the
+  /// old playable is released and left at the pose it had.
+  void retarget(Playable next) {
+    if (identical(next, playable)) return;
+    var old = playable;
+    old.releaseDriver(this);
+    playable = next;
+    if (isPlaying) next.claimDriver(this);
+    next.apply(_position);
+    notifyListeners();
+  }
+
   late final Ticker _ticker;
 
   Duration get duration => playable.duration;

@@ -102,26 +102,46 @@ class OrderButtonTracks extends SceneExtTracks {
 }
 
 class BannerSceneArgs extends SceneRefArgs {
-  const BannerSceneArgs();
+  const BannerSceneArgs({
+    this.test = 'COUCOU',
+    this.color = const SceneColor(0xFF3E7C4F),
+    this.agaga = 0.0,
+  });
+
+  final String test;
+  final SceneColor color;
+  final double agaga;
 
   @override
   String get entry => 'BannerScene';
 
   @override
-  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs();
+  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs(
+    test: fx.text('test') ?? test,
+    color: fx.color('color') ?? color,
+    agaga: fx.number('agaga') ?? agaga,
+  );
 
   @override
-  Map<String, Object?> toMap() => {};
+  Map<String, Object?> toMap() => {
+    'test': test,
+    'color': color,
+    'agaga': agaga,
+  };
 
   @override
-  SceneDefinition build() => BannerScene();
+  SceneDefinition build() =>
+      BannerScene(test: test, color: color, agaga: agaga);
 }
 
 class BannerSceneTracks extends SceneExtTracks {
-  const BannerSceneTracks();
+  const BannerSceneTracks({this.color, this.agaga});
+
+  final MotionTrack? color;
+  final MotionTrack? agaga;
 
   @override
-  Map<String, MotionTrack> toMap() => {};
+  Map<String, MotionTrack> toMap() => {'color': ?color, 'agaga': ?agaga};
 }
 
 class InvoiceArgs extends SceneRefArgs {
@@ -277,12 +297,14 @@ class StoreBannerArgs extends SceneRefArgs {
     this.subtitle = 'Order ahead. Skip the line. Earn rewards.',
     this.cta = 'Get the app',
     this.tint = const SceneColor(0xFFE8632B),
+    this.tokens = const SceneTokens(),
   });
 
   final String headline;
   final String subtitle;
   final String cta;
   final SceneColor tint;
+  final SceneTokens tokens;
 
   @override
   String get entry => 'StoreBanner';
@@ -293,6 +315,7 @@ class StoreBannerArgs extends SceneRefArgs {
     subtitle: fx.text('subtitle') ?? subtitle,
     cta: fx.text('cta') ?? cta,
     tint: fx.color('tint') ?? tint,
+    tokens: tokens,
   );
 
   @override
@@ -304,8 +327,13 @@ class StoreBannerArgs extends SceneRefArgs {
   };
 
   @override
-  SceneDefinition build() =>
-      StoreBanner(headline: headline, subtitle: subtitle, cta: cta, tint: tint);
+  SceneDefinition build() => StoreBanner(
+    headline: headline,
+    subtitle: subtitle,
+    cta: cta,
+    tint: tint,
+    tokens: tokens,
+  );
 }
 
 class StoreBannerTracks extends SceneExtTracks {
@@ -318,19 +346,21 @@ class StoreBannerTracks extends SceneExtTracks {
 }
 
 class StoryCardArgs extends SceneRefArgs {
-  const StoryCardArgs();
+  const StoryCardArgs({this.tokens = const SceneTokens()});
+
+  final SceneTokens tokens;
 
   @override
   String get entry => 'StoryCard';
 
   @override
-  StoryCardArgs merge(SceneArgs fx) => StoryCardArgs();
+  StoryCardArgs merge(SceneArgs fx) => StoryCardArgs(tokens: tokens);
 
   @override
   Map<String, Object?> toMap() => {};
 
   @override
-  SceneDefinition build() => StoryCard();
+  SceneDefinition build() => StoryCard(tokens: tokens);
 }
 
 class StoryCardTracks extends SceneExtTracks {
