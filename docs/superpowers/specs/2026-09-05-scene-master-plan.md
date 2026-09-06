@@ -324,7 +324,20 @@ Each is a table row and a renderer case.
    clears it too. The compiler stays the last grader for the type match
    between a token and the argument it fills.
 3. **Whether the importer runs in the studio or the CLI.** It needs network and
-   credentials, which is a first for this plugin.
+   credentials, which is a first for this plugin. M5½ (2026-09-06) settled
+   the shape without deciding the lane: the import is a **plugin action**,
+   `scene importTokens --file=<saved JSON>`, so `fw`, the MCP server and the
+   studio all reach the same door, and the network lane (M8) is whatever
+   produces that file. Modes reached the declaration grammar here —
+   `Token<T>('name', value, modes: {'dark': …})` — and the generated class
+   carries one static set per mode name (`SceneTokens.dark`, `SceneTokens.
+   modes`), which is what M6's switch flips. A mode name that is a keyword
+   ("Default") is suffixed (`defaultMode`) rather than refused, because a
+   mode is a whole set and refusing it would take every variable with it; a
+   variable whose name makes no identifier, or collides once one is made, is
+   refused by name with the reason. The fixture is shaped after the
+   variables endpoint's documented answer, not a captured one — the first
+   real export is the acceptance test the plan promised, still owed.
 
 ## 8. What the second pass changed
 

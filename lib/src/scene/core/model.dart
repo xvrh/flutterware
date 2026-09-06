@@ -102,11 +102,18 @@ class SceneParamDecl {
 /// `tokens.name`, and never the canvas. Its [type] is the declaration's type
 /// argument, verbatim, so the generated class can spell it back.
 class SceneTokenDecl {
-  SceneTokenDecl(this.name, SceneParamKind this.kind, Object this.value)
-    : type = _typeOf(kind);
+  SceneTokenDecl(
+    this.name,
+    SceneParamKind this.kind,
+    Object this.value, {
+    this.modes = const {},
+  }) : type = _typeOf(kind);
 
   /// A token the editor cannot see into: the name and the type, no value.
-  const SceneTokenDecl.opaque(this.name, this.type) : kind = null, value = null;
+  const SceneTokenDecl.opaque(this.name, this.type)
+    : kind = null,
+      value = null,
+      modes = const {};
 
   final String name;
 
@@ -118,6 +125,12 @@ class SceneTokenDecl {
 
   /// String, double, bool or [SceneColor]; null for an opaque token.
   final Object? value;
+
+  /// The token's value in each named mode — `{'dark': SceneColor(…)}` — for
+  /// the modes that differ from [value]. A mode name is an identifier: the
+  /// generated class carries one static set per mode. Empty for a token
+  /// that is the same everywhere, and always for an opaque one.
+  final Map<String, Object> modes;
 
   bool get isOpaque => kind == null;
 
@@ -150,11 +163,17 @@ String? tokenMarkerName(Object? value) => switch (value) {
 /// class types the field as, and the value is its default — so the
 /// declaration file compiles before anything has been generated from it,
 /// and the generated class is derived from it, never the other way round.
+///
+/// [modes] names the value in each other mode — `modes: {'dark':
+/// SceneColor(0xFF…)}` — and [value] is the default one. A mode is a whole
+/// set of tokens, so the generated class carries one static set per mode
+/// name, filled from every token that names it and defaulted elsewhere.
 class Token<T> {
-  const Token(this.name, this.value);
+  const Token(this.name, this.value, {this.modes = const {}});
 
   final String name;
   final T value;
+  final Map<String, T> modes;
 
   Type get type => T;
 }

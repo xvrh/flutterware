@@ -102,46 +102,26 @@ class OrderButtonTracks extends SceneExtTracks {
 }
 
 class BannerSceneArgs extends SceneRefArgs {
-  const BannerSceneArgs({
-    this.test = 'COUCOU',
-    this.color = const SceneColor(0xFF3E7C4F),
-    this.agaga = 0.0,
-  });
-
-  final String test;
-  final SceneColor color;
-  final double agaga;
+  const BannerSceneArgs();
 
   @override
   String get entry => 'BannerScene';
 
   @override
-  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs(
-    test: fx.text('test') ?? test,
-    color: fx.color('color') ?? color,
-    agaga: fx.number('agaga') ?? agaga,
-  );
+  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs();
 
   @override
-  Map<String, Object?> toMap() => {
-    'test': test,
-    'color': color,
-    'agaga': agaga,
-  };
+  Map<String, Object?> toMap() => {};
 
   @override
-  SceneDefinition build() =>
-      BannerScene(test: test, color: color, agaga: agaga);
+  SceneDefinition build() => BannerScene();
 }
 
 class BannerSceneTracks extends SceneExtTracks {
-  const BannerSceneTracks({this.color, this.agaga});
-
-  final MotionTrack? color;
-  final MotionTrack? agaga;
+  const BannerSceneTracks();
 
   @override
-  Map<String, MotionTrack> toMap() => {'color': ?color, 'agaga': ?agaga};
+  Map<String, MotionTrack> toMap() => {};
 }
 
 class InvoiceArgs extends SceneRefArgs {
@@ -375,6 +355,15 @@ class SceneTokens {
   final SceneColor ink;
   final SceneColor espresso;
   final double radius;
+
+  static const dark = SceneTokens(
+    brand: SceneColor(0xFFFF8A5C),
+    ink: SceneColor(0xFF1A1208),
+    espresso: SceneColor(0xFFF3E9E1),
+  );
+
+  /// Every mode the declaration names, by name.
+  static const modes = <String, SceneTokens>{'dark': dark};
 
   /// The app's own, as `scene_tokens.dart` declares it.
   ButtonStyle get ctaStyle => _token('ctaStyle')! as ButtonStyle;

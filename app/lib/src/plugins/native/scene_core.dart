@@ -16,6 +16,7 @@ import '../../scene/args_generate.dart';
 import '../../scene/discovery.dart';
 import '../../scene/externals_file.dart';
 import '../../scene/export/video.dart';
+import '../../scene/import/variables.dart';
 import '../../scene/scene_file.dart';
 import '../../scene/tokens_file.dart';
 import '../../utils/string/plural.dart';
@@ -309,7 +310,85 @@ class SceneCore extends PluginCore {
         ActionParameter('fps', 'Frames a second', description: 'Default 30.'),
       ],
     ),
+    PluginAction(
+      'importTokens',
+      'Import tokens',
+      description:
+          "Writes $sceneTokensFileName from a design file's variables — the "
+          'JSON its REST API answers for local variables, saved to a file. '
+          'Every variable becomes a Token with its modes; what cannot be one '
+          'is refused by name. Replaces a file a previous import wrote; a '
+          'hand-written one is kept unless force is set.',
+      parameters: [
+        _packageParameter,
+        ActionParameter(
+          'file',
+          'Variables JSON',
+          description: 'The saved response, by path.',
+          required: true,
+        ),
+        ActionParameter(
+          'force',
+          'Replace a hand-written file',
+          kind: ActionParameterKind.boolean,
+          required: false,
+          description: 'Default false.',
+        ),
+      ],
+    ),
   ];
+
+  /// The import door: read, refuse, write, and rescan so the generated
+  /// vocabulary follows. Returns what was written and what was not.
+  Future<Map<String, Object?>> importTokens({
+    required String package,
+    required String jsonPath,
+    bool force = false,
+  }) async {
+    var file = File(jsonPath);
+    if (!file.existsSync()) {
+      throw ArgumentError.value(jsonPath, 'file', 'no such file');
+    }
+    var imported = importVariables(file.readAsStringSync());
+    if (imported.tokens.isEmpty) {
+      throw ArgumentError.value(
+        jsonPath,
+        'file',
+        'nothing to import: ${imported.refusals.join('; ')}',
+      );
+    }
+    var target = File(p.join(rootFor(package), sceneTokensFileName));
+    if (target.existsSync() &&
+        !force &&
+        !isImportedTokensFile(target.readAsStringSync())) {
+      throw StateError(
+        '${p.relative(target.path, from: host.worktree.path)} was written by '
+        'hand — pass force to replace it',
+      );
+    }
+    var source = emitImportedTokens(imported, from: p.basename(jsonPath));
+    // The file the tool writes has to be one the tool reads: the parser is
+    // the grader, before anything lands on disk.
+    var check = parseTokensFile(source);
+    if (!check.ok) {
+      throw StateError(
+        'the import produced a file its own reader refuses: '
+        '${check.refusals.join('; ')}',
+      );
+    }
+    target.parent.createSync(recursive: true);
+    target.writeAsStringSync(source);
+    await reload(package);
+    return {
+      'path': p.relative(target.path, from: host.worktree.path),
+      'tokens': [
+        for (var t in imported.tokens)
+          {'name': t.name, 'type': t.decl.typeName, 'from': t.source},
+      ],
+      'modes': imported.modeNames,
+      'refusals': [for (var r in imported.refusals) '$r'],
+    };
+  }
 
   ActionParameter get _packageParameter => ActionParameter(
     'package',
@@ -349,6 +428,24 @@ class SceneCore extends PluginCore {
               },
           ],
         };
+      case 'importTokens':
+        return importTokens(
+          package: package,
+          jsonPath: switch (arguments['file']) {
+            String path when path.isNotEmpty =>
+              p.isAbsolute(path) ? path : p.join(host.worktree.path, path),
+            _ => throw ArgumentError.value(
+              arguments['file'],
+              'file',
+              'the saved variables JSON, by path',
+            ),
+          },
+          force: switch (arguments['force']) {
+            bool b => b,
+            'true' => true,
+            _ => false,
+          },
+        );
       case 'video':
         return exportVideo(
           package: package,

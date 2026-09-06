@@ -56,17 +56,24 @@ class TokensParse {
 /// that already holds the real objects.
 List<SceneTokenDecl> describeTokens(List<Token<Object>> tokens) => [
   for (var t in tokens)
-    SceneTokenDecl(t.name, switch (t.value) {
-      String() => SceneParamKind.string,
-      bool() => SceneParamKind.bool,
-      SceneColor() => SceneParamKind.color,
-      num() => SceneParamKind.number,
-      var v => throw ArgumentError(
-        'a token is a String, double, bool or SceneColor — '
-        '"${t.name}" is a ${v.runtimeType}',
-      ),
-    }, t.value is num ? (t.value as num).toDouble() : t.value),
+    SceneTokenDecl(
+      t.name,
+      switch (t.value) {
+        String() => SceneParamKind.string,
+        bool() => SceneParamKind.bool,
+        SceneColor() => SceneParamKind.color,
+        num() => SceneParamKind.number,
+        var v => throw ArgumentError(
+          'a token is a String, double, bool or SceneColor — '
+          '"${t.name}" is a ${v.runtimeType}',
+        ),
+      },
+      _number(t.value),
+      modes: {for (var e in t.modes.entries) e.key: _number(e.value)},
+    ),
 ];
+
+Object _number(Object v) => v is num ? v.toDouble() : v;
 
 /// The kinds a token may have, by the type argument the declaration spells.
 const _tokenKinds = {
@@ -194,33 +201,81 @@ SceneTokenDecl? _token(
     );
     return null;
   }
-  if (args.arguments.length != 2 ||
-      args.arguments.any((a) => a is NamedArgument)) {
+  var positional = [
+    for (var a in args.arguments)
+      if (a is! NamedArgument) a,
+  ];
+  var named = [
+    for (var a in args.arguments)
+      if (a is NamedArgument) a,
+  ];
+  if (positional.length != 2 || named.any((a) => a.name.lexeme != 'modes')) {
     refuse(
       e.offset,
       'arguments',
-      "a token is Token<double>('radius', 16) — a name and its value",
+      "a token is Token<double>('radius', 16) — a name and its value, "
+          "then modes: {'dark': …} if it differs by mode",
     );
     return null;
   }
-  var nameArg = args.arguments[0].argumentExpression;
+  var nameArg = positional[0].argumentExpression;
   if (nameArg is! SimpleStringLiteral || !isValidNodeName(nameArg.value)) {
     refuse(nameArg.offset, 'token name', 'a token name is an identifier');
     return null;
   }
   var kind = _tokenKinds[typeName];
   // Not a value type: the app's own object. Named, typed, never read.
-  if (kind == null) return SceneTokenDecl.opaque(nameArg.value, typeName);
-  var value = _value(args.arguments[1].argumentExpression, kind);
+  if (kind == null) {
+    if (named.isNotEmpty) {
+      refuse(
+        named.first.offset,
+        'modes',
+        "a $typeName token is the app's own object and has no modes here — "
+            'the app picks one where it builds it',
+      );
+      return null;
+    }
+    return SceneTokenDecl.opaque(nameArg.value, typeName);
+  }
+  var value = _value(positional[1].argumentExpression, kind);
   if (value == null) {
     refuse(
-      args.arguments[1].offset,
+      positional[1].offset,
       'token value',
       "a $typeName token's value is a $typeName literal",
     );
     return null;
   }
-  return SceneTokenDecl(nameArg.value, kind, value);
+  var modes = <String, Object>{};
+  for (var arg in named) {
+    var map = arg.argumentExpression;
+    if (map is! SetOrMapLiteral) {
+      refuse(map.offset, 'modes', "modes is a map — modes: {'dark': …}");
+      return null;
+    }
+    for (var entry in map.elements) {
+      if (entry is! MapLiteralEntry) {
+        refuse(entry.offset, 'modes', "modes is a map — modes: {'dark': …}");
+        return null;
+      }
+      var key = entry.key;
+      if (key is! SimpleStringLiteral || !isValidNodeName(key.value)) {
+        refuse(key.offset, 'mode name', 'a mode name is an identifier');
+        return null;
+      }
+      var v = _value(entry.value, kind);
+      if (v == null) {
+        refuse(
+          entry.value.offset,
+          'mode value',
+          "a $typeName token's value is a $typeName literal in every mode",
+        );
+        return null;
+      }
+      modes[key.value] = v;
+    }
+  }
+  return SceneTokenDecl(nameArg.value, kind, value, modes: modes);
 }
 
 Object? _value(Expression e, SceneParamKind kind) {

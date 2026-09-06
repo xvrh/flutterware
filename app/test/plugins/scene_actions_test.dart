@@ -67,6 +67,73 @@ void main() {
     if (scratch.existsSync()) scratch.deleteSync(recursive: true);
   });
 
+  group('importTokens', () {
+    var fixture = p.absolute('test/scene/fixtures/variables.json');
+
+    test('writes the declaration and regenerates the vocabulary', () async {
+      writeScene('BannerScene', withMotion: false);
+      var result =
+          (await core().invoke('importTokens', arguments: {'file': fixture}))!
+              as Map<String, Object?>;
+      expect(result['path'], 'demo/scene_tokens.dart');
+      expect(result['modes'], ['light', 'darkMode', 'defaultMode']);
+      expect((result['tokens']! as List).length, 8);
+      expect((result['refusals']! as List).length, 2);
+      var written = File(p.join(root.path, 'demo', 'scene_tokens.dart'));
+      expect(written.readAsStringSync(), startsWith('// @flutterware:tokens'));
+      expect(
+        written.readAsStringSync(),
+        contains("Token<double>('radiusCard', 28"),
+      );
+      var args = File(p.join(root.path, 'demo', 'scene_args.dart'));
+      expect(args.readAsStringSync(), contains('class SceneTokens {'));
+      expect(args.readAsStringSync(), contains('static const darkMode'));
+      // Importing again replaces the file it wrote, without being asked.
+      await core().invoke('importTokens', arguments: {'file': fixture});
+      expect(written.existsSync(), isTrue);
+    });
+
+    test('keeps a hand-written declaration unless forced', () async {
+      var written = File(p.join(root.path, 'demo', 'scene_tokens.dart'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('final sceneTokens = [];');
+      expect(
+        () => core().invoke('importTokens', arguments: {'file': fixture}),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('written by hand'),
+          ),
+        ),
+      );
+      await core().invoke(
+        'importTokens',
+        arguments: {'file': fixture, 'force': 'true'},
+      );
+      expect(written.readAsStringSync(), contains('brandPrimary'));
+    });
+
+    test('a missing file, or one with nothing in it, is refused', () {
+      expect(
+        () => core().invoke('importTokens', arguments: {'file': 'nope.json'}),
+        throwsA(isA<ArgumentError>()),
+      );
+      var empty = File(p.join(scratch.path, 'empty.json'))
+        ..writeAsStringSync('{"document": {}}');
+      expect(
+        () => core().invoke('importTokens', arguments: {'file': empty.path}),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            contains('nothing to import'),
+          ),
+        ),
+      );
+    });
+  });
+
   test('list reports the scenes and where they are', () async {
     writeScene('BannerScene');
     writeScene('OtherScene', withMotion: false);

@@ -1636,6 +1636,20 @@ fw run scene video [--package=…] --scene=<string> --fps=<string>
 | `scene` | string | yes | — | The scene file, by name or path. |
 | `fps` | string | yes | — | Default 30. |
 
+#### `importTokens` — Import tokens
+
+Writes scene_tokens.dart from a design file's variables — the JSON its REST API answers for local variables, saved to a file. Every variable becomes a Token with its modes; what cannot be one is refused by name. Replaces a file a previous import wrote; a hand-written one is kept unless force is set.
+
+```sh
+fw run scene importTokens [--package=…] --file=<string> [--force=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `file` | string | yes | — | The saved response, by path. |
+| `force` | boolean | no | — | Default false. |
+
 
 ### `flutterware.render`
 

@@ -257,6 +257,31 @@ void _tokensClass(StringBuffer out, List<SceneTokenDecl> tokens) {
   for (var t in values) {
     out.writeln('  final ${t.typeName} ${t.name};');
   }
+  // One static set per mode name any token carries: the mode's value where
+  // the token names it, the default everywhere else. `modes` is the switch
+  // a canvas or an app flips.
+  var modeNames = {for (var t in values) ...t.modes.keys}.toList()..sort();
+  for (var mode in modeNames) {
+    // Inside a const set, so a colour is spelled without its own `const`.
+    var args = [
+      for (var t in values)
+        if (t.modes.containsKey(mode))
+          '${t.name}: ${_literal(t.modes[mode]!).replaceFirst('const ', '')}',
+    ];
+    out
+      ..writeln()
+      ..writeln(
+        '  static const $mode = $sceneTokensClassName(${args.join(', ')});',
+      );
+  }
+  if (modeNames.isNotEmpty) {
+    out
+      ..writeln()
+      ..writeln('  /// Every mode the declaration names, by name.')
+      ..writeln(
+        '  static const modes = <String, $sceneTokensClassName>{${[for (var m in modeNames) "'$m': $m"].join(', ')}};',
+      );
+  }
   for (var t in opaque) {
     out
       ..writeln()
