@@ -102,46 +102,26 @@ class OrderButtonTracks extends SceneExtTracks {
 }
 
 class BannerSceneArgs extends SceneRefArgs {
-  const BannerSceneArgs({
-    this.test = 'COUCOU',
-    this.color = const SceneColor(0xFF3E7C4F),
-    this.agaga = 0.0,
-  });
-
-  final String test;
-  final SceneColor color;
-  final double agaga;
+  const BannerSceneArgs();
 
   @override
   String get entry => 'BannerScene';
 
   @override
-  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs(
-    test: fx.text('test') ?? test,
-    color: fx.color('color') ?? color,
-    agaga: fx.number('agaga') ?? agaga,
-  );
+  BannerSceneArgs merge(SceneArgs fx) => BannerSceneArgs();
 
   @override
-  Map<String, Object?> toMap() => {
-    'test': test,
-    'color': color,
-    'agaga': agaga,
-  };
+  Map<String, Object?> toMap() => {};
 
   @override
-  SceneDefinition build() =>
-      BannerScene(test: test, color: color, agaga: agaga);
+  SceneDefinition build() => BannerScene();
 }
 
 class BannerSceneTracks extends SceneExtTracks {
-  const BannerSceneTracks({this.color, this.agaga});
-
-  final MotionTrack? color;
-  final MotionTrack? agaga;
+  const BannerSceneTracks();
 
   @override
-  Map<String, MotionTrack> toMap() => {'color': ?color, 'agaga': ?agaga};
+  Map<String, MotionTrack> toMap() => {};
 }
 
 class InvoiceArgs extends SceneRefArgs {
@@ -379,12 +359,22 @@ class SceneTokens {
     this.ink = const SceneColor(0xFFFFFFFF),
     this.espresso = const SceneColor(0xFF2B1B12),
     this.radius = 28.0,
+    this.title = const SceneTextStyle(
+      fontSize: 54.0,
+      weight: SceneFontWeight.w700,
+    ),
+    this.body = const SceneTextStyle(
+      fontSize: 20.0,
+      color: SceneColor(0xFFD8C9BD),
+    ),
   });
 
   final SceneColor brand;
   final SceneColor ink;
   final SceneColor espresso;
   final double radius;
+  final SceneTextStyle title;
+  final SceneTextStyle body;
 
   static const dark = SceneTokens(
     brand: SceneColor(0xFFFF8A5C),

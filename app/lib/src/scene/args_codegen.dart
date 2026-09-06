@@ -370,10 +370,20 @@ String _reader(String type) => switch (type) {
   _ => 'number',
 };
 
+String _styleField(String field, Object value) => switch (value) {
+  SceneFontWeight w => 'SceneFontWeight.w${w.value}',
+  SceneTextAlign a => 'SceneTextAlign.${a.name}',
+  int i => '$i',
+  var v => _literal(v).replaceFirst('const ', ''),
+};
+
 /// A track interpolates, so only what has in-between values gets a slot.
 bool _animatable(String type) => type == 'double' || type == 'SceneColor';
 
 String _literal(Object value) => switch (value) {
+  // A const context all the way down: the inner colour spells no `const`.
+  SceneTextStyle s =>
+    'const SceneTextStyle(${[for (var e in s.values.entries) '${e.key}: ${_styleField(e.key, e.value)}'].join(', ')})',
   String s => "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'")}'",
   SceneColor c =>
     'const SceneColor(0x${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0')})',

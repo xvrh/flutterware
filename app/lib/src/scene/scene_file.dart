@@ -255,7 +255,8 @@ bool _readsTokens(SceneDocument doc) {
   for (var (node, _) in doc.walk()) {
     if (node is SceneRefNode && node.tokensArg != null) return true;
     for (var b in node.bindings.values) {
-      if (b case TokenRef(:var name) when doc.tokenNamed(name) != null) {
+      if (b case TokenRef(:var name) || StyleRef(:var name)
+          when doc.tokenNamed(name) != null) {
         return true;
       }
     }
@@ -352,6 +353,9 @@ void _emitNode(
         return scope.tokens.containsKey(name)
             ? '${scope.tokensFormal}.$name'
             : null;
+      case StyleRef():
+        // A style is spelled by hand, under its own key, before the table.
+        return null;
       case ItemRef(:var list, :var field):
         // Spelled with the closure's own parameter rather than the list's
         // name, and only inside the closure.
@@ -368,6 +372,14 @@ void _emitNode(
     props.add('$key: ${ref(key) ?? spell()}');
   }
 
+  /// The shared style [n] takes, when it names one that is declared — the
+  /// baseline the text properties are compared against instead of the
+  /// table's defaults: equal to the style is inherited and not written.
+  var style = switch (n.bindings[styleBindingKey]) {
+    StyleRef(:var name) => scope.tokens[name]?.style,
+    _ => null,
+  };
+
   /// Every table property of [n] off its default, or bound — a binding is
   /// written whatever the value, because the reference IS the value. The
   /// text and the arguments are positional and spelled by hand; children and
@@ -379,7 +391,10 @@ void _emitNode(
       var bound =
           n.bindings.containsKey(p.name) ||
           (p.sides ?? const []).any(n.bindings.containsKey);
-      if (isSceneDefault(p, v) && !bound) continue;
+      var inherited = style != null && style.sets(p.name)
+          ? v == style.values[p.name]
+          : isSceneDefault(p, v);
+      if (inherited && !bound) continue;
       switch (p.kind) {
         case ScenePropKind.edges:
           // One number while one number says it, four names when it does
@@ -446,6 +461,10 @@ void _emitNode(
       out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
       props.add(ref('text') ?? _str(t.text));
+      if (style != null) {
+        var name = (n.bindings[styleBindingKey]! as StyleRef).name;
+        props.add('$styleBindingKey: ${scope.tokensFormal}.$name');
+      }
       table(skip: const {'text'});
       out.write('TextNode(${props.join(', ')})');
     case ShapeNode _:
@@ -1220,6 +1239,8 @@ class _Parser {
       case 'TextNode':
         var node = TextNode('', name: name);
         node.text = _contentOf(positional, args, node) ?? '';
+        // The style first, so what the node spells beside it overrides.
+        _take(named, styleBindingKey, (e) => _styleRef(e, node));
         _applyProps(node, named, skip: const {'text'});
         _refuseRest('TextNode', named);
         _checkPositionals(positional, 1);
@@ -1739,6 +1760,38 @@ class _Parser {
     }
     n.bindings[prop] = TokenRef(decl.name);
     return decl.value;
+  }
+
+  /// `style: tokens.title` — a shared text style, applied whole: every
+  /// property it sets lands on the node, and the node's own arguments,
+  /// read after, override. Only a token: a style literal in a scene file
+  /// would be a bundle nothing else could share.
+  void _styleRef(Expression e, TextNode n) {
+    if (e is! PrefixedIdentifier || e.prefix.name != _tokensFormal) {
+      refuse(
+        e.offset,
+        styleBindingKey,
+        "a text's style is a shared token — style: tokens.title",
+      );
+      return;
+    }
+    var decl = _tokens[e.identifier.name];
+    if (decl == null) {
+      _refuseUnknownToken(e);
+      return;
+    }
+    var style = decl.style;
+    if (style == null) {
+      refuse(
+        e.offset,
+        'token type',
+        '"${e.identifier.name}" is a ${decl.typeName} — a style is a '
+            'SceneTextStyle token',
+      );
+      return;
+    }
+    n.bindings[styleBindingKey] = StyleRef(decl.name);
+    writeStyle(n, style);
   }
 
   void _refuseUnknownToken(PrefixedIdentifier e) {

@@ -622,6 +622,7 @@ class SceneInspector extends StatelessWidget {
   );
 
   List<Widget> _textProps(BuildContext context, TextNode t) => [
+    ..._styleRow(context, t),
     _label(context, 'Content'),
     _bindable(
       context,
@@ -703,6 +704,64 @@ class SceneInspector extends StatelessWidget {
       ),
     ),
   ];
+
+  /// The shared text style, when the package declares any: a picker over
+  /// them, and — once one is applied — one word per property it sets,
+  /// saying whether the node inherits it or overrides it, with the way back.
+  /// Equal is inherited, by decision: there is no flag to show.
+  List<Widget> _styleRow(BuildContext context, TextNode t) {
+    var styles = [
+      for (var s in doc.tokens)
+        if (s.isStyle) s,
+    ];
+    if (styles.isEmpty) return const [];
+    var bound = switch (t.bindings[styleBindingKey]) {
+      StyleRef(:var name) => name,
+      _ => null,
+    };
+    var style = styleOf(doc, t);
+    var colors = context.colors;
+    var caption = context.type.caption.copyWith(color: colors.mut2);
+    return [
+      _label(context, 'Style'),
+      FwPicker<String?>(
+        selected: bound,
+        choices: [
+          const FwChoice(value: null, label: 'none', detail: 'its own values'),
+          for (var s in styles)
+            FwChoice(
+              value: s.name,
+              label: 'tokens.${s.name}',
+              detail: s.style!.values.keys.map(_propLabel).join(' · '),
+            ),
+        ],
+        onChanged: (name) =>
+            name == null ? editor.detachStyle(t) : editor.applyStyle(t, name),
+      ),
+      if (style != null)
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          child: Wrap(
+            spacing: FwSpacing.md,
+            runSpacing: FwSpacing.xxs,
+            children: [
+              for (var prop in style.values.keys)
+                if (inheritsFromStyle(doc, t, prop))
+                  Text('${_propLabel(prop)} ← $bound', style: caption)
+                else
+                  Tappable(
+                    onTap: () => editor.resetToStyle(t, prop),
+                    child: Text(
+                      '${_propLabel(prop)} overridden · reset',
+                      style: caption.copyWith(color: colors.accent),
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      const SizedBox(height: FwSpacing.md),
+    ];
+  }
 
   List<Widget> _frameProps(BuildContext context, FrameNode f) => [
     Padding(

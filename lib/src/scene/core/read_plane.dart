@@ -67,6 +67,31 @@ SceneDocument instantiateScene(
   return doc;
 }
 
+/// The shared style [node] takes, when it is bound to one that exists.
+SceneTextStyle? styleOf(SceneDocument doc, SceneNode node) =>
+    switch (node.bindings[styleBindingKey]) {
+      StyleRef(:var name) => doc.tokenNamed(name)?.style,
+      _ => null,
+    };
+
+/// Whether [prop] of [node] is what its style says — set by the style and
+/// equal to it. "Equal means inherited": there is no override flag, by
+/// decision, so a property overridden back to the style's own value is
+/// inherited again and follows the style.
+bool inheritsFromStyle(SceneDocument doc, SceneNode node, String prop) {
+  var style = styleOf(doc, node);
+  if (style == null || !style.sets(prop)) return false;
+  return getSceneProperty(node, prop) == style.values[prop];
+}
+
+/// Writes every property [style] sets onto [node] — applying a style, or
+/// resetting to it. Properties the style leaves alone are untouched.
+void writeStyle(SceneNode node, SceneTextStyle style) {
+  for (var e in style.values.entries) {
+    setSceneProperty(node, e.key, e.value);
+  }
+}
+
 /// Puts the document's [SceneDocument.tokenMode] onto every token-bound
 /// property: the mode's value where the token names it, the default
 /// elsewhere. Reaches into every nested instance that receives the set
@@ -80,7 +105,7 @@ void applyTokenMode(SceneDocument doc) {
     for (var entry in node.bindings.entries) {
       if (entry.value case TokenRef(:var name)) {
         var decl = doc.tokenNamed(name);
-        if (decl == null || decl.isOpaque) continue;
+        if (decl == null || decl.isOpaque || decl.isStyle) continue;
         setSceneProperty(node, entry.key, decl.valueIn(doc.tokenMode));
       }
     }
@@ -258,6 +283,15 @@ List<String> reconcileBindings(SceneDocument doc) {
   for (var (node, _) in doc.walk()) {
     for (var entry in node.bindings.entries.toList()) {
       var prop = entry.key;
+      // A style is several properties, each the node's to override: an edit
+      // is never a detach here. Only a token that is gone drops it.
+      if (prop == styleBindingKey) {
+        if (styleOf(doc, node) == null) {
+          node.bindings.remove(prop);
+          dropped.add('${node.name}.$prop');
+        }
+        continue;
+      }
       var current = getSceneProperty(node, prop);
       // A property that was cleared — a fill removed, a size set to hug —
       // no longer reads anything.
@@ -286,7 +320,7 @@ List<String> reconcileBindings(SceneDocument doc) {
           }
         case TokenRef(:var name):
           var decl = doc.tokenNamed(name);
-          if (decl == null) {
+          if (decl == null || decl.isStyle) {
             node.bindings.remove(prop);
             dropped.add('${node.name}.$prop');
             // An opaque token has no value to keep: the argument goes too.
@@ -297,6 +331,9 @@ List<String> reconcileBindings(SceneDocument doc) {
             node.bindings.remove(prop);
             dropped.add('${node.name}.$prop');
           }
+        case StyleRef():
+          // Handled above, under its own key.
+          break;
         case ItemRef(:var list, :var field):
           var decl = doc.paramNamed(list);
           var scope = _repeatScope(doc, node);

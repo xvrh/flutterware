@@ -287,8 +287,19 @@ Each is a table row and a renderer case.
 
 ## 7. Open
 
-1. **How a style with one property overridden is spelled in the file**, such
-   that it round-trips. M7's design owes this.
+1. ~~**How a style with one property overridden is spelled in the file**~~
+   Answered in M7, 2026-09-06: **the override is the property, spelled.**
+   `TextNode('Sub', style: tokens.body, fontSize: 24)` — the style first,
+   applied whole; anything the node spells beside it is an override and
+   read after. Inherited is absent. The emitter compares each text property
+   against the style's value where the style sets one (the table's default
+   elsewhere) and writes only what differs — so a property overridden back
+   to the style's own value stops being written and follows the style, the
+   §4.3 decision made concrete. The compiled node resolves the same way,
+   `fontSize ?? style?.fontSize ?? 16`, so a file the tool wrote and a scene
+   the compiler built agree. A style is a token (`Token<SceneTextStyle>`),
+   never an in-file literal: a bundle nothing else could share is not a
+   style. Modes on styles are not built yet; the reader refuses them.
 2. ~~**Whether a token set is a class or a map.**~~ Decided in M5, 2026-09-05:
    **a class**, generated. `scene_tokens.dart` declares `final sceneTokens =
    [Token<SceneColor>('brand', SceneColor(0xFF…)), …]`; the generator writes a

@@ -28,17 +28,8 @@ class StoreBanner({
     circle: true,
   );
   late final cup = TextNode('☕', x: 700, y: 120, fontSize: 180);
-  late final title = TextNode(
-    headline,
-    fontSize: 54,
-    weight: SceneFontWeight.w700,
-    color: tokens.ink,
-  );
-  late final sub = TextNode(
-    subtitle,
-    fontSize: 20,
-    color: SceneColor(0xFFD8C9BD),
-  );
+  late final title = TextNode(headline, style: tokens.title, color: tokens.ink);
+  late final sub = TextNode(subtitle, style: tokens.body);
   late final ctaLabel = TextNode(
     cta,
     fontSize: 17,

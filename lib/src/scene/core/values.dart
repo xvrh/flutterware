@@ -75,6 +75,61 @@ enum SceneCrossAxisAlignment { start, end, center, stretch, baseline }
 /// that is what the file spells and what it becomes.
 enum SceneTextAlign { left, right, center, justify }
 
+/// A text style: the text subset of the property table, as one value — what
+/// a token names and a `TextNode` takes as `style:`, so five properties are
+/// shared in one move and each may still be overridden on the node.
+///
+/// Every field is nullable, because a style sets what it sets: a style that
+/// says only `weight` leaves size and colour to the node. The rule a node
+/// applies is `fontSize ?? style?.fontSize ?? 16` — the argument, then the
+/// style, then the default — which is also what the file spells: a property
+/// written on the node is an override, one absent is inherited, and one
+/// written equal to the style's is indistinguishable from inherited and
+/// follows the style (master plan §4.3, decided).
+class SceneTextStyle {
+  const SceneTextStyle({
+    this.fontSize,
+    this.weight,
+    this.color,
+    this.align,
+    this.maxLines,
+  });
+
+  final double? fontSize;
+  final SceneFontWeight? weight;
+  final SceneColor? color;
+  final SceneTextAlign? align;
+  final int? maxLines;
+
+  /// The properties this style sets, by the table's name — what an emitter
+  /// compares a node against, and what an inspector marks as inherited.
+  Map<String, Object> get values => {
+    'fontSize': ?fontSize,
+    'weight': ?weight,
+    'color': ?color,
+    'align': ?align,
+    'maxLines': ?maxLines,
+  };
+
+  bool sets(String prop) => values.containsKey(prop);
+
+  @override
+  bool operator ==(Object other) =>
+      other is SceneTextStyle &&
+      other.fontSize == fontSize &&
+      other.weight == weight &&
+      other.color == color &&
+      other.align == align &&
+      other.maxLines == maxLines;
+
+  @override
+  int get hashCode => Object.hash(fontSize, weight, color, align, maxLines);
+
+  @override
+  String toString() =>
+      'SceneTextStyle(${values.entries.map((e) => '${e.key}: ${e.value}').join(', ')})';
+}
+
 /// Four numbers that are one when they agree: edges, corners. What the
 /// property table needs to spell either as one number or four named parts.
 abstract interface class SceneQuad {

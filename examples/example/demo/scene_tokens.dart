@@ -32,6 +32,16 @@ final sceneTokens = [
     modes: {'dark': SceneColor(0xFFF3E9E1)},
   ),
   const Token<double>('radius', 28),
+  // Text styles: the text subset of the table, shared whole. A scene writes
+  // `TextNode(headline, style: tokens.title)` and overrides what it must.
+  const Token<SceneTextStyle>(
+    'title',
+    SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700),
+  ),
+  const Token<SceneTextStyle>(
+    'body',
+    SceneTextStyle(fontSize: 20, color: SceneColor(0xFFD8C9BD)),
+  ),
   Token<ButtonStyle>(
     'ctaStyle',
     FilledButton.styleFrom(

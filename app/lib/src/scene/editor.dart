@@ -519,7 +519,7 @@ class SceneEditor extends SceneListenable {
         if (switch (e.value) {
           ParamRef(:var name) => name == param,
           ItemRef(:var list) => list == param,
-          TokenRef() => false,
+          TokenRef() || StyleRef() => false,
         })
           (n, e.key),
     for (var (n, _) in doc.walk())
@@ -678,6 +678,11 @@ class SceneEditor extends SceneListenable {
   void bindToken(SceneNode node, String prop, String token) {
     var decl = doc.tokenNamed(token);
     if (decl == null) throw ArgumentError('no token "$token"');
+    if (decl.isStyle) {
+      throw ArgumentError(
+        '"$token" is a text style — apply it to a text, not to a property',
+      );
+    }
     if (decl.isOpaque) {
       if (node is! ExternalNode || !prop.startsWith('args.')) {
         throw ArgumentError(
@@ -707,12 +712,49 @@ class SceneEditor extends SceneListenable {
     });
   }
 
-  /// The properties reading [token], as (node, property) pairs.
+  /// The properties reading [token], as (node, property) pairs — a style's
+  /// readers under [styleBindingKey].
   List<(SceneNode, String)> readersOfToken(String token) => [
     for (var (n, _) in doc.walk())
       for (var e in n.bindings.entries)
-        if (e.value case TokenRef(:var name) when name == token) (n, e.key),
+        if (switch (e.value) {
+          TokenRef(:var name) || StyleRef(:var name) => name == token,
+          _ => false,
+        })
+          (n, e.key),
   ];
+
+  /// Gives [node] the shared text style [token]: every property the style
+  /// sets takes its value, and stays the node's to override afterwards.
+  void applyStyle(SceneNode node, String token) {
+    var decl = doc.tokenNamed(token);
+    if (decl == null) throw ArgumentError('no token "$token"');
+    var style = decl.style;
+    if (style == null) {
+      throw ArgumentError('"$token" is a ${decl.typeName}, not a text style');
+    }
+    if (node is! TextNode) {
+      throw ArgumentError(
+        '"${node.name}" is not a text — a style is a text\'s',
+      );
+    }
+    perform('Apply style $token', () {
+      node.bindings[styleBindingKey] = StyleRef(token);
+      writeStyle(node, style);
+    });
+  }
+
+  /// Takes the style off [node]; every value stays where it is.
+  void detachStyle(SceneNode node) => unbind(node, styleBindingKey);
+
+  /// Puts the style's own value back on [prop] — the end of an override.
+  void resetToStyle(SceneNode node, String prop) {
+    var style = styleOf(doc, node);
+    if (style == null || !style.sets(prop)) return;
+    perform('Reset $prop to style', () {
+      setSceneProperty(node, prop, style.values[prop]);
+    });
+  }
 
   /// Declares a parameter whose default is what [prop] of [node] holds now,
   /// and binds the property to it — one edit, one undo entry. Returns the

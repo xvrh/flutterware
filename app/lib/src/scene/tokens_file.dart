@@ -56,21 +56,24 @@ class TokensParse {
 /// that already holds the real objects.
 List<SceneTokenDecl> describeTokens(List<Token<Object>> tokens) => [
   for (var t in tokens)
-    SceneTokenDecl(
-      t.name,
-      switch (t.value) {
-        String() => SceneParamKind.string,
-        bool() => SceneParamKind.bool,
-        SceneColor() => SceneParamKind.color,
-        num() => SceneParamKind.number,
-        var v => throw ArgumentError(
-          'a token is a String, double, bool or SceneColor — '
-          '"${t.name}" is a ${v.runtimeType}',
-        ),
-      },
-      _number(t.value),
-      modes: {for (var e in t.modes.entries) e.key: _number(e.value)},
-    ),
+    if (t.value case SceneTextStyle style)
+      SceneTokenDecl.style(t.name, style)
+    else
+      SceneTokenDecl(
+        t.name,
+        switch (t.value) {
+          String() => SceneParamKind.string,
+          bool() => SceneParamKind.bool,
+          SceneColor() => SceneParamKind.color,
+          num() => SceneParamKind.number,
+          var v => throw ArgumentError(
+            'a token is a String, double, bool or SceneColor — '
+            '"${t.name}" is a ${v.runtimeType}',
+          ),
+        },
+        _number(t.value),
+        modes: {for (var e in t.modes.entries) e.key: _number(e.value)},
+      ),
 ];
 
 Object _number(Object v) => v is num ? v.toDouble() : v;
@@ -224,6 +227,19 @@ SceneTokenDecl? _token(
     return null;
   }
   var kind = _tokenKinds[typeName];
+  // A text style: a bundle the editor renders, applied whole to a text.
+  if (typeName == 'SceneTextStyle') {
+    if (named.isNotEmpty) {
+      refuse(
+        named.first.offset,
+        'modes',
+        'a style has no modes yet — declare one style per look',
+      );
+      return null;
+    }
+    var style = _style(positional[1].argumentExpression, refuse);
+    return style == null ? null : SceneTokenDecl.style(nameArg.value, style);
+  }
   // Not a value type: the app's own object. Named, typed, never read.
   if (kind == null) {
     if (named.isNotEmpty) {
@@ -316,6 +332,96 @@ Object? _value(Expression e, SceneParamKind kind) {
     default:
       return null;
   }
+}
+
+/// `SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700, color:
+/// SceneColor(0xFF…), align: SceneTextAlign.center, maxLines: 2)` — each
+/// field a literal of its kind, any of them absent.
+SceneTextStyle? _style(
+  Expression e,
+  void Function(int, String, String) refuse,
+) {
+  ArgumentList? args;
+  switch (e) {
+    case InstanceCreationExpression(:var constructorName, :var argumentList)
+        when constructorName.type.name.lexeme == 'SceneTextStyle':
+      args = argumentList;
+    case MethodInvocation(:var methodName, :var argumentList)
+        when methodName.name == 'SceneTextStyle':
+      args = argumentList;
+    default:
+  }
+  if (args == null) {
+    refuse(e.offset, 'token value', 'a style is SceneTextStyle(fontSize: …)');
+    return null;
+  }
+  double? fontSize;
+  SceneFontWeight? weight;
+  SceneColor? color;
+  SceneTextAlign? align;
+  int? maxLines;
+  for (var arg in args.arguments) {
+    if (arg is! NamedArgument) {
+      refuse(arg.offset, 'style', 'a style names each field — fontSize: 54');
+      return null;
+    }
+    var v = arg.argumentExpression;
+    var name = arg.name.lexeme;
+    var read = switch (name) {
+      'fontSize' => _value(v, SceneParamKind.number),
+      'color' => _value(v, SceneParamKind.color),
+      'maxLines' => switch (_value(v, SceneParamKind.number)) {
+        double d => d.round(),
+        _ => null,
+      },
+      'weight' => switch (v) {
+        PrefixedIdentifier(:var prefix, :var identifier)
+            when prefix.name == 'SceneFontWeight' =>
+          SceneFontWeight.values
+              .where((w) => 'w${w.value}' == identifier.name)
+              .firstOrNull,
+        _ => null,
+      },
+      'align' => switch (v) {
+        PrefixedIdentifier(:var prefix, :var identifier)
+            when prefix.name == 'SceneTextAlign' =>
+          SceneTextAlign.values
+              .where((a) => a.name == identifier.name)
+              .firstOrNull,
+        _ => null,
+      },
+      _ => null,
+    };
+    if (read == null) {
+      refuse(
+        v.offset,
+        'style',
+        'a style has fontSize, weight (SceneFontWeight.w700), color '
+            '(SceneColor(0x…)), align (SceneTextAlign.center) and maxLines — '
+            '"$name" is not one, or not a literal of its kind',
+      );
+      return null;
+    }
+    switch (name) {
+      case 'fontSize':
+        fontSize = read as double;
+      case 'weight':
+        weight = read as SceneFontWeight;
+      case 'color':
+        color = read as SceneColor;
+      case 'align':
+        align = read as SceneTextAlign;
+      case 'maxLines':
+        maxLines = read as int;
+    }
+  }
+  return SceneTextStyle(
+    fontSize: fontSize,
+    weight: weight,
+    color: color,
+    align: align,
+    maxLines: maxLines,
+  );
 }
 
 String? _typeArgument(TypeArgumentList? types) =>

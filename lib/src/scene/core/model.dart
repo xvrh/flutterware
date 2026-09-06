@@ -115,6 +115,14 @@ class SceneTokenDecl {
       value = null,
       modes = const {};
 
+  /// A text style: a bundle of table values the editor renders and a text
+  /// node takes whole, with each property still its own to override. No
+  /// mode yet — a style that differs by mode is a later piece.
+  const SceneTokenDecl.style(this.name, SceneTextStyle this.value)
+    : kind = null,
+      type = 'SceneTextStyle',
+      modes = const {};
+
   final String name;
 
   /// The value kind, or null for an opaque token.
@@ -132,7 +140,14 @@ class SceneTokenDecl {
   /// that is the same everywhere, and always for an opaque one.
   final Map<String, Object> modes;
 
-  bool get isOpaque => kind == null;
+  bool get isStyle => value is SceneTextStyle;
+
+  /// The app's own object — neither a value the editor renders nor a style.
+  bool get isOpaque => kind == null && !isStyle;
+
+  /// The style, for a style token.
+  SceneTextStyle? get style =>
+      value is SceneTextStyle ? value! as SceneTextStyle : null;
 
   /// The value in [mode], or the default when the token does not name it —
   /// which is the rule the generated `SceneTokens.<mode>` set follows.
@@ -201,6 +216,9 @@ sealed class SceneBinding {
     if (wire.startsWith(TokenRef.prefix)) {
       return TokenRef(wire.substring(TokenRef.prefix.length));
     }
+    if (wire.startsWith(StyleRef.prefix)) {
+      return StyleRef(wire.substring(StyleRef.prefix.length));
+    }
     var dot = wire.indexOf('.');
     return dot < 0
         ? ParamRef(wire)
@@ -242,6 +260,27 @@ class ItemRef extends SceneBinding {
   @override
   String toWire() => '$list.$field';
 }
+
+/// The node takes a shared text style whole — keyed under [styleBindingKey]
+/// rather than any one property, because a style is several at once. Each
+/// of them stays the node's to override; see [SceneTextStyle].
+class StyleRef extends SceneBinding {
+  const StyleRef(this.name);
+
+  final String name;
+
+  static const prefix = 'style:';
+
+  @override
+  String toWire() => '$prefix$name';
+
+  @override
+  String toString() => 'tokens.$name';
+}
+
+/// The key a [StyleRef] sits under in [SceneNode.bindings] — the name the
+/// file spells it with, `style: tokens.title`.
+const styleBindingKey = 'style';
 
 /// The property reads one of the package's shared tokens, by name — the
 /// file spells `tokens.brand` through the scene's tokens formal.
@@ -703,13 +742,22 @@ class TextNode extends SceneNode {
     super.maxHeight,
     super.opacity,
     super.visible,
-    this.fontSize = 16,
-    this.weight = SceneFontWeight.w400,
-    this.color = const SceneColor(0xFF1A1A1A),
-    this.align = SceneTextAlign.left,
-    this.maxLines,
-  });
+    SceneTextStyle? style,
+    double? fontSize,
+    SceneFontWeight? weight,
+    SceneColor? color,
+    SceneTextAlign? align,
+    int? maxLines,
+  }) : fontSize = fontSize ?? style?.fontSize ?? 16,
+       weight = weight ?? style?.weight ?? SceneFontWeight.w400,
+       color = color ?? style?.color ?? const SceneColor(0xFF1A1A1A),
+       align = align ?? style?.align ?? SceneTextAlign.left,
+       maxLines = maxLines ?? style?.maxLines;
 
+  /// The argument, then the [style], then the default — the resolution a
+  /// constructor cannot tell apart afterwards, which is why the fields below
+  /// are plain values and the style itself is not kept: what was passed is
+  /// the override, and the file spells exactly that.
   String text;
   double fontSize;
   SceneFontWeight weight;
