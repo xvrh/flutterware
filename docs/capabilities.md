@@ -1261,209 +1261,6 @@ fw run server sql [--name=…] [--top=…]
 | `top` | integer | no | 20 | — |
 
 
-### `flutterware.motion`
-
-The animations each declared package declares, rendered at any point on their playhead so a curve can be looked at rather than described.
-
-#### `capture` — Capture
-
-Renders one motion at a point on its playhead and writes a PNG. The whole of an animation an agent can afford to look at: `t` is an axis like a device or a language, so the same call at several values is a filmstrip.
-
-```sh
-fw run motion capture --motion=<string> [--t=…] [--package=…] [--device=…]
-```
-
-Returns `Artifact`:
-
-```
-kind: String   # A MIME type where one fits — see the constants above.
-address: String   # What this is an artifact of, axes included.
-path: String?   # Where it was written, when it was written.
-text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
-meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it — `homeMotion` |
-| `t` | string | no | — | Where on the motion, 0 to 1. The end when omitted. |
-| `package` | choice | no | — | Which declared package; the only one when omitted |
-| `device` | choice | no | — | A device to render as; the panel otherwise |
-
-#### `filmstrip` — Filmstrip
-
-Renders a motion at several points on its playhead and composes them into one contact sheet. This is how to look at an animation without watching it: one image, N moments, each labelled with its t and its milliseconds.
-
-```sh
-fw run motion filmstrip --motion=<string> [--frames=…] [--mode=…] [--package=…] [--device=…]
-```
-
-Returns `Artifact`:
-
-```
-kind: String   # A MIME type where one fits — see the constants above.
-address: String   # What this is an artifact of, axes included.
-path: String?   # Where it was written, when it was written.
-text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
-meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it |
-| `frames` | integer | no | — | How many, including both ends. 5 when omitted. |
-| `mode` | choice | no | — | How each stop is reached. `playhead` sets the playhead and draws, and no time passes — right for a scene, which is what a motion is meant to be. `time` also lets exactly one frame of the frame rate elapse, so a screen with animation of its own — a controller, an implicit animation, a scroll spring — advances by exactly that much rather than by however long the machine took. |
-| `package` | choice | no | — | Which declared package; the only one when omitted |
-| `device` | choice | no | — | A device to render as; the panel otherwise |
-
-#### `video` — Video
-
-Renders the whole motion to an mp4 at its own duration, one frame per video frame. Not a screen recording: every frame is the motion evaluated at a playhead position, so the clip is exactly what the scrubber shows and is not rendered in real time. Needs `ffmpeg` on PATH.
-
-```sh
-fw run motion video --motion=<string> [--fps=…] [--package=…] [--device=…] [--knobs=…] [--axes=…] [--mode=…] [--scope=…]
-```
-
-Returns `Artifact`:
-
-```
-kind: String   # A MIME type where one fits — see the constants above.
-address: String   # What this is an artifact of, axes included.
-path: String?   # Where it was written, when it was written.
-text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
-meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it |
-| `fps` | integer | no | — | Frames a second of output. 30 when omitted. |
-| `package` | choice | no | — | Which declared package; the only one when omitted |
-| `device` | choice | no | — | A device to render as; the panel otherwise |
-| `knobs` | string | no | — | Values to turn before rendering: `name=value,name=value`, or a JSON object. This is how one authored motion becomes many clips — the same timing over different words, a different accent, a different locale — without touching the file it was authored in. |
-| `axes` | string | no | — | What the shell around the demo offers — `theme=dark`. Same syntax as knobs. |
-| `mode` | choice | no | — | How each stop is reached. `playhead` sets the playhead and draws, and no time passes — right for a scene, which is what a motion is meant to be. `time` also lets exactly one frame of the frame rate elapse, so a screen with animation of its own — a controller, an implicit animation, a scroll spring — advances by exactly that much rather than by however long the machine took. |
-| `scope` | string | no | — | Which mounted playhead to walk, when the screen has several. A composed screen mounts one scope for its own flow and one per component inside it. Omitted, the outermost — the flow — because scopes mount in tree order. The scopes a render saw come back on the result, so a clip of the wrong timeline is visible rather than merely wrong. |
-
-#### `new` — New motion
-
-Starts a motion from nothing: a stage, a values file and a preview entry, with one element already in them so the first render is not a blank screen. This is the cold start — by hand it is roughly a hundred lines across two files that have to agree on a string.
-
-```sh
-fw run motion new --name=<string> [--width=…] [--height=…] [--package=…]
-```
-
-Returns `Artifact`:
-
-```
-kind: String   # A MIME type where one fits — see the constants above.
-address: String   # What this is an artifact of, axes included.
-path: String?   # Where it was written, when it was written.
-text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
-meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `name` | string | yes | — | Lower snake case, and the basename of all three files — `checkout` gives `checkout.dart`, `checkout.motion.dart` and `checkout.stage.dart`. |
-| `width` | integer | no | — | Logical pixels. 360 when omitted. |
-| `height` | integer | no | — | Logical pixels. 640 when omitted. |
-| `package` | choice | no | — | Which declared package; the only one when omitted |
-
-#### `add-element` — Add element
-
-Adds one placeholder to a motion's draft stage. The stage is the only place the tool may create a target: the other place a target is named is your build method, which it does not touch. Refuses rather than approximates — a stage file outside the grammar comes back with the offset that broke it and nothing is written.
-
-```sh
-fw run motion add-element --motion=<string> --target=<string> [--kind=…] [--x=…] [--y=…] [--width=…] [--height=…] [--label=…] [--package=…]
-```
-
-Returns `Artifact`:
-
-```
-kind: String   # A MIME type where one fits — see the constants above.
-address: String   # What this is an artifact of, axes included.
-path: String?   # Where it was written, when it was written.
-text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
-meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it. Its stage is the `.stage.dart` beside it. |
-| `target` | string | yes | — | The name the lane and the read site will both use. Must not already be on the stage. |
-| `kind` | choice | no | — | box when omitted |
-| `x` | integer | no | — | Left, in stage pixels. 24 when omitted. |
-| `y` | integer | no | — | Top, in stage pixels. Below the lowest element when omitted, so a bare call stacks rather than overlaps. |
-| `width` | integer | no | — | 280 when omitted. |
-| `height` | integer | no | — | 48 when omitted. |
-| `label` | string | no | — | Shown inside a `text` placeholder. |
-| `package` | choice | no | — | Which declared package; the only one when omitted |
-
-#### `verify` — Verify
-
-Renders the same moments twice, and again backwards, and reports whether the pictures were identical. This is how to know a motion will export correctly, because a clip cannot be checked by watching it: a frame of the wrong moment looks exactly as plausible as a frame of the right one. A motion that repeats and is order-free is a function of its playhead, which is what a scene is. One that is not can still be exported with `mode=time`, which drives such a screen deliberately.
-
-```sh
-fw run motion verify --motion=<string> [--stops=…] [--package=…] [--device=…] [--scope=…]
-```
-
-Returns `MotionVerifyResult`:
-
-```
-motion: String
-file: String
-stops: int   # How many playhead positions were compared.
-durationMs: int
-repeats: bool
-orderFree: bool
-differingStops: List<double>   # The playhead positions that came out different, so a failure names the moments to look at rather than only the verdict.
-scope: String?
-scopes: List<String>   # Every playhead that was mounted, when there was more than one — a verdict about the wrong one is worth being able to see.
-ok: bool
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `motion` | string | yes | — | The `motion:` identifier, as `list` reports it |
-| `stops` | integer | no | — | How many playhead positions to compare, including both ends. 9 when omitted. More is a finer check and a longer one. |
-| `package` | choice | no | — | Which declared package; the only one when omitted |
-| `device` | choice | no | — | A device to render as; the panel otherwise |
-| `scope` | string | no | — | Which mounted playhead to drive, when a screen has more than one |
-
-#### `list` — List
-
-Every motion of a package, with its targets and where each is read — from the syntactic scan, without compiling or running anything. Read the diagnostics: a target named by an expression rather than a literal is real at run time and invisible here.
-
-```sh
-fw run motion list [--package=…]
-```
-
-Returns `MotionListResult`:
-
-```
-packages: List<MotionListPackage>
-  path: String
-  directory: String   # The scanned directory, relative to the package.
-  motions: List<MotionListMotion>
-    file: String   # Package-relative source file.
-    line: int
-    values: String?   # The identifier passed to `motion:`, which names the values file's const.
-    address: String?   # Where to open it, playhead included — append `?t=` to park it.
-    targets: List<MotionListTarget>
-      name: String
-      line: int
-      properties: List<String>   # Vocabulary properties read at a call site.
-      boxed: bool   # Whether a `MotionBox` was handed this target, which applies eight properties without reading any of them here.
-  diagnostics: List<String>   # What the scan noticed and could not act on.
-  error: String?   # Set when the package could not be scanned, in which case [motions] means nothing.
-```
-
-| parameter | kind | required | default | |
-|---|---|---|---|---|
-| `package` | choice | no | — | Which declared package; all of them when omitted |
-
-
 ### `flutterware.scenarios`
 
 Scenarios — deterministic headless flows through the app — listed, run, and read back a step at a time with what each step had on screen.
@@ -1807,6 +1604,79 @@ restarted: List<String>   # The package paths whose harness was dropped.
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | choice | no | — | Which declared package; all of them when omitted |
+
+
+### `flutterware.scene`
+
+Scenes this project owns — a design and the motion animating it, in one tool-written file per scene, grouped by folder and rendered by the app itself.
+
+#### `list` — List
+
+The scene groups this project has — each a folder with a scenes.dart — with the scenes in each, and the token libraries found.
+
+```sh
+fw run scene list [--package=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+
+#### `video` — Video
+
+Renders a scene's motion to an mp4, drawn by the app itself — its theme, its group's widgets — one frame per moment on the harness lane, where a frame cannot be of a moment other than the one it was drawn for. Needs ffmpeg.
+
+```sh
+fw run scene video [--package=…] --scene=<string> --fps=<string>
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `scene` | string | yes | — | The scene file, by name or path. |
+| `fps` | string | yes | — | Default 30. |
+
+#### `newGroup` — New group
+
+Makes a folder a scene group: writes its scenes.dart skeleton, which the next scan finds. The generated scene_args.dart follows.
+
+```sh
+fw run scene newGroup [--package=…] --folder=<string>
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `folder` | string | yes | — | Relative to the package — lib/scenes/marketing. |
+
+#### `newLibrary` — New library
+
+Writes an empty token library — <name>.tokens.dart, the editor's own — and lists it in a group when one is named.
+
+```sh
+fw run scene newLibrary [--package=…] --name=<string> [--folder=…] [--group=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `name` | string | yes | — | The library — Brand, store front. |
+| `folder` | string | no | — | Relative to the package; the group's own folder when a group is named, lib/ otherwise. |
+| `group` | string | no | — | A group folder, relative to the package. |
+
+#### `importTokens` — Import tokens
+
+Merges a design file's variables into a token library — the JSON its REST API answers for local variables, saved to a file. By name: a token the file knows takes its value and modes, a new one is added, one the file does not have is kept and listed; a name held here as another kind is refused by name, as is a variable that cannot be a token. The report is written into the library, where the panel shows it.
+
+```sh
+fw run scene importTokens [--package=…] --file=<string> [--library=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `file` | string | yes | — | The saved response, by path. |
+| `library` | string | no | — | The library file to merge into, created when missing — relative to the package, lib/design/brand.tokens.dart. Default: imported.tokens.dart in the first group's folder. |
 
 
 ### `flutterware.render`

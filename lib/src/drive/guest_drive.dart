@@ -28,11 +28,20 @@ import 'resolve.dart';
 /// never as overlapping gestures.
 class GuestDrive {
   GuestDrive({Drive? drive, this.inspector, this.humanActions})
-    : drive = drive ?? Drive() {
-    // The cycle, closed here: the recorder knows when a burst of taps has
-    // ended, and this knows how to photograph a screen and how to do it
-    // without cutting into an agent's transaction.
-    humanActions?.capture = _captureBeat;
+    : drive = drive ?? Drive();
+
+  /// Starts photographing human bursts — called on the first contact from
+  /// anything that reads beats, never at startup.
+  ///
+  /// The gesture *list* is always recorded: a pointer route costs nothing and
+  /// it is what fills the first reply's `human` field. The *capture* is a
+  /// settle plus a `toImage` after every burst of taps — real frames forced
+  /// in the user's app — and with no agent driving and no host polling,
+  /// every picture it took would age out of the ring unseen. So the recorder
+  /// runs cold until a consumer announces itself through `act` or `beats`,
+  /// and arms for the rest of the app's life on the first call.
+  void _armBeats() {
+    humanActions?.capture ??= _captureBeat;
   }
 
   /// One beat's worth of observation, queued like any other transaction.
@@ -91,6 +100,7 @@ class GuestDrive {
   /// Registers the extension. Call once, before `runApp`.
   void registerExtensions() {
     developer.registerExtension('ext.flutterware.act', (method, params) {
+      _armBeats();
       var completer = Completer<developer.ServiceExtensionResponse>();
       _queue = _queue.then((_) async {
         Object? result;
@@ -125,6 +135,7 @@ class GuestDrive {
       method,
       params,
     ) async {
+      _armBeats();
       return developer.ServiceExtensionResponse.result(
         jsonEncode({'human': humanActions?.take() ?? const []}),
       );

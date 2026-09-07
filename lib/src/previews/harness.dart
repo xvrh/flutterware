@@ -37,9 +37,8 @@ import '../scenarios/fonts.dart';
 import '../scenarios/real_work.dart';
 import '../scenarios/run_args.dart';
 import '../scenarios/settle.dart';
-import '../motion/guest.dart';
-import '../motion/stops.dart';
-import '../motion/testing.dart';
+import '../scene/core/stops.dart';
+import 'playhead.dart';
 import '../scenarios/staging.dart';
 import '../ui_catalog/axes.dart';
 import '../ui_catalog/guest.dart';
@@ -845,7 +844,8 @@ void _declare(
           // asked for at `t` and rendered at zero is wrong in the one way
           // nothing catches, which is what this lane did until now.
           if (walk == null && motionT != null) {
-            await tester.seekMotion(motionT, scope: _defaultScope());
+            var scope = _defaultScope();
+            await _seek(tester, _playheadDuration(scope) * motionT, scope);
           }
           if (output != null && walk != null) {
             captured?[entry.id] = {
@@ -931,16 +931,37 @@ class _Walk {
   Duration get frame => Duration(microseconds: 1000000 ~/ fps);
 }
 
-/// The playhead to drive when the caller named none.
+/// The playhead to drive when the caller named none — the first mounted one,
+/// so a screen that mounts two still renders rather than refusing.
+String? _defaultScope() => PlayheadRegistry.instance.defaultId;
+
+/// Park the mounted playhead and let the frame it asks for happen.
 ///
-/// The first mounted one, which is what the guest's seek does — a demo that
-/// mounts two would otherwise refuse every picture it used to render. Null
-/// when there is only one, so the single-scope case keeps the registry's own
-/// refusal wording if it somehow has none.
-String? _defaultScope() {
-  var mounted = MotionRegistry.instance.ids.toList();
-  return mounted.length == 1 ? null : mounted.firstOrNull;
+/// The one thing the harness needs from whatever is animating, and the whole
+/// of what it knows about it: the scene runtime and any other implementer of
+/// [Playhead] are equally drivable here.
+Future<void> _seek(
+  WidgetTester tester,
+  Duration position,
+  String? scope,
+) async {
+  var playhead = PlayheadRegistry.instance.resolve(scope);
+  if (playhead == null) {
+    var mounted = PlayheadRegistry.instance.ids.toList();
+    throw StateError(
+      scope == null
+          ? 'nothing on this screen has a playhead to walk — mount a scene, '
+                'or register one'
+          : 'no playhead "$scope" on this screen. Mounted: '
+                '${mounted.isEmpty ? 'none' : mounted.join(', ')}',
+    );
+  }
+  playhead.seek(position);
+  await tester.pump();
 }
+
+Duration _playheadDuration(String? scope) =>
+    PlayheadRegistry.instance.resolve(scope)?.duration ?? Duration.zero;
 
 /// How many zero-duration frames a stop is given to *apply* its playhead.
 ///
@@ -952,7 +973,7 @@ const _applyPlayheadFrames = 6;
 /// Photographs the playhead at each of [walk]'s stops, in order.
 ///
 /// **This is the whole reason export lives on this lane.** There is no wire
-/// and no second thread: `seekMotion` writes the playhead and pumps, and
+/// and no second thread: the playhead is parked and pumped, and
 /// `toImage` rasterises the layer tree *that pump produced*. A frame cannot be
 /// of a moment other than the one just built. The embedder cannot say that —
 /// it advances the playhead on the UI thread and writes whatever its
@@ -988,15 +1009,19 @@ Future<Map<String, Object?>> _walk(
   // seek does — a demo that mounts two would otherwise start refusing every
   // clip it used to render. Which one was driven is reported, so a caller can
   // see there were others rather than discover it in the picture.
-  var mounted = MotionRegistry.instance.ids.toList();
+  var mounted = PlayheadRegistry.instance.ids.toList();
   var scope = walk.scope ?? _defaultScope();
-  var durationMs = tester.motionDuration(scope: scope).inMilliseconds;
+  var durationMs = _playheadDuration(scope).inMilliseconds;
   // The whole motion when the caller did not say: it could not have, because
   // the duration is the running motion's and nobody outside it knows.
   var stops = walk.stops ?? videoStops(durationMs: durationMs, fps: walk.fps);
   var frames = <Map<String, Object?>>[];
   for (var (index, t) in stops.indexed) {
-    await tester.seekMotion(t, scope: scope);
+    await _seek(
+      tester,
+      Duration(microseconds: (durationMs * 1000 * t).round()),
+      scope,
+    );
     // **Let the screen finish applying the playhead, without letting time
     // pass.** A screen that reads `t` during build and then moves something
     // else from a post-frame callback — a flow driven by `PageView.jumpTo` is

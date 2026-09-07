@@ -100,29 +100,17 @@ void main() => Flutterware.configure((fw) {
                 Devices.wideWindow,
               ],
             ),
-            // The exceptions, and they are exceptions: these two are *app
-            // content* rather than studio chrome — a receipt and a player
-            // card, which is what a motion demo has to be to be worth
-            // scrubbing. A phone first, and a small one beside it because
-            // that is where a stagger runs out of room.
-            PreviewCanvas(
-              'tool/catalog/demos/motion_receipt.dart',
-              devices: [Devices.iphone16, Devices.iphoneSe],
-            ),
-            PreviewCanvas(
-              'tool/catalog/demos/motion_player.dart',
-              devices: [Devices.iphone16, Devices.iphoneSe],
-            ),
           ],
         ),
         .new(example),
       ],
     ),
   );
-  // `app` only, and pointed at the catalog demos rather than `lib`: a motion
-  // needs a mounted screen to scrub, and in this repo the screens that mount
-  // one are the demos that exist to exercise it.
-  fw.use(Motion(packages: [.new(app, directory: 'tool/catalog/demos')]));
+  // `example` only: a scene is rendered by the app whose theme and widgets
+  // it uses. No `directory:` — a scene group is a folder with a `scenes.dart`
+  // in it, found wherever it was written; `demo/` holds the one this
+  // project has.
+  fw.use(Scene(packages: [.new(example)]));
   // `example` only. `root` is a library and `app` is this GUI — neither has a
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
   fw.use(NativeSplash(packages: [.new(example)]));
@@ -267,6 +255,14 @@ void main() => Flutterware.configure((fw) {
                       'it is opened',
                 ),
               ],
+            ),
+            Entrypoint(
+              'lib/canvas_toy/main.dart',
+              name: 'Canvas toy',
+              description:
+                  'Disposable scene-canvas experiment — uniform-node model, '
+                  'selection, drag, inspector',
+              platforms: [RunPlatform.desktop],
             ),
           ],
         ),

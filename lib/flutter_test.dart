@@ -7,7 +7,6 @@ export 'package:flutter_test/flutter_test.dart';
 
 export 'src/canvases.dart';
 export 'src/devices.dart';
-export 'src/motion/testing.dart';
 export 'src/previews/harness.dart' show PreviewEntry, runPreviewHarness;
 export 'src/real_work/tracker.dart' show RealWork, TrackedRealWork;
 export 'src/scenarios/aim.dart' show ScenarioAim;

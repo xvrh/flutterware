@@ -1,0 +1,208 @@
+{
+  "status": 200,
+  "error": false,
+  "meta": {
+    "variableCollections": {
+      "VariableCollectionId:1:100": {
+        "id": "VariableCollectionId:1:100",
+        "name": "Colors",
+        "key": "c0ffee",
+        "modes": [
+          {"modeId": "1:0", "name": "Light"},
+          {"modeId": "1:1", "name": "Dark mode"}
+        ],
+        "defaultModeId": "1:0",
+        "remote": false,
+        "hiddenFromPublishing": false,
+        "variableIds": [
+          "VariableID:1:200",
+          "VariableID:1:201",
+          "VariableID:1:202",
+          "VariableID:1:203",
+          "VariableID:1:204",
+          "VariableID:1:205"
+        ]
+      },
+      "VariableCollectionId:1:300": {
+        "id": "VariableCollectionId:1:300",
+        "name": "Layout",
+        "key": "1ay0ut",
+        "modes": [{"modeId": "3:0", "name": "Default"}],
+        "defaultModeId": "3:0",
+        "remote": false,
+        "hiddenFromPublishing": false,
+        "variableIds": [
+          "VariableID:1:400",
+          "VariableID:1:401",
+          "VariableID:1:402",
+          "VariableID:1:403",
+          "VariableID:1:404"
+        ]
+      }
+    },
+    "variables": {
+      "VariableID:1:200": {
+        "id": "VariableID:1:200",
+        "name": "Brand/Primary",
+        "key": "k200",
+        "variableCollectionId": "VariableCollectionId:1:100",
+        "resolvedType": "COLOR",
+        "valuesByMode": {
+          "1:0": {"r": 0.9098, "g": 0.3882, "b": 0.1686, "a": 1},
+          "1:1": {"r": 1, "g": 0.5, "b": 0.3, "a": 1}
+        },
+        "remote": false,
+        "description": "",
+        "hiddenFromPublishing": false,
+        "scopes": ["ALL_SCOPES"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:201": {
+        "id": "VariableID:1:201",
+        "name": "Brand/Surface",
+        "key": "k201",
+        "variableCollectionId": "VariableCollectionId:1:100",
+        "resolvedType": "COLOR",
+        "valuesByMode": {
+          "1:0": {"r": 1, "g": 1, "b": 1, "a": 1},
+          "1:1": {"r": 0.1686, "g": 0.1059, "b": 0.0706, "a": 1}
+        },
+        "remote": false,
+        "description": "",
+        "hiddenFromPublishing": false,
+        "scopes": ["ALL_SCOPES"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:202": {
+        "id": "VariableID:1:202",
+        "name": "Text/On Brand",
+        "key": "k202",
+        "variableCollectionId": "VariableCollectionId:1:100",
+        "resolvedType": "COLOR",
+        "valuesByMode": {
+          "1:0": {"type": "VARIABLE_ALIAS", "id": "VariableID:1:201"},
+          "1:1": {"type": "VARIABLE_ALIAS", "id": "VariableID:1:201"}
+        },
+        "remote": false,
+        "description": "aliases Surface in each mode",
+        "hiddenFromPublishing": false,
+        "scopes": ["ALL_SCOPES"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:203": {
+        "id": "VariableID:1:203",
+        "name": "Brand/Primary ",
+        "key": "k203",
+        "variableCollectionId": "VariableCollectionId:1:100",
+        "resolvedType": "COLOR",
+        "valuesByMode": {
+          "1:0": {"r": 0, "g": 0, "b": 0, "a": 1},
+          "1:1": {"r": 0, "g": 0, "b": 0, "a": 1}
+        },
+        "remote": false,
+        "description": "a duplicate once the name is an identifier",
+        "hiddenFromPublishing": false,
+        "scopes": ["ALL_SCOPES"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:204": {
+        "id": "VariableID:1:204",
+        "name": "Old/Accent",
+        "key": "k204",
+        "variableCollectionId": "VariableCollectionId:1:100",
+        "resolvedType": "COLOR",
+        "valuesByMode": {
+          "1:0": {"r": 0, "g": 0, "b": 0, "a": 1},
+          "1:1": {"r": 0, "g": 0, "b": 0, "a": 1}
+        },
+        "remote": false,
+        "description": "",
+        "hiddenFromPublishing": false,
+        "deletedButReferenced": true,
+        "scopes": ["ALL_SCOPES"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:205": {
+        "id": "VariableID:1:205",
+        "name": "🎨",
+        "key": "k205",
+        "variableCollectionId": "VariableCollectionId:1:100",
+        "resolvedType": "COLOR",
+        "valuesByMode": {
+          "1:0": {"r": 0, "g": 0, "b": 0, "a": 1},
+          "1:1": {"r": 0, "g": 0, "b": 0, "a": 1}
+        },
+        "remote": false,
+        "description": "no identifier in that",
+        "hiddenFromPublishing": false,
+        "scopes": ["ALL_SCOPES"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:400": {
+        "id": "VariableID:1:400",
+        "name": "Radius/Card",
+        "key": "k400",
+        "variableCollectionId": "VariableCollectionId:1:300",
+        "resolvedType": "FLOAT",
+        "valuesByMode": {"3:0": 28},
+        "remote": false,
+        "description": "",
+        "hiddenFromPublishing": false,
+        "scopes": ["CORNER_RADIUS"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:401": {
+        "id": "VariableID:1:401",
+        "name": "Spacing - 2x",
+        "key": "k401",
+        "variableCollectionId": "VariableCollectionId:1:300",
+        "resolvedType": "FLOAT",
+        "valuesByMode": {"3:0": 16.5},
+        "remote": false,
+        "description": "",
+        "hiddenFromPublishing": false,
+        "scopes": ["GAP"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:402": {
+        "id": "VariableID:1:402",
+        "name": "Copy/CTA",
+        "key": "k402",
+        "variableCollectionId": "VariableCollectionId:1:300",
+        "resolvedType": "STRING",
+        "valuesByMode": {"3:0": "Order now"},
+        "remote": false,
+        "description": "",
+        "hiddenFromPublishing": false,
+        "scopes": ["TEXT_CONTENT"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:403": {
+        "id": "VariableID:1:403",
+        "name": "Show badge",
+        "key": "k403",
+        "variableCollectionId": "VariableCollectionId:1:300",
+        "resolvedType": "BOOLEAN",
+        "valuesByMode": {"3:0": true},
+        "remote": false,
+        "description": "",
+        "hiddenFromPublishing": false,
+        "scopes": ["ALL_SCOPES"],
+        "codeSyntax": {}
+      },
+      "VariableID:1:404": {
+        "id": "VariableID:1:404",
+        "name": "Card/Surface",
+        "key": "k404",
+        "variableCollectionId": "VariableCollectionId:1:300",
+        "resolvedType": "COLOR",
+        "valuesByMode": {"3:0": {"type": "VARIABLE_ALIAS", "id": "VariableID:1:201"}},
+        "remote": false,
+        "description": "an alias across collections: Layout has no Dark mode, so the default",
+        "hiddenFromPublishing": false,
+        "scopes": ["ALL_SCOPES"],
+        "codeSyntax": {}
+      }
+    }
+  }
+}

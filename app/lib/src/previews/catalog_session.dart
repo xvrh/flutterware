@@ -1424,10 +1424,9 @@ class CatalogSession extends ChangeNotifier {
   /// Calls a service extension on this session's guest, or null when there is
   /// no guest to call.
   ///
-  /// The one door another plugin reaches this guest through. The motion
+  /// The one door another plugin reaches this guest through. The scene
   /// plugin shares the catalog's compiler and guest and has its own panel, so
-  /// it needs to drive `ext.flutterware.motion.*` against whatever is running
-  /// here. Deliberately not an `InspectClient`: that one is *this* plugin's
+  /// it needs to drive `ext.fw.scene.*` against whatever is running here. Deliberately not an `InspectClient`: that one is *this* plugin's
   /// vocabulary, and widening it every time somebody else needs a call is how
   /// one class ends up owning every plugin's protocol.
   Future<Map<String, dynamic>?> callGuestExtension(

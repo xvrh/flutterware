@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,7 +67,12 @@ void main() {
     await tester.pump();
     await done;
 
-    expect(textureLayers(), 0);
+    // The withhold is a per-platform trade: on Linux a TextureLayer under
+    // toImage is a segfault, so the guest must leave the raster's tree; on
+    // macOS it is merely a hole in the picture, and withholding there costs a
+    // visible one-frame blink on every raster a click triggers — so the guest
+    // stays put and the hole is accepted.
+    expect(textureLayers(), Platform.isMacOS ? 1 : 0);
     await tester.pump();
     expect(
       textureLayers(),

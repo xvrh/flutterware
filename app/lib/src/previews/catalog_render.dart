@@ -192,7 +192,7 @@ class CatalogWalk {
   /// Order is part of the request rather than a detail of the loop because it
   /// is the one thing that tells a scene from a state machine: taken
   /// backwards, a scene renders the same pictures and a state machine does
-  /// not. `motion verify` is that comparison.
+  /// not. `walk_determinism_test` is that comparison.
   ///
   /// Null is the ordinary case for a clip, and it is not a convenience: only
   /// the running motion knows how long it is, so a caller that computed stops

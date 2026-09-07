@@ -9,9 +9,10 @@ import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:test/test.dart';
 
-/// The project this repo actually has: previews scans `tool/catalog`, motion
-/// scans the narrower `tool/catalog/demos`. Before this resolution existed the
-/// two hashed to different daemon addresses and compiled the same files twice.
+/// Previews scans `tool/catalog`; a second plugin declares the narrower
+/// `tool/catalog/demos` on the same package. Before this resolution existed the
+/// two hashed to different daemon addresses and compiled the same files twice —
+/// measured on this repo, when the motion plugin was that second plugin.
 PluginManifest get _manifest => const PluginManifest([
   PluginDeclaration(
     id: previewsPluginId,
@@ -24,8 +25,8 @@ PluginManifest get _manifest => const PluginManifest([
     },
   ),
   PluginDeclaration(
-    id: 'flutterware.motion',
-    label: 'Motion',
+    id: 'flutterware.scene',
+    label: 'Scene',
     config: {
       'packages': [
         {'path': 'app', 'directory': 'tool/catalog/demos'},
@@ -61,21 +62,21 @@ void main() {
   });
 
   test('every plugin is told the same place, whatever it declared', () {
-    // The invariant. Motion declares a *narrower* directory and still renders
+    // The invariant. Scene declares a *narrower* directory and still renders
     // through the catalog's roots — because a narrower root would not narrow
     // the catalog, it would fork the compiler and give the panel a second warm
     // kernel that nothing keeps current.
     expect(
-      _hostFor('flutterware.motion').catalogRootsFor('app'),
+      _hostFor('flutterware.scene').catalogRootsFor('app'),
       _hostFor(previewsPluginId).catalogRootsFor('app'),
     );
-    expect(_hostFor('flutterware.motion').catalogRootsFor('app'), [
+    expect(_hostFor('flutterware.scene').catalogRootsFor('app'), [
       'tool/catalog',
     ]);
   });
 
   test('a package nobody declared falls back rather than throwing', () {
-    expect(_hostFor('flutterware.motion').catalogRootsFor('nope'), [
+    expect(_hostFor('flutterware.scene').catalogRootsFor('nope'), [
       defaultCatalogRoot,
     ]);
   });

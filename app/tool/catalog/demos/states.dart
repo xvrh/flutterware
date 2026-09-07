@@ -58,10 +58,10 @@ Widget empty() => _Stack(
     ),
     EmptyState(
       icon: Icons.movie_outlined,
-      title: 'No motions here',
+      title: 'No scenes here',
       message:
-          'Nothing declares a MotionScope in packages/app/lib, which is the '
-          'directory this plugin was pointed at.',
+          'No *.scene.dart under packages/app/lib, which is the directory '
+          'this plugin was pointed at.',
       action: OutlinedButton(onPressed: () {}, child: const Text('Scan again')),
       minHeight: 180,
     ),

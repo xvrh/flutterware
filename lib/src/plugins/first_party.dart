@@ -495,14 +495,17 @@ final class LocalesPerKeyCatalog extends TranslationCatalog {
   };
 }
 
-/// Motion — timelines scrubbed against a live screen, with the tuned numbers in
-/// a file no human writes. See
-/// `docs/superpowers/specs/2026-07-31-motion-design.md`.
-class Motion extends Plugin {
-  Motion({this.packages = const [], String? label})
-    : super('flutterware.motion', label: label ?? 'Motion');
+/// The scene editor: WYSIWYG scenes and the motion that animates them, in
+/// files this tool owns end to end (`*.scene.dart`).
+///
+/// A scene is rendered by the app itself — declare a `@Preview` entry named
+/// `sceneCanvasHost` in the package whose theme and widgets the scenes use,
+/// and the editor composites it.
+class Scene extends Plugin {
+  Scene({this.packages = const [], String? label})
+    : super('flutterware.scene', label: label ?? 'Scene');
 
-  final List<MotionPackage> packages;
+  final List<ScenePackage> packages;
 
   @override
   Map<String, Object?> get config => {
@@ -510,15 +513,13 @@ class Motion extends Plugin {
   };
 }
 
-class MotionPackage extends PluginPackage {
-  const MotionPackage(super.pkg, {this.directory});
+class ScenePackage extends PluginPackage {
+  const ScenePackage(super.pkg, {this.directory});
 
-  /// Where this package's screens are, relative to the package; `lib` when
-  /// null.
-  ///
-  /// A directory rather than a convention of ours, because a motion is not a
-  /// thing you keep somewhere — it is a screen that happens to move, and it
-  /// lives wherever the screens live.
+  /// Where the package is scanned for scene groups, relative to the package;
+  /// the whole package when null. A group is a folder with a `scenes.dart`
+  /// in it, found wherever it was written — this only narrows the walk for a
+  /// package large enough to want that.
   final String? directory;
 
   @override
@@ -527,8 +528,8 @@ class MotionPackage extends PluginPackage {
     if (directory != null) 'directory': directory,
   };
 
-  static List<MotionPackage> each(List<Pkg> packages) => [
-    for (var pkg in packages) MotionPackage(pkg),
+  static List<ScenePackage> each(List<Pkg> packages) => [
+    for (var pkg in packages) ScenePackage(pkg),
   ];
 }
 

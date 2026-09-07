@@ -95,18 +95,21 @@ class FwPicker<T> extends StatelessWidget {
                 Icon(Icons.circle, size: 8, color: color),
                 const Gap(FwSpacing.sm),
               ],
-              Flexible(
-                flex: 0,
-                child: Text(
-                  current?.label ?? 'Choose…',
-                  style: context.type.bodyStrong,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Expanded, not Flexible-beside-a-Spacer: two flex children
-              // split the free space, and a short detail's unused half landed
-              // *after* the caret, floating it off the right edge.
+              // Alone, the label takes the row and ellipsises when the field
+              // is narrower than its words — a `Flexible(flex: 0)` beside a
+              // Spacer was laid out unconstrained and overflowed by exactly
+              // the words' excess. With a detail, the detail takes the room:
+              // two flex children would split it, and a short detail's unused
+              // half landed *after* the caret, floating it off the right edge.
               if (current?.detail case var detail?) ...[
+                Flexible(
+                  flex: 0,
+                  child: Text(
+                    current?.label ?? 'Choose…',
+                    style: context.type.bodyStrong,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 const Gap(FwSpacing.sm),
                 Expanded(
                   child: Text(
@@ -116,7 +119,13 @@ class FwPicker<T> extends StatelessWidget {
                   ),
                 ),
               ] else
-                const Spacer(),
+                Expanded(
+                  child: Text(
+                    current?.label ?? 'Choose…',
+                    style: context.type.bodyStrong,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               const Gap(FwSpacing.sm),
               Icon(Icons.expand_more, size: FwIconSize.md, color: colors.mut2),
             ],

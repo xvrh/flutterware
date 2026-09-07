@@ -90,7 +90,10 @@ class _ZoomableCanvasState extends State<ZoomableCanvas> {
   /// way `InteractiveViewer` does it for a wheel.
   void _zoomBy(double change, Offset focal) {
     var value = _transform.value;
-    var scale = value.getMaxScaleOnAxis();
+    // The x scale, which for a uniform 2D zoom is the zoom. Not
+    // `getMaxScaleOnAxis`: that takes z into account, which is never scaled,
+    // so below life-size it answers 1 and a zoom-out could never clamp right.
+    var scale = value.storage[0];
     var target = (scale * change).clamp(widget.minScale, widget.maxScale);
     if (target == scale) return;
     var factor = target / scale;
