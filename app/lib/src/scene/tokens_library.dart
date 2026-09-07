@@ -33,8 +33,10 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
   TokensLibrary({
     required this.path,
     List<SceneTokenDecl> tokens = const [],
+    List<String> modes = const [],
     String? source,
   }) : tokens = [...tokens],
+       declaredModes = [...modes],
        _disk = source;
 
   /// Read a file through the parse door — its list symbol derived from its
@@ -43,10 +45,20 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
     var parsed = parseTokensFile(source, symbol: tokensSymbolFor(path));
     if (!parsed.ok) return TokensLibraryOpen._(null, parsed.refusals);
     return TokensLibraryOpen._(
-      TokensLibrary(path: path, tokens: parsed.tokens, source: source),
+      TokensLibrary(
+        path: path,
+        tokens: parsed.tokens,
+        modes: parsed.modes,
+        source: source,
+      ),
       const [],
     );
   }
+
+  /// The modes this library declares by name, in the file's order — a mode
+  /// exists here before any token differs in it, which is how one is added
+  /// from the panel.
+  final List<String> declaredModes;
 
   /// Where it lives — the identity a workspace dedupes on.
   @override
@@ -84,9 +96,11 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
     return null;
   }
 
-  /// Every mode any token here names, sorted.
+  /// Every mode this library knows — declared by name, or named by a
+  /// token — sorted. The file written declares all of them.
   List<String> get modes =>
-      {for (var t in tokens) ...t.modes.keys}.toList()..sort();
+      {...declaredModes, for (var t in tokens) ...t.modes.keys}.toList()
+        ..sort();
 
   /// Why [wanted] cannot be a token's name here, or null when it can.
   /// [taken] names what the group's other libraries and exports already
@@ -120,8 +134,8 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
   // --- Journal -------------------------------------------------------------
 
   static const _journalCap = 100;
-  final _undo = <(String, List<SceneTokenDecl>)>[];
-  final _redo = <(String, List<SceneTokenDecl>)>[];
+  final _undo = <(String, List<SceneTokenDecl>, List<String>)>[];
+  final _redo = <(String, List<SceneTokenDecl>, List<String>)>[];
   String? _openMerge;
 
   bool get canUndo => _undo.isNotEmpty;
@@ -138,7 +152,7 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
         _openMerge == mergeKey;
     _openMerge = mergeKey;
     if (!merge) {
-      _undo.add((label, List.of(tokens)));
+      _undo.add((label, List.of(tokens), List.of(declaredModes)));
       if (_undo.length > _journalCap) _undo.removeAt(0);
       _redo.clear();
     }
@@ -151,11 +165,14 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   void undo() {
     if (_undo.isEmpty) return;
-    var (label, before) = _undo.removeLast();
-    _redo.add((label, List.of(tokens)));
+    var (label, before, modes) = _undo.removeLast();
+    _redo.add((label, List.of(tokens), List.of(declaredModes)));
     tokens
       ..clear()
       ..addAll(before);
+    declaredModes
+      ..clear()
+      ..addAll(modes);
     _openMerge = null;
     _revision++;
     notifyListeners();
@@ -163,14 +180,82 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   void redo() {
     if (_redo.isEmpty) return;
-    var (label, after) = _redo.removeLast();
-    _undo.add((label, List.of(tokens)));
+    var (label, after, modes) = _redo.removeLast();
+    _undo.add((label, List.of(tokens), List.of(declaredModes)));
     tokens
       ..clear()
       ..addAll(after);
+    declaredModes
+      ..clear()
+      ..addAll(modes);
     _revision++;
     notifyListeners();
   }
+
+  // --- Modes ---------------------------------------------------------------
+
+  /// Declares a mode. Nothing differs in it yet: every token shows its
+  /// default there until one is set.
+  void addMode(String name) {
+    name = name.trim();
+    if (!isValidNodeName(name) || name == 'default') {
+      throw ArgumentError('"$name" is not a mode name — an identifier');
+    }
+    if (modes.contains(name)) throw ArgumentError('there is a "$name" mode');
+    perform('Add mode $name', () => declaredModes.add(name));
+  }
+
+  /// Renames a mode; every token's value in it follows.
+  void renameMode(String name, String wanted) {
+    wanted = wanted.trim();
+    if (wanted == name) return;
+    if (!modes.contains(name)) throw ArgumentError('no mode "$name"');
+    if (!isValidNodeName(wanted) || wanted == 'default') {
+      throw ArgumentError('"$wanted" is not a mode name — an identifier');
+    }
+    if (modes.contains(wanted)) {
+      throw ArgumentError('there is a "$wanted" mode');
+    }
+    perform('Rename mode $name', () {
+      var i = declaredModes.indexOf(name);
+      if (i >= 0) {
+        declaredModes[i] = wanted;
+      } else {
+        declaredModes.add(wanted);
+      }
+      for (var (j, t) in tokens.indexed) {
+        if (!t.modes.containsKey(name)) continue;
+        tokens[j] = _withModes(t, {
+          for (var e in t.modes.entries)
+            if (e.key == name) wanted: e.value else e.key: e.value,
+        });
+      }
+    });
+  }
+
+  /// Deletes a mode; every value a token held in it goes with it.
+  void deleteMode(String name) {
+    if (!modes.contains(name)) throw ArgumentError('no mode "$name"');
+    perform('Delete mode $name', () {
+      declaredModes.remove(name);
+      for (var (j, t) in tokens.indexed) {
+        if (!t.modes.containsKey(name)) continue;
+        tokens[j] = _withModes(t, {
+          for (var e in t.modes.entries)
+            if (e.key != name) e.key: e.value,
+        });
+      }
+    });
+  }
+
+  /// How many tokens differ in [mode].
+  int differingIn(String mode) =>
+      tokens.where((t) => t.modes.containsKey(mode)).length;
+
+  static SceneTokenDecl _withModes(SceneTokenDecl t, Map<String, Object> m) =>
+      t.style != null
+      ? SceneTokenDecl.style(t.name, t.style!, modes: m)
+      : SceneTokenDecl(t.name, t.kind!, t.value!, modes: m);
 
   // --- Doors ---------------------------------------------------------------
 
@@ -264,15 +349,41 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
     });
   }
 
-  /// Replaces a style token's fields.
-  void setStyle(String name, SceneTextStyle style, {String? mergeKey}) {
+  /// Replaces a style token's fields — the default's, or [mode]'s. A mode
+  /// style equal to the default is the default: the mode entry goes.
+  void setStyle(
+    String name,
+    SceneTextStyle style, {
+    String? mode,
+    String? mergeKey,
+  }) {
     var i = tokens.indexWhere((t) => t.name == name);
     if (i < 0) throw ArgumentError('no token "$name"');
-    if (!tokens[i].isStyle || !tokens[i].hasValue) {
+    var t = tokens[i];
+    if (!t.isStyle || !t.hasValue) {
       throw ArgumentError('"$name" is not a style');
     }
     perform('Edit style $name', mergeKey: mergeKey, () {
-      tokens[i] = SceneTokenDecl.style(name, style);
+      if (mode == null) {
+        tokens[i] = SceneTokenDecl.style(
+          name,
+          style,
+          modes: {
+            for (var e in t.modes.entries)
+              if (e.value != style) e.key: e.value,
+          },
+        );
+      } else {
+        tokens[i] = SceneTokenDecl.style(
+          name,
+          t.style!,
+          modes: {
+            for (var e in t.modes.entries)
+              if (e.key != mode) e.key: e.value,
+            if (style != t.style) mode: style,
+          },
+        );
+      }
     });
   }
 
@@ -286,7 +397,7 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   // --- File ----------------------------------------------------------------
 
-  String emit() => emitTokensLibrary(tokens, symbol: symbol);
+  String emit() => emitTokensLibrary(tokens, symbol: symbol, modes: modes);
 
   /// Emit, refuse to write anything the parser would reject, and hand the
   /// text to [write]. Returns the refusals — empty on success.
@@ -311,6 +422,9 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
       tokens
         ..clear()
         ..addAll(parsed.tokens);
+      declaredModes
+        ..clear()
+        ..addAll(parsed.modes);
     });
     _disk = source;
     _savedRevision = _revision;
@@ -319,7 +433,7 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   static SceneTokenDecl _renamed(SceneTokenDecl t, String name) =>
       t.style != null
-      ? SceneTokenDecl.style(name, t.style!)
+      ? SceneTokenDecl.style(name, t.style!, modes: t.modes)
       : SceneTokenDecl(name, t.kind!, t.value!, modes: t.modes);
 
   static Object _zeroOf(SceneParamKind kind) => switch (kind) {
@@ -357,10 +471,18 @@ $sceneTokensFileMarker
 String emitTokensLibrary(
   List<SceneTokenDecl> tokens, {
   required String symbol,
+  List<String> modes = const [],
 }) {
   var out = StringBuffer(tokensLibraryHeader)
     ..writeln("import 'package:flutterware/scene_authoring.dart';")
     ..writeln();
+  if (modes.isNotEmpty) {
+    out
+      ..writeln(
+        'const ${modesSymbolFor(symbol)} = [${modes.map((m) => "'$m'").join(', ')}];',
+      )
+      ..writeln();
+  }
   if (tokens.isEmpty) {
     out.writeln('final $symbol = <Token<Object>>[];');
   } else {
@@ -375,7 +497,10 @@ String emitTokensLibrary(
 
 String _tokenLiteral(SceneTokenDecl t) {
   if (t.style case var style?) {
-    return "const Token<SceneTextStyle>('${t.name}', ${_styleLiteral(style)})";
+    var modes = t.modes.isEmpty
+        ? ''
+        : ', modes: {${[for (var e in t.modes.entries) "'${e.key}': ${_styleLiteral(e.value as SceneTextStyle)}"].join(', ')}}';
+    return "const Token<SceneTextStyle>('${t.name}', ${_styleLiteral(style)}$modes)";
   }
   var modes = t.modes.isEmpty
       ? ''

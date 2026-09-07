@@ -200,7 +200,12 @@ void main() {
         (nested.root.children.single as TextNode).color,
         const SceneColor(0xFFEEEEEE),
       );
-      expect(SceneTokens.modes.keys, ['dark']);
+      expect(SceneTokens.modes.keys, ['dark', 'dense']);
+      expect(
+        SceneTokens.dense.surface,
+        const SceneTokens().surface,
+        reason: 'declared, nothing differs in it yet',
+      );
     });
 
     test('flipped while its intro plays: the player carries across', () {

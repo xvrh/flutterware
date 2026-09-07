@@ -31,6 +31,11 @@ import 'scene_file.dart';
 /// default for a source parsed without a file name (a test, a demo).
 const sceneTokensSymbol = 'sceneTokens';
 
+/// The symbol beside a library's list naming its modes: `brandTokens` →
+/// `brandTokensModes`. Declared so a mode exists before any token differs
+/// in it.
+String modesSymbolFor(String symbol) => '${symbol}Modes';
+
 /// What a library file ends with: `brand.tokens.dart`.
 const sceneTokensFileSuffix = '.tokens.dart';
 
@@ -86,10 +91,19 @@ const sceneTokensClassName = 'SceneTokens';
 
 /// What a read of a declaration file produced.
 class TokensParse {
-  TokensParse(this.tokens, this.refusals, [this.imports = const []]);
+  TokensParse(
+    this.tokens,
+    this.refusals, [
+    this.imports = const [],
+    this.modes = const [],
+  ]);
 
   final List<SceneTokenDecl> tokens;
   final List<SceneRefusal> refusals;
+
+  /// The modes the file declares by name — `const brandTokensModes =
+  /// ['dark']` — including ones no token differs in yet.
+  final List<String> modes;
 
   /// The file's imports other than the authoring one, verbatim — what an
   /// opaque token's type is spelled with, so the generated class imports the
@@ -166,9 +180,29 @@ TokensParse parseTokensFile(
   var imports = declarationImports(result.unit, source);
 
   ListLiteral? list;
+  var modes = <String>[];
   for (var decl in result.unit.declarations) {
     if (decl is! TopLevelVariableDeclaration) continue;
     for (var v in decl.variables.variables) {
+      if (v.name.lexeme == modesSymbolFor(sceneTokensSymbol)) {
+        if (v.initializer case ListLiteral l) {
+          for (var e in l.elements) {
+            if (e is SimpleStringLiteral && isValidNodeName(e.value)) {
+              if (!modes.contains(e.value)) modes.add(e.value);
+            } else {
+              refuse(e.offset, 'mode name', 'a mode name is an identifier');
+            }
+          }
+        } else {
+          refuse(
+            v.offset,
+            'declaration',
+            '${modesSymbolFor(sceneTokensSymbol)} is a list of names — '
+                "['dark']",
+          );
+        }
+        continue;
+      }
       if (v.name.lexeme != sceneTokensSymbol) continue;
       if (v.initializer case ListLiteral l) {
         list = l;
@@ -193,7 +227,12 @@ TokensParse parseTokensFile(
     return TokensParse(const [], refusals);
   }
 
-  return TokensParse(parseTokenElements(list, refuse), refusals, imports);
+  return TokensParse(
+    parseTokenElements(list, refuse),
+    refusals,
+    imports,
+    modes,
+  );
 }
 
 /// The `Token<…>(…)` elements of one list literal — a library's list, or,
@@ -313,16 +352,31 @@ SceneTokenDecl? _token(
   var kind = _tokenKinds[typeName];
   // A text style: a bundle the editor renders, applied whole to a text.
   if (typeName == 'SceneTextStyle') {
-    if (named.isNotEmpty) {
-      refuse(
-        named.first.offset,
-        'modes',
-        'a style has no modes yet — declare one style per look',
-      );
-      return null;
-    }
     var style = _style(positional[1].argumentExpression, refuse);
-    return style == null ? null : SceneTokenDecl.style(nameArg.value, style);
+    if (style == null) return null;
+    var modes = <String, Object>{};
+    for (var arg in named) {
+      var map = arg.argumentExpression;
+      if (map is! SetOrMapLiteral) {
+        refuse(map.offset, 'modes', "modes is a map — modes: {'dark': …}");
+        return null;
+      }
+      for (var entry in map.elements) {
+        if (entry is! MapLiteralEntry) {
+          refuse(entry.offset, 'modes', "modes is a map — modes: {'dark': …}");
+          return null;
+        }
+        var key = entry.key;
+        if (key is! SimpleStringLiteral || !isValidNodeName(key.value)) {
+          refuse(key.offset, 'mode name', 'a mode name is an identifier');
+          return null;
+        }
+        var v = _style(entry.value, refuse);
+        if (v == null) return null;
+        modes[key.value] = v;
+      }
+    }
+    return SceneTokenDecl.style(nameArg.value, style, modes: modes);
   }
   // Not a value type: the app's own object, which a library cannot hold —
   // the editor writes a library, and it cannot write what it cannot see.

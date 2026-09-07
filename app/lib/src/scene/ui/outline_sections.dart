@@ -29,6 +29,7 @@ class SceneOutlineSections extends StatefulWidget {
     this.onOpenMotion,
     this.onOpenParam,
     this.onOpenToken,
+    this.onOpenLibrary,
     this.tokens,
   });
 
@@ -36,6 +37,10 @@ class SceneOutlineSections extends StatefulWidget {
 
   /// Opens a token below the canvas.
   final ValueChanged<String>? onOpenToken;
+
+  /// Opens a library, by path — its divider in the tokens section is the
+  /// row, and the drawer shows its modes. Null: the editor's own door.
+  final ValueChanged<String>? onOpenLibrary;
 
   /// The group's libraries and the doors past this file; null hides the
   /// Tokens section's `+` and makes rename and delete local.
@@ -134,6 +139,16 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
               context,
               library.symbol,
               onAdd: (at) => _addTokenMenu(context, at, library.path),
+              open: editor.drawer == LibraryAside(library.path),
+              onOpen: () => _openLibrary(library.path),
+              tooltip: [
+                library.fileName,
+                '${library.tokens.length} ${library.tokens.length == 1 ? 'token' : 'tokens'}',
+                if (library.modes.isNotEmpty)
+                  'modes: ${library.modes.join(', ')}'
+                else
+                  'no modes — click to add one',
+              ].join(' · '),
             ),
             for (var t in library.tokens) _tokenRow(context, t),
           ],
@@ -158,12 +173,44 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
     ];
   }
 
+  /// A library's line over its tokens — and, with [onOpen], a row of its
+  /// own: click opens the library in the drawer, for its modes.
   Widget _divider(
     BuildContext context,
     String label, {
     void Function(Offset at)? onAdd,
+    bool open = false,
+    VoidCallback? onOpen,
+    String? tooltip,
   }) {
     var colors = context.colors;
+    Widget name = Text(
+      label,
+      overflow: TextOverflow.ellipsis,
+      style: context.type.micro.copyWith(
+        color: open ? colors.accentDark : colors.mut2,
+      ),
+    );
+    if (tooltip != null) {
+      name = Tooltip(
+        message: tooltip,
+        waitDuration: const Duration(milliseconds: 600),
+        child: name,
+      );
+    }
+    if (onOpen != null) {
+      name = Tappable(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.xxs,
+            vertical: FwSpacing.xxs,
+          ),
+          child: name,
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(
         left: FwSpacing.md + FwSpacing.xxs + FwSpacing.sm,
@@ -173,11 +220,7 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: context.type.micro.copyWith(color: colors.mut2),
-            ),
+            child: Align(alignment: Alignment.centerLeft, child: name),
           ),
           if (onAdd != null)
             Tooltip(
@@ -236,6 +279,14 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
     }
   }
 
+  void _openLibrary(String path) {
+    if (widget.onOpenLibrary case var open?) {
+      open(path);
+    } else {
+      editor.openLibrary = path;
+    }
+  }
+
   /// `+` on the section, or on one library's divider: a token of a kind,
   /// or a style, in that library — the first one when the section's own
   /// `+` was pressed — and, from the section, a new library.
@@ -246,34 +297,12 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
         ? host.libraries.firstOrNull
         : host.libraries.where((l) => l.path == libraryPath).firstOrNull;
     showContextMenu(context, at, [
-      if (library != null) ...[
-        MenuHeader('New token in ${library.symbol}'),
-        for (var (kind, label, type) in paramKinds)
-          MenuItem(
-            label,
-            icon: paramKindIcon(kind),
-            shortcut: type,
-            onSelected: () {
-              var taken = host.takenIn(editor)
-                ..removeAll(library.tokens.map((t) => t.name));
-              var name = library.freeName(kind.name, taken: taken);
-              library.add(name, kind, taken: taken);
-              _openToken(name);
-              setState(() {
-                _tokensOpen = true;
-                _renaming = TokenAside(name);
-              });
-            },
-          ),
-        MenuItem(
-          'Style',
-          icon: Icons.text_format,
-          shortcut: 'SceneTextStyle',
-          onSelected: () {
-            var taken = host.takenIn(editor)
-              ..removeAll(library.tokens.map((t) => t.name));
-            var name = library.freeName('style', taken: taken);
-            library.addStyle(name, taken: taken);
+      if (library != null)
+        ...newTokenEntries(
+          editor,
+          host,
+          library,
+          onAdded: (name) {
             _openToken(name);
             setState(() {
               _tokensOpen = true;
@@ -281,7 +310,6 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
             });
           },
         ),
-      ],
       if (libraryPath == null && host.onNewLibrary != null) ...[
         if (library != null) const MenuDivider(),
         MenuItem(

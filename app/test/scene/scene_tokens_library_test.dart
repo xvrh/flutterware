@@ -112,6 +112,75 @@ void main() {
       expect(library.freeName('brand'), 'brand2');
     });
 
+    test('declares a mode by name, renames it, deletes it — each undo', () {
+      var library = _open();
+      expect(library.declaredModes, isEmpty, reason: 'the file lists none');
+      library.addMode('dense');
+      expect(library.modes, ['dark', 'dense']);
+      expect(library.differingIn('dense'), 0);
+      expect(library.differingIn('dark'), 1);
+      expect(() => library.addMode('dark'), throwsArgumentError);
+      expect(() => library.addMode('default'), throwsArgumentError);
+      expect(() => library.addMode('no way'), throwsArgumentError);
+      var out = library.emit();
+      expect(out, contains("const brandTokensModes = ['dark', 'dense'];"));
+      var again = TokensLibrary.open(library.path, out).library!;
+      expect(again.declaredModes, ['dark', 'dense']);
+      library.renameMode('dark', 'night');
+      expect(library.named('brand')!.modes.keys, ['night']);
+      expect(library.modes, ['dense', 'night']);
+      expect(() => library.renameMode('night', 'dense'), throwsArgumentError);
+      library.deleteMode('night');
+      expect(library.named('brand')!.modes, isEmpty);
+      expect(library.modes, ['dense']);
+      library.undo();
+      expect(library.named('brand')!.modes.keys, ['night']);
+      library.undo();
+      expect(library.modes, ['dark', 'dense']);
+      library.undo();
+      expect(library.modes, ['dark']);
+    });
+
+    test('a style has a value per mode, whole, equal-is-default', () {
+      var library = _open();
+      const dark = SceneTextStyle(fontSize: 40, color: SceneColor(0xFFFFFFFF));
+      library.setStyle('title', dark, mode: 'dark');
+      expect(library.named('title')!.styleIn('dark'), dark);
+      expect(library.named('title')!.style!.fontSize, 54, reason: 'default');
+      expect(library.differingIn('dark'), 2);
+      library.rename('title', 'headline');
+      expect(library.named('headline')!.styleIn('dark'), dark);
+      library.setStyle(
+        'headline',
+        library.named('headline')!.style!,
+        mode: 'dark',
+      );
+      expect(
+        library.named('headline')!.modes,
+        isEmpty,
+        reason: 'same as default',
+      );
+      library.setStyle('headline', dark, mode: 'dark');
+      library.setStyle('headline', dark);
+      expect(
+        library.named('headline')!.modes,
+        isEmpty,
+        reason: 'default caught up',
+      );
+      var out = library.emit();
+      library.setStyle(
+        'headline',
+        const SceneTextStyle(fontSize: 12),
+        mode: 'dark',
+      );
+      out = library.emit();
+      expect(
+        out.replaceAll(RegExp(r'\s+'), ' '),
+        contains("modes: {'dark': SceneTextStyle(fontSize: 12)}"),
+      );
+      expect(TokensLibrary.open(library.path, out).library!.emit(), out);
+    });
+
     test('refuses a style edit on a value and a value on a style', () {
       var library = _open();
       expect(() => library.setValue('title', 3.0), throwsArgumentError);
@@ -269,6 +338,37 @@ void main() {
         contains('final SceneColor brand = const SceneColor(0xFFFF8A5C)'),
       );
       expect(() => editor.localizeToken('title'), throwsArgumentError);
+    });
+
+    test('a declared mode reaches the canvas picker, and leaves it', () {
+      var editor = file.editor;
+      expect(editor.tokenModes, ['dark']);
+      library.addMode('dense');
+      expect(editor.tokenModes, ['dark', 'dense']);
+      editor.tokenMode = 'dense';
+      expect(
+        file.scene.root.fill,
+        const SceneColor(0xFFE8632B),
+        reason: 'default',
+      );
+      library.deleteMode('dense');
+      expect(editor.tokenModes, ['dark']);
+      expect(editor.tokenMode, isNull, reason: 'the mode on show is gone');
+      // A style's mode moves the readers in that mode.
+      editor.tokenMode = 'dark';
+      library.setStyle(
+        'title',
+        const SceneTextStyle(fontSize: 40),
+        mode: 'dark',
+      );
+      expect((file.scene.nodeNamed('headline')! as TextNode).fontSize, 40);
+      expect(
+        (file.scene.nodeNamed('sub')! as TextNode).fontSize,
+        20,
+        reason: 'override',
+      );
+      editor.tokenMode = null;
+      expect((file.scene.nodeNamed('headline')! as TextNode).fontSize, 54);
     });
 
     test('a library added later counts', () {

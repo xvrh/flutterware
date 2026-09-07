@@ -3,6 +3,9 @@
 // tokens formal, with a dark mode so a set can be flipped under a scene.
 import 'package:flutterware/scene_authoring.dart';
 
+// Declared by name: a mode exists before any token differs in it.
+const sampleTokensModes = ['dark', 'dense'];
+
 final sampleTokens = [
   const Token<SceneColor>(
     'surface',

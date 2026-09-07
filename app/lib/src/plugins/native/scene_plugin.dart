@@ -372,6 +372,7 @@ class _ScenePanelState extends State<_ScenePanel>
       File(entry.path).readAsStringSync(),
       declaredArgs: _declaredArgs(),
       tokens: _liveTokens(libraries),
+      modes: {for (var l in libraries) ...l.modes}.toList()..sort(),
     );
     if (!opened.ok) {
       setState(() {
@@ -577,6 +578,7 @@ class _ScenePanelState extends State<_ScenePanel>
         File(entry.path).readAsStringSync(),
         declaredArgs: _declaredArgs(),
         tokens: _tokens(),
+        modes: _workspace?.modeNames ?? const [],
       );
       if (!opened.ok) {
         setState(() {

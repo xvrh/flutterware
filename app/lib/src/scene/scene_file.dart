@@ -184,9 +184,12 @@ ${_imports(imports, needsArgs: _placesSomething(doc) || hasTokensFormal)}
   if (hasTokensFormal && !seen.add(tokensFormal)) {
     throw ArgumentError('"$tokensFormal" is not a usable tokens formal name');
   }
-  var scope = _Scope(params, {
-    for (var t in doc.tokens) t.name: t,
-  }, tokensFormal);
+  var scope = _Scope(
+    params,
+    {for (var t in doc.tokens) t.name: t},
+    tokensFormal,
+    doc.tokenMode,
+  );
   if (doc.params.isEmpty && !hasTokensFormal) {
     out.writeln('class $className extends SceneDefinition {');
   } else {
@@ -280,11 +283,15 @@ String _freeFormal(SceneDocument doc, String base) {
 /// What a node initializer may name: the parameters, the tokens and what
 /// the tokens formal is called.
 class _Scope {
-  _Scope(this.params, this.tokens, this.tokensFormal);
+  _Scope(this.params, this.tokens, this.tokensFormal, this.mode);
 
   final Map<String, SceneParamDecl> params;
   final Map<String, SceneTokenDecl> tokens;
   final String tokensFormal;
+
+  /// The mode the document's values are in — what a style's fields are
+  /// compared against, since the nodes show that mode's style.
+  final String? mode;
 }
 
 /// The file's other imports, canonically: package ones first, each group
@@ -377,7 +384,7 @@ void _emitNode(
   /// baseline the text properties are compared against instead of the
   /// table's defaults: equal to the style is inherited and not written.
   var style = switch (n.bindings[styleBindingKey]) {
-    StyleRef(:var name) => scope.tokens[name]?.style,
+    StyleRef(:var name) => scope.tokens[name]?.styleIn(scope.mode),
     _ => null,
   };
 

@@ -133,8 +133,10 @@ class SceneTokens {
     ink: SceneColor(0xFFEEEEEE),
   );
 
+  static const dense = SceneTokens();
+
   /// Every mode the declaration names, by name.
-  static const modes = <String, SceneTokens>{'dark': dark};
+  static const modes = <String, SceneTokens>{'dark': dark, 'dense': dense};
 
   /// The app's own, as the group exports it.
   SceneColor get accent => sceneColorOf(_token('accent')! as Color);

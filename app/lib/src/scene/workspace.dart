@@ -44,6 +44,7 @@ class SceneFile implements SceneSavable {
     String source, {
     Map<String, Set<String>> declaredArgs = const {},
     List<SceneTokenDecl> tokens = const [],
+    List<String> modes = const [],
   }) {
     var parsed = parseSceneFile(
       source,
@@ -51,6 +52,7 @@ class SceneFile implements SceneSavable {
       tokens: tokens,
     );
     if (!parsed.ok) return SceneFileOpen._(null, parsed.refusals);
+    parsed.doc!.tokenModeNames.addAll(modes);
     return SceneFileOpen._(
       SceneFile(
         path: path,
@@ -153,6 +155,7 @@ class SceneFile implements SceneSavable {
     imports
       ..clear()
       ..addAll(parsed.imports);
+    parsed.doc!.tokenModeNames.addAll(editor.doc.tokenModeNames);
     editor.adopt(parsed.doc!, parsed.motions);
     _disk = source;
     _savedRevision = editor.revision;
@@ -223,11 +226,16 @@ class SceneWorkspace extends SceneListenable {
     _onLibrary();
   }
 
+  /// Every mode the libraries know, sorted.
+  List<String> get modeNames =>
+      {for (var l in libraries) ...l.modes}.toList()..sort();
+
   void _onLibrary() {
     var tokens = tokensFor?.call(libraries);
     if (tokens == null) return;
+    var modes = modeNames;
     for (var file in _opened.values) {
-      file.editor.retokenize(tokens);
+      file.editor.retokenize(tokens, modes: modes);
     }
     // A nested instance carries its own copy of the child's document.
     resolveInstances(active);

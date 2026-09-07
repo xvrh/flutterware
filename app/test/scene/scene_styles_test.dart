@@ -70,14 +70,22 @@ void main() {
       ]);
     });
 
-    test('refuses a field that is not one, and modes', () {
+    test('refuses a field that is not one; a style is whole per mode', () {
       var parsed = parseTokensFile('''
 final sceneTokens = [
   Token<SceneTextStyle>('a', SceneTextStyle(letterSpacing: 2)),
-  Token<SceneTextStyle>('b', SceneTextStyle(fontSize: 10), modes: {'dark': SceneTextStyle()}),
+  Token<SceneTextStyle>('b', SceneTextStyle(fontSize: 10), modes: {'dark': SceneTextStyle(fontSize: 12, color: SceneColor(0xFFFFFFFF))}),
+  Token<SceneTextStyle>('c', SceneTextStyle(fontSize: 10), modes: {'dark': 3}),
 ];
 ''');
-      expect(parsed.refusals.map((r) => r.construct), ['style', 'modes']);
+      expect(parsed.refusals.map((r) => r.construct), ['style', 'token value']);
+      var b = parsed.tokens.single;
+      expect(
+        b.styleIn('dark'),
+        const SceneTextStyle(fontSize: 12, color: SceneColor(0xFFFFFFFF)),
+      );
+      expect(b.styleIn('sepia'), b.style, reason: 'no value there: default');
+      expect(b.styleIn(null), b.style);
     });
 
     test('is a const field on the generated class', () {
@@ -92,6 +100,79 @@ final sceneTokens = [
         ),
       );
       expect(flat, contains('color: SceneColor(0xFFD8C9BD), maxLines: 2'));
+    });
+  });
+
+  group('a style in a mode', () {
+    final tokens = parseTokensFile('''
+final sceneTokens = [
+  const Token<SceneColor>('ink', SceneColor(0xFF111111)),
+  const Token<SceneTextStyle>(
+    'title',
+    SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700, align: SceneTextAlign.center),
+    modes: {'dark': SceneTextStyle(fontSize: 40, weight: SceneFontWeight.w900, color: SceneColor(0xFFFFFFFF))},
+  ),
+  const Token<SceneTextStyle>('body', SceneTextStyle(fontSize: 20, color: SceneColor(0xFFD8C9BD), maxLines: 2)),
+];
+''').tokens;
+
+    SceneEditor open() =>
+        SceneEditor(parseSceneFile(_scene, tokens: tokens).doc!);
+
+    test('the mode switch moves what was inherited, and back', () {
+      var e = open();
+      var headline = e.doc.nodeNamed('headline')! as TextNode;
+      var sub = e.doc.nodeNamed('sub')! as TextNode;
+      e.tokenMode = 'dark';
+      expect(headline.fontSize, 40);
+      expect(headline.weight, SceneFontWeight.w900);
+      expect(
+        headline.color,
+        const SceneColor(0xFF111111),
+        reason: 'bound to ink on its own: the binding wins over the style',
+      );
+      expect(sub.fontSize, 24, reason: 'body has no dark style');
+      e.tokenMode = null;
+      expect(headline.fontSize, 54);
+      expect(headline.weight, SceneFontWeight.w700);
+    });
+
+    test('an override survives the switch; the file follows the mode', () {
+      var e = open();
+      var headline = e.doc.nodeNamed('headline')! as TextNode;
+      e.perform('Size', () => headline.fontSize = 30);
+      e.tokenMode = 'dark';
+      expect(headline.fontSize, 30, reason: 'an override');
+      expect(headline.weight, SceneFontWeight.w900, reason: 'inherited');
+      var dark = _emit(e.doc);
+      expect(dark, contains('fontSize: 30'));
+      expect(dark, isNot(contains('weight:')), reason: 'inherited in dark');
+      e.tokenMode = null;
+      expect(_emit(e.doc), isNot(contains('weight:')));
+    });
+
+    test('the generated set carries the whole style of the mode', () {
+      var source = emitSceneArgs(externals: [], scenes: [], tokens: tokens);
+      var flat = source.replaceAll(RegExp(r'\s+'), ' ');
+      expect(
+        flat,
+        contains(
+          'static const dark = SceneTokens( title: SceneTextStyle( '
+          'fontSize: 40.0, weight: SceneFontWeight.w900, '
+          'color: SceneColor(0xFFFFFFFF), ), );',
+        ),
+      );
+    });
+
+    test('a declared mode no token differs in is a static too', () {
+      var source = emitSceneArgs(
+        externals: [],
+        scenes: [],
+        tokens: tokens,
+        modes: const ['dense'],
+      );
+      expect(source, contains('static const dense = SceneTokens();'));
+      expect(source, contains("'dark': dark, 'dense': dense"));
     });
   });
 

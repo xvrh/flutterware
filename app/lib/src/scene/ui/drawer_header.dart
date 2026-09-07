@@ -7,6 +7,8 @@ import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import 'inline_name.dart';
+import '../tokens_file.dart';
+import '../tokens_library.dart';
 import 'param_pane.dart';
 import 'tokens_host.dart';
 
@@ -62,12 +64,18 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
           when editor.doc.paramNamed(name)?.kind == SceneParamKind.list =>
         'table',
       TokenAside() => 'token',
+      LibraryAside() => 'library',
       _ => 'parameter',
     };
     var kindWord = switch (open) {
       MotionAside() => 'Motion',
       TokenAside() => 'Token',
+      LibraryAside() => 'Library',
       _ => 'Parameter',
+    };
+    var shown = switch (open) {
+      LibraryAside(:var path) => tokensSymbolFor(path),
+      _ => active,
     };
     var collapsed = editor.drawerCollapsed;
     return Container(
@@ -104,7 +112,9 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
               style: type.caption.copyWith(color: colors.mut2),
             ),
             GestureDetector(
-              onDoubleTap: () => setState(() => _renaming = true),
+              onDoubleTap: open is LibraryAside
+                  ? null
+                  : () => setState(() => _renaming = true),
               onSecondaryTapUp: (d) =>
                   showContextMenu(context, d.globalPosition, _menu(open)),
               child: _renaming
@@ -118,7 +128,7 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
                         onCancel: () => setState(() => _renaming = false),
                       ),
                     )
-                  : Text(active, style: type.bodyStrong),
+                  : Text(shown ?? active, style: type.bodyStrong),
             ),
             if (_openable().length > 1)
               _HeaderButton(
@@ -173,6 +183,13 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
         return '$what · read by $readers';
       case TokenAside(:var name):
         return tokenFacts(editor, widget.tokens, name);
+      case LibraryAside(:var path):
+        var library = widget.tokens?.libraryAt(path);
+        if (library == null) return "not one of the group's libraries";
+        var n = library.tokens.length;
+        var m = library.modes.length;
+        return '${library.fileName} · $n ${n == 1 ? 'token' : 'tokens'} · '
+            '$m ${m == 1 ? 'mode' : 'modes'}';
     }
   }
 
@@ -192,6 +209,8 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
           } else {
             throw ArgumentError('no library open to rename in');
           }
+        case LibraryAside():
+          throw ArgumentError('a library is named by its file — rename that');
       }
     } on ArgumentError catch (e) {
       return e.message as String?;
@@ -228,6 +247,15 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
         ];
       case TokenAside(:var name):
         return tokenMenu(editor, widget.tokens, name, onRename: rename);
+      case LibraryAside(:var path):
+        var library = widget.tokens?.libraryAt(path);
+        if (library == null) return const [];
+        return newTokenEntries(
+          editor,
+          widget.tokens!,
+          library,
+          onAdded: (name) => widget.onPick(TokenAside(name)),
+        );
     }
   }
 
@@ -237,6 +265,8 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
     for (var name in editor.motions.keys) MotionAside(name),
     for (var p in editor.doc.params) ParamAside(p.name),
     for (var t in editor.doc.tokens) TokenAside(t.name),
+    for (var l in widget.tokens?.libraries ?? const <TokensLibrary>[])
+      LibraryAside(l.path),
   ];
 
   List<MenuEntry> _switcher(SceneAside open) {
@@ -244,6 +274,7 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
     var motions = all.whereType<MotionAside>().toList();
     var params = all.whereType<ParamAside>().toList();
     var tokens = all.whereType<TokenAside>().toList();
+    var libraries = all.whereType<LibraryAside>().toList();
     return [
       if (motions.isNotEmpty) const MenuHeader('Motions'),
       for (var m in motions)
@@ -265,6 +296,13 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
           t.name,
           icon: t == open ? Icons.check : null,
           onSelected: t == open ? null : () => widget.onPick(t),
+        ),
+      if (libraries.isNotEmpty) const MenuHeader('Libraries'),
+      for (var l in libraries)
+        MenuItem(
+          tokensSymbolFor(l.path),
+          icon: l == open ? Icons.check : null,
+          onSelected: l == open ? null : () => widget.onPick(l),
         ),
     ];
   }

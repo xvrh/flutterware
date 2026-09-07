@@ -1,14 +1,14 @@
 //@flutterware:tokens=1
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. A token is `Token<T>('name', value, modes: {…})`; every scene of a
-// group that lists `brandTokens` reads it as `tokens.name`. Hand edits are
+// group that lists this library reads it as `tokens.name`. Hand edits are
 // welcome inside the grammar; anything outside it is refused with a line
 // number rather than silently dropped.
 import 'package:flutterware/scene_authoring.dart';
 
+const brandTokensModes = ['dark'];
+
 final brandTokens = [
-  // A token that differs by mode names the other value: the generated
-  // `SceneTokens.dark` is the whole set with these swapped in.
   const Token<SceneColor>(
     'brand',
     SceneColor(0xFFE8632B),
@@ -25,8 +25,6 @@ final brandTokens = [
     modes: {'dark': SceneColor(0xFFF3E9E1)},
   ),
   const Token<double>('radius', 28),
-  // Text styles: the text subset of the table, shared whole. A scene writes
-  // `TextNode(headline, style: tokens.title)` and overrides what it must.
   const Token<SceneTextStyle>(
     'title',
     SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700),

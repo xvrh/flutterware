@@ -21,10 +21,13 @@ import 'tokens_file.dart';
 /// One library as a group sees it: where it is, what it is called, and
 /// what it declares.
 class GroupLibrary {
-  GroupLibrary(this.entry, this.tokens);
+  GroupLibrary(this.entry, this.tokens, {this.modes = const []});
 
   final SceneLibraryEntry entry;
   final List<SceneTokenDecl> tokens;
+
+  /// The modes the library declares by name.
+  final List<String> modes;
 }
 
 /// What a group's declaration and its libraries add up to — the vocabulary
@@ -51,6 +54,13 @@ class GroupVocabulary {
     for (var l in libraries) ...l.tokens,
     ...exports,
   ];
+
+  /// Every mode the libraries declare or a token names, sorted — the
+  /// generated statics, and what the canvas offers.
+  List<String> get modes => {
+    for (var l in libraries) ...l.modes,
+    for (var t in tokens) ...t.modes.keys,
+  }.toList()..sort();
 
   Map<String, Set<String>> get declaredArgs => {
     for (var w in widgets) w.entry: {for (var a in w.args) a.name},
@@ -140,7 +150,7 @@ class SceneArgsResult {
         ),
       );
     }
-    libraries.add(GroupLibrary(entry, tokens.tokens));
+    libraries.add(GroupLibrary(entry, tokens.tokens, modes: tokens.modes));
     for (var t in tokens.tokens) {
       var other = seen[t.name];
       if (other != null) {
@@ -225,6 +235,7 @@ SceneArgsResult generateSceneArgsFor(
     externals: vocabulary.widgets,
     scenes: scenes,
     tokens: tokens,
+    modes: vocabulary.modes,
     declarationImports: vocabulary.imports,
   );
   if (target.existsSync() && target.readAsStringSync() == source) {

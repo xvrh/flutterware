@@ -477,6 +477,36 @@ the editor's file, the scene-file rule.
 for every kind including styles; the canvas picker reads the union's mode
 list. Lands: light and dark authored in the editor rather than in a file.
 
+**T3 landed 2026-09-07.** A mode is declared by name, so it exists before
+any token differs in it: the library file carries `const <symbol>Modes =
+['dark', 'dense'];` beside its list (`modesSymbolFor`), the reader returns
+it as `TokensParse.modes`, and the emitter writes the union of the declared
+names and every mode a token names. `TokensLibrary.addMode/renameMode/
+deleteMode` (journaled with the token list; a rename or delete follows into
+every token's values), `differingIn(mode)`, and `setStyle(name, style,
+mode:)` — a style is whole per mode, the way a value is: `modes: {'dark':
+SceneTextStyle(…)}`, equal-to-default means no entry, `SceneTokenDecl
+.styleIn(mode)` reads it. The generated class emits a static for every
+declared mode, differing tokens or not (`static const dense =
+SceneTokens();`), with a mode's whole style where one differs. The mode
+list rides the vocabulary: `SceneDocument.tokenModeNames` (set by
+`SceneFile.open(modes:)` and `editor.retokenize(next, modes:)` from
+`workspace.modeNames`), and `editor.tokenModes` is that union — the canvas
+picker offers a mode nothing differs in yet. Switching modes now moves
+style readers too: `applyTokenMode(doc, from:)` takes the mode the values
+were in, and every property inherited from the old mode's style takes the
+new mode's; a property with its own binding follows the binding, never the
+style; the emitter compares a text against the style in the document's
+mode. UI: a `LibraryAside(path)` opens in the drawer from the library's
+divider in the tree (or the header's switcher) — `SceneLibraryPane` lists
+the modes with how many tokens differ, click shows the mode on the canvas,
+double-click renames, right-click deletes, `+ Add mode` names a new one
+and shows it; the token pane's style editor gets a Default/dark/… row and
+edits one mode's style at a time, with *same as default* to drop a mode's
+own. Verified live on the demo: a mode added from the pane reached the
+picker, the file and the regenerated `scene_args.dart` within a save; the
+title's dark weight moved the canvas's headline and came back.
+
 **T4 — import merges.** §4.8, with the report shown in the library pane.
 Lands: a design file's variables refresh a library the user has also edited,
 without losing either side.

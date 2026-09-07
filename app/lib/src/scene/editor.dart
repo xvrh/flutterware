@@ -104,6 +104,14 @@ class TokenAside extends SceneAside {
   const TokenAside(super.name);
 }
 
+/// A token library the group lists, by path — opened for what is the
+/// library's rather than any one token's: its modes.
+class LibraryAside extends SceneAside {
+  const LibraryAside(super.name);
+
+  String get path => name;
+}
+
 class SceneEditor extends SceneListenable {
   SceneEditor(this.doc, {Map<String, MotionDocument> motions = const {}})
     : motions = {...motions};
@@ -126,9 +134,29 @@ class SceneEditor extends SceneListenable {
     if (name != null) {
       _openParam = null;
       _openToken = null;
+      _openLibrary = null;
     }
     _drawerCollapsed = false;
     clearKeySelection();
+    notifyListeners();
+  }
+
+  /// The library open in the drawer, by path, or null — for its modes.
+  /// The editor knows no library; whoever draws the pane says whether the
+  /// path is still one of the group's.
+  String? get openLibrary => _openLibrary;
+  String? _openLibrary;
+
+  set openLibrary(String? path) {
+    if (_openLibrary == path) return;
+    _openLibrary = path;
+    if (path != null) {
+      _activeMotion = null;
+      _openParam = null;
+      _openToken = null;
+      clearKeySelection();
+    }
+    _drawerCollapsed = false;
     notifyListeners();
   }
 
@@ -144,6 +172,7 @@ class SceneEditor extends SceneListenable {
     if (name != null) {
       _activeMotion = null;
       _openParam = null;
+      _openLibrary = null;
       clearKeySelection();
     }
     _drawerCollapsed = false;
@@ -163,6 +192,7 @@ class SceneEditor extends SceneListenable {
     if (name != null) {
       _activeMotion = null;
       _openToken = null;
+      _openLibrary = null;
       clearKeySelection();
     }
     _drawerCollapsed = false;
@@ -171,12 +201,14 @@ class SceneEditor extends SceneListenable {
 
   /// What the drawer under the canvas is showing — a motion, a parameter or
   /// a token — or null. The outline highlights exactly this row.
-  SceneAside? get drawer => switch ((activeMotion, openParam, openToken)) {
-    (var m?, _, _) => MotionAside(m),
-    (_, var p?, _) => ParamAside(p),
-    (_, _, var t?) => TokenAside(t),
-    _ => null,
-  };
+  SceneAside? get drawer =>
+      switch ((activeMotion, openParam, openToken, openLibrary)) {
+        (var m?, _, _, _) => MotionAside(m),
+        (_, var p?, _, _) => ParamAside(p),
+        (_, _, var t?, _) => TokenAside(t),
+        (_, _, _, var l?) => LibraryAside(l),
+        _ => null,
+      };
 
   // ---------------------------------------------------------------------
   // Tokens are declared elsewhere — a library the editor owns, an export
@@ -192,12 +224,19 @@ class SceneEditor extends SceneListenable {
   /// value on every property that was inherited from the old one; a
   /// reference to a token that is gone is dropped, as an edit would drop
   /// it.
-  void retokenize(List<SceneTokenDecl> next) {
+  void retokenize(List<SceneTokenDecl> next, {List<String> modes = const []}) {
     var old = {for (var t in doc.tokens) t.name: t};
     doc.edit(() {
       doc.tokens
         ..clear()
         ..addAll(next);
+      doc.tokenModeNames
+        ..clear()
+        ..addAll(modes);
+      // The mode on show may be gone with the library's change.
+      if (doc.tokenMode != null && !tokenModes.contains(doc.tokenMode)) {
+        doc.tokenMode = null;
+      }
       for (var (node, _) in doc.walk()) {
         for (var e in node.bindings.entries.toList()) {
           switch (e.value) {
@@ -207,10 +246,12 @@ class SceneEditor extends SceneListenable {
                 setSceneProperty(node, e.key, decl.valueIn(doc.tokenMode));
               }
             case StyleRef(:var name):
-              var was = old[name]?.style;
-              var now = doc.tokenNamed(name)?.style;
+              var was = old[name]?.styleIn(doc.tokenMode);
+              var now = doc.tokenNamed(name)?.styleIn(doc.tokenMode);
               if (now == null) continue;
               for (var f in now.values.entries) {
+                // A property bound on its own follows its binding.
+                if (node.bindings.containsKey(f.key)) continue;
                 var current = getSceneProperty(node, f.key);
                 // Inherited from the old style, or never set by it: follow.
                 if (was == null ||
@@ -349,14 +390,17 @@ class SceneEditor extends SceneListenable {
       throw ArgumentError('no token mode "$mode" — ${tokenModes.join(', ')}');
     }
     if (doc.tokenMode == mode) return;
+    var from = doc.tokenMode;
     doc.tokenMode = mode;
-    doc.edit(() => applyTokenMode(doc));
+    doc.edit(() => applyTokenMode(doc, from: from));
     notifyListeners();
   }
 
-  /// Every mode the declaration names, sorted.
-  List<String> get tokenModes =>
-      {for (var t in doc.tokens) ...t.modes.keys}.toList()..sort();
+  /// Every mode the group's libraries declare or a token names, sorted.
+  List<String> get tokenModes => {
+    ...doc.tokenModeNames,
+    for (var t in doc.tokens) ...t.modes.keys,
+  }.toList()..sort();
 
   /// Whether the drawer under the canvas is folded away while its motion
   /// stays open — the header keeps naming it, the motion stays on the

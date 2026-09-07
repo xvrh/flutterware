@@ -66,6 +66,7 @@ String emitSceneArgs({
   required List<ExternalWidgetDecl> externals,
   required List<SceneClassDecl> scenes,
   List<SceneTokenDecl> tokens = const [],
+  List<String> modes = const [],
   List<String> declarationImports = const [],
   bool entries = true,
 }) {
@@ -202,7 +203,7 @@ String emitSceneArgs({
     );
   }
 
-  if (tokens.isNotEmpty) _tokensClass(out, tokens);
+  if (tokens.isNotEmpty) _tokensClass(out, tokens, modes);
 
   if (externals.isNotEmpty) {
     out
@@ -352,7 +353,11 @@ void _argsClass(
 /// which a const cannot hold and this file cannot spell, so it is read from
 /// the declaration list at the moment a scene asks — the same move as
 /// `_external` below.
-void _tokensClass(StringBuffer out, List<SceneTokenDecl> tokens) {
+void _tokensClass(
+  StringBuffer out,
+  List<SceneTokenDecl> tokens,
+  List<String> declaredModes,
+) {
   var values = [
     for (var t in tokens)
       if (t.hasValue) t,
@@ -380,7 +385,10 @@ void _tokensClass(StringBuffer out, List<SceneTokenDecl> tokens) {
   // One static set per mode name any token carries: the mode's value where
   // the token names it, the default everywhere else. `modes` is the switch
   // a canvas or an app flips.
-  var modeNames = {for (var t in values) ...t.modes.keys}.toList()..sort();
+  var modeNames = {
+    ...declaredModes,
+    for (var t in values) ...t.modes.keys,
+  }.toList()..sort();
   for (var mode in modeNames) {
     // Inside a const set, so a colour is spelled without its own `const`.
     var args = [

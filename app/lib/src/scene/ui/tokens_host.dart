@@ -49,6 +49,10 @@ class SceneTokensHost {
   /// `Scene · node.prop`, for the pane.
   final List<String> Function(String name)? readersElsewhere;
 
+  /// The library at [path], or null when the group does not list it.
+  TokensLibrary? libraryAt(String path) =>
+      libraries.where((l) => l.path == path).firstOrNull;
+
   /// The library declaring [name], or null for an export.
   TokensLibrary? libraryOf(String name) {
     for (var library in libraries) {
@@ -74,6 +78,45 @@ class SceneTokensHost {
     library.rename(name, wanted, taken: takenIn(editor)..remove(name));
     editor.renameTokenRefs(name, wanted);
   }
+}
+
+/// The entries that add a token to [library] — one per kind, then a style
+/// — named after the kind and opened at once, so the name is the first
+/// thing typed. [onAdded] takes the new token's name.
+List<MenuEntry> newTokenEntries(
+  SceneEditor editor,
+  SceneTokensHost host,
+  TokensLibrary library, {
+  required ValueChanged<String> onAdded,
+}) {
+  Set<String> taken() =>
+      host.takenIn(editor)..removeAll(library.tokens.map((t) => t.name));
+  return [
+    MenuHeader('New token in ${library.symbol}'),
+    for (var (kind, label, type) in paramKinds)
+      MenuItem(
+        label,
+        icon: paramKindIcon(kind),
+        shortcut: type,
+        onSelected: () {
+          var free = taken();
+          var name = library.freeName(kind.name, taken: free);
+          library.add(name, kind, taken: free);
+          onAdded(name);
+        },
+      ),
+    MenuItem(
+      'Style',
+      icon: Icons.text_format,
+      shortcut: 'SceneTextStyle',
+      onSelected: () {
+        var free = taken();
+        var name = library.freeName('style', taken: free);
+        library.addStyle(name, taken: free);
+        onAdded(name);
+      },
+    ),
+  ];
 }
 
 /// The word a token's value is shown as beside its name.

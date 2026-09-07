@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/action_button.dart';
@@ -34,10 +35,31 @@ class SceneTokenPane extends StatelessWidget {
     var decl = editor.doc.tokenNamed(name);
     if (decl == null) return const SizedBox.shrink();
     var library = host?.libraryOf(name);
-    var readers = editor.readersOfToken(name);
-    var elsewhere = host?.readersElsewhere?.call(name) ?? const [];
     var colors = context.colors;
     var caption = context.type.caption.copyWith(color: colors.mut2);
+    if (library != null) {
+      // The library's own edits — from this pane, or another scene's —
+      // redraw it; the readers below follow through the document.
+      return AnimatedBuilder(
+        animation: library.listenable,
+        builder: (context, _) => _body(context, library, caption),
+      );
+    }
+    return _body(context, library, caption);
+  }
+
+  Widget _body(
+    BuildContext context,
+    TokensLibrary? library,
+    TextStyle caption,
+  ) {
+    // Read again here: the library's edit reached the document before this
+    // rebuild, and the declaration above is the one from before it.
+    var decl = editor.doc.tokenNamed(name);
+    if (decl == null) return const SizedBox.shrink();
+    var colors = context.colors;
+    var readers = editor.readersOfToken(name);
+    var elsewhere = host?.readersElsewhere?.call(name) ?? const [];
     return Container(
       key: ValueKey('pane:token:$name'),
       color: colors.panel,
@@ -263,17 +285,42 @@ class SceneTokenPane extends StatelessWidget {
   }
 
   /// A style's fields: size, weight, colour, align, max lines — each
-  /// unset-able, because a style sets only what it sets.
+  /// unset-able, because a style sets only what it sets. One style per
+  /// mode, edited one at a time: the row over the fields picks which, and
+  /// follows the canvas's mode when the pane opens.
   Widget _style(
     BuildContext context,
     TokensLibrary library,
     SceneTokenDecl decl,
     TextStyle caption,
   ) {
-    var style = decl.style!;
-    var key = 'style:${decl.name}';
+    var modes = library.modes;
+    if (modes.isEmpty) {
+      return _styleFields(context, library, decl, null, caption);
+    }
+    return _StyleModes(
+      key: ValueKey('style-modes:${decl.name}'),
+      initial: editor.tokenMode != null && modes.contains(editor.tokenMode)
+          ? editor.tokenMode
+          : null,
+      modes: modes,
+      own: (mode) => mode == null || decl.modes.containsKey(mode),
+      builder: (context, mode) =>
+          _styleFields(context, library, decl, mode, caption),
+    );
+  }
+
+  Widget _styleFields(
+    BuildContext context,
+    TokensLibrary library,
+    SceneTokenDecl decl,
+    String? mode,
+    TextStyle caption,
+  ) {
+    var style = decl.styleIn(mode)!;
+    var key = 'style:${decl.name}:${mode ?? ''}';
     void put(SceneTextStyle next, {String? mergeKey}) =>
-        library.setStyle(decl.name, next, mergeKey: mergeKey);
+        library.setStyle(decl.name, next, mode: mode, mergeKey: mergeKey);
     Widget field(String label, Widget control, {VoidCallback? unset}) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -303,11 +350,36 @@ class SceneTokenPane extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: FwSpacing.md,
       children: [
-        Text(
-          'A text style: what it sets, a text takes whole and may override '
-          'property by property.',
-          style: context.type.micro.copyWith(color: context.colors.mut2),
-        ),
+        if (mode == null)
+          Text(
+            'A text style: what it sets, a text takes whole and may override '
+            'property by property.',
+            style: context.type.micro.copyWith(color: context.colors.mut2),
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  decl.modes.containsKey(mode)
+                      ? 'The style in $mode.'
+                      : "Same as the default — an edit makes it $mode's own.",
+                  style: context.type.micro.copyWith(
+                    color: context.colors.mut2,
+                  ),
+                ),
+              ),
+              if (decl.modes.containsKey(mode))
+                Tappable(
+                  onTap: () =>
+                      library.setStyle(decl.name, decl.style!, mode: mode),
+                  child: Text(
+                    'same as default',
+                    style: caption.copyWith(color: context.colors.accent),
+                  ),
+                ),
+            ],
+          ),
         field(
           style.fontSize == null ? 'Size · unset' : 'Size',
           SceneNumberField(
@@ -382,4 +454,73 @@ class SceneTokenPane extends StatelessWidget {
     align: clearAlign ? null : align ?? s.align,
     maxLines: s.maxLines,
   );
+}
+
+/// The row picking which mode's style the fields below edit: the default,
+/// then each mode the library names; a mode with no style of its own is
+/// marked so. Local state, because which column is being edited is the
+/// pane's business, not the document's.
+class _StyleModes extends StatefulWidget {
+  const _StyleModes({
+    super.key,
+    required this.initial,
+    required this.modes,
+    required this.own,
+    required this.builder,
+  });
+
+  final String? initial;
+  final List<String> modes;
+  final bool Function(String? mode) own;
+  final Widget Function(BuildContext context, String? mode) builder;
+
+  @override
+  State<_StyleModes> createState() => _StyleModesState();
+}
+
+class _StyleModesState extends State<_StyleModes> {
+  late String? _mode = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var mode = widget.modes.contains(_mode) ? _mode : null;
+    Widget tab(String? m, String label) {
+      var on = m == mode;
+      return Tappable(
+        key: ValueKey('style-mode:${m ?? 'default'}'),
+        onTap: () => setState(() => _mode = m),
+        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: FwSpacing.xs,
+            vertical: FwSpacing.xxs,
+          ),
+          child: Text(
+            widget.own(m) ? label : '$label ·',
+            style: context.type.caption.copyWith(
+              color: on ? colors.accentDark : colors.mut2,
+              fontWeight: on ? FontWeight.w600 : null,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      spacing: FwSpacing.sm,
+      children: [
+        Wrap(
+          spacing: FwSpacing.xs,
+          children: [
+            tab(null, 'Default'),
+            for (var m in widget.modes) tab(m, m),
+          ],
+        ),
+        widget.builder(context, mode),
+      ],
+    );
+  }
 }

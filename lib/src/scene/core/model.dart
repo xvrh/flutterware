@@ -136,12 +136,14 @@ class SceneTokenDecl {
   /// A text style: a bundle of table values the editor renders and a text
   /// node takes whole, with each property still its own to override. No
   /// mode yet — a style that differs by mode is a later piece.
-  const SceneTokenDecl.style(this.name, SceneTextStyle this.value)
-    : kind = null,
-      type = 'SceneTextStyle',
-      modes = const {},
-      owner = SceneTokenOwner.library,
-      _styleType = true;
+  const SceneTokenDecl.style(
+    this.name,
+    SceneTextStyle this.value, {
+    this.modes = const {},
+  }) : kind = null,
+       type = 'SceneTextStyle',
+       owner = SceneTokenOwner.library,
+       _styleType = true;
 
   final String name;
 
@@ -199,6 +201,10 @@ class SceneTokenDecl {
   /// which is the rule the generated `SceneTokens.<mode>` set follows. Null
   /// for an export.
   Object? valueIn(String? mode) => mode == null ? value : modes[mode] ?? value;
+
+  /// The style in [mode], for a library style; null otherwise.
+  SceneTextStyle? styleIn(String? mode) =>
+      style == null ? null : valueIn(mode)! as SceneTextStyle;
 
   String get typeName => type;
 
@@ -1274,6 +1280,11 @@ class SceneDocument extends SceneListenable {
   /// written: the file spells the reference, and the mode is what the canvas
   /// (or the app's `tokens:` argument) puts behind it. See `applyTokenMode`.
   String? tokenMode;
+
+  /// Every mode the group's libraries declare, whether or not any token
+  /// here differs in it — what the canvas offers to switch to. Set beside
+  /// [tokens] by whoever hands the document its vocabulary.
+  final tokenModeNames = <String>[];
 
   SceneTokenDecl? tokenNamed(String name) {
     for (var t in tokens) {

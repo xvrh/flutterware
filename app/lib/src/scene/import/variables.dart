@@ -406,6 +406,8 @@ $importedTokensMarker $from
 // lost then. Refusals, if any, are listed at the end.
 import 'package:flutterware/scene_authoring.dart';
 
+const ${modesSymbolFor(symbol)} = [${import.modeNames.map((m) => "'$m'").join(', ')}];
+
 final $symbol = [
 ''');
   for (var t in import.tokens) {
