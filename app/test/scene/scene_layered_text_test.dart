@@ -49,6 +49,55 @@ void main() {
     );
   });
 
+  testWidgets('a pass is shaped by the ambient style, like the base is', (
+    tester,
+  ) async {
+    // The bug this pins: a `Text` merges over the ambient `DefaultTextStyle`
+    // and a `TextPainter` merges over nothing, so a scene that names no size
+    // or family had the base and the passes SHAPING differently — wrapping at
+    // different widths, and a box that no longer described what was painted
+    // in it. It reads as a layout bug in whatever holds the text.
+    Widget under(TextStyle ambient, List<TextLayer> layers) => MaterialApp(
+      home: DefaultTextStyle(
+        style: ambient,
+        child: Center(
+          child: SizedBox(
+            width: 220,
+            child: LayeredText(
+              span: const TextSpan(text: 'GAME OVER AND OVER AGAIN'),
+              // Says nothing about size: the ambient style answers, and both
+              // halves have to hear the same answer.
+              style: const TextStyle(color: Color(0xFFFFC400)),
+              layers: layers,
+              textAlign: TextAlign.left,
+              maxLines: null,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const ambient = TextStyle(fontSize: 44);
+    await tester.pumpWidget(
+      under(ambient, const [
+        StrokeLayer(width: 8, paint: SolidPaint(SceneColor(0xFF120720))),
+        FillLayer(),
+      ]),
+    );
+    var paint = tester.widget<CustomPaint>(_passes);
+    var painter = paint.foregroundPainter! as SceneTextStackPainter;
+    var base = tester.widget<Text>(find.byType(Text));
+    // The size came from the ambient style, and the passes have to have
+    // heard it too — comparing them to each other rather than to a number,
+    // because it is their AGREEMENT that keeps one layout.
+    expect(painter.style.fontSize, 44);
+    expect(
+      painter.style,
+      base.style!.copyWith(color: painter.style.color),
+      reason: 'one resolved style, two consumers',
+    );
+  });
+
   testWidgets('the box is the same whether it is painted once or nine times', (
     tester,
   ) async {

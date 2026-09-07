@@ -1,0 +1,478 @@
+// The paint stack, as a list you can add to, reorder and take apart.
+//
+// The pattern every design tool already teaches — a row per pass, a swatch, a
+// number, and the rest one tap in — because a stack is read top-down and the
+// order IS the meaning. The model is back to front (the first layer is
+// painted first, so it sits behind); the list shows it FRONT first, which is
+// what "the top layer" means to everyone who has used one of these.
+import 'package:flutter/material.dart';
+import 'package:flutterware/scene_authoring.dart';
+
+import '../../ui/design/design.dart';
+import '../../ui/menu.dart';
+import '../../ui/popover.dart';
+import '../../ui/tappable.dart';
+import '../editor.dart';
+import '../layer_presets.dart';
+import 'number_field.dart';
+import 'number_shape.dart';
+import 'swatches.dart';
+
+class SceneLayerList extends StatefulWidget {
+  const SceneLayerList(this.editor, this.node, {super.key});
+
+  final SceneEditor editor;
+  final TextNode node;
+
+  @override
+  State<SceneLayerList> createState() => _SceneLayerListState();
+}
+
+class _SceneLayerListState extends State<SceneLayerList> {
+  /// Which pass is open, by its position in the MODEL — an index survives a
+  /// rebuild, and nothing else about a layer is stable, because a layer is a
+  /// value and has no identity by decision.
+  int? _open;
+
+  TextNode get _node => widget.node;
+  List<TextLayer> get _layers => _node.layers;
+
+  void _write(String label, List<TextLayer> next, {String? mergeKey}) {
+    widget.editor.perform(label, () => _node.layers = next, mergeKey: mergeKey);
+  }
+
+  void _replace(int i, TextLayer layer, {String? mergeKey}) {
+    var next = [..._layers];
+    next[i] = layer;
+    _write('Layer', next, mergeKey: mergeKey);
+  }
+
+  void _add(TextLayer layer) {
+    // On top, which is where a new pass is expected to land and where it can
+    // actually be seen.
+    _write('Add layer', [..._layers, layer]);
+    setState(() => _open = _layers.length - 1);
+  }
+
+  void _remove(int i) {
+    _write('Remove layer', [..._layers]..removeAt(i));
+    setState(() => _open = null);
+  }
+
+  void _move(int i, int by) {
+    var to = i + by;
+    if (to < 0 || to >= _layers.length) return;
+    var next = [..._layers];
+    next.insert(to, next.removeAt(i));
+    _write('Reorder layers', next);
+    setState(() => _open = to);
+  }
+
+  void _applyPreset(LayerPreset preset) {
+    _write('${preset.name} layers', preset.forSize(_node.fontSize));
+    setState(() => _open = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var caption = context.type.caption.copyWith(color: colors.mut2);
+    // Front first: the last layer painted is the one on top.
+    var rows = [for (var i = _layers.length - 1; i >= 0; i--) _row(context, i)];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text('Paint', style: caption)),
+            _addButton(context),
+          ],
+        ),
+        const Gap(FwSpacing.xs),
+        if (_layers.isEmpty)
+          Text('painted once, in the colour above', style: caption)
+        else
+          ...rows,
+      ],
+    );
+  }
+
+  Widget _addButton(BuildContext context) => Menu(
+    align: PopoverAlign.end,
+    entries: [
+      const MenuHeader('Add a pass'),
+      MenuItem(
+        'Fill',
+        icon: Icons.format_color_fill_outlined,
+        onSelected: () => _add(const FillLayer()),
+      ),
+      MenuItem(
+        'Stroke',
+        icon: Icons.border_color_outlined,
+        onSelected: () => _add(
+          StrokeLayer(width: _node.fontSize / 7, join: SceneStrokeJoin.round),
+        ),
+      ),
+      const MenuDivider(),
+      // A stack nobody could have guessed at, one click away — and then
+      // ordinary layers, with no link back to the preset.
+      const MenuHeader('Start from'),
+      for (var preset in layerPresets)
+        MenuItem(
+          preset.name,
+          icon: Icons.auto_awesome_outlined,
+          shortcut: '${preset.layers.length}',
+          onSelected: () => _applyPreset(preset),
+        ),
+      if (_layers.isNotEmpty) ...[
+        const MenuDivider(),
+        MenuItem(
+          'Clear',
+          icon: Icons.layers_clear_outlined,
+          onSelected: () {
+            _write('Clear layers', const []);
+            setState(() => _open = null);
+          },
+        ),
+      ],
+    ],
+    builder: (context, controller) => Tappable(
+      onTap: controller.toggle,
+      child: Padding(
+        padding: const EdgeInsets.all(FwSpacing.xxs),
+        child: Icon(Icons.add, size: FwIconSize.sm, color: context.colors.mut2),
+      ),
+    ),
+  );
+
+  Widget _row(BuildContext context, int i) {
+    var layer = _layers[i];
+    var colors = context.colors;
+    var open = _open == i;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Tappable.builder(
+          onTap: () => setState(() => _open = open ? null : i),
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          builder: (context, hovered) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: FwSpacing.xxs),
+            child: Row(
+              children: [
+                _chip(context, layer),
+                const Gap(FwSpacing.sm),
+                Expanded(
+                  child: Text(
+                    _describe(layer),
+                    style: context.type.caption,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (hovered) ...[
+                  _icon(
+                    context,
+                    Icons.arrow_upward,
+                    () => _move(i, 1),
+                    enabled: i < _layers.length - 1,
+                  ),
+                  _icon(
+                    context,
+                    Icons.arrow_downward,
+                    () => _move(i, -1),
+                    enabled: i > 0,
+                  ),
+                  _icon(context, Icons.close, () => _remove(i)),
+                ] else
+                  Icon(
+                    open ? Icons.keyboard_arrow_down : Icons.chevron_right,
+                    size: FwIconSize.sm,
+                    color: colors.mut2,
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (open) _detail(context, i, layer),
+      ],
+    );
+  }
+
+  Widget _icon(
+    BuildContext context,
+    IconData icon,
+    VoidCallback onTap, {
+    bool enabled = true,
+  }) => Tappable(
+    onTap: enabled ? onTap : null,
+    child: Padding(
+      padding: const EdgeInsets.all(FwSpacing.xxs),
+      child: Icon(
+        icon,
+        size: FwIconSize.xs,
+        color: enabled ? context.colors.mut2 : context.colors.line,
+      ),
+    ),
+  );
+
+  /// What the pass paints, as a small square — the way a fill list is read at
+  /// a glance in every tool that has one.
+  Widget _chip(BuildContext context, TextLayer layer) {
+    var size = FwIconSize.md;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(context.radii.micro),
+        border: Border.all(color: context.colors.line),
+        color: switch (layer.paint) {
+          SolidPaint(:var color) => Color(color.argb),
+          null => Color(_node.color.argb),
+          LinearPaint() => null,
+        },
+        gradient: switch (layer.paint) {
+          LinearPaint(:var colors, :var stops) => LinearGradient(
+            colors: [for (var c in colors) Color(c.argb)],
+            stops: stops,
+          ),
+          _ => null,
+        },
+      ),
+    );
+  }
+
+  String _describe(TextLayer layer) {
+    var what = switch (layer) {
+      StrokeLayer(:var width) => 'Stroke ${_short(width)}',
+      FillLayer() => 'Fill',
+    };
+    var notes = [
+      if (layer.paint == null) 'text colour',
+      if (layer.blur > 0) 'blur ${_short(layer.blur)}',
+      if (layer.dx != 0 || layer.dy != 0)
+        '${_short(layer.dx)},${_short(layer.dy)}',
+      if (layer.opacity != 1) '${(layer.opacity * 100).round()}%',
+    ];
+    return notes.isEmpty ? what : '$what · ${notes.join(' · ')}';
+  }
+
+  static String _short(double v) =>
+      v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
+
+  Widget _detail(BuildContext context, int i, TextLayer layer) {
+    var caption = context.type.caption.copyWith(color: context.colors.mut2);
+    return Padding(
+      padding: const EdgeInsets.only(
+        left: FwSpacing.xl,
+        bottom: FwSpacing.md,
+        top: FwSpacing.xs,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (layer.paint case LinearPaint _) ...[
+            Text('a gradient, from the file', style: caption),
+            const Gap(FwSpacing.xs),
+            Tappable(
+              onTap: () => _replace(i, _withPaint(layer, null)),
+              child: Text(
+                'make it the text colour',
+                style: caption.copyWith(color: context.colors.accent),
+              ),
+            ),
+          ] else
+            SceneSwatches(
+              current: switch (layer.paint) {
+                SolidPaint(:var color) => color,
+                _ => null,
+              },
+              onPick: (c) => _replace(
+                i,
+                _withPaint(layer, c == null ? null : SolidPaint(c)),
+              ),
+            ),
+          const Gap(FwSpacing.sm),
+          if (layer case StrokeLayer(:var width))
+            _number(
+              context,
+              'Width',
+              width,
+              const SceneNumberShape(perPixel: 0.2, decimals: 1, min: 0),
+              (v) => _replace(
+                i,
+                StrokeLayer(
+                  width: v,
+                  join: layer.join,
+                  paint: layer.paint,
+                  blur: layer.blur,
+                  dx: layer.dx,
+                  dy: layer.dy,
+                  opacity: layer.opacity,
+                ),
+                mergeKey: 'layer:$i:width',
+              ),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: _number(
+                  context,
+                  'X',
+                  layer.dx,
+                  const SceneNumberShape(perPixel: 0.2, decimals: 1),
+                  (v) => _replace(
+                    i,
+                    _withOffset(layer, dx: v),
+                    mergeKey: 'layer:$i:dx',
+                  ),
+                ),
+              ),
+              const Gap(FwSpacing.md),
+              Expanded(
+                child: _number(
+                  context,
+                  'Y',
+                  layer.dy,
+                  const SceneNumberShape(perPixel: 0.2, decimals: 1),
+                  (v) => _replace(
+                    i,
+                    _withOffset(layer, dy: v),
+                    mergeKey: 'layer:$i:dy',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Gap(FwSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: _number(
+                  context,
+                  'Blur',
+                  layer.blur,
+                  const SceneNumberShape(perPixel: 0.2, decimals: 1, min: 0),
+                  (v) => _replace(
+                    i,
+                    _withBlur(layer, v),
+                    mergeKey: 'layer:$i:blur',
+                  ),
+                ),
+              ),
+              const Gap(FwSpacing.md),
+              Expanded(
+                child: _number(
+                  context,
+                  'Opacity',
+                  layer.opacity,
+                  const SceneNumberShape(
+                    perPixel: 0.005,
+                    decimals: 2,
+                    min: 0,
+                    softMax: 1,
+                  ),
+                  (v) => _replace(
+                    i,
+                    _withOpacity(layer, v),
+                    mergeKey: 'layer:$i:opacity',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _number(
+    BuildContext context,
+    String label,
+    double value,
+    SceneNumberShape shape,
+    ValueChanged<double> apply,
+  ) => SceneNumberField(
+    label: label,
+    value: value,
+    shape: shape,
+    onChanged: apply,
+    onCommit: apply,
+  );
+}
+
+// A layer is a value, so every edit is a new one. These say which field
+// changed without every call site respelling the constructor.
+TextLayer _withPaint(TextLayer l, ScenePaint? paint) => switch (l) {
+  StrokeLayer(:var width, :var join) => StrokeLayer(
+    width: width,
+    join: join,
+    paint: paint,
+    blur: l.blur,
+    dx: l.dx,
+    dy: l.dy,
+    opacity: l.opacity,
+  ),
+  FillLayer() => FillLayer(
+    paint: paint,
+    blur: l.blur,
+    dx: l.dx,
+    dy: l.dy,
+    opacity: l.opacity,
+  ),
+};
+
+TextLayer _withOffset(TextLayer l, {double? dx, double? dy}) => switch (l) {
+  StrokeLayer(:var width, :var join) => StrokeLayer(
+    width: width,
+    join: join,
+    paint: l.paint,
+    blur: l.blur,
+    dx: dx ?? l.dx,
+    dy: dy ?? l.dy,
+    opacity: l.opacity,
+  ),
+  FillLayer() => FillLayer(
+    paint: l.paint,
+    blur: l.blur,
+    dx: dx ?? l.dx,
+    dy: dy ?? l.dy,
+    opacity: l.opacity,
+  ),
+};
+
+TextLayer _withBlur(TextLayer l, double blur) => switch (l) {
+  StrokeLayer(:var width, :var join) => StrokeLayer(
+    width: width,
+    join: join,
+    paint: l.paint,
+    blur: blur,
+    dx: l.dx,
+    dy: l.dy,
+    opacity: l.opacity,
+  ),
+  FillLayer() => FillLayer(
+    paint: l.paint,
+    blur: blur,
+    dx: l.dx,
+    dy: l.dy,
+    opacity: l.opacity,
+  ),
+};
+
+TextLayer _withOpacity(TextLayer l, double opacity) => switch (l) {
+  StrokeLayer(:var width, :var join) => StrokeLayer(
+    width: width,
+    join: join,
+    paint: l.paint,
+    blur: l.blur,
+    dx: l.dx,
+    dy: l.dy,
+    opacity: opacity,
+  ),
+  FillLayer() => FillLayer(
+    paint: l.paint,
+    blur: l.blur,
+    dx: l.dx,
+    dy: l.dy,
+    opacity: opacity,
+  ),
+};

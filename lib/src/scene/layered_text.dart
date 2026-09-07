@@ -54,14 +54,28 @@ class LayeredText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // What a `Text` would actually draw with, resolved HERE and handed to
+    // both halves.
+    //
+    // This is the law's fine print. A `Text` merges its style over the
+    // ambient `DefaultTextStyle`; a `TextPainter` merges over nothing. Give
+    // the painter the unmerged style and the two disagree about any property
+    // the scene left unset — the family, most of all — so they SHAPE
+    // differently, wrap at different widths, and the box no longer describes
+    // what is painted in it. That is one input feeding two layouts, which is
+    // exactly what "a pass may change paint, never layout" forbids, and it
+    // does not announce itself: it looks like a layout bug in whatever holds
+    // the text.
+    var ambient = DefaultTextStyle.of(context);
+    var resolved = ambient.style.merge(style);
     var text = Text.rich(
       span,
       // A stack replaces the single draw rather than adding to it, so the
       // widget that does the LAYOUT draws nothing: transparent, not
       // `Opacity(0)`, which would cost a save layer for the same nothing.
       style: layers.isEmpty
-          ? style
-          : style.copyWith(color: const Color(0x00000000)),
+          ? resolved
+          : resolved.copyWith(color: const Color(0x00000000)),
       textAlign: textAlign,
       maxLines: maxLines,
       overflow: _overflow,
@@ -70,23 +84,30 @@ class LayeredText extends StatelessWidget {
     return CustomPaint(
       // Foreground rather than background: the passes are the text, and the
       // child is only there to have been measured.
-      foregroundPainter: _StackPainter(
+      foregroundPainter: SceneTextStackPainter(
         span: span,
-        style: style,
+        style: resolved,
         layers: layers,
         textAlign: textAlign,
         maxLines: maxLines,
         overflow: _overflow,
         textDirection: Directionality.of(context),
         scaler: MediaQuery.textScalerOf(context),
+        // The rest of what a `Text` reads off the ambient style, for the same
+        // reason: every metric input, or two layouts.
+        widthBasis: ambient.textWidthBasis,
+        heightBehavior: ambient.textHeightBehavior,
       ),
       child: text,
     );
   }
 }
 
-class _StackPainter extends CustomPainter {
-  _StackPainter({
+/// Public so a test can hold the invariant the whole thing rests on: the
+/// [style] here IS the style the base text was laid out with. One resolved
+/// style, two consumers.
+class SceneTextStackPainter extends CustomPainter {
+  SceneTextStackPainter({
     required this.span,
     required this.style,
     required this.layers,
@@ -95,6 +116,8 @@ class _StackPainter extends CustomPainter {
     required this.overflow,
     required this.textDirection,
     required this.scaler,
+    required this.widthBasis,
+    required this.heightBehavior,
   });
 
   final InlineSpan span;
@@ -105,6 +128,8 @@ class _StackPainter extends CustomPainter {
   final TextOverflow overflow;
   final TextDirection textDirection;
   final TextScaler scaler;
+  final TextWidthBasis widthBasis;
+  final TextHeightBehavior? heightBehavior;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -131,6 +156,8 @@ class _StackPainter extends CustomPainter {
       maxLines,
       textDirection,
       scaler,
+      widthBasis,
+      heightBehavior,
     );
     return _cache.putIfAbsent(key, () {
       var painter = TextPainter(
@@ -147,6 +174,8 @@ class _StackPainter extends CustomPainter {
         ellipsis: overflow == TextOverflow.ellipsis ? '…' : null,
         textDirection: textDirection,
         textScaler: scaler,
+        textWidthBasis: widthBasis,
+        textHeightBehavior: heightBehavior,
       );
       // The same width the child was laid out in, so the lines break where
       // they broke: identical metric inputs, identical layout.
@@ -204,14 +233,16 @@ class _StackPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_StackPainter old) =>
+  bool shouldRepaint(SceneTextStackPainter old) =>
       old.span.toPlainText() != span.toPlainText() ||
       old.style != style ||
       !_sameLayers(old.layers, layers) ||
       old.textAlign != textAlign ||
       old.maxLines != maxLines ||
       old.textDirection != textDirection ||
-      old.scaler != scaler;
+      old.scaler != scaler ||
+      old.widthBasis != widthBasis ||
+      old.heightBehavior != heightBehavior;
 }
 
 bool _sameLayers(List<TextLayer> a, List<TextLayer> b) {
@@ -236,6 +267,8 @@ class _PainterKey {
     this.maxLines,
     this.direction,
     this.scaler,
+    this.widthBasis,
+    this.heightBehavior,
   );
 
   final String text;
@@ -246,6 +279,8 @@ class _PainterKey {
   final int? maxLines;
   final TextDirection direction;
   final TextScaler scaler;
+  final TextWidthBasis widthBasis;
+  final TextHeightBehavior? heightBehavior;
 
   @override
   bool operator ==(Object other) =>
@@ -257,11 +292,23 @@ class _PainterKey {
       other.align == align &&
       other.maxLines == maxLines &&
       other.direction == direction &&
-      other.scaler == scaler;
+      other.scaler == scaler &&
+      other.widthBasis == widthBasis &&
+      other.heightBehavior == heightBehavior;
 
   @override
-  int get hashCode =>
-      Object.hash(text, style, layer, size, align, maxLines, direction, scaler);
+  int get hashCode => Object.hash(
+    text,
+    style,
+    layer,
+    size,
+    align,
+    maxLines,
+    direction,
+    scaler,
+    widthBasis,
+    heightBehavior,
+  );
 }
 
 /// Bounded and least-recently-used, because a motion plays: every frame of an

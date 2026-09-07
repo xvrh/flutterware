@@ -13,6 +13,7 @@ import 'package:flutterware/previews.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutter/material.dart';
 
+import 'arcade_poster.scene.dart';
 import 'banner.scene.dart';
 import 'invoice.scene.dart';
 import 'ohoh.scene.dart';
@@ -103,6 +104,52 @@ class OrderButtonTracks extends SceneExtTracks {
 
   @override
   Map<String, MotionTrack> toMap() => {};
+}
+
+class ArcadePosterArgs extends SceneRefArgs {
+  const ArcadePosterArgs({
+    this.title = 'GAME OVER',
+    this.kicker = 'insert coin to continue',
+    this.score = '00128400',
+    this.neon = const SceneColor(0xFFFF2D95),
+  });
+
+  final String title;
+  final String kicker;
+  final String score;
+  final SceneColor neon;
+
+  @override
+  String get entry => 'ArcadePoster';
+
+  @override
+  ArcadePosterArgs merge(SceneArgs fx) => ArcadePosterArgs(
+    title: fx.text('title') ?? title,
+    kicker: fx.text('kicker') ?? kicker,
+    score: fx.text('score') ?? score,
+    neon: fx.color('neon') ?? neon,
+  );
+
+  @override
+  Map<String, Object?> toMap() => {
+    'title': title,
+    'kicker': kicker,
+    'score': score,
+    'neon': neon,
+  };
+
+  @override
+  SceneDefinition build() =>
+      ArcadePoster(title: title, kicker: kicker, score: score, neon: neon);
+}
+
+class ArcadePosterTracks extends SceneExtTracks {
+  const ArcadePosterTracks({this.neon});
+
+  final MotionTrack? neon;
+
+  @override
+  Map<String, MotionTrack> toMap() => {'neon': ?neon};
 }
 
 class BannerSceneArgs extends SceneRefArgs {

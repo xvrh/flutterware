@@ -22,6 +22,7 @@ import '../../ui/picker.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import 'curve_picker.dart';
+import 'layer_list.dart';
 import 'number_shape.dart';
 import 'number_field.dart';
 import 'swatches.dart';
@@ -778,6 +779,10 @@ class SceneInspector extends StatelessWidget {
         onPick: (c) => _set('color', c!, () => t.color = c),
       ),
     ),
+    const SizedBox(height: FwSpacing.md),
+    // Above the disclosure and not inside it: a paint stack is the thing a
+    // poster is made of, and once a text has one it is what you come back to.
+    SceneLayerList(editor, t),
     const SizedBox(height: FwSpacing.md),
     // The rest is real and rarely touched, which is the whole argument for
     // putting it behind one tap rather than at the bottom of a column

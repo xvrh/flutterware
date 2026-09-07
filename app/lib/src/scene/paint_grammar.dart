@@ -234,12 +234,26 @@ SceneAlignment? _readAlignment(Expression? e, Refuse refuse) {
   return null;
 }
 
+/// A colour inside a stack is a LITERAL, and this says why when somebody
+/// tries otherwise: a binding is keyed by property NAME, and a pass has no
+/// name — it is an anonymous element of a list, by decision. So a parameter
+/// cannot reach into a stack. What a stack does share is the style token that
+/// carries the whole of it.
 SceneColor? _readColor(Expression e, Refuse refuse) {
   if (_call(e) case ('SceneColor', var args) when args.arguments.length == 1) {
     var v = args.arguments.single;
     if (v is IntegerLiteral && v.value != null) return SceneColor(v.value!);
   }
-  refuse(e.offset, 'paint', 'expected a color, spelled SceneColor(0xAARRGGBB)');
+  refuse(
+    e.offset,
+    'paint',
+    e is Identifier
+        ? 'a pass has no name for "$e" to bind to, so its colour is a '
+              'literal: SceneColor(0xAARRGGBB). Share the whole stack as a '
+              "style token, or leave the pass no paint and bind the text's "
+              'own colour, which is what it then takes.'
+        : 'expected a color, spelled SceneColor(0xAARRGGBB)',
+  );
   return null;
 }
 
