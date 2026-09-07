@@ -12,5 +12,6 @@ library;
 
 export 'src/scene/flutter_bridge.dart';
 export 'src/scene/host.dart';
+export 'src/scene/layered_text.dart';
 export 'src/scene/player.dart';
 export 'src/scene/view.dart';

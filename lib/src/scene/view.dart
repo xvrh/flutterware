@@ -17,6 +17,7 @@ import 'core/props.dart';
 import 'core/motion_runtime.dart';
 import 'core/values.dart';
 import 'flutter_bridge.dart';
+import 'layered_text.dart';
 
 /// Reports what the layout measured, in artboard coordinates. The editor's
 /// geometry comes from here: a flex child has no authored position, so the
@@ -262,14 +263,12 @@ class _SceneViewState extends State<SceneView> {
     Widget? inner;
     switch (n) {
       case TextNode t:
-        inner = Text.rich(
-          TextSpan(children: sceneTextRuns(t)),
+        inner = LayeredText(
+          span: TextSpan(children: sceneTextRuns(t)),
           style: sceneTextStyleFor(t),
+          layers: t.layers,
           textAlign: t.align.flutter,
           maxLines: t.maxLines,
-          overflow: t.maxLines == null
-              ? TextOverflow.clip
-              : TextOverflow.ellipsis,
         );
       case ShapeNode _:
         inner = null;

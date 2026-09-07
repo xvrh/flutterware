@@ -66,6 +66,10 @@ extension SceneTextDecorationStyleToFlutter on SceneTextDecorationStyle {
   TextDecorationStyle get flutter => TextDecorationStyle.values[index];
 }
 
+extension SceneStrokeJoinToFlutter on SceneStrokeJoin {
+  StrokeJoin get flutter => StrokeJoin.values[index];
+}
+
 extension SceneEdgesToFlutter on SceneEdges {
   EdgeInsets get flutter => EdgeInsets.fromLTRB(left, top, right, bottom);
 }
