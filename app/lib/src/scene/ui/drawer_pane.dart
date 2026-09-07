@@ -70,14 +70,15 @@ class DrawerPane extends StatelessWidget {
 /// and a body that scrolls when the band is shorter than it.
 class DrawerSection {
   const DrawerSection({
-    required this.title,
+    this.title,
     required this.child,
     this.width,
     this.trailing,
     this.key,
   });
 
-  final String title;
+  /// Null for a column whose blocks carry their own titles.
+  final String? title;
   final Widget child;
 
   /// Wished for, or null for a share of what is left. Scaled down with
@@ -97,43 +98,52 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var colors = context.colors;
-    var caption = context.type.caption.copyWith(color: colors.mut2);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            FwSpacing.lg,
-            FwSpacing.md,
-            FwSpacing.lg,
-            FwSpacing.xs,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  section.title,
-                  overflow: TextOverflow.ellipsis,
-                  style: caption,
-                ),
-              ),
-              if (section.trailing case var trailing?)
-                Flexible(child: trailing),
-            ],
-          ),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
+        if (section.title case var title?)
+          Padding(
             padding: const EdgeInsets.fromLTRB(
               FwSpacing.lg,
-              0,
+              FwSpacing.md,
+              FwSpacing.lg,
+              FwSpacing.xs,
+            ),
+            child: DrawerBlockTitle(title, trailing: section.trailing),
+          ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              FwSpacing.lg,
+              section.title == null ? FwSpacing.md : 0,
               FwSpacing.lg,
               FwSpacing.md,
             ),
             child: section.child,
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// A caption over a block, with something at its right end — a section's
+/// own title, or one of several blocks down one column.
+class DrawerBlockTitle extends StatelessWidget {
+  const DrawerBlockTitle(this.title, {super.key, this.trailing});
+
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    var caption = context.type.caption.copyWith(color: context.colors.mut2);
+    return Row(
+      children: [
+        Expanded(
+          child: Text(title, overflow: TextOverflow.ellipsis, style: caption),
+        ),
+        if (trailing case var trailing?) Flexible(child: trailing),
       ],
     );
   }

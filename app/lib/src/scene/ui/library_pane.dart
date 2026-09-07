@@ -71,32 +71,39 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
         key: ValueKey('pane:library:${widget.path}'),
         sections: [
           DrawerSection(
-            title: 'Modes',
-            width: 260,
-            trailing: _naming == ''
-                ? null
-                : DrawerLink(
-                    '+ mode',
-                    key: const ValueKey('library:add-mode'),
-                    onTap: () => setState(() => _naming = ''),
-                  ),
-            child: _modes(context, library),
-          ),
-          DrawerSection(
-            title: library.fileName,
-            child: _tokens(context, library),
-          ),
-          DrawerSection(
-            title: 'Design file',
-            width: 260,
-            trailing: switch (widget.host?.importInto) {
-              var importInto? => DrawerLink(
-                library.importNote == null ? 'import…' : 'import again…',
-                onTap: () => importInto(library.path),
-              ),
-              null => null,
-            },
-            child: _import(context, library),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              spacing: FwSpacing.xs,
+              children: [
+                DrawerBlockTitle(
+                  'Modes',
+                  trailing: _naming == ''
+                      ? null
+                      : DrawerLink(
+                          '+ mode',
+                          key: const ValueKey('library:add-mode'),
+                          onTap: () => setState(() => _naming = ''),
+                        ),
+                ),
+                _modes(context, library),
+                const SizedBox(height: FwSpacing.lg),
+                DrawerBlockTitle(library.fileName),
+                _tokens(context, library),
+                const SizedBox(height: FwSpacing.lg),
+                DrawerBlockTitle(
+                  'Design file',
+                  trailing: switch (widget.host?.importInto) {
+                    var importInto? => DrawerLink(
+                      library.importNote == null ? 'import…' : 'import again…',
+                      onTap: () => importInto(library.path),
+                    ),
+                    null => null,
+                  },
+                ),
+                _import(context, library),
+              ],
+            ),
           ),
         ],
       ),

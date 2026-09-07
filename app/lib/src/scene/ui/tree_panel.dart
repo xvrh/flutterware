@@ -241,6 +241,8 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
                 maxHeight: constraints.maxHeight * 0.45,
               ),
               child: SingleChildScrollView(
+                // The scrollbar's lane, so a row's `+` is not under it.
+                padding: const EdgeInsets.only(right: FwSpacing.md),
                 child: SceneOutlineSections(
                   editor,
                   sceneClassName: widget.sceneClassName,

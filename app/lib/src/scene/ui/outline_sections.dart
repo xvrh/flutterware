@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
+import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/context_menu.dart';
@@ -68,6 +69,9 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
   var _motionsOpen = true;
   var _tokensOpen = true;
 
+  /// The libraries folded away, by path; the app's exports by [_exportsKey].
+  final _folded = <String>{};
+
   /// The row being renamed in place, if any.
   SceneAside? _renaming;
 
@@ -113,9 +117,10 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
     );
   }
 
-  /// The group's tokens: one divider per library the group lists with the
-  /// tokens it declares, then the app's exports. Package-wide, so every
-  /// scene of the group shows the same section.
+  /// The group's tokens: one branch per library the group lists, with the
+  /// tokens it declares under it, then the app's exports. Package-wide, so
+  /// every scene of the group shows the same section. A library's row
+  /// opens the library in the drawer; its chevron folds it.
   List<Widget> _tokensSection(BuildContext context) {
     var host = widget.tokens;
     var exports = [
@@ -135,31 +140,50 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
       if (_tokensOpen) ...[
         if (host != null)
           for (var library in host.libraries) ...[
-            _divider(
+            _branch(
               context,
-              library.symbol,
-              onAdd: (at) => _addTokenMenu(context, at, library.path),
-              open: editor.drawer == LibraryAside(library.path),
-              onOpen: () => _openLibrary(library.path),
+              label: library.symbol,
+              icon: Icons.style_outlined,
+              facts: '${library.tokens.length}',
               tooltip: [
                 library.fileName,
-                '${library.tokens.length} ${library.tokens.length == 1 ? 'token' : 'tokens'}',
                 if (library.modes.isNotEmpty)
                   'modes: ${library.modes.join(', ')}'
                 else
-                  'no modes — click to add one',
+                  'no modes yet',
+                'click for its modes and its design file',
               ].join(' · '),
+              open: !_folded.contains(library.path),
+              onToggle: () => setState(() {
+                if (!_folded.remove(library.path)) _folded.add(library.path);
+              }),
+              selected: editor.drawer == LibraryAside(library.path),
+              onOpen: () => _openLibrary(library.path),
+              onAdd: (at) => _addTokenMenu(context, at, library.path),
+              addTooltip: 'New token in ${library.symbol}',
             ),
-            for (var t in library.tokens) _tokenRow(context, t),
+            if (!_folded.contains(library.path))
+              for (var t in library.tokens) _tokenRow(context, t),
           ],
         if (exports.isNotEmpty) ...[
-          _divider(context, 'from the app'),
-          for (var t in exports) _tokenRow(context, t),
+          _branch(
+            context,
+            label: 'from the app',
+            icon: Icons.ios_share_outlined,
+            facts: '${exports.length}',
+            tooltip: "The group's exports — the app's own values, by name",
+            open: !_folded.contains(_exportsKey),
+            onToggle: () => setState(() {
+              if (!_folded.remove(_exportsKey)) _folded.add(_exportsKey);
+            }),
+          ),
+          if (!_folded.contains(_exportsKey))
+            for (var t in exports) _tokenRow(context, t),
         ],
         if (host != null && host.libraries.isEmpty && exports.isEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(
-              FwSpacing.md + FwSpacing.xxs,
+              FwSpacing.md + FwSpacing.xl,
               FwSpacing.xxs,
               FwSpacing.sm,
               FwSpacing.xs,
@@ -173,71 +197,88 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
     ];
   }
 
-  /// A library's line over its tokens — and, with [onOpen], a row of its
-  /// own: click opens the library in the drawer, for its modes.
-  Widget _divider(
-    BuildContext context,
-    String label, {
-    void Function(Offset at)? onAdd,
-    bool open = false,
+  static const _exportsKey = '<exports>';
+
+  /// A branch one level under a section — a library, the app's exports —
+  /// drawn as the layers above draw a frame: the chevron folds, the row
+  /// selects (opens the library), and the `+` at its end adds under it.
+  Widget _branch(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required String facts,
+    required String tooltip,
+    required bool open,
+    required VoidCallback onToggle,
+    bool selected = false,
     VoidCallback? onOpen,
-    String? tooltip,
+    void Function(Offset at)? onAdd,
+    String? addTooltip,
   }) {
     var colors = context.colors;
-    Widget name = Text(
-      label,
-      overflow: TextOverflow.ellipsis,
-      style: context.type.micro.copyWith(
-        color: open ? colors.accentDark : colors.mut2,
-      ),
-    );
-    if (tooltip != null) {
-      name = Tooltip(
+    return FwTreeRow(
+      depth: 1,
+      density: TreeRowDensity.roomy,
+      selected: selected,
+      open: open,
+      onToggleFold: onToggle,
+      onTap: onOpen,
+      label: Tooltip(
         message: tooltip,
         waitDuration: const Duration(milliseconds: 600),
-        child: name,
-      );
-    }
-    if (onOpen != null) {
-      name = Tappable(
-        onTap: onOpen,
-        borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: FwSpacing.xxs,
-            vertical: FwSpacing.xxs,
-          ),
-          child: name,
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.only(
-        left: FwSpacing.md + FwSpacing.xxs + FwSpacing.sm,
-        right: FwSpacing.sm,
-        top: FwSpacing.xs,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Align(alignment: Alignment.centerLeft, child: name),
-          ),
-          if (onAdd != null)
-            Tooltip(
-              message: 'New token in $label',
-              child: GestureDetector(
-                onTapDown: (d) => onAdd(d.globalPosition),
-                child: Padding(
-                  padding: const EdgeInsets.all(FwSpacing.xxs),
-                  child: Icon(
-                    Icons.add,
-                    size: FwIconSize.sm,
-                    color: colors.mut,
-                  ),
+        child: Row(
+          spacing: FwSpacing.sm,
+          children: [
+            Icon(
+              icon,
+              size: FwIconSize.sm,
+              color: selected ? colors.accentDark : colors.mut,
+            ),
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.body.copyWith(
+                  color: selected ? colors.accentDark : colors.ink,
                 ),
               ),
             ),
-        ],
+          ],
+        ),
+      ),
+      trailing: [
+        Text(facts, style: context.type.caption.copyWith(color: colors.mut2)),
+        if (onAdd != null) _addButton(context, addTooltip ?? 'New', onAdd),
+      ],
+    );
+  }
+
+  /// The `+` at a row's end: a real target, not a bare glyph — hover wash,
+  /// a click-sized box — sized so the thumb of the scrollbar beside it
+  /// does not take the click.
+  Widget _addButton(
+    BuildContext context,
+    String tooltip,
+    void Function(Offset at) onAdd,
+  ) {
+    return Tooltip(
+      message: tooltip,
+      child: Builder(
+        builder: (context) => Tappable(
+          onTap: () {
+            var box = context.findRenderObject()! as RenderBox;
+            onAdd(box.localToGlobal(Offset(0, box.size.height)));
+          },
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          child: Padding(
+            padding: const EdgeInsets.all(FwSpacing.xs),
+            child: Icon(
+              Icons.add,
+              size: FwIconSize.sm,
+              color: context.colors.mut,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -245,12 +286,20 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
   Widget _tokenRow(BuildContext context, SceneTokenDecl t) {
     var aside = TokenAside(t.name);
     var host = widget.tokens;
+    // A colour is its swatch here, the way the layers show theirs: the
+    // hex is in the tooltip, and the name keeps its room.
+    var swatch = switch (t.value) {
+      SceneColor c when !t.isExport => c,
+      _ => null,
+    };
     return _row(
       context,
       aside,
+      depth: 2,
       icon: tokenIcon(t),
       name: t.name,
-      trailing: tokenValueLabel(t),
+      trailing: swatch == null ? tokenValueLabel(t) : '',
+      swatch: swatch,
       tooltip: tokenFacts(editor, host, t.name),
       onOpen: () => _openToken(t.name),
       menu: () => tokenMenu(
@@ -322,6 +371,9 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
     ]);
   }
 
+  /// A section's line: a branch at the root of this outline, drawn as the
+  /// layers draw a frame — the chevron folds, and so does the row, since a
+  /// section is nothing to select — with its count, and `+` at its end.
   Widget _section(
     BuildContext context,
     String label,
@@ -332,53 +384,27 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
   }) {
     var colors = context.colors;
     var type = context.type;
-    return Padding(
-      padding: const EdgeInsets.only(
-        left: FwSpacing.md + FwSpacing.xxs,
-        right: FwSpacing.sm,
-        top: FwSpacing.md,
-        bottom: FwSpacing.xs,
-      ),
-      child: Row(
+    return FwTreeRow(
+      depth: 0,
+      density: TreeRowDensity.roomy,
+      open: open,
+      onToggleFold: onToggle,
+      onTap: onToggle,
+      label: Row(
+        spacing: FwSpacing.sm,
         children: [
-          Tappable(
-            onTap: onToggle,
-            child: Row(
-              children: [
-                Icon(
-                  open ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
-                  size: FwIconSize.sm,
-                  color: colors.mut,
-                ),
-                const SizedBox(width: FwSpacing.xs),
-                Text(label, style: type.sectionLabel),
-                const SizedBox(width: FwSpacing.sm),
-                Text(
-                  '$count',
-                  style: type.caption.copyWith(color: colors.mut2),
-                ),
-              ],
-            ),
-          ),
-          const Spacer(),
-          if (onAdd != null)
-            Tooltip(
-              message:
-                  'New ${label.toLowerCase().substring(0, label.length - 1)}',
-              child: GestureDetector(
-                onTapDown: (d) => onAdd(d.globalPosition),
-                child: Padding(
-                  padding: const EdgeInsets.all(FwSpacing.xxs),
-                  child: Icon(
-                    Icons.add,
-                    size: FwIconSize.sm,
-                    color: colors.mut,
-                  ),
-                ),
-              ),
-            ),
+          Text(label, style: type.sectionLabel),
+          Text('$count', style: type.caption.copyWith(color: colors.mut2)),
         ],
       ),
+      trailing: [
+        if (onAdd != null)
+          _addButton(
+            context,
+            'New ${label.toLowerCase().substring(0, label.length - 1)}',
+            onAdd,
+          ),
+      ],
     );
   }
 
@@ -453,9 +479,11 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
   Widget _row(
     BuildContext context,
     SceneAside aside, {
+    int depth = 1,
     required IconData icon,
     required String name,
     required String trailing,
+    SceneColor? swatch,
     required String tooltip,
     required VoidCallback onOpen,
     required List<MenuEntry> Function() menu,
@@ -468,11 +496,9 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
       onSecondaryTapDown: (d) =>
           showContextMenu(context, d.globalPosition, menu()),
       child: FwTreeRow(
-        // One level under the section's own line, whose chevron is in the
-        // leading slot the way a frame's is: the kind's icon takes that
-        // slot here, so a row reads as the section's child, not a
-        // grandchild.
-        depth: 0,
+        // Under the section's line, whose chevron is in the leading slot
+        // the way a frame's is; the kind's icon takes that slot here.
+        depth: depth,
         density: TreeRowDensity.roomy,
         selected: open,
         onTap: () {
@@ -520,10 +546,25 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
                 ),
               ),
         trailing: [
+          if (swatch != null)
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: swatch.flutter,
+                shape: BoxShape.circle,
+                border: Border.all(color: colors.line),
+              ),
+            ),
           if (trailing.isNotEmpty)
-            Text(
-              trailing,
-              style: context.type.caption.copyWith(color: colors.mut2),
+            // Capped, not flexed: a flex would split the row with the name.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 88),
+              child: Text(
+                trailing,
+                overflow: TextOverflow.ellipsis,
+                style: context.type.caption.copyWith(color: colors.mut2),
+              ),
             ),
         ],
       ),
