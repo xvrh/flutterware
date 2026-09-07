@@ -316,7 +316,7 @@ final sceneTokens = [
     await tester.pump();
     // Nothing selected: the inspector is on the root, whose fill is free.
     await tester.tapAt(
-      tester.getCenter(find.byType(SceneSwatches).first),
+      tester.getCenter(find.byType(SceneColorField).first),
       buttons: kSecondaryButton,
       kind: PointerDeviceKind.mouse,
     );
@@ -335,7 +335,11 @@ final sceneTokens = [
     await tester.pump();
     expect(editor.doc.root.fill, const SceneColor(0xFFE8632B));
     expect(editor.doc.root.bindings['fill'], const TokenRef('brand'));
-    expect(find.text('fill ← tokens.brand'), findsOneWidget);
+    // The row itself says what it reads now, in place of the control: the
+    // panel used to say it in a block at the top and the swatches stayed
+    // live, editing the token's readers everywhere.
+    expect(find.text('tokens.brand'), findsOneWidget);
+    expect(find.text('#E8632B'), findsWidgets);
     await tester.pump(kDoubleTapTimeout);
   });
 

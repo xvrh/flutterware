@@ -298,7 +298,7 @@ final scenes = SceneGroup(exports: [
     );
     await tester.pump();
     await tester.tapAt(
-      tester.getCenter(find.byType(SceneSwatches).last),
+      tester.getCenter(find.byType(SceneColorField).last),
       buttons: kSecondaryButton,
       kind: PointerDeviceKind.mouse,
     );
@@ -316,7 +316,12 @@ final scenes = SceneGroup(exports: [
     await tester.pump();
     var plain = editor.doc.nodeNamed('plain')!;
     expect(plain.bindings['color'], const TokenRef('accent'));
-    expect(find.text('← tokens.accent · from the app'), findsOneWidget);
+    expect(find.text('tokens.accent'), findsOneWidget);
+    expect(
+      find.text("the app's"),
+      findsOneWidget,
+      reason: 'the editor holds no value for an export',
+    );
     await tester.pump(kDoubleTapTimeout);
   });
 }

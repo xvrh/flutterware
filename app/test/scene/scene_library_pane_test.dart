@@ -186,6 +186,52 @@ void main() {
     expect(library.named('title')!.modes, isEmpty, reason: 'the link resets');
   });
 
+  testWidgets('editing one field of a style keeps the other fourteen', (
+    tester,
+  ) async {
+    // The pane used to rebuild the style from a hand-written constructor
+    // call naming five fields, so setting the weight deleted the tracking,
+    // the typeface and the paint stack — from the model and, on the next
+    // autosave, from the file.
+    library.setStyle(
+      'title',
+      const SceneTextStyle(
+        fontFamily: 'Bungee',
+        fontSize: 54,
+        weight: SceneFontWeight.w700,
+        letterSpacing: 8,
+        textCase: SceneTextCase.upper,
+        maxLines: 2,
+        layers: [
+          StrokeLayer(width: 6, paint: SolidPaint(SceneColor(0xFF000000))),
+          FillLayer(),
+        ],
+      ),
+    );
+    wide(tester);
+    await tester.pumpWidget(
+      host(
+        SceneTokenPane(
+          file.editor,
+          'title',
+          host: SceneTokensHost(libraries: [library]),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Bold').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Black').last);
+    await tester.pumpAndSettle();
+    var style = library.named('title')!.style!;
+    expect(style.weight, SceneFontWeight.w900);
+    expect(style.fontSize, 54);
+    expect(style.fontFamily, 'Bungee');
+    expect(style.letterSpacing, 8);
+    expect(style.textCase, SceneTextCase.upper);
+    expect(style.maxLines, 2);
+    expect(style.layers, hasLength(2));
+  });
+
   testWidgets("a value's pane is one column per mode too", (tester) async {
     var editor = file.editor;
     wide(tester);

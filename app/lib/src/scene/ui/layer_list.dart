@@ -12,17 +12,42 @@ import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/popover.dart';
 import '../../ui/tappable.dart';
-import '../editor.dart';
 import '../layer_presets.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
 import 'swatches.dart';
 
-class SceneLayerList extends StatefulWidget {
-  const SceneLayerList(this.editor, this.node, {super.key});
+/// What a change to the stack is: the whole next list, with the words for
+/// the undo entry it makes.
+typedef LayersChanged = void Function(
+  List<TextLayer> next, {
+  required String label,
+  String? mergeKey,
+});
 
-  final SceneEditor editor;
-  final TextNode node;
+class SceneLayerList extends StatefulWidget {
+  const SceneLayerList({
+    super.key,
+    required this.layers,
+    required this.fontSize,
+    required this.color,
+    required this.onChanged,
+  });
+
+  /// A text node's own stack, or a shared style's — the control is the same
+  /// list of the same values either way, and the two hosts differ only in
+  /// where the next list is written.
+  final List<TextLayer> layers;
+
+  /// What a preset scales its numbers to, and what a new stroke's default
+  /// width is derived from.
+  final double fontSize;
+
+  /// What a pass with no paint of its own is drawn in — the swatch a row
+  /// shows when it says "the text's own colour".
+  final Color color;
+
+  final LayersChanged onChanged;
 
   @override
   State<SceneLayerList> createState() => _SceneLayerListState();
@@ -34,11 +59,10 @@ class _SceneLayerListState extends State<SceneLayerList> {
   /// value and has no identity by decision.
   int? _open;
 
-  TextNode get _node => widget.node;
-  List<TextLayer> get _layers => _node.layers;
+  List<TextLayer> get _layers => widget.layers;
 
   void _write(String label, List<TextLayer> next, {String? mergeKey}) {
-    widget.editor.perform(label, () => _node.layers = next, mergeKey: mergeKey);
+    widget.onChanged(next, label: label, mergeKey: mergeKey);
   }
 
   void _replace(int i, TextLayer layer, {String? mergeKey}) {
@@ -69,7 +93,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
   }
 
   void _applyPreset(LayerPreset preset) {
-    _write('${preset.name} layers', preset.forSize(_node.fontSize));
+    _write('${preset.name} layers', preset.forSize(widget.fontSize));
     setState(() => _open = null);
   }
 
@@ -110,7 +134,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
         'Stroke',
         icon: Icons.border_color_outlined,
         onSelected: () => _add(
-          StrokeLayer(width: _node.fontSize / 7, join: SceneStrokeJoin.round),
+          StrokeLayer(width: widget.fontSize / 7, join: SceneStrokeJoin.round),
         ),
       ),
       const MenuDivider(),
@@ -226,7 +250,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
         border: Border.all(color: context.colors.line),
         color: switch (layer.paint) {
           SolidPaint(:var color) => Color(color.argb),
-          null => Color(_node.color.argb),
+          null => widget.color,
           LinearPaint() => null,
         },
         gradient: switch (layer.paint) {
@@ -280,7 +304,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
               ),
             ),
           ] else
-            SceneSwatches(
+            SceneColorField(
               current: switch (layer.paint) {
                 SolidPaint(:var color) => color,
                 _ => null,
