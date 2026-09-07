@@ -583,14 +583,6 @@ class _NodeTargetState extends State<_NodeTarget> {
   /// worth trusting after the node has been moving under it.
   var _lastPoint = Offset.zero;
 
-  /// Whether [inner] is [outer] or sits inside it.
-  bool _isInside(FrameNode inner, FrameNode outer) {
-    for (SceneNode? p = inner; p != null; p = doc.parentOf(p)) {
-      if (p == outer) return true;
-    }
-    return false;
-  }
-
   /// Where the pointer is, in artboard coordinates.
   ///
   /// Measured against the ARTBOARD, never against the node being dragged.

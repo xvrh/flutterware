@@ -321,8 +321,12 @@ void main() {
       n.measured = SceneRect(n.x, n.y, n.width ?? 100, n.height ?? 40);
     }
     doc.root.measured = const SceneRect(0, 0, 1024, 500);
-    var copy = doc.nodeNamed('copy')! as FrameNode
-      ..measured = const SceneRect(64, 120, 500, 220);
+    (doc.nodeNamed('copy')! as FrameNode).measured = const SceneRect(
+      64,
+      120,
+      500,
+      220,
+    );
 
     await tester.pumpWidget(
       MaterialApp(

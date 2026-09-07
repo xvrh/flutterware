@@ -316,7 +316,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       expect(player.position, const Duration(milliseconds: 100));
       expect(glow.fxRendered('translateY'), 50.0);
-      player.position = (const Duration(milliseconds: 40));
+      player.position = const Duration(milliseconds: 40);
       expect(glow.fxRendered('translateY'), 20.0);
       player.dispose();
     });
