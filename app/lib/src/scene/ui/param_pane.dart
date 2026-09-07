@@ -154,11 +154,7 @@ class SceneParamPane extends StatelessWidget {
     return DrawerPane(
       key: ValueKey('pane:param:${p.name}'),
       sections: [
-        DrawerSection(
-          title: 'Default',
-          width: 320,
-          child: _control(context, p),
-        ),
+        DrawerSection(title: 'Default', child: _control(context, p)),
         readersSection(context, editor, readers, action: share),
       ],
     );

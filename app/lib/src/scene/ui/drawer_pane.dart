@@ -11,18 +11,19 @@ import '../editor.dart';
 /// titled columns, side by side, each scrolling on its own.
 ///
 /// The drawer is wide and short — a third of the window's height at most,
-/// all of its width — so a pane lays its parts out ACROSS it, never down
-/// it. A token's modes are columns (the way a design tool's variables
-/// table has one column per mode), a library's modes and tokens and
-/// design file are columns, a parameter's default and its readers are
-/// columns. A column outgrowing the band scrolls; more columns than fit
-/// scroll sideways. Nothing here can overflow.
+/// all of its width — so a pane puts its few parts side by side: what is
+/// edited, and who reads it; a library's modes, its tokens, its design
+/// file. Down a column is where the list goes — a token's modes are rows
+/// of its value column — and a column outgrowing the band scrolls, the
+/// way any properties panel does. The columns always fit the band: a
+/// fixed width is a wish, scaled down together when the band is narrower
+/// than their sum. Nothing here overflows, and nothing scrolls sideways.
 class DrawerPane extends StatelessWidget {
   const DrawerPane({super.key, required this.sections});
 
   final List<DrawerSection> sections;
 
-  /// The least a flexible column gets before the band scrolls sideways.
+  /// What a flexible column asks for when the fixed ones are placed.
   static const minFlexWidth = 200.0;
 
   @override
@@ -46,24 +47,21 @@ class DrawerPane extends StatelessWidget {
           var flexWidth = flexible == 0
               ? 0.0
               : math.max(minFlexWidth, (available - fixed) / flexible);
-          var total = fixed + flexible * flexWidth + dividers;
-          var row = Row(
+          var total = fixed + flexible * flexWidth;
+          // Narrower than the wishes: everyone gives up the same share.
+          var scale = total > available ? available / total : 1.0;
+          return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var (i, s) in sections.indexed) ...[
                 if (i > 0) Container(width: 1, color: colors.line),
                 SizedBox(
                   key: s.key,
-                  width: s.width ?? flexWidth,
+                  width: (s.width ?? flexWidth) * scale,
                   child: _Section(s),
                 ),
               ],
             ],
-          );
-          if (total <= constraints.maxWidth + 0.5) return row;
-          return SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(width: total, child: row),
           );
         },
       ),
@@ -85,7 +83,8 @@ class DrawerSection {
   final String title;
   final Widget child;
 
-  /// Fixed, or null for a share of what is left.
+  /// Wished for, or null for a share of what is left. Scaled down with
+  /// the others when the band is narrower than their sum.
   final double? width;
 
   /// A link or a word beside the title — `unset`, `same as default`.
@@ -215,6 +214,7 @@ DrawerSection readersSection(
   var caption = context.type.caption.copyWith(color: colors.mut2);
   return DrawerSection(
     title: readers.isEmpty ? 'Read by nothing here' : 'Read by',
+    width: 260,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,

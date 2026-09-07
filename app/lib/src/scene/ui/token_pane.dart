@@ -18,12 +18,12 @@ import 'tokens_host.dart';
 /// opens too, because both are values you edit while looking at the
 /// nodes reading them above.
 ///
-/// A library token is one column per mode — the default first, then each
-/// mode the library names — with the value in the kind's own control, or
-/// a style's fields; a mode column left equal to the default says so, and
-/// an edit there makes it the mode's own. Every reader in every open scene
-/// follows an edit. An export is one column saying what it is — the
-/// app's, so nothing to edit. Last, who reads it.
+/// A library token is its value column: one row per mode — the default
+/// first, then each mode the library names — with the value in the kind's
+/// own control, or a style's fields; a mode left equal to the default says
+/// so, and an edit there makes it the mode's own. Every reader in every
+/// open scene follows an edit. An export says what it is — the app's, so
+/// nothing to edit. Beside it, who reads it.
 class SceneTokenPane extends StatelessWidget {
   const SceneTokenPane(this.editor, this.name, {super.key, this.host});
 
@@ -77,11 +77,31 @@ class SceneTokenPane extends StatelessWidget {
         ),
       ];
     } else {
+      var modes = library.modes;
       value = [
-        for (var mode in [null, ...library.modes])
-          decl.isStyle
-              ? _styleSection(context, library, decl, mode)
-              : _valueSection(context, library, decl, mode),
+        DrawerSection(
+          title: modes.isEmpty
+              ? 'Value'
+              : 'Value · default and ${modes.length} '
+                    '${modes.length == 1 ? 'mode' : 'modes'}',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var (i, mode) in [null, ...modes].indexed)
+                _modeRow(
+                  context,
+                  library,
+                  decl,
+                  mode,
+                  first: i == 0,
+                  child: decl.isStyle
+                      ? _styleFields(context, library, decl, mode)
+                      : _valueControl(context, library, decl, mode),
+                ),
+            ],
+          ),
+        ),
       ];
     }
     return DrawerPane(
@@ -107,42 +127,74 @@ class SceneTokenPane extends StatelessWidget {
     );
   }
 
-  /// The title row's right end of a mode column: what the column is to the
-  /// default — nothing, for the default itself; *same as default* for a
-  /// mode with no value of its own; a link back to that when it has one.
-  Widget? _modeTrailing(
+  /// One mode's row: its name, what it is to the default — nothing, for
+  /// the default itself; *same as default* for a mode with no value of its
+  /// own; a link back to that when it has one — and the value under it.
+  Widget _modeRow(
+    BuildContext context,
     TokensLibrary library,
     SceneTokenDecl decl,
-    String? mode,
-    VoidCallback reset,
-  ) {
-    if (mode == null) return null;
-    var own = decl.modes.containsKey(mode);
-    return DrawerLink('same as default', onTap: own ? reset : null);
+    String? mode, {
+    required bool first,
+    required Widget child,
+  }) {
+    var colors = context.colors;
+    Widget? trailing;
+    if (mode != null) {
+      var own = decl.modes.containsKey(mode);
+      trailing = DrawerLink(
+        'same as default',
+        onTap: !own
+            ? null
+            : decl.isStyle
+            ? () => library.setStyle(decl.name, decl.style!, mode: mode)
+            : () => library.setValue(decl.name, decl.value!, mode: mode),
+      );
+    }
+    return Container(
+      key: ValueKey(
+        '${decl.isStyle ? 'style' : 'token'}-mode:${mode ?? 'default'}',
+      ),
+      margin: EdgeInsets.only(top: first ? 0 : FwSpacing.md),
+      padding: EdgeInsets.only(top: first ? 0 : FwSpacing.md),
+      decoration: first
+          ? null
+          : BoxDecoration(
+              border: Border(top: BorderSide(color: colors.line)),
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    mode ?? 'Default',
+                    overflow: TextOverflow.ellipsis,
+                    style: context.type.bodyStrong,
+                  ),
+                ),
+                if (trailing != null) Flexible(child: trailing),
+              ],
+            ),
+          ),
+          child,
+        ],
+      ),
+    );
   }
 
-  DrawerSection _valueSection(
+  Widget _valueControl(
     BuildContext context,
     TokensLibrary library,
     SceneTokenDecl decl,
     String? mode,
-  ) {
-    var value = decl.valueIn(mode)!;
-    return DrawerSection(
-      key: ValueKey('token-mode:${mode ?? 'default'}'),
-      title: mode ?? 'Default',
-      width: 260,
-      trailing: _modeTrailing(
-        library,
-        decl,
-        mode,
-        () => library.setValue(decl.name, decl.value!, mode: mode),
-      ),
-      child: _control(context, decl, value, (v, {String? mergeKey}) {
-        library.setValue(decl.name, v, mode: mode, mergeKey: mergeKey);
-      }, endMerge: library.endMerge),
-    );
-  }
+  ) => _control(context, decl, decl.valueIn(mode)!, (v, {String? mergeKey}) {
+    library.setValue(decl.name, v, mode: mode, mergeKey: mergeKey);
+  }, endMerge: library.endMerge);
 
   Widget _control(
     BuildContext context,
@@ -202,7 +254,7 @@ class SceneTokenPane extends StatelessWidget {
   /// A style's fields in one mode: size, weight and align on a row, the
   /// colour under them — each unset-able, because a style sets only what
   /// it sets, and a text takes it whole.
-  DrawerSection _styleSection(
+  Widget _styleFields(
     BuildContext context,
     TokensLibrary library,
     SceneTokenDecl decl,
@@ -236,91 +288,80 @@ class SceneTokenPane extends StatelessWidget {
         control,
       ],
     );
-    return DrawerSection(
-      key: ValueKey('style-mode:${mode ?? 'default'}'),
-      title: mode ?? 'Default',
-      width: 360,
-      trailing: _modeTrailing(
-        library,
-        decl,
-        mode,
-        () => library.setStyle(decl.name, decl.style!, mode: mode),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        spacing: FwSpacing.md,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: FwSpacing.md,
-            children: [
-              Expanded(
-                child: field(
-                  style.fontSize == null ? 'Size · unset' : 'Size',
-                  SceneNumberField(
-                    value: style.fontSize ?? 16,
-                    shape: const SceneNumberShape(perPixel: 1, decimals: 2),
-                    onChanged: (v) =>
-                        put(_with(style, fontSize: v), mergeKey: key),
-                    onCommit: (v) {
-                      put(_with(style, fontSize: v), mergeKey: key);
-                      library.endMerge();
-                    },
-                  ),
-                  unset: style.fontSize == null
-                      ? null
-                      : () => put(_with(style, clearFontSize: true)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      spacing: FwSpacing.md,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: FwSpacing.md,
+          children: [
+            Expanded(
+              child: field(
+                style.fontSize == null ? 'Size · unset' : 'Size',
+                SceneNumberField(
+                  value: style.fontSize ?? 16,
+                  shape: const SceneNumberShape(perPixel: 1, decimals: 2),
+                  onChanged: (v) =>
+                      put(_with(style, fontSize: v), mergeKey: key),
+                  onCommit: (v) {
+                    put(_with(style, fontSize: v), mergeKey: key);
+                    library.endMerge();
+                  },
                 ),
+                unset: style.fontSize == null
+                    ? null
+                    : () => put(_with(style, clearFontSize: true)),
               ),
-              Expanded(
-                flex: 2,
-                child: field(
-                  'Weight',
-                  FwPicker<SceneFontWeight?>(
-                    selected: style.weight,
-                    choices: const [
-                      FwChoice(value: null, label: 'unset'),
-                      FwChoice(value: SceneFontWeight.w400, label: 'Regular'),
-                      FwChoice(value: SceneFontWeight.w500, label: 'Medium'),
-                      FwChoice(value: SceneFontWeight.w600, label: 'Semibold'),
-                      FwChoice(value: SceneFontWeight.w700, label: 'Bold'),
-                      FwChoice(value: SceneFontWeight.w900, label: 'Black'),
-                    ],
-                    onChanged: (w) =>
-                        put(_with(style, weight: w, clearWeight: w == null)),
-                  ),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: field(
-                  'Align',
-                  FwPicker<SceneTextAlign?>(
-                    selected: style.align,
-                    choices: const [
-                      FwChoice(value: null, label: 'unset'),
-                      FwChoice(value: SceneTextAlign.left, label: 'Left'),
-                      FwChoice(value: SceneTextAlign.center, label: 'Center'),
-                      FwChoice(value: SceneTextAlign.right, label: 'Right'),
-                      FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
-                    ],
-                    onChanged: (a) =>
-                        put(_with(style, align: a, clearAlign: a == null)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          field(
-            style.color == null ? 'Colour · unset' : 'Colour',
-            SceneSwatches(
-              current: style.color,
-              onPick: (c) => put(_with(style, color: c, clearColor: c == null)),
             ),
+            Expanded(
+              flex: 2,
+              child: field(
+                'Weight',
+                FwPicker<SceneFontWeight?>(
+                  selected: style.weight,
+                  choices: const [
+                    FwChoice(value: null, label: 'unset'),
+                    FwChoice(value: SceneFontWeight.w400, label: 'Regular'),
+                    FwChoice(value: SceneFontWeight.w500, label: 'Medium'),
+                    FwChoice(value: SceneFontWeight.w600, label: 'Semibold'),
+                    FwChoice(value: SceneFontWeight.w700, label: 'Bold'),
+                    FwChoice(value: SceneFontWeight.w900, label: 'Black'),
+                  ],
+                  onChanged: (w) =>
+                      put(_with(style, weight: w, clearWeight: w == null)),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: field(
+                'Align',
+                FwPicker<SceneTextAlign?>(
+                  selected: style.align,
+                  choices: const [
+                    FwChoice(value: null, label: 'unset'),
+                    FwChoice(value: SceneTextAlign.left, label: 'Left'),
+                    FwChoice(value: SceneTextAlign.center, label: 'Center'),
+                    FwChoice(value: SceneTextAlign.right, label: 'Right'),
+                    FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
+                  ],
+                  onChanged: (a) =>
+                      put(_with(style, align: a, clearAlign: a == null)),
+                ),
+              ),
+            ),
+          ],
+        ),
+        field(
+          style.color == null ? 'Colour · unset' : 'Colour',
+          SceneSwatches(
+            current: style.color,
+            onPick: (c) => put(_with(style, color: c, clearColor: c == null)),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
