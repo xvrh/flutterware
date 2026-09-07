@@ -397,6 +397,7 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
         editor,
         p,
         onRename: () => setState(() => _renaming = aside),
+        host: widget.tokens,
       ),
       rename: (wanted) => editor.renameParam(p.name, wanted),
     );

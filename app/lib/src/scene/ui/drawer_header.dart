@@ -139,10 +139,41 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
                 onTap: (at) => showContextMenu(context, at, _switcher(open)),
               ),
             const SizedBox(width: FwSpacing.sm),
-            Text(
-              _facts(open),
-              style: type.caption.copyWith(color: colors.mut2),
-            ),
+            if (open is ParamAside || open is TokenAside)
+              // The readers are a menu off the facts: each a step to the
+              // node, and the ones in other scenes named. Not a column of
+              // the pane — the pane is the value.
+              Tooltip(
+                message: 'Who reads it — click to step to a reader',
+                waitDuration: const Duration(milliseconds: 600),
+                child: Builder(
+                  builder: (context) => Tappable(
+                    onTap: () {
+                      var box = context.findRenderObject()! as RenderBox;
+                      var at = box.localToGlobal(Offset(0, box.size.height));
+                      showContextMenu(context, at, _readersMenu(open));
+                    },
+                    borderRadius: BorderRadius.circular(
+                      context.radii.radiusSmall,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: FwSpacing.xs,
+                        vertical: FwSpacing.xxs,
+                      ),
+                      child: Text(
+                        '${_facts(open)} ▾',
+                        style: type.caption.copyWith(color: colors.mut2),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Text(
+                _facts(open),
+                style: type.caption.copyWith(color: colors.mut2),
+              ),
             const Spacer(),
             _HeaderButton(
               tooltip: '$kindWord menu',
@@ -193,6 +224,37 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
     }
   }
 
+  /// Who reads the open parameter or token: each reader here a step to
+  /// its node; readers in other scenes of the group named, not reachable.
+  List<MenuEntry> _readersMenu(SceneAside open) {
+    var readers = switch (open) {
+      ParamAside(:var name) => editor.readersOf(name),
+      TokenAside(:var name) => editor.readersOfToken(name),
+      _ => const <(SceneNode, String)>[],
+    };
+    var elsewhere = switch (open) {
+      TokenAside(:var name) =>
+        widget.tokens?.readersElsewhere?.call(name) ?? const <String>[],
+      _ => const <String>[],
+    };
+    return [
+      MenuHeader(readers.isEmpty ? 'Read by nothing here' : 'Read by'),
+      if (readers.isEmpty)
+        const MenuItem('Right-click a property of a node to bind it'),
+      for (var (node, prop) in readers)
+        MenuItem(
+          '${node.name} · $prop',
+          icon: Icons.subdirectory_arrow_right,
+          onSelected: () => editor.select(node),
+        ),
+      if (elsewhere.isNotEmpty) ...[
+        const MenuDivider(),
+        const MenuHeader('Elsewhere in the group'),
+        for (var r in elsewhere) MenuItem(r),
+      ],
+    ];
+  }
+
   String? _rename(SceneAside open, String wanted) {
     try {
       switch (open) {
@@ -228,6 +290,7 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
           editor,
           editor.doc.paramNamed(name)!,
           onRename: rename,
+          host: widget.tokens,
         );
       case MotionAside(:var name):
         return [

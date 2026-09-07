@@ -200,8 +200,7 @@ void main() {
     );
     expect(find.byKey(const ValueKey('token-mode:default')), findsOneWidget);
     expect(find.byKey(const ValueKey('token-mode:dark')), findsOneWidget);
-    expect(find.text('Read by'), findsOneWidget);
-    expect(find.text('root · fill'), findsOneWidget);
+    expect(find.text('Read by'), findsNothing, reason: 'on the header');
     await tester.tap(find.text('same as default'));
     await tester.pumpAndSettle();
     expect(library.named('brand')!.modes, isEmpty);

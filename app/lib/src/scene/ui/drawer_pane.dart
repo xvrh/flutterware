@@ -1,21 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
 import '../../ui/tappable.dart';
-import '../editor.dart';
 
 /// The shape every pane in the drawer under the canvas takes: a band of
 /// titled columns, side by side, each scrolling on its own.
 ///
 /// The drawer is wide and short — a third of the window's height at most,
-/// all of its width — so a pane puts its few parts side by side: what is
-/// edited, and who reads it; a library's modes, its tokens, its design
-/// file. Down a column is where the list goes — a token's modes are rows
-/// of its value column — and a column outgrowing the band scrolls, the
-/// way any properties panel does. The columns always fit the band: a
+/// all of its width. A value pane is one column, the value; a library's
+/// modes, tokens and design file are three. Down a column is where a list
+/// goes — a token's modes are rows of its value column — and a column
+/// outgrowing the band scrolls, the way any properties panel does. The columns always fit the band: a
 /// fixed width is a wish, scaled down together when the band is narrower
 /// than their sum. Nothing here overflows, and nothing scrolls sideways.
 class DrawerPane extends StatelessWidget {
@@ -166,96 +163,4 @@ class DrawerLink extends StatelessWidget {
       ),
     );
   }
-}
-
-/// A chip that names a node and a property, and steps to the node.
-class ReaderChip extends StatelessWidget {
-  const ReaderChip(this.label, {super.key, this.onTap, this.muted = false});
-
-  final String label;
-  final VoidCallback? onTap;
-  final bool muted;
-
-  @override
-  Widget build(BuildContext context) {
-    var colors = context.colors;
-    var text = Text(
-      label,
-      style: context.type.mono.copyWith(
-        color: muted ? colors.mut : colors.accentDark,
-      ),
-    );
-    if (onTap == null) return text;
-    return Tappable(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: FwSpacing.xs,
-          vertical: FwSpacing.xxs,
-        ),
-        child: text,
-      ),
-    );
-  }
-}
-
-/// The column every value pane ends with: who reads the thing, each a
-/// step to the node; readers in other scenes of the group, named; and the
-/// one move the thing offers — Share, Make local.
-DrawerSection readersSection(
-  BuildContext context,
-  SceneEditor editor,
-  List<(SceneNode, String)> readers, {
-  List<String> elsewhere = const [],
-  Widget? action,
-}) {
-  var colors = context.colors;
-  var caption = context.type.caption.copyWith(color: colors.mut2);
-  return DrawerSection(
-    title: readers.isEmpty ? 'Read by nothing here' : 'Read by',
-    width: 260,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (readers.isEmpty)
-          Text(
-            'Right-click a property of a node to bind it here.',
-            style: context.type.micro.copyWith(color: colors.mut2),
-          ),
-        Wrap(
-          spacing: FwSpacing.md,
-          runSpacing: FwSpacing.xxs,
-          children: [
-            for (var (node, prop) in readers)
-              ReaderChip(
-                '${node.name} · $prop',
-                onTap: () => editor.select(node),
-              ),
-          ],
-        ),
-        if (elsewhere.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.only(
-              top: FwSpacing.md,
-              bottom: FwSpacing.xs,
-            ),
-            child: Text('Elsewhere in the group', style: caption),
-          ),
-          Wrap(
-            spacing: FwSpacing.md,
-            runSpacing: FwSpacing.xxs,
-            children: [for (var r in elsewhere) ReaderChip(r, muted: true)],
-          ),
-        ],
-        if (action != null)
-          Padding(
-            padding: const EdgeInsets.only(top: FwSpacing.lg),
-            // A row, so the button takes its own width, not the column's.
-            child: Row(mainAxisSize: MainAxisSize.min, children: [action]),
-          ),
-      ],
-    ),
-  );
 }

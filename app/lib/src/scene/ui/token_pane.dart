@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
-import '../../ui/action_button.dart';
 import '../../ui/design/design.dart';
 import '../../ui/picker.dart';
 import '../../ui/tappable.dart';
@@ -23,7 +22,8 @@ import 'tokens_host.dart';
 /// own control, or a style's fields; a mode left equal to the default says
 /// so, and an edit there makes it the mode's own. Every reader in every
 /// open scene follows an edit. An export says what it is — the app's, so
-/// nothing to edit. Beside it, who reads it.
+/// nothing to edit. Who reads it is on the drawer's header, and Make local
+/// in its menu.
 class SceneTokenPane extends StatelessWidget {
   const SceneTokenPane(this.editor, this.name, {super.key, this.host});
 
@@ -48,8 +48,6 @@ class SceneTokenPane extends StatelessWidget {
     // before this rebuild.
     var decl = editor.doc.tokenNamed(name);
     if (decl == null) return const SizedBox.shrink();
-    var readers = editor.readersOfToken(name);
-    var elsewhere = host?.readersElsewhere?.call(name) ?? const <String>[];
     var colors = context.colors;
     var micro = context.type.micro.copyWith(color: colors.mut2);
     List<DrawerSection> value;
@@ -104,27 +102,7 @@ class SceneTokenPane extends StatelessWidget {
         ),
       ];
     }
-    return DrawerPane(
-      key: ValueKey('pane:token:$name'),
-      sections: [
-        ...value,
-        readersSection(
-          context,
-          editor,
-          readers,
-          elsewhere: elsewhere,
-          action: decl.hasValue && !decl.isStyle
-              ? FwActionButton(
-                  label: 'Make local',
-                  tooltip:
-                      'A parameter of this scene, with this value — '
-                      'the token stays for the other scenes',
-                  onPressed: () async => editor.localizeToken(name),
-                )
-              : null,
-        ),
-      ],
-    );
+    return DrawerPane(key: ValueKey('pane:token:$name'), sections: value);
   }
 
   /// One mode's row: its name, what it is to the default — nothing, for

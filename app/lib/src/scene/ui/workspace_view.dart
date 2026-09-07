@@ -233,11 +233,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                                     editor.doc.paramNamed(name)?.kind ==
                                             SceneParamKind.list
                                         ? SceneListTable(editor, name)
-                                        : SceneParamPane(
-                                            editor,
-                                            name,
-                                            tokens: widget.tokens,
-                                          ),
+                                        : SceneParamPane(editor, name),
                                   TokenAside(:var name) => SceneTokenPane(
                                     editor,
                                     name,

@@ -4,8 +4,6 @@ import 'package:flutterware/scene_authoring.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
-import '../../ui/action_button.dart';
-import '../../ui/context_menu.dart';
 import '../editor.dart';
 import 'drawer_pane.dart';
 import 'number_field.dart';
@@ -47,6 +45,7 @@ List<MenuEntry> paramMenu(
   SceneEditor editor,
   SceneParamDecl p, {
   required VoidCallback onRename,
+  SceneTokensHost? host,
 }) {
   var index = editor.doc.params.indexOf(p);
   var readers = editor.readersOf(p.name);
@@ -71,6 +70,29 @@ List<MenuEntry> paramMenu(
           onSelected: readBy != null || kind == p.kind
               ? null
               : () => editor.retypeParam(p.name, kind),
+        ),
+    ],
+    // SHARE: the parameter becomes a token of one of the group's libraries
+    // and every scene of the group may read it; this parameter goes.
+    if (host != null && host.libraries.isNotEmpty) ...[
+      const MenuDivider(),
+      const MenuHeader('Share into'),
+      for (var library in host.libraries)
+        MenuItem(
+          library.symbol,
+          icon: Icons.ios_share_outlined,
+          shortcut: 'a token of the group',
+          onSelected: p.kind == SceneParamKind.list
+              ? null
+              : () => editor.shareParam(
+                  p.name,
+                  (name, kind, value) => library.add(
+                    name,
+                    kind,
+                    value: value,
+                    taken: host.takenIn(editor),
+                  ),
+                ),
         ),
     ],
     const MenuDivider(),
@@ -99,64 +121,22 @@ List<MenuEntry> paramMenu(
 /// One parameter, open in the drawer under the canvas — the same place a
 /// motion's timeline opens, because both are things you work on while
 /// clicking nodes above: the mockup in the kind's own control, editable
-/// because the default IS the mockup and every node reading it follows; and
-/// what reads it, each a step to that node. A list opens as its table
-/// instead; this is every other kind.
+/// because the default IS the mockup and every node reading it follows.
+/// Who reads it is on the drawer's header, and Share is in its menu. A
+/// list opens as its table instead; this is every other kind.
 class SceneParamPane extends StatelessWidget {
-  const SceneParamPane(this.editor, this.name, {super.key, this.tokens});
+  const SceneParamPane(this.editor, this.name, {super.key});
 
   final SceneEditor editor;
   final String name;
-
-  /// The group's libraries, for SHARE: the parameter becomes a token of
-  /// one of them and every scene of the group may read it.
-  final SceneTokensHost? tokens;
 
   @override
   Widget build(BuildContext context) {
     var p = editor.doc.paramNamed(name);
     if (p == null) return const SizedBox.shrink();
-    var readers = editor.readersOf(p.name);
-    Widget? share;
-    if (tokens case var host? when host.libraries.isNotEmpty) {
-      if (p.kind != SceneParamKind.list) {
-        share = Builder(
-          builder: (context) => FwActionButton(
-            label: 'Share',
-            tooltip:
-                'A token of the group, with this default — '
-                'every scene may read it; this parameter goes',
-            onPressed: () async {
-              var box = context.findRenderObject()! as RenderBox;
-              var at = box.localToGlobal(Offset(0, box.size.height));
-              await showContextMenu(context, at, [
-                const MenuHeader('Share into'),
-                for (var library in host.libraries)
-                  MenuItem(
-                    library.symbol,
-                    icon: Icons.ios_share_outlined,
-                    onSelected: () => editor.shareParam(
-                      p.name,
-                      (name, kind, value) => library.add(
-                        name,
-                        kind,
-                        value: value,
-                        taken: host.takenIn(editor),
-                      ),
-                    ),
-                  ),
-              ]);
-            },
-          ),
-        );
-      }
-    }
     return DrawerPane(
       key: ValueKey('pane:param:${p.name}'),
-      sections: [
-        DrawerSection(title: 'Default', child: _control(context, p)),
-        readersSection(context, editor, readers, action: share),
-      ],
+      sections: [DrawerSection(title: 'Default', child: _control(context, p))],
     );
   }
 
