@@ -4,23 +4,137 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as dev;
+import 'dart:io';
 
+import 'package:flutter/material.dart' show MaterialApp;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'core/json.dart';
 import 'core/model.dart';
+import 'core/motion_runtime.dart';
 import 'core/values.dart';
 import 'view.dart';
+
+/// What one folder of scenes may use, declared once in that folder's
+/// `scenes.dart` — the app's widgets, the app's own values by name, the
+/// token libraries the scenes read, and what wraps the canvas.
+///
+/// A scene group is a folder with a `scenes.dart` in it; the scenes are the
+/// `.scene.dart` files below. The tool reads this declaration as text (the
+/// closures are skipped), generates `scene_args.dart` beside it, and boots
+/// the guest from the entries that file declares. The app compiles it, so
+/// every expression here is the app's own.
+///
+/// ```dart
+/// //@flutterware:scenes
+/// final scenes = SceneGroup(
+///   libraries: [brandTokens],
+///   widgets: [ExternalWidget('OrderButton', args: […], build: (a) => …)],
+///   exports: [Token<Color>('shopBrand', AppColors.brand)],
+///   wrap: (child) => MaterialApp(theme: appTheme, home: child),
+/// );
+/// ```
+class SceneGroup {
+  const SceneGroup({
+    this.libraries = const [],
+    this.widgets = const [],
+    this.exports = const [],
+    this.wrap,
+  });
+
+  /// The token libraries these scenes read — each a `*.tokens.dart` the
+  /// editor owns, imported here so the compiler checks the reference.
+  final List<List<Token<Object?>>> libraries;
+
+  /// The widgets a scene may place.
+  final List<ExternalWidget> widgets;
+
+  /// The app's own values, named for the scenes: any type, any expression.
+  /// The editor offers each where its type fits and never sees inside;
+  /// the canvas — this process — resolves it.
+  final List<Token<Object?>> exports;
+
+  /// What the canvas is mounted under: the app's theme, its localizations,
+  /// whatever the scenes' widgets expect above them. A bare [MaterialApp]
+  /// when null.
+  final Widget Function(Widget child)? wrap;
+
+  /// Every token the scenes may name: the libraries' tokens, then the
+  /// exports.
+  List<Token<Object?>> get tokens => [
+    for (var library in libraries) ...library,
+    ...exports,
+  ];
+
+  Widget _wrapped(Widget child) =>
+      wrap?.call(child) ??
+      MaterialApp(debugShowCheckedModeBanner: false, home: child);
+}
+
+/// A scene and its motion, played from the file the editor wrote — the
+/// shape an export walks. The generated `scenePlayer` entry mounts this
+/// with the `pair` knob's path.
+///
+/// The knob carries a path rather than the document itself: a scene is
+/// kilobytes of JSON, and a walk asks for it once. Mounting [SceneView]
+/// with a bound motion is what registers the playhead the harness drives,
+/// so every stop of the clip is `evaluate(t)` and nothing else.
+class ScenePlayerHost extends StatelessWidget {
+  const ScenePlayerHost(this.group, {super.key, required this.pairPath});
+
+  final SceneGroup group;
+  final String pairPath;
+
+  @override
+  Widget build(BuildContext context) {
+    if (pairPath.isEmpty) {
+      return _waiting(context, 'scene player — no pair given');
+    }
+    var file = File(pairPath);
+    if (!file.existsSync()) return _waiting(context, 'no such pair: $pairPath');
+    var pair = sceneFileFromJson(
+      jsonDecode(file.readAsStringSync()) as Map<String, Object?>,
+    );
+    var motion = pair.motions.values.firstOrNull;
+    // The pair came off disk as data, so its external nodes carry a label
+    // and no generated class. This is what turns the label back into a
+    // widget; a scene the app COMPILED needs none of it.
+    bindExternals(pair.scene, group.widgets, tokens: group.tokens);
+    return group._wrapped(
+      Align(
+        alignment: Alignment.topLeft,
+        child: SceneView.document(
+          pair.scene,
+          motion: motion == null ? null : BoundMotion.bind(motion, pair.scene),
+        ),
+      ),
+    );
+  }
+
+  Widget _waiting(BuildContext context, String message) => group._wrapped(
+    ColoredBox(
+      color: const Color(0xFF26282C),
+      child: Center(
+        child: Text(
+          message,
+          style: const TextStyle(color: Color(0x8AFFFFFF)),
+          textDirection: TextDirection.ltr,
+        ),
+      ),
+    ),
+  );
+}
 
 /// The scene editor's canvas, hosted by the app whose theme and widgets the
 /// scenes use.
 ///
-/// Declare a `@Preview` entry named `sceneCanvasHost` that mounts this under
-/// the app's own theme, and the editor composites it: it sends the scene as
-/// *data* over a VM-service extension, this draws it with [SceneView], and
-/// answers with what the layout measured — which is where the editor's
-/// selection rectangles and drag targets come from.
+/// The generated `sceneCanvasHost` entry beside a group's `scenes.dart`
+/// mounts this through [SceneCanvasHost.of], under the group's own wrapper,
+/// and the editor composites it: it sends the scene as *data* over a
+/// VM-service extension, this draws it with [SceneView], and answers with
+/// what the layout measured — which is where the editor's selection
+/// rectangles and drag targets come from.
 ///
 /// The editor also sends its **view** — how the canvas is scaled and panned —
 /// and this draws the artboard through it. The window this renders into is
@@ -34,6 +148,12 @@ class SceneCanvasHost extends StatefulWidget {
     this.tokens = const [],
     this.ground = const Color(0x00000000),
   });
+
+  /// The canvas for one group, under the group's wrapper — what the
+  /// generated entry mounts.
+  static Widget of(SceneGroup group) => group._wrapped(
+    SceneCanvasHost(externals: group.widgets, tokens: group.tokens),
+  );
 
   /// The widgets a scene may place, as the app declares them.
   ///

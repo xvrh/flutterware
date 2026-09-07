@@ -15,21 +15,23 @@ import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/scene/args_codegen.dart';
 import 'package:flutterware_app/src/scene/args_generate.dart';
 import 'package:flutterware_app/src/scene/externals_file.dart';
+import 'package:flutterware_app/src/scene/group_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
+import 'package:flutterware_app/src/scene/tokens_file.dart';
 
 void main() {
-  group('a declaration file', () {
+  group('a group declaration', () {
     test('names a widget, its arguments, their types and their defaults', () {
-      var parsed = parseExternalsFile('''
+      var parsed = parseGroupFile('''
 import 'package:flutterware/scene_authoring.dart';
 
-final sceneExternals = [
+final scenes = SceneGroup(widgets: [
   ExternalWidget(
     'DrinkBadge',
     args: [const Arg<double>('size', 56), const Arg<String>('label')],
     build: (a) => DrinkBadge(size: a.number('size') ?? 56),
   ),
-];
+], wrap: (child) => child);
 ''');
       expect(parsed.refusals, isEmpty);
       var widget = parsed.widgets.single;
@@ -40,26 +42,83 @@ final sceneExternals = [
     });
 
     test('reads the real one beside this test', () {
-      var parsed = parseExternalsFile(
-        File('test/scene/scene_externals.dart').readAsStringSync(),
+      var parsed = parseGroupFile(
+        File('test/scene/scenes.dart').readAsStringSync(),
       );
       expect(parsed.refusals, isEmpty);
       expect(parsed.widgets.single.entry, 'SampleChip');
+      expect(parsed.libraries.single.symbol, 'sampleTokens');
     });
 
     test('refuses an argument with no type to check it against', () {
-      var parsed = parseExternalsFile('''
-final sceneExternals = [
+      var parsed = parseGroupFile('''
+final scenes = SceneGroup(widgets: [
   ExternalWidget('DrinkBadge', args: [Arg('size', 56)], build: (a) => 1),
-];
+]);
 ''');
       expect(parsed.refusals.single.construct, 'argument type');
       expect(parsed.refusals.single.line, 2);
     });
 
     test('refuses a file that declares nothing', () {
-      var parsed = parseExternalsFile('final widgets = [];');
-      expect(parsed.refusals.single.construct, 'no declarations');
+      var parsed = parseGroupFile('final widgets = [];');
+      expect(parsed.refusals.single.construct, 'no declaration');
+    });
+
+    test('resolves a library through the imports, and refuses one it '
+        'cannot', () {
+      var dir = Directory.systemTemp.createTempSync('fw_group');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      var library = File('${dir.path}/brand.tokens.dart')
+        ..writeAsStringSync('$sceneTokensFileMarker\nfinal brandTokens = [];');
+      var declaration = '${dir.path}/$sceneGroupFileName';
+      String? symbolAt(String path) =>
+          path == library.path ? tokensSymbolFor(path) : null;
+      var parsed = parseGroupFile(
+        "import 'brand.tokens.dart';\n"
+        'final scenes = SceneGroup(libraries: [brandTokens, storeTokens]);',
+        resolveImport: importResolverFor(declaration),
+        librarySymbolAt: symbolAt,
+      );
+      expect(parsed.libraries.single.path, library.path);
+      expect(parsed.refusals.single.construct, 'library');
+      expect(parsed.refusals.single.message, contains('storeTokens'));
+    });
+
+    test('attaches a library: one import, one list element, nothing else', () {
+      var source =
+          '''
+$sceneGroupFileMarker
+import 'package:flutterware/scene.dart';
+
+final scenes = SceneGroup(widgets: []);
+''';
+      var attached = attachLibraryIn(
+        source,
+        '/pkg/lib/scenes/scenes.dart',
+        '/pkg/lib/design/brand.tokens.dart',
+        refuse: (r) => fail(r),
+      )!;
+      expect(attached, contains("import '../design/brand.tokens.dart';"));
+      expect(
+        attached,
+        contains('SceneGroup(libraries: [brandTokens], widgets: [])'),
+      );
+      var again = attachLibraryIn(
+        attached,
+        '/pkg/lib/scenes/scenes.dart',
+        '/pkg/lib/design/brand.tokens.dart',
+        refuse: (r) => fail(r),
+      );
+      expect(again, attached, reason: 'already attached is a no-op');
+      var detached = detachLibraryIn(
+        attached,
+        '/pkg/lib/scenes/scenes.dart',
+        '/pkg/lib/design/brand.tokens.dart',
+        refuse: (r) => fail(r),
+      )!;
+      expect(detached, isNot(contains('brand.tokens.dart')));
+      expect(detached, contains('libraries: [], widgets: []'));
     });
   });
 
@@ -76,7 +135,6 @@ final sceneExternals = [
           SceneParamDecl('label', SceneParamKind.string, 'New'),
         ], 'promo_badge.scene.dart'),
       ],
-      externalsImport: 'scene_externals.dart',
     );
 
     test('is one class per widget, typed by the declaration', () {
@@ -109,7 +167,7 @@ final sceneExternals = [
       );
       expect(
         source,
-        contains('sceneExternals.firstWhere((w) => w.entry == entry)'),
+        contains('scenes.widgets.firstWhere((w) => w.entry == entry)'),
       );
     });
 
@@ -127,8 +185,8 @@ final sceneExternals = [
     // generated, `sample.scene.dart` imports it, and a declaration that
     // moved without a regeneration fails here rather than in whatever the
     // compiler says next.
-    var result = generateSceneArgsIn('test/scene', write: false);
-    expect(result.refusals, isEmpty);
+    var result = generateSceneArgsIn('test/scene', write: false).values.single;
+    expect(result.refusals, isEmpty, reason: result.refusals.join('\n'));
     expect(
       result.source,
       File('test/scene/scene_args.dart').readAsStringSync(),

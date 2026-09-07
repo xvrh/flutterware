@@ -106,10 +106,11 @@ void main() => Flutterware.configure((fw) {
       ],
     ),
   );
-  // `example` only, pointed at `demo/`: a scene is rendered by the app whose
-  // theme and widgets it uses, and `demo/` is where the scene host entry that
-  // renders them lives.
-  fw.use(Scene(packages: [.new(example, directory: 'demo')]));
+  // `example` only: a scene is rendered by the app whose theme and widgets
+  // it uses. No `directory:` — a scene group is a folder with a `scenes.dart`
+  // in it, found wherever it was written; `demo/` holds the one this
+  // project has.
+  fw.use(Scene(packages: [.new(example)]));
   // `example` only. `root` is a library and `app` is this GUI — neither has a
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
   fw.use(NativeSplash(packages: [.new(example)]));
@@ -343,15 +344,6 @@ void main() => Flutterware.configure((fw) {
                 Knob('seed', description: 'What to put in the app at startup'),
                 Knob('marker', label: 'Marker'),
               ],
-            ),
-            Entrypoint(
-              'demo/scene_host.dart',
-              name: 'Scene host',
-              description:
-                  "Disposable spike — renders the canvas toy's scene from "
-                  'data pushed over a VM-service extension, with this '
-                  "package's own widgets live",
-              platforms: [RunPlatform.desktop, RunPlatform.ios],
             ),
             Entrypoint(
               'lib/ui_book.dart',

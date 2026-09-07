@@ -1608,11 +1608,11 @@ restarted: List<String>   # The package paths whose harness was dropped.
 
 ### `flutterware.scene`
 
-Scenes this project owns — a design and the motion animating it, in one tool-written file per scene, rendered by the app itself.
+Scenes this project owns — a design and the motion animating it, in one tool-written file per scene, grouped by folder and rendered by the app itself.
 
 #### `list` — List
 
-The scenes this project has, with the class each declares and the motions beside it.
+The scene groups this project has — each a folder with a scenes.dart — with the scenes in each, and the token libraries found.
 
 ```sh
 fw run scene list [--package=…]
@@ -1624,7 +1624,7 @@ fw run scene list [--package=…]
 
 #### `video` — Video
 
-Renders a scene's motion to an mp4, drawn by the app itself — its theme, its widgets — one frame per moment on the harness lane, where a frame cannot be of a moment other than the one it was drawn for. Needs ffmpeg.
+Renders a scene's motion to an mp4, drawn by the app itself — its theme, its group's widgets — one frame per moment on the harness lane, where a frame cannot be of a moment other than the one it was drawn for. Needs ffmpeg.
 
 ```sh
 fw run scene video [--package=…] --scene=<string> --fps=<string>
@@ -1636,18 +1636,47 @@ fw run scene video [--package=…] --scene=<string> --fps=<string>
 | `scene` | string | yes | — | The scene file, by name or path. |
 | `fps` | string | yes | — | Default 30. |
 
-#### `importTokens` — Import tokens
+#### `newGroup` — New group
 
-Writes scene_tokens.dart from a design file's variables — the JSON its REST API answers for local variables, saved to a file. Every variable becomes a Token with its modes; what cannot be one is refused by name. Replaces a file a previous import wrote; a hand-written one is kept unless force is set.
+Makes a folder a scene group: writes its scenes.dart skeleton, which the next scan finds. The generated scene_args.dart follows.
 
 ```sh
-fw run scene importTokens [--package=…] --file=<string> [--force=…]
+fw run scene newGroup [--package=…] --folder=<string>
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `folder` | string | yes | — | Relative to the package — lib/scenes/marketing. |
+
+#### `newLibrary` — New library
+
+Writes an empty token library — <name>.tokens.dart, the editor's own — and lists it in a group when one is named.
+
+```sh
+fw run scene newLibrary [--package=…] --name=<string> [--folder=…] [--group=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `name` | string | yes | — | The library — Brand, store front. |
+| `folder` | string | no | — | Relative to the package; the group's own folder when a group is named, lib/ otherwise. |
+| `group` | string | no | — | A group folder, relative to the package. |
+
+#### `importTokens` — Import tokens
+
+Writes a token library from a design file's variables — the JSON its REST API answers for local variables, saved to a file. Every variable becomes a Token with its modes; what cannot be one is refused by name. Replaces a library a previous import wrote; one the editor or a hand wrote is kept unless force is set.
+
+```sh
+fw run scene importTokens [--package=…] --file=<string> [--library=…] [--force=…]
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | string | no | — | Which declared package; the first when omitted. |
 | `file` | string | yes | — | The saved response, by path. |
+| `library` | string | no | — | The library file to write, relative to the package — lib/design/brand.tokens.dart. Default: imported.tokens.dart in the first group's folder. |
 | `force` | boolean | no | — | Default false. |
 
 

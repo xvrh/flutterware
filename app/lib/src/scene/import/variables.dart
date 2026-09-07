@@ -373,29 +373,40 @@ class _Importer {
 
 /// The line that marks a tokens file as the importer's, so the next import
 /// may replace it without asking. A file without it is somebody's own.
-const importedTokensMarker = '// @flutterware:tokens imported from';
+const importedTokensMarker = '// imported from';
 
-/// Whether [source] is a tokens file this importer wrote.
-bool isImportedTokensFile(String source) =>
-    source.startsWith(importedTokensMarker);
+/// Whether [source] is a library file this importer wrote: the library
+/// marker on the first line, the import note on the second.
+bool isImportedTokensFile(String source) {
+  var lines = source.split('\n');
+  return lines.length > 1 &&
+      isTokensFile(source) &&
+      lines[1].startsWith(importedTokensMarker);
+}
 
-/// `scene_tokens.dart` from an import: the marker, then one `Token<…>` per
-/// variable with its modes, in the design file's order. What
+/// A library file from an import: the library marker, the import note,
+/// then one `Token<…>` per variable with its modes, in the design file's
+/// order, under [symbol] — the list name the file's own name derives. What
 /// [parseTokensFile] reads back, so the round trip is the test.
-String emitImportedTokens(VariablesImport import, {required String from}) {
+String emitImportedTokens(
+  VariablesImport import, {
+  required String from,
+  String symbol = sceneTokensSymbol,
+}) {
   var out = StringBuffer('''
+$sceneTokensFileMarker
 $importedTokensMarker $from
 //
 // The design file's variables, as tokens. Each is `Token<T>('name', value,
 // modes: {…})` — the value is the collection's default mode, `modes` names
-// every mode. Every scene of the package may read them through its tokens
-// formal: `fill: tokens.brandPrimary`.
+// every mode. Every scene of a group that lists `$symbol` reads them through
+// its tokens formal: `fill: tokens.brandPrimary`.
 //
 // Written by an import, and replaced by the next one: a hand edit here is
 // lost then. Refusals, if any, are listed at the end.
 import 'package:flutterware/scene_authoring.dart';
 
-final $sceneTokensSymbol = [
+final $symbol = [
 ''');
   for (var t in import.tokens) {
     out.writeln('  // ${t.source}');

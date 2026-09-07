@@ -4,17 +4,17 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/src/scene/args_generate.dart';
+import 'package:flutterware_app/src/scene/discovery.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
-import 'package:flutterware_app/src/scene/tokens_file.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
   var dir = Directory(p.join('..', 'examples', 'example', 'demo'));
-  // The demos read the package's tokens, declared beside them — parsed the
-  // way the studio parses them, declaration first.
-  var tokens = parseTokensFile(
-    File(p.join(dir.path, sceneTokensFileName)).readAsStringSync(),
-  ).tokens;
+  // The demos read their group's tokens — the libraries `demo/scenes.dart`
+  // lists — read the way the studio reads them, declaration first.
+  var scan = discoverPackage(dir.path);
+  var tokens = readGroup(scan.groups.single, scan).vocabulary!.tokens;
   SceneParse parse(String source) => parseSceneFile(source, tokens: tokens);
   var files =
       dir

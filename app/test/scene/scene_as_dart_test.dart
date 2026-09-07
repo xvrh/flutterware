@@ -12,18 +12,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_app/src/scene/externals_file.dart';
+import 'package:flutterware_app/src/scene/group_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/tokens_file.dart';
 
 import 'sample.scene.dart';
 import 'sample_widget.dart' as app;
-import 'scene_externals.dart';
+import 'scenes.dart';
 
 /// The fixture package's tokens, read the way the studio reads them —
 /// declaration first, so `tokens.ink` in the sample names something.
 final _tokens = parseTokensFile(
-  File('test/scene/scene_tokens.dart').readAsStringSync(),
+  File('test/scene/sample.tokens.dart').readAsStringSync(),
+  symbol: 'sampleTokens',
 ).tokens;
 
 void main() {
@@ -177,7 +178,7 @@ void main() {
 
     // The label is all that arrived, and the app's declarations are what
     // turn it back into a widget.
-    bindExternals(arrived, sceneExternals);
+    bindExternals(arrived, scenes.widgets);
     await tester.pumpWidget(
       MaterialApp(home: Center(child: SceneView.document(arrived))),
     );
@@ -227,8 +228,8 @@ void main() {
           "const SampleChipArgs(label: 'new')",
           "const SampleChipArgs(label: 'new', progress: 1)",
         );
-    var declared = parseExternalsFile(
-      File('test/scene/scene_externals.dart').readAsStringSync(),
+    var declared = parseGroupFile(
+      File('test/scene/scenes.dart').readAsStringSync(),
     );
     var names = {
       for (var w in declared.widgets) w.entry: {for (var a in w.args) a.name},

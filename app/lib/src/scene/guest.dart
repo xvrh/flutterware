@@ -16,16 +16,24 @@ import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:flutterware/scene_authoring.dart';
 
 import '../previews/catalog_session.dart';
+import 'args_codegen.dart';
 import 'editor.dart';
+import 'scene_file.dart';
 
-/// The preview entry a project declares to host scenes — the registration,
-/// per the scene v1 decision that a preview entry *is* the registration.
-const sceneHostEntrySymbol = 'sceneCanvasHost';
+/// The preview entry a group's generated file declares to host its scenes
+/// — the registration, per the scene v1 decision that a preview entry *is*
+/// the registration. One per group, told apart by the folder it sits in.
+const sceneHostEntrySymbol = sceneCanvasHostSymbol;
 
 /// Pushes one editor's document to one guest, coalescing while a push is in
 /// flight, and applies the rects it measures back onto the nodes.
+///
+/// [groupDirectory] is the folder of the group the editor's file belongs
+/// to, relative to the session's project root: the entry booted is the
+/// host declared in THAT folder's `scene_args.dart`, since every group has
+/// one and they all share the symbol.
 class SceneGuest {
-  SceneGuest(this.session, this.editor) {
+  SceneGuest(this.session, this.editor, {required this.groupDirectory}) {
     editor.doc.addListener(_push);
     editor.addListener(_push);
     session.addListener(_onSession);
@@ -98,22 +106,24 @@ class SceneGuest {
       if (_everApplied) _push();
     }
     for (var entry in session.entries) {
-      if (entry.symbol == sceneHostEntrySymbol) {
-        if (session.wantedEntryId != entry.id) session.wantedEntryId = entry.id;
-        // A host that does not compile is a guest showing its last good
-        // build, silently — the status line is where that has to be said.
-        if (session.compileErrorFor(entry) case var error?) {
-          status.value = 'guest: the host does not compile — $error';
-        } else if (session.lastSwitch?.error case var error?) {
-          status.value = 'guest: $error';
-        }
-        return;
+      if (entry.symbol != sceneHostEntrySymbol) continue;
+      if (!isGroupHostEntry(entry.path, groupDirectory)) continue;
+      if (session.wantedEntryId != entry.id) session.wantedEntryId = entry.id;
+      // A host that does not compile is a guest showing its last good
+      // build, silently — the status line is where that has to be said.
+      if (session.compileErrorFor(entry) case var error?) {
+        status.value = 'guest: the host does not compile — $error';
+      } else if (session.lastSwitch?.error case var error?) {
+        status.value = 'guest: $error';
       }
+      return;
     }
     status.value =
-        'guest: this project declares no scene host — add a @Preview entry '
-        'named $sceneHostEntrySymbol';
+        'guest: no scene host in $groupDirectory/ — the generated '
+        '$sceneArgsFileName declares it; rescan the group';
   }
+
+  final String groupDirectory;
 
   /// Sends the document now — after a guest reload, which remounts the host
   /// with no scene, and otherwise only when the document or the selection

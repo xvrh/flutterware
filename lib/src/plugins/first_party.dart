@@ -516,9 +516,10 @@ class Scene extends Plugin {
 class ScenePackage extends PluginPackage {
   const ScenePackage(super.pkg, {this.directory});
 
-  /// Where this package's scene files are, relative to the package; `lib`
-  /// when null. A scene is a screen that happens to be designed, so it lives
-  /// wherever the screens live.
+  /// Where the package is scanned for scene groups, relative to the package;
+  /// the whole package when null. A group is a folder with a `scenes.dart`
+  /// in it, found wherever it was written — this only narrows the walk for a
+  /// package large enough to want that.
   final String? directory;
 
   @override

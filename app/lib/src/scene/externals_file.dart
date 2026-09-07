@@ -144,6 +144,19 @@ ExternalsParse parseExternalsFile(String source) {
     return ExternalsParse(const [], refusals);
   }
 
+  return ExternalsParse(
+    parseExternalWidgetElements(list, refuse),
+    refusals,
+    imports,
+  );
+}
+
+/// The `ExternalWidget(…)` elements of one list literal — the `widgets:`
+/// of a group declaration, or the whole list of a legacy externals file.
+List<ExternalWidgetDecl> parseExternalWidgetElements(
+  ListLiteral list,
+  void Function(int offset, String construct, String message) refuse,
+) {
   var widgets = <ExternalWidgetDecl>[];
   for (var element in list.elements) {
     if (element is! Expression) {
@@ -207,7 +220,7 @@ ExternalsParse parseExternalsFile(String source) {
     }
     widgets.add(ExternalWidgetDecl(entry, args));
   }
-  return ExternalsParse(widgets, refusals, imports);
+  return widgets;
 }
 
 ExternalArgDecl? _arg(Expression e, void Function(int, String, String) refuse) {

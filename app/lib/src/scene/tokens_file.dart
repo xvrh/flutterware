@@ -26,11 +26,57 @@ import 'package:flutterware/scene_authoring.dart';
 
 import 'scene_file.dart';
 
-/// The symbol the declaration list must be called.
+/// The symbol a library's list is called when nothing derives one — the
+/// default for a source parsed without a file name (a test, a demo).
 const sceneTokensSymbol = 'sceneTokens';
 
-/// Where a package declares its tokens — beside its externals.
-const sceneTokensFileName = 'scene_tokens.dart';
+/// What a library file ends with: `brand.tokens.dart`.
+const sceneTokensFileSuffix = '.tokens.dart';
+
+/// The first line of a library file — how discovery tells one from any
+/// other Dart file, the way a scene file declares itself.
+const sceneTokensFileMarker = '//@flutterware:tokens=1';
+
+/// Whether [source] is a library file: the marker is on its first line.
+bool isTokensFile(String source) {
+  var end = source.indexOf('\n');
+  var first = end < 0 ? source : source.substring(0, end);
+  return first.contains('@flutterware:tokens');
+}
+
+/// The list symbol a library file declares, from its name:
+/// `brand.tokens.dart` → `brandTokens`, `store_front.tokens.dart` →
+/// `storeFrontTokens`. Derived rather than declared so a group can name the
+/// library it imports and the tool can check the name without resolving.
+String tokensSymbolFor(String path) {
+  var base = path.replaceAll(r'\', '/');
+  base = base.substring(base.lastIndexOf('/') + 1);
+  if (base.endsWith(sceneTokensFileSuffix)) {
+    base = base.substring(0, base.length - sceneTokensFileSuffix.length);
+  } else if (base.endsWith('.dart')) {
+    base = base.substring(0, base.length - '.dart'.length);
+  }
+  var parts = base.split(RegExp('[^A-Za-z0-9]+')).where((s) => s.isNotEmpty);
+  var camel = StringBuffer();
+  for (var (i, part) in parts.indexed) {
+    camel.write(i == 0 ? part : part[0].toUpperCase() + part.substring(1));
+  }
+  var name = '$camel';
+  if (name.isEmpty || RegExp('^[0-9]').hasMatch(name)) name = 'lib$name';
+  return '${name}Tokens';
+}
+
+/// A library file's name from a library name the user typed: `Brand` →
+/// `brand.tokens.dart`, `Store front` → `store_front.tokens.dart`.
+String tokensFileNameFor(String libraryName) {
+  var snake = libraryName
+      .trim()
+      .replaceAllMapped(RegExp('([a-z0-9])([A-Z])'), (m) => '${m[1]}_${m[2]}')
+      .replaceAll(RegExp('[^A-Za-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '')
+      .toLowerCase();
+  return '${snake.isEmpty ? 'tokens' : snake}$sceneTokensFileSuffix';
+}
 
 /// What the generated class is called, and therefore the TYPE a scene's
 /// tokens formal is recognised by: `class Banner({final SceneTokens tokens =
@@ -86,12 +132,18 @@ const _tokenKinds = {
   'SceneColor': SceneParamKind.color,
 };
 
-/// Reads `final sceneTokens = [Token<SceneColor>('brand', SceneColor(…)), …]`.
+/// Reads `final brandTokens = [Token<SceneColor>('brand', SceneColor(…)), …]`
+/// — [symbol] being the list's name, derived from the file's own name by
+/// [tokensSymbolFor].
 ///
 /// Everything outside that shape is refused with a line number rather than
 /// skipped, the externals rule: a token silently half-read is a scene that
 /// silently loses a colour.
-TokensParse parseTokensFile(String source) {
+TokensParse parseTokensFile(
+  String source, {
+  String symbol = sceneTokensSymbol,
+}) {
+  var sceneTokensSymbol = symbol;
   var refusals = <SceneRefusal>[];
   var lines = source.split('\n');
   void refuse(int offset, String construct, String message) {
@@ -140,6 +192,16 @@ TokensParse parseTokensFile(String source) {
     return TokensParse(const [], refusals);
   }
 
+  return TokensParse(parseTokenElements(list, refuse), refusals, imports);
+}
+
+/// The `Token<…>(…)` elements of one list literal — a library's list, or
+/// the `exports:` of a group declaration. A name declared twice in the
+/// same list is refused.
+List<SceneTokenDecl> parseTokenElements(
+  ListLiteral list,
+  void Function(int offset, String construct, String message) refuse,
+) {
   var tokens = <SceneTokenDecl>[];
   var names = <String>{};
   for (var element in list.elements) {
@@ -159,7 +221,7 @@ TokensParse parseTokensFile(String source) {
     }
     tokens.add(decl);
   }
-  return TokensParse(tokens, refusals, imports);
+  return tokens;
 }
 
 /// A declaration file's imports other than the authoring one, as written.

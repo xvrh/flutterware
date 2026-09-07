@@ -12,7 +12,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
 import 'package:flutterware_app/src/scene/args_codegen.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
-import 'package:flutterware_app/src/scene/externals_file.dart';
+import 'package:flutterware_app/src/scene/group_file.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/tokens_file.dart';
 import 'package:flutterware_app/src/scene/ui/inspector.dart';
@@ -184,7 +184,7 @@ final sceneTokens = [
       var parsed = parseSceneFile(_scene);
       expect(parsed.doc, isNull);
       expect(parsed.refusals.first.construct, 'tokens formal');
-      expect(parsed.refusals.first.message, contains(sceneTokensFileName));
+      expect(parsed.refusals.first.message, contains('no token library'));
     });
 
     test('a nested argument may read a token', () {
@@ -340,7 +340,6 @@ final sceneTokens = [
         externals: [],
         scenes: [],
         tokens: _tokens,
-        tokensImport: 'scene_tokens.dart',
         declarationImports: parseTokensFile(_declaration).imports,
       );
       expect(
@@ -355,9 +354,9 @@ final sceneTokens = [
       );
       expect(
         source,
-        contains('sceneTokens.firstWhere((t) => t.name == name).value'),
+        contains('scenes.tokens.firstWhere((t) => t.name == name).value'),
       );
-      expect(source, contains("import 'scene_tokens.dart';"));
+      expect(source, contains("import 'scenes.dart';"));
       expect(
         source,
         contains(
@@ -370,24 +369,23 @@ final sceneTokens = [
     });
 
     test("fills an external argument of the app's own type", () {
-      var externals = parseExternalsFile('''
+      var externals = parseGroupFile('''
 import 'package:flutter/material.dart' show ButtonStyle;
 import 'package:flutterware/scene_authoring.dart';
 
-final sceneExternals = [
+final scenes = SceneGroup(widgets: [
   ExternalWidget(
     'OrderButton',
     args: [const Arg<String>('label', 'Go'), const Arg<ButtonStyle>('style')],
     build: (a) => 1,
   ),
-];
+]);
 ''');
       expect(externals.refusals, isEmpty);
       expect(externals.widgets.single.args.last.typeName, 'ButtonStyle');
       var source = emitSceneArgs(
         externals: externals.widgets,
         scenes: [],
-        externalsImport: 'scene_externals.dart',
         declarationImports: externals.imports,
       );
       expect(source, contains('final ButtonStyle? style;'));
@@ -400,10 +398,10 @@ final sceneExternals = [
     });
 
     test('an opaque argument with a default is refused', () {
-      var parsed = parseExternalsFile('''
-final sceneExternals = [
+      var parsed = parseGroupFile('''
+final scenes = SceneGroup(widgets: [
   ExternalWidget('B', args: [Arg<ButtonStyle>('style', x)], build: (a) => 1),
-];
+]);
 ''');
       expect(parsed.refusals.single.construct, 'opaque default');
     });

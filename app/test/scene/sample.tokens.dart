@@ -1,8 +1,9 @@
-// The fixture package's tokens: what `sample.scene.dart` reads through its
+//@flutterware:tokens=1
+// The fixture group's tokens: what `sample.scene.dart` reads through its
 // tokens formal, with a dark mode so a set can be flipped under a scene.
 import 'package:flutterware/scene_authoring.dart';
 
-final sceneTokens = [
+final sampleTokens = [
   const Token<SceneColor>(
     'surface',
     SceneColor(0xFF2B1B12),

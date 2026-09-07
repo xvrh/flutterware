@@ -4,8 +4,9 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:watcher/watcher.dart';
 
-/// Fires when a scene file under a directory moves on disk — an agent
-/// writing one, a branch switch, an editor saving one by hand.
+/// Fires when a scene file, a group declaration or a token library under a
+/// directory moves on disk — an agent writing one, a branch switch, an
+/// editor saving one by hand.
 ///
 /// Small on purpose, and deliberately the same shape as the shell's config
 /// watcher, because file watching goes wrong the same three ways every time:
@@ -54,7 +55,14 @@ class SceneWatcher {
   }
 
   void _onEvent(WatchEvent event) {
-    if (!event.path.endsWith('.scene.dart')) return;
+    // Scene files, group declarations and libraries: each one changes what
+    // the listing says or what an open scene is parsed against.
+    var name = p.basename(event.path);
+    if (!name.endsWith('.scene.dart') &&
+        name != 'scenes.dart' &&
+        !name.endsWith('.tokens.dart')) {
+      return;
+    }
     _pending.add(p.canonicalize(event.path));
     _settle?.cancel();
     _settle = Timer(debounce, _fire);

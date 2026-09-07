@@ -11,7 +11,10 @@ import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/native/scene_core.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
+import 'package:flutterware_app/src/scene/group_file.dart';
+import 'package:flutterware_app/src/scene/skeletons.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
+import 'package:flutterware_app/src/scene/tokens_file.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
@@ -37,17 +40,22 @@ void main() {
         ),
         config: const {
           'packages': [
-            {'path': '.', 'directory': 'demo'},
+            {'path': '.'},
           ],
         },
       ),
     );
   }
 
+  /// The scene goes in `demo/`, which this makes a group on the way.
   void writeScene(String name, {bool withMotion = true}) {
     var scene = coffeeBannerDraft();
     var file = File(p.join(root.path, 'demo', '$name.scene.dart'));
     file.parent.createSync(recursive: true);
+    var declaration = File(p.join(root.path, 'demo', sceneGroupFileName));
+    if (!declaration.existsSync()) {
+      declaration.writeAsStringSync(emitGroupSkeleton());
+    }
     file.writeAsStringSync(
       emitSceneFile(
         scene,
@@ -70,20 +78,31 @@ void main() {
   group('importTokens', () {
     var fixture = p.absolute('test/scene/fixtures/variables.json');
 
-    test('writes the declaration and regenerates the vocabulary', () async {
+    test('writes the library, lists it in the group, regenerates', () async {
       writeScene('BannerScene', withMotion: false);
       var result =
           (await core().invoke('importTokens', arguments: {'file': fixture}))!
               as Map<String, Object?>;
-      expect(result['path'], 'demo/scene_tokens.dart');
+      expect(result['path'], 'demo/imported.tokens.dart');
+      expect(result['symbol'], 'importedTokens');
       expect(result['modes'], ['light', 'darkMode', 'defaultMode']);
       expect((result['tokens']! as List).length, 8);
       expect((result['refusals']! as List).length, 2);
-      var written = File(p.join(root.path, 'demo', 'scene_tokens.dart'));
-      expect(written.readAsStringSync(), startsWith('// @flutterware:tokens'));
+      expect(result['listedBy'], ['demo'], reason: 'attached to its group');
+      var written = File(p.join(root.path, 'demo', 'imported.tokens.dart'));
+      expect(written.readAsStringSync(), startsWith(sceneTokensFileMarker));
       expect(
         written.readAsStringSync(),
         contains("Token<double>('radiusCard', 28"),
+      );
+      var declaration = File(p.join(root.path, 'demo', sceneGroupFileName));
+      expect(
+        declaration.readAsStringSync(),
+        contains("import 'imported.tokens.dart';"),
+      );
+      expect(
+        declaration.readAsStringSync(),
+        contains('libraries: [importedTokens]'),
       );
       var args = File(p.join(root.path, 'demo', 'scene_args.dart'));
       expect(args.readAsStringSync(), contains('class SceneTokens {'));
@@ -93,17 +112,17 @@ void main() {
       expect(written.existsSync(), isTrue);
     });
 
-    test('keeps a hand-written declaration unless forced', () async {
-      var written = File(p.join(root.path, 'demo', 'scene_tokens.dart'))
-        ..parent.createSync(recursive: true)
-        ..writeAsStringSync('final sceneTokens = [];');
+    test('keeps a library not written by an import unless forced', () async {
+      writeScene('BannerScene', withMotion: false);
+      var written = File(p.join(root.path, 'demo', 'imported.tokens.dart'))
+        ..writeAsStringSync(emitTokensSkeleton('importedTokens'));
       expect(
         () => core().invoke('importTokens', arguments: {'file': fixture}),
         throwsA(
           isA<StateError>().having(
             (e) => e.message,
             'message',
-            contains('written by hand'),
+            contains('not written by an import'),
           ),
         ),
       );
@@ -134,17 +153,74 @@ void main() {
     });
   });
 
-  test('list reports the scenes and where they are', () async {
+  test('list reports the groups, their scenes and where they are', () async {
     writeScene('BannerScene');
     writeScene('OtherScene', withMotion: false);
     var result = (await core().invoke('list'))! as Map<String, Object?>;
     expect(result['package'], '.');
-    var scenes = (result['scenes']! as List).cast<Map<String, Object?>>();
+    var groups = (result['groups']! as List).cast<Map<String, Object?>>();
+    expect(groups.single['name'], 'demo');
+    expect(groups.single['folder'], 'demo');
+    var scenes = (groups.single['scenes']! as List)
+        .cast<Map<String, Object?>>();
     expect(scenes.map((s) => s['class']).toSet(), {
       'BannerScene',
       'OtherScene',
     });
     expect(scenes.first['path'], startsWith('demo/'));
+    expect(result['strayScenes'], 0);
+  });
+
+  test('a scene file outside any group is counted, not listed', () async {
+    File(p.join(root.path, 'lib', 'loose.scene.dart'))
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync(
+        emitSceneFile(coffeeBannerDraft(), className: 'LooseScene'),
+      );
+    var result = (await core().invoke('list'))! as Map<String, Object?>;
+    expect(result['groups'], isEmpty);
+    expect(result['strayScenes'], 1);
+  });
+
+  test('newGroup writes the skeleton, and list finds the folder', () async {
+    var made =
+        (await core().invoke(
+              'newGroup',
+              arguments: {'folder': 'lib/scenes/m'},
+            ))!
+            as Map<String, Object?>;
+    expect(made['path'], 'lib/scenes/m/$sceneGroupFileName');
+    var result = (await core().invoke('list'))! as Map<String, Object?>;
+    var groups = (result['groups']! as List).cast<Map<String, Object?>>();
+    expect(groups.single['name'], 'm');
+    expect(groups.single['scenes'], isEmpty);
+    expect(
+      File(p.join(root.path, 'lib/scenes/m', 'scene_args.dart')).existsSync(),
+      isTrue,
+      reason: 'the generated file follows, entries and all',
+    );
+    expect(
+      () => core().invoke('newGroup', arguments: {'folder': 'lib/scenes/m'}),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('newLibrary writes an empty library and lists it in a group', () async {
+    writeScene('BannerScene', withMotion: false);
+    var made =
+        (await core().invoke(
+              'newLibrary',
+              arguments: {'name': 'Brand', 'group': 'demo'},
+            ))!
+            as Map<String, Object?>;
+    expect(made['path'], 'demo/brand.tokens.dart');
+    expect(made['symbol'], 'brandTokens');
+    expect(made['attachedTo'], 'demo');
+    var result = (await core().invoke('list'))! as Map<String, Object?>;
+    var groups = (result['groups']! as List).cast<Map<String, Object?>>();
+    expect(groups.single['libraries'], ['demo/brand.tokens.dart']);
+    var libraries = (result['libraries']! as List).cast<Map<String, Object?>>();
+    expect(libraries.single['symbol'], 'brandTokens');
   });
 
   test('an unknown package is refused by naming the declared ones', () {
@@ -188,15 +264,19 @@ void main() {
     );
   });
 
-  test('a project with no scene player says what to declare', () {
+  test('a group whose generated player is gone says so', () async {
     writeScene('BannerScene');
+    // The generated file carries the player; scan once so it exists, then
+    // take it away.
+    await core().invoke('list');
+    File(p.join(root.path, 'demo', 'scene_args.dart')).deleteSync();
     expect(
       () => core().invoke('video', arguments: {'scene': 'BannerScene'}),
       throwsA(
         isA<StateError>().having(
           (e) => e.message,
           'message',
-          allOf(contains('scenePlayer'), contains('pair')),
+          allOf(contains('no scene player'), contains('demo/')),
         ),
       ),
     );

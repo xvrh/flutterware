@@ -72,6 +72,7 @@ import 'package:analyzer/dart/ast/token.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
 
+import 'group_file.dart';
 import 'motion_file.dart';
 import 'tokens_file.dart';
 
@@ -995,8 +996,8 @@ class _Parser {
           refuse(
             p.type!.offset,
             'tokens formal',
-            'this package declares no tokens — add $sceneTokensFileName '
-                'beside the scene, `final $sceneTokensSymbol = [Token<…>(…)]`',
+            "this scene's group lists no token library — create one in the "
+                "editor, or attach one in the group's $sceneGroupFileName",
           );
           continue;
         }
@@ -1798,7 +1799,8 @@ class _Parser {
     refuse(
       e.identifier.offset,
       'unknown token',
-      '$sceneTokensFileName declares no "${e.identifier.name}" — it has '
+      "no library of this scene's group declares "
+          '"${e.identifier.name}" — they have '
           '${_tokens.keys.map((k) => '"$k"').join(', ')}',
     );
   }

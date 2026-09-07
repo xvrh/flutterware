@@ -14,13 +14,16 @@ import '../../previews/compiler_daemon_client.dart';
 
 import 'package:flutterware/scene_authoring.dart';
 
+import '../../scene/args_generate.dart';
 import '../../scene/discovery.dart';
 import '../../scene/externals_file.dart';
+import '../../scene/group_file.dart';
 import '../../scene/autosave.dart';
 import '../../scene/editor.dart';
 import '../../scene/guest.dart';
 import '../../scene/scene_file.dart';
 import '../../scene/playback.dart';
+import '../../scene/tokens_file.dart';
 import '../../scene/ui/workspace_view.dart';
 import '../../scene/watch.dart';
 import '../../scene/workspace.dart';
@@ -29,6 +32,8 @@ import '../../ui/count_badge.dart';
 import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/loading_state.dart';
+import '../../ui/context_menu.dart';
+import '../../ui/menu.dart';
 import '../../ui/panel_header.dart';
 import '../../ui/picker.dart';
 import '../../ui/popover.dart';
@@ -98,6 +103,10 @@ class _ScenePanelState extends State<_ScenePanel>
   /// picked: booting a guest is expensive and a listing needs none.
   SceneWorkspace? _workspace;
   SceneGuest? _guest;
+
+  /// The group the open file belongs to — what it is parsed against and
+  /// which folder's host the guest boots.
+  SceneGroupEntry? _group;
   String _note = '';
 
   /// One playback per motion opened, by file and name — a playback owns a
@@ -192,9 +201,14 @@ class _ScenePanelState extends State<_ScenePanel>
     // The new core has computed nothing; the old one's scan is gone with it.
     if (package != null) _core.track(package);
     var file = _workspace?.active;
-    if (file == null || package == null) return;
+    var group = _group;
+    if (file == null || package == null || group == null) return;
     _guest?.dispose();
-    _guest = SceneGuest(widget.plugin.sessionFor(package), file.editor);
+    _guest = SceneGuest(
+      widget.plugin.sessionFor(package),
+      file.editor,
+      groupDirectory: _core.groupPathFor(package, group),
+    );
     // The new engine started at the session's default size; forget the
     // old one's, or the artboard draws at half scale in a texture nobody
     // resized.
@@ -215,10 +229,23 @@ class _ScenePanelState extends State<_ScenePanel>
     _guest?.dispose();
     _guest = null;
     _workspace = null;
+    _group = null;
     _note = '';
   }
 
   void _open(SceneEntry entry) {
+    var package = _package!;
+    var group = _core.groupFor(package, entry.path);
+    if (group == null) {
+      setState(() {
+        _close();
+        _note =
+            '${entry.fileName} is in no group — no folder above it has a '
+            '$sceneGroupFileName';
+      });
+      return;
+    }
+    _group = group;
     var opened = SceneFile.open(
       entry.path,
       File(entry.path).readAsStringSync(),
@@ -238,13 +265,18 @@ class _ScenePanelState extends State<_ScenePanel>
     setState(() {
       _guest?.dispose();
       _workspace = SceneWorkspace(file, resolveNested: _resolveNested);
-      _guest = SceneGuest(widget.plugin.sessionFor(_package!), file.editor);
+      _guest = SceneGuest(
+        widget.plugin.sessionFor(package),
+        file.editor,
+        groupDirectory: _core.groupPathFor(package, group),
+      );
       _note = '';
     });
     _autosave.bind(_workspace);
   }
 
-  /// Starts (or re-points) the watch on the package's scene directory.
+  /// Starts (or re-points) the watch on the package's scanned scope — scene
+  /// files, group declarations and libraries alike.
   void _watchDirectory(String package) {
     var directory = _core.rootFor(package);
     if (_watching == directory && _watcher?.isWatching == true) return;
@@ -254,9 +286,9 @@ class _ScenePanelState extends State<_ScenePanel>
       ..start();
   }
 
-  /// Scene files moved on disk. The listing is refreshed either way; an open
-  /// file is adopted when this editor has nothing of its own to lose, and
-  /// held otherwise.
+  /// Scene files, a declaration or a library moved on disk. The listing is
+  /// refreshed either way; an open file is adopted when this editor has
+  /// nothing of its own to lose, and held otherwise.
   void _onDiskChanged(Set<String> paths) {
     if (!mounted) return;
     var package = _package ?? _resolve();
@@ -319,11 +351,12 @@ class _ScenePanelState extends State<_ScenePanel>
   }
 
   /// Writes an empty scene — one root frame of the size asked for — as
-  /// `<snake_name>.scene.dart` in the package's scene directory, and opens
-  /// it. The emitter writes it, so a file made here is canonical from its
-  /// first byte.
+  /// `<snake_name>.scene.dart` in [group]'s folder, and opens it. The
+  /// emitter writes it, so a file made here is canonical from its first
+  /// byte.
   void _createScene(
     String package,
+    SceneGroupEntry group,
     String className,
     double width,
     double height,
@@ -333,11 +366,7 @@ class _ScenePanelState extends State<_ScenePanel>
       ..height = height
       ..fill = const SceneColor(0xFFFFFFFF);
     var source = emitSceneFile(SceneDocument(root), className: className);
-    var dir = p.join(
-      widget.plugin.host.worktree.path,
-      package,
-      _core.directoryFor(package),
-    );
+    var dir = group.directory;
     var path = p.join(dir, '${_snake(className)}.scene.dart');
     if (File(path).existsSync()) {
       setState(() => _note = '${p.basename(path)} already exists');
@@ -354,30 +383,31 @@ class _ScenePanelState extends State<_ScenePanel>
       .replaceAllMapped(RegExp('([a-z0-9])([A-Z])'), (m) => '${m[1]}_${m[2]}')
       .toLowerCase();
 
-  /// The widgets this package declares — what an inspector reads a type and
-  /// a default from, and what a parse checks an argument name against.
-  List<ExternalWidgetDecl> _externals() {
+  /// What the open file's group declares — the widgets an inspector reads
+  /// a type and a default from, the tokens a parse checks `tokens.x`
+  /// against.
+  GroupVocabulary _vocabulary() {
     var package = _package;
-    return package == null ? const [] : _core.externalsFor(package);
+    var group = _group;
+    return package == null || group == null
+        ? GroupVocabulary.empty
+        : _core.vocabularyFor(package, group);
   }
 
-  Map<String, Set<String>> _declaredArgs() => {
-    for (var w in _externals()) w.entry: {for (var a in w.args) a.name},
-  };
+  List<ExternalWidgetDecl> _externals() => _vocabulary().widgets;
 
-  List<SceneTokenDecl> _tokens() {
-    var package = _package;
-    return package == null ? const [] : _core.tokensFor(package);
-  }
+  Map<String, Set<String>> _declaredArgs() => _vocabulary().declaredArgs;
 
-  /// A nested scene is another scene file of the same package, found by the
+  List<SceneTokenDecl> _tokens() => _vocabulary().tokens;
+
+  /// A nested scene is another scene file of the same group, found by the
   /// class it declares. Opened fresh here; the workspace keeps the one copy
   /// it already holds, so edits inside a child are not lost to a re-resolve.
   SceneFile? _resolveNested(SceneNode node) {
     if (node is! SceneRefNode) return null;
-    var package = _package;
-    if (package == null) return null;
-    for (var entry in _core.scenesFor(package) ?? const <SceneEntry>[]) {
+    var group = _group;
+    if (group == null) return null;
+    for (var entry in group.scenes) {
       if (entry.className != node.sceneClassName) continue;
       var opened = SceneFile.open(
         entry.path,
@@ -404,10 +434,15 @@ class _ScenePanelState extends State<_ScenePanel>
   void _syncGuest() {
     var workspace = _workspace;
     var package = _package;
-    if (workspace == null || package == null) return;
+    var group = _group;
+    if (workspace == null || package == null || group == null) return;
     if (_guest?.editor == workspace.editor) return;
     _guest?.dispose();
-    _guest = SceneGuest(widget.plugin.sessionFor(package), workspace.editor);
+    _guest = SceneGuest(
+      widget.plugin.sessionFor(package),
+      workspace.editor,
+      groupDirectory: _core.groupPathFor(package, group),
+    );
     _paneRendered = null;
   }
 
@@ -461,21 +496,42 @@ class _ScenePanelState extends State<_ScenePanel>
   }
 
   Widget _listing(String package) {
-    var scenes = _core.scenesFor(package);
-    if (scenes == null) return const LoadingState(title: 'Looking for scenes');
+    var scan = _core.scanFor(package);
+    if (scan == null) return const LoadingState(title: 'Looking for scenes');
     var colors = context.colors;
     var type = context.type;
+    var scope = _core.directoryFor(package);
+    var libraries = scan.libraries;
+    // Which groups list which library — from the vocabularies, so an
+    // unlisted library is visibly unused rather than lost.
+    var listedBy = <String, List<SceneGroupEntry>>{};
+    for (var group in scan.groups) {
+      for (var l in _core.vocabularyFor(package, group).libraries) {
+        (listedBy[p.canonicalize(l.entry.path)] ??= []).add(group);
+      }
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         FwPanelHeader(
           'Scenes',
-          subtitle: ['$package/${_core.directoryFor(package)}'],
-          badge: scenes.isEmpty ? null : CountBadge(scenes.length),
-          trailing: _NewSceneButton(
-            taken: {for (var s in scenes) s.className},
-            onCreate: (className, width, height) =>
-                _createScene(package, className, width, height),
+          subtitle: [scope == '.' ? package : '$package/$scope'],
+          badge: scan.scenes.isEmpty ? null : CountBadge(scan.scenes.length),
+          trailing: Row(
+            spacing: FwSpacing.sm,
+            children: [
+              _NewLibraryButton(
+                groups: scan.groups,
+                defaultFolder: 'lib',
+                folderOf: (group) => _core.groupPathFor(package, group),
+                onCreate: (name, folder, group) =>
+                    _createLibrary(package, folder, name, attachTo: group),
+              ),
+              _NewGroupButton(
+                taken: {for (var g in scan.groups) g.name},
+                onCreate: (folder) => _createGroup(package, folder),
+              ),
+            ],
           ),
         ),
         if (_note.isNotEmpty)
@@ -486,14 +542,16 @@ class _ScenePanelState extends State<_ScenePanel>
             ),
             child: Text(_note, style: type.body.copyWith(color: colors.red)),
           ),
-        if (scenes.isEmpty)
+        if (scan.groups.isEmpty && libraries.isEmpty)
           Expanded(
             child: EmptyState(
               icon: Icons.movie_filter_outlined,
-              title: 'No scenes here',
+              title: 'No scene groups',
               message:
-                  'A scene file is one this tool writes, marked in its first '
-                  'line. None under ${_core.directoryFor(package)}/ yet.',
+                  'A scene group is a folder with a $sceneGroupFileName in '
+                  'it; its scenes are the .scene.dart files below. None '
+                  'under ${scope == '.' ? 'this package' : '$scope/'} yet — '
+                  'New group writes one.',
             ),
           )
         else
@@ -501,41 +559,36 @@ class _ScenePanelState extends State<_ScenePanel>
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
               children: [
-                for (var scene in scenes)
-                  Tappable(
-                    onTap: () => _open(scene),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: FwSpacing.xl,
-                        vertical: FwSpacing.md,
-                      ),
-                      child: Row(
-                        spacing: FwSpacing.md,
-                        children: [
-                          Icon(
-                            Icons.movie_filter_outlined,
-                            size: FwIconSize.md,
-                            color: colors.mut,
-                          ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(scene.className, style: type.body),
-                                Text(
-                                  p.relative(
-                                    scene.path,
-                                    from: widget.plugin.host.worktree.path,
-                                  ),
-                                  style: type.caption.copyWith(
-                                    color: colors.mut2,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+                for (var group in scan.groups)
+                  ..._groupSection(package, group, libraries),
+                if (libraries.isNotEmpty || scan.groups.isNotEmpty)
+                  _sectionTitle(
+                    'Libraries',
+                    libraries.isEmpty
+                        ? 'none yet — a library is a *$sceneTokensFileSuffix '
+                              'the editor owns'
+                        : null,
+                  ),
+                for (var library in libraries)
+                  _libraryRow(
+                    package,
+                    library,
+                    listedBy[p.canonicalize(library.path)] ?? const [],
+                    scan.groups,
+                  ),
+                if (scan.strayScenes > 0)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      FwSpacing.xl,
+                      FwSpacing.lg,
+                      FwSpacing.xl,
+                      FwSpacing.sm,
+                    ),
+                    child: Text(
+                      '${scan.strayScenes} scene file'
+                      '${scan.strayScenes == 1 ? '' : 's'} outside any group '
+                      '— not scenes the tool knows',
+                      style: type.caption.copyWith(color: colors.mut2),
                     ),
                   ),
               ],
@@ -543,6 +596,289 @@ class _ScenePanelState extends State<_ScenePanel>
           ),
       ],
     );
+  }
+
+  Widget _sectionTitle(String title, String? caption) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      FwSpacing.xl,
+      FwSpacing.lg,
+      FwSpacing.xl,
+      FwSpacing.xs,
+    ),
+    child: Row(
+      spacing: FwSpacing.sm,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(title, style: context.type.bodyStrong),
+        if (caption != null)
+          Expanded(
+            child: Text(
+              caption,
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+    ),
+  );
+
+  /// One group: its folder as the title, what it sees in a line, its
+  /// refusals in red, its scenes beneath, and New scene at its right edge.
+  List<Widget> _groupSection(
+    String package,
+    SceneGroupEntry group,
+    List<SceneLibraryEntry> libraries,
+  ) {
+    var colors = context.colors;
+    var type = context.type;
+    var vocabulary = _core.vocabularyFor(package, group);
+    var refusals = _core.argsResultFor(package, group)?.refusals ?? const [];
+    var sees = [
+      _count(vocabulary.libraries.length, 'library', 'libraries'),
+      _count(vocabulary.widgets.length, 'widget', 'widgets'),
+      _count(vocabulary.exports.length, 'export', 'exports'),
+    ].join(' · ');
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(
+          FwSpacing.xl,
+          FwSpacing.lg,
+          FwSpacing.xl,
+          FwSpacing.xs,
+        ),
+        child: Row(
+          spacing: FwSpacing.md,
+          children: [
+            Icon(Icons.folder_outlined, size: FwIconSize.md, color: colors.mut),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    spacing: FwSpacing.sm,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(group.name, style: type.bodyStrong),
+                      // The path, when it says more than the name does.
+                      if (_core.groupPathFor(package, group) != group.name)
+                        Text(
+                          _core.groupPathFor(package, group),
+                          style: type.caption.copyWith(color: colors.mut2),
+                        ),
+                    ],
+                  ),
+                  Text(sees, style: type.caption.copyWith(color: colors.mut2)),
+                ],
+              ),
+            ),
+            _NewSceneButton(
+              taken: {for (var s in group.scenes) s.className},
+              onCreate: (className, width, height) =>
+                  _createScene(package, group, className, width, height),
+            ),
+          ],
+        ),
+      ),
+      for (var refusal in refusals)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            FwSpacing.xl + FwIconSize.md + FwSpacing.md,
+            0,
+            FwSpacing.xl,
+            FwSpacing.xs,
+          ),
+          child: Text(
+            '$refusal',
+            style: type.caption.copyWith(color: colors.red),
+          ),
+        ),
+      if (group.scenes.isEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            FwSpacing.xl + FwIconSize.md + FwSpacing.md,
+            FwSpacing.xs,
+            FwSpacing.xl,
+            FwSpacing.sm,
+          ),
+          child: Text(
+            'No scenes in this folder yet.',
+            style: type.caption.copyWith(color: colors.mut2),
+          ),
+        ),
+      for (var scene in group.scenes)
+        Tappable(
+          onTap: () => _open(scene),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.xl + FwIconSize.md + FwSpacing.md,
+              FwSpacing.sm,
+              FwSpacing.xl,
+              FwSpacing.sm,
+            ),
+            child: Row(
+              spacing: FwSpacing.md,
+              children: [
+                Icon(
+                  Icons.movie_filter_outlined,
+                  size: FwIconSize.md,
+                  color: colors.mut,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(scene.className, style: type.body),
+                      Text(
+                        p.relative(
+                          scene.path,
+                          from: widget.plugin.host.worktree.path,
+                        ),
+                        style: type.caption.copyWith(color: colors.mut2),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+    ];
+  }
+
+  static String _count(int n, String one, String many) =>
+      '$n ${n == 1 ? one : many}';
+
+  /// One library: its symbol, its file, who lists it, and a menu to attach
+  /// it to a group or detach it.
+  Widget _libraryRow(
+    String package,
+    SceneLibraryEntry library,
+    List<SceneGroupEntry> listedBy,
+    List<SceneGroupEntry> groups,
+  ) {
+    var colors = context.colors;
+    var type = context.type;
+    var listing = {for (var g in listedBy) p.canonicalize(g.directory)};
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        FwSpacing.xl,
+        FwSpacing.sm,
+        FwSpacing.xl,
+        FwSpacing.sm,
+      ),
+      child: Row(
+        spacing: FwSpacing.md,
+        children: [
+          Icon(Icons.style_outlined, size: FwIconSize.md, color: colors.mut),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(library.symbol, style: type.body),
+                Text(
+                  '${p.relative(library.path, from: widget.plugin.host.worktree.path)}'
+                  ' · ${listedBy.isEmpty ? 'listed by no group' : 'listed by ${listedBy.map((g) => g.name).join(', ')}'}',
+                  style: type.caption.copyWith(
+                    color: listedBy.isEmpty ? colors.warningText : colors.mut2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Tooltip(
+            message: 'Attach to a group, or detach',
+            child: Builder(
+              builder: (context) => Tappable(
+                onTap: () {
+                  var box = context.findRenderObject()! as RenderBox;
+                  var at = box.localToGlobal(Offset(0, box.size.height));
+                  showContextMenu(context, at, [
+                    const MenuHeader('Groups'),
+                    for (var group in groups)
+                      if (listing.contains(p.canonicalize(group.directory)))
+                        MenuItem(
+                          'Detach from ${group.name}',
+                          icon: Icons.link_off,
+                          onSelected: () =>
+                              _detachLibrary(package, group, library),
+                        )
+                      else
+                        MenuItem(
+                          'Attach to ${group.name}',
+                          icon: Icons.link,
+                          onSelected: () =>
+                              _attachLibrary(package, group, library),
+                        ),
+                    if (groups.isEmpty)
+                      const MenuItem('No groups to attach to'),
+                  ]);
+                },
+                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+                child: Padding(
+                  padding: const EdgeInsets.all(FwSpacing.xs),
+                  child: Icon(
+                    Icons.more_horiz,
+                    size: FwIconSize.md,
+                    color: colors.ink,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _createGroup(String package, String folder) async {
+    try {
+      await _core.createGroup(package, folder);
+      setState(() => _note = '');
+    } on Object catch (e) {
+      setState(() => _note = '$e');
+    }
+  }
+
+  Future<void> _createLibrary(
+    String package,
+    String folder,
+    String name, {
+    SceneGroupEntry? attachTo,
+  }) async {
+    try {
+      await _core.createLibrary(package, folder, name, attachTo: attachTo);
+      setState(() => _note = '');
+    } on Object catch (e) {
+      setState(() => _note = '$e');
+    }
+  }
+
+  Future<void> _attachLibrary(
+    String package,
+    SceneGroupEntry group,
+    SceneLibraryEntry library,
+  ) async {
+    try {
+      await _core.attachLibrary(package, group, library.path);
+      setState(() => _note = '');
+    } on Object catch (e) {
+      setState(() => _note = '$e');
+    }
+  }
+
+  Future<void> _detachLibrary(
+    String package,
+    SceneGroupEntry group,
+    SceneLibraryEntry library,
+  ) async {
+    try {
+      await _core.detachLibrary(package, group, library.path);
+      setState(() => _note = '');
+    } on Object catch (e) {
+      setState(() => _note = '$e');
+    }
   }
 
   Widget _editor(SceneWorkspace workspace) {
@@ -563,6 +899,7 @@ class _ScenePanelState extends State<_ScenePanel>
       children: [
         _Header(
           workspace: workspace,
+          groupName: _group?.name,
           note: _autosave.note.isNotEmpty ? _autosave.note : _note,
           saveState: _autosave.state,
           onBack: () => setState(_close),
@@ -696,6 +1033,7 @@ class _ScenePanelState extends State<_ScenePanel>
 class _Header extends StatelessWidget {
   const _Header({
     required this.workspace,
+    required this.groupName,
     required this.note,
     required this.saveState,
     required this.onBack,
@@ -704,6 +1042,9 @@ class _Header extends StatelessWidget {
   });
 
   final SceneWorkspace workspace;
+
+  /// The folder the open file belongs to — the first crumb.
+  final String? groupName;
   final String note;
   final SceneSaveState saveState;
   final VoidCallback onBack;
@@ -736,9 +1077,13 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-          // The breadcrumb: one crumb today, a drill-in path once a nested
-          // scene can be entered. The last is where you are, so it is not a
-          // link.
+          // The breadcrumb: the group, then the file, then every nested
+          // scene entered since. The last is where you are, so it is not a
+          // link; the group is a word, since back is the way to it.
+          if (groupName case var name?) ...[
+            Text(name, style: type.body.copyWith(color: colors.mut2)),
+            Text('›', style: type.body.copyWith(color: colors.mut3)),
+          ],
           for (var (index, crumb) in crumbs.indexed) ...[
             if (index > 0)
               Text('›', style: type.body.copyWith(color: colors.mut3)),
@@ -880,6 +1225,7 @@ class _NewSceneButtonState extends State<_NewSceneButton> {
           }
 
           return Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: FwSpacing.md,
             children: [
@@ -912,6 +1258,266 @@ class _NewSceneButtonState extends State<_NewSceneButton> {
                   onPressed: name.isEmpty || refusal != null
                       ? null
                       : () async => create(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// "New group": a folder, in a popover off the header. The folder gets a
+/// `scenes.dart` skeleton and is a group from then on.
+class _NewGroupButton extends StatefulWidget {
+  const _NewGroupButton({required this.taken, required this.onCreate});
+
+  final Set<String> taken;
+  final void Function(String folder) onCreate;
+
+  @override
+  State<_NewGroupButton> createState() => _NewGroupButtonState();
+}
+
+class _NewGroupButtonState extends State<_NewGroupButton> {
+  final _folder = TextEditingController(text: 'lib/scenes/');
+
+  @override
+  void dispose() {
+    _folder.dispose();
+    super.dispose();
+  }
+
+  String? get _refusal {
+    var folder = _folder.text.trim();
+    if (folder.isEmpty || folder == 'lib/scenes/') return null;
+    if (folder.startsWith('/') || folder.contains('..')) {
+      return 'A folder inside the package';
+    }
+    if (widget.taken.contains(p.basename(folder))) {
+      return 'There is a ${p.basename(folder)} group already';
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) => Popover(
+    anchor: (context, controller) => FwActionButton(
+      label: 'New group',
+      tooltip: 'A folder for scenes, with its $sceneGroupFileName',
+      onPressed: () async => controller.open(),
+    ),
+    side: PopoverSide.bottom,
+    align: PopoverAlign.end,
+    content: (context, controller) => _form(context, controller),
+  );
+
+  Widget _form(BuildContext context, PopoverController controller) {
+    var colors = context.colors;
+    return Container(
+      width: 300,
+      padding: const EdgeInsets.all(FwSpacing.lg),
+      decoration: BoxDecoration(
+        color: colors.panel,
+        border: Border.all(color: colors.line),
+        borderRadius: BorderRadius.circular(context.radii.radius),
+        boxShadow: context.elevation.sm,
+      ),
+      child: StatefulBuilder(
+        builder: (context, rebuild) {
+          var refusal = _refusal;
+          var folder = _folder.text.trim();
+          var ready =
+              folder.isNotEmpty && folder != 'lib/scenes/' && refusal == null;
+          void create() {
+            if (!ready) return;
+            controller.close();
+            widget.onCreate(folder.replaceAll(RegExp(r'/+$'), ''));
+            _folder.text = 'lib/scenes/';
+          }
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: FwSpacing.md,
+            children: [
+              Text('New group', style: context.type.bodyStrong),
+              Text(
+                'A folder, relative to the package. Its name is the '
+                "group's; its scenes are the files below it.",
+                style: context.type.caption.copyWith(color: colors.mut2),
+              ),
+              TextField(
+                controller: _folder,
+                autofocus: true,
+                style: context.type.mono,
+                decoration: const InputDecoration(
+                  hintText: 'lib/scenes/marketing',
+                ),
+                onChanged: (_) => rebuild(() {}),
+                onSubmitted: (_) => create(),
+              ),
+              if (refusal != null)
+                Text(
+                  refusal,
+                  style: context.type.caption.copyWith(color: colors.red),
+                ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FwActionButton(
+                  label: 'Create',
+                  primary: true,
+                  onPressed: ready ? () async => create() : null,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// "New library": a name, a folder, and optionally the group to list it
+/// in. The file is the editor's own from its first byte.
+class _NewLibraryButton extends StatefulWidget {
+  const _NewLibraryButton({
+    required this.groups,
+    required this.defaultFolder,
+    required this.folderOf,
+    required this.onCreate,
+  });
+
+  final List<SceneGroupEntry> groups;
+  final String defaultFolder;
+
+  /// A group's folder relative to the package — what the folder field
+  /// takes when a group is picked.
+  final String Function(SceneGroupEntry group) folderOf;
+  final void Function(String name, String folder, SceneGroupEntry? attachTo)
+  onCreate;
+
+  @override
+  State<_NewLibraryButton> createState() => _NewLibraryButtonState();
+}
+
+class _NewLibraryButtonState extends State<_NewLibraryButton> {
+  final _name = TextEditingController();
+  late final _folder = TextEditingController(text: widget.defaultFolder);
+  int? _group;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _folder.dispose();
+    super.dispose();
+  }
+
+  String? get _refusal {
+    var name = _name.text.trim();
+    if (name.isEmpty) return null;
+    if (!RegExp(r'^[A-Za-z][A-Za-z0-9 _-]*$').hasMatch(name)) {
+      return 'A name: letters and digits';
+    }
+    var folder = _folder.text.trim();
+    if (folder.startsWith('/') || folder.contains('..')) {
+      return 'A folder inside the package';
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) => Popover(
+    anchor: (context, controller) => FwActionButton(
+      label: 'New library',
+      tooltip: 'A token library the editor owns',
+      onPressed: () async => controller.open(),
+    ),
+    side: PopoverSide.bottom,
+    align: PopoverAlign.end,
+    content: (context, controller) => _form(context, controller),
+  );
+
+  Widget _form(BuildContext context, PopoverController controller) {
+    var colors = context.colors;
+    return Container(
+      width: 300,
+      padding: const EdgeInsets.all(FwSpacing.lg),
+      decoration: BoxDecoration(
+        color: colors.panel,
+        border: Border.all(color: colors.line),
+        borderRadius: BorderRadius.circular(context.radii.radius),
+        boxShadow: context.elevation.sm,
+      ),
+      child: StatefulBuilder(
+        builder: (context, rebuild) {
+          var refusal = _refusal;
+          var name = _name.text.trim();
+          var ready = name.isNotEmpty && refusal == null;
+          void create() {
+            if (!ready) return;
+            controller.close();
+            var group = _group == null ? null : widget.groups[_group!];
+            widget.onCreate(
+              name,
+              _folder.text.trim().isEmpty ? '.' : _folder.text.trim(),
+              group,
+            );
+            _name.clear();
+          }
+
+          var file = name.isEmpty ? '' : tokensFileNameFor(name);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: FwSpacing.md,
+            children: [
+              Text('New library', style: context.type.bodyStrong),
+              TextField(
+                controller: _name,
+                autofocus: true,
+                decoration: const InputDecoration(hintText: 'Brand'),
+                onChanged: (_) => rebuild(() {}),
+                onSubmitted: (_) => create(),
+              ),
+              TextField(
+                controller: _folder,
+                style: context.type.mono,
+                decoration: const InputDecoration(hintText: 'lib/design'),
+                onChanged: (_) => rebuild(() {}),
+                onSubmitted: (_) => create(),
+              ),
+              if (file.isNotEmpty)
+                Text(
+                  '${_folder.text.trim()}/$file · ${tokensSymbolFor(file)}',
+                  style: context.type.caption.copyWith(color: colors.mut2),
+                ),
+              if (widget.groups.isNotEmpty)
+                FwPicker<int>(
+                  choices: [
+                    const FwChoice(value: -1, label: 'Listed by no group yet'),
+                    for (var (i, g) in widget.groups.indexed)
+                      FwChoice(value: i, label: 'List in ${g.name}'),
+                  ],
+                  selected: _group ?? -1,
+                  onChanged: (i) => rebuild(() {
+                    _group = i < 0 ? null : i;
+                    if (i >= 0)
+                      _folder.text = widget.folderOf(widget.groups[i]);
+                  }),
+                ),
+              if (refusal != null)
+                Text(
+                  refusal,
+                  style: context.type.caption.copyWith(color: colors.red),
+                ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FwActionButton(
+                  label: 'Create',
+                  primary: true,
+                  onPressed: ready ? () async => create() : null,
                 ),
               ),
             ],

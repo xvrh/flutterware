@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
 import 'package:flutterware_app/src/scene/args_codegen.dart';
 import 'package:flutterware_app/src/scene/args_generate.dart';
+import 'package:flutterware_app/src/scene/group_file.dart';
 import 'package:flutterware_app/src/scene/import/variables.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/tokens_file.dart';
@@ -133,9 +134,21 @@ final sceneTokens = [
     () {
       var dir = Directory.systemTemp.createTempSync('fw_tokens_import');
       addTearDown(() => dir.deleteSync(recursive: true));
-      File(
-        '${dir.path}/$sceneTokensFileName',
-      ).writeAsStringSync(emitImportedTokens(import, from: 'variables.json'));
+      File('${dir.path}/imported.tokens.dart').writeAsStringSync(
+        emitImportedTokens(
+          import,
+          from: 'variables.json',
+          symbol: 'importedTokens',
+        ),
+      );
+      File('${dir.path}/$sceneGroupFileName').writeAsStringSync('''
+$sceneGroupFileMarker
+import 'package:flutterware/scene.dart';
+
+import 'imported.tokens.dart';
+
+final scenes = SceneGroup(libraries: [importedTokens]);
+''');
       File('${dir.path}/card.scene.dart').writeAsStringSync('''
 $sceneFileMarker
 import 'package:flutterware/scene_authoring.dart';
@@ -148,14 +161,15 @@ class Card({final SceneTokens tokens = const SceneTokens()}) extends SceneDefini
   late final root = FrameNode(width: 200, height: 100, fill: tokens.brandPrimary, corner: tokens.radiusCard, children: [label]);
 }
 ''');
-      var result = generateSceneArgsIn(dir.path);
+      var result = generateSceneArgsIn(dir.path).values.single;
       expect(result.refusals, isEmpty, reason: result.refusals.join('\n'));
       expect(result.wrote, isTrue);
       expect(result.source, contains('class SceneTokens {'));
       expect(result.source, contains('static const darkMode = SceneTokens('));
       expect(result.source, contains('class CardArgs extends SceneRefArgs'));
       var decls = parseTokensFile(
-        File('${dir.path}/$sceneTokensFileName').readAsStringSync(),
+        File('${dir.path}/imported.tokens.dart').readAsStringSync(),
+        symbol: 'importedTokens',
       ).tokens;
       var parsed = parseSceneFile(
         File('${dir.path}/card.scene.dart').readAsStringSync(),

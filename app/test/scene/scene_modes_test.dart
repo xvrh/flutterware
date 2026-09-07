@@ -254,9 +254,10 @@ void main() {
 
   test('the fixture declaration is what the sample reads', () {
     expect(
-      parseTokensFile(File('test/scene/scene_tokens.dart').readAsStringSync())
-          .tokens
-          .map((t) => t.name),
+      parseTokensFile(
+        File('test/scene/sample.tokens.dart').readAsStringSync(),
+        symbol: 'sampleTokens',
+      ).tokens.map((t) => t.name),
       ['surface', 'ink'],
     );
   });
