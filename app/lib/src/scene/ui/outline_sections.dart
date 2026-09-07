@@ -10,6 +10,7 @@ import '../../ui/tree_row.dart';
 import '../editor.dart';
 import 'inline_name.dart';
 import 'param_pane.dart';
+import 'tokens_host.dart';
 
 /// The rest of what the file declares, under the layers: its parameters and
 /// its motions, each a section with a count and its own `+`.
@@ -27,9 +28,18 @@ class SceneOutlineSections extends StatefulWidget {
     this.sceneClassName,
     this.onOpenMotion,
     this.onOpenParam,
+    this.onOpenToken,
+    this.tokens,
   });
 
   final SceneEditor editor;
+
+  /// Opens a token below the canvas.
+  final ValueChanged<String>? onOpenToken;
+
+  /// The group's libraries and the doors past this file; null hides the
+  /// Tokens section's `+` and makes rename and delete local.
+  final SceneTokensHost? tokens;
 
   /// What a new motion animates; null hides the motions' `+`.
   final String? sceneClassName;
@@ -51,6 +61,7 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
 
   var _paramsOpen = true;
   var _motionsOpen = true;
+  var _tokensOpen = true;
 
   /// The row being renamed in place, if any.
   SceneAside? _renaming;
@@ -91,9 +102,196 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
         ),
         if (_motionsOpen)
           for (var name in motions) _motionRow(context, name),
+        ..._tokensSection(context),
         const SizedBox(height: FwSpacing.sm),
       ],
     );
+  }
+
+  /// The group's tokens: one divider per library the group lists with the
+  /// tokens it declares, then the app's exports. Package-wide, so every
+  /// scene of the group shows the same section.
+  List<Widget> _tokensSection(BuildContext context) {
+    var host = widget.tokens;
+    var exports = [
+      for (var t in doc.tokens)
+        if (t.isExport) t,
+    ];
+    var count = doc.tokens.length;
+    return [
+      _section(
+        context,
+        'Tokens',
+        count,
+        open: _tokensOpen,
+        onToggle: () => setState(() => _tokensOpen = !_tokensOpen),
+        onAdd: host == null ? null : (at) => _addTokenMenu(context, at, null),
+      ),
+      if (_tokensOpen) ...[
+        if (host != null)
+          for (var library in host.libraries) ...[
+            _divider(
+              context,
+              library.symbol,
+              onAdd: (at) => _addTokenMenu(context, at, library.path),
+            ),
+            for (var t in library.tokens) _tokenRow(context, t),
+          ],
+        if (exports.isNotEmpty) ...[
+          _divider(context, 'from the app'),
+          for (var t in exports) _tokenRow(context, t),
+        ],
+        if (host != null && host.libraries.isEmpty && exports.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FwSpacing.md + FwSpacing.xxs,
+              FwSpacing.xxs,
+              FwSpacing.sm,
+              FwSpacing.xs,
+            ),
+            child: Text(
+              'No library yet — + starts one for this group.',
+              style: context.type.micro.copyWith(color: context.colors.mut2),
+            ),
+          ),
+      ],
+    ];
+  }
+
+  Widget _divider(
+    BuildContext context,
+    String label, {
+    void Function(Offset at)? onAdd,
+  }) {
+    var colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(
+        left: FwSpacing.md + FwSpacing.xxs + FwSpacing.sm,
+        right: FwSpacing.sm,
+        top: FwSpacing.xs,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: context.type.micro.copyWith(color: colors.mut2),
+            ),
+          ),
+          if (onAdd != null)
+            Tooltip(
+              message: 'New token in $label',
+              child: GestureDetector(
+                onTapDown: (d) => onAdd(d.globalPosition),
+                child: Padding(
+                  padding: const EdgeInsets.all(FwSpacing.xxs),
+                  child: Icon(
+                    Icons.add,
+                    size: FwIconSize.sm,
+                    color: colors.mut,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tokenRow(BuildContext context, SceneTokenDecl t) {
+    var aside = TokenAside(t.name);
+    var host = widget.tokens;
+    return _row(
+      context,
+      aside,
+      icon: tokenIcon(t),
+      name: t.name,
+      trailing: tokenValueLabel(t),
+      tooltip: tokenFacts(editor, host, t.name),
+      onOpen: () => _openToken(t.name),
+      menu: () => tokenMenu(
+        editor,
+        host,
+        t.name,
+        onRename: () => setState(() => _renaming = aside),
+      ),
+      rename: (wanted) {
+        if (host?.rename case var rename?) {
+          rename(t.name, wanted);
+        } else if (host != null) {
+          host.renameHere(editor, t.name, wanted);
+        } else {
+          throw ArgumentError('no library open to rename in');
+        }
+      },
+    );
+  }
+
+  void _openToken(String name) {
+    if (widget.onOpenToken case var open?) {
+      open(name);
+    } else {
+      editor.openToken = name;
+    }
+  }
+
+  /// `+` on the section, or on one library's divider: a token of a kind,
+  /// or a style, in that library — the first one when the section's own
+  /// `+` was pressed — and, from the section, a new library.
+  void _addTokenMenu(BuildContext context, Offset at, String? libraryPath) {
+    var host = widget.tokens;
+    if (host == null) return;
+    var library = libraryPath == null
+        ? host.libraries.firstOrNull
+        : host.libraries.where((l) => l.path == libraryPath).firstOrNull;
+    showContextMenu(context, at, [
+      if (library != null) ...[
+        MenuHeader('New token in ${library.symbol}'),
+        for (var (kind, label, type) in paramKinds)
+          MenuItem(
+            label,
+            icon: paramKindIcon(kind),
+            shortcut: type,
+            onSelected: () {
+              var taken = host.takenIn(editor)
+                ..removeAll(library.tokens.map((t) => t.name));
+              var name = library.freeName(kind.name, taken: taken);
+              library.add(name, kind, taken: taken);
+              _openToken(name);
+              setState(() {
+                _tokensOpen = true;
+                _renaming = TokenAside(name);
+              });
+            },
+          ),
+        MenuItem(
+          'Style',
+          icon: Icons.text_format,
+          shortcut: 'SceneTextStyle',
+          onSelected: () {
+            var taken = host.takenIn(editor)
+              ..removeAll(library.tokens.map((t) => t.name));
+            var name = library.freeName('style', taken: taken);
+            library.addStyle(name, taken: taken);
+            _openToken(name);
+            setState(() {
+              _tokensOpen = true;
+              _renaming = TokenAside(name);
+            });
+          },
+        ),
+      ],
+      if (libraryPath == null && host.onNewLibrary != null) ...[
+        if (library != null) const MenuDivider(),
+        MenuItem(
+          'New library',
+          icon: Icons.library_add_outlined,
+          shortcut: 'in this folder',
+          onSelected: host.onNewLibrary,
+        ),
+      ],
+    ]);
   }
 
   Widget _section(

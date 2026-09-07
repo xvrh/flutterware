@@ -13,9 +13,19 @@ import 'package:flutterware/scene_authoring.dart';
 
 import 'editor.dart';
 import 'scene_file.dart';
+import 'tokens_library.dart';
+
+/// What the autosave writes: a scene file or a token library, each with a
+/// path, a dirty flag and a save door that refuses what it cannot re-read.
+abstract interface class SceneSavable {
+  String get path;
+  bool get isDirty;
+  bool matchesDisk(String source);
+  List<SceneRefusal> save(void Function(String path, String source) write);
+}
 
 /// One open file: the pair, its editor, and where it came from.
-class SceneFile {
+class SceneFile implements SceneSavable {
   SceneFile({
     required this.path,
     required this.className,
@@ -55,6 +65,7 @@ class SceneFile {
   }
 
   /// Where it lives — the identity a workspace dedupes on.
+  @override
   final String path;
 
   /// The scene class, which is also the file's name in the UI. Follows the
@@ -74,6 +85,7 @@ class SceneFile {
   String? _disk;
 
   /// Whether [source] is the text this file last read or wrote.
+  @override
   bool matchesDisk(String source) => source == _disk;
 
   final SceneEditor editor;
@@ -86,6 +98,7 @@ class SceneFile {
   /// Whether the file differs from what was last written. Counted off the
   /// editor's revision, so undoing back to the saved state still reads
   /// dirty — the safe direction to be wrong in.
+  @override
   bool get isDirty => editor.revision != _savedRevision;
 
   /// The text to write. Emitting through the door and parsing the result
@@ -99,6 +112,7 @@ class SceneFile {
 
   /// Emit, refuse to write anything the parser would reject, and hand the
   /// text to [write]. Returns the refusals — empty on success.
+  @override
   List<SceneRefusal> save(void Function(String path, String source) write) {
     var source = emit();
     // The check parses against the tokens the document was read with: the
@@ -174,13 +188,79 @@ class SceneCrumb {
 typedef NestedSceneResolver = SceneFile? Function(SceneNode node);
 
 class SceneWorkspace extends SceneListenable {
-  SceneWorkspace(SceneFile root, {this.resolveNested})
-    : _stack = [SceneCrumb(root, null)],
-      _opened = {root.path: root} {
+  SceneWorkspace(
+    SceneFile root, {
+    this.resolveNested,
+    List<TokensLibrary> libraries = const [],
+    this.tokensFor,
+  }) : _stack = [SceneCrumb(root, null)],
+       _opened = {root.path: root},
+       libraries = [...libraries] {
+    for (var library in this.libraries) {
+      library.addListener(_onLibrary);
+    }
     resolveInstances(root);
   }
 
   final List<SceneCrumb> _stack;
+
+  /// The token libraries the open file's group lists — shared documents,
+  /// held by whoever opened them and listened to here: an edit in one
+  /// moves every reader in every open file.
+  final List<TokensLibrary> libraries;
+
+  /// The group's whole vocabulary as it is now — the libraries' tokens,
+  /// then the exports — which is what every open document is retokenized
+  /// with. Given the live list, so a library added later counts. Null when
+  /// the workspace was built without libraries.
+  final List<SceneTokenDecl> Function(List<TokensLibrary> libraries)? tokensFor;
+
+  /// Lists one more library — created from here — and retokenizes.
+  void addLibrary(TokensLibrary library) {
+    if (libraryAt(library.path) != null) return;
+    libraries.add(library);
+    library.addListener(_onLibrary);
+    _onLibrary();
+  }
+
+  void _onLibrary() {
+    var tokens = tokensFor?.call(libraries);
+    if (tokens == null) return;
+    for (var file in _opened.values) {
+      file.editor.retokenize(tokens);
+    }
+    // A nested instance carries its own copy of the child's document.
+    resolveInstances(active);
+    notifyListeners();
+  }
+
+  /// A library the open file's group lists, by path.
+  TokensLibrary? libraryAt(String path) {
+    for (var library in libraries) {
+      if (library.path == path) return library;
+    }
+    return null;
+  }
+
+  /// The library declaring [token], or null for an export or a stranger.
+  TokensLibrary? libraryOf(String token) {
+    for (var library in libraries) {
+      if (library.named(token) != null) return library;
+    }
+    return null;
+  }
+
+  /// Every token name the group already uses, for a library refusing a
+  /// duplicate.
+  Set<String> get tokenNames => {
+    for (var t in tokensFor?.call(libraries) ?? editor.doc.tokens) t.name,
+  };
+
+  void dispose() {
+    for (var library in libraries) {
+      library.removeListener(_onLibrary);
+    }
+  }
 
   /// Every file this workspace has opened, by path — NOT just the ones on
   /// the breadcrumb. Leaving a nested scene must not lose sight of edits
@@ -205,8 +285,12 @@ class SceneWorkspace extends SceneListenable {
   Iterable<SceneFile> get openFiles => _opened.values;
 
   /// The files with unsaved work — what a save-all button writes and what an
-  /// exit guard warns about. Includes nested scenes already left behind.
-  Iterable<SceneFile> get dirtyFiles => _opened.values.where((f) => f.isDirty);
+  /// exit guard warns about. Includes nested scenes already left behind,
+  /// and the libraries edited from here.
+  Iterable<SceneSavable> get dirtyFiles => [
+    ..._opened.values.where((f) => f.isDirty),
+    ...libraries.where((l) => l.isDirty),
+  ];
 
   bool get anyDirty => dirtyFiles.isNotEmpty;
 

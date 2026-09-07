@@ -8,6 +8,7 @@ import '../../ui/tappable.dart';
 import '../editor.dart';
 import 'inline_name.dart';
 import 'param_pane.dart';
+import 'tokens_host.dart';
 
 /// The line above the drawer under the canvas, naming the one thing that is
 /// open there — a motion's timeline, a parameter's pane or table — and
@@ -25,9 +26,14 @@ class SceneDrawerHeader extends StatefulWidget {
     super.key,
     required this.onClose,
     required this.onPick,
+    this.tokens,
   });
 
   final SceneEditor editor;
+
+  /// The group's libraries and the doors past this file, for a token's
+  /// facts, menu and rename.
+  final SceneTokensHost? tokens;
 
   /// Closes whatever is open — for a motion, the scene as authored.
   final VoidCallback onClose;
@@ -55,7 +61,13 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
       ParamAside(:var name)
           when editor.doc.paramNamed(name)?.kind == SceneParamKind.list =>
         'table',
+      TokenAside() => 'token',
       _ => 'parameter',
+    };
+    var kindWord = switch (open) {
+      MotionAside() => 'Motion',
+      TokenAside() => 'Token',
+      _ => 'Parameter',
     };
     var collapsed = editor.drawerCollapsed;
     return Container(
@@ -88,7 +100,7 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
             )
           else ...[
             Text(
-              isMotion ? 'Motion ·' : 'Parameter ·',
+              '$kindWord ·',
               style: type.caption.copyWith(color: colors.mut2),
             ),
             GestureDetector(
@@ -123,7 +135,7 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
             ),
             const Spacer(),
             _HeaderButton(
-              tooltip: isMotion ? 'Motion menu' : 'Parameter menu',
+              tooltip: '$kindWord menu',
               icon: Icons.more_horiz,
               size: FwIconSize.md,
               color: colors.mut,
@@ -132,7 +144,7 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
             _HeaderButton(
               tooltip: isMotion
                   ? 'Close the motion — the scene as authored'
-                  : 'Close the parameter',
+                  : 'Close the $thing',
               icon: Icons.close,
               size: FwIconSize.sm,
               color: colors.mut,
@@ -159,6 +171,8 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
             ? '${p.items.length} ${p.items.length == 1 ? 'item' : 'items'}'
             : '${paramKindLabel(p.kind)} · ${p.typeName}';
         return '$what · read by $readers';
+      case TokenAside(:var name):
+        return tokenFacts(editor, widget.tokens, name);
     }
   }
 
@@ -169,6 +183,15 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
           editor.renameMotion(name, wanted);
         case ParamAside(:var name):
           editor.renameParam(name, wanted);
+        case TokenAside(:var name):
+          var host = widget.tokens;
+          if (host?.rename case var rename?) {
+            rename(name, wanted);
+          } else if (host != null) {
+            host.renameHere(editor, name, wanted);
+          } else {
+            throw ArgumentError('no library open to rename in');
+          }
       }
     } on ArgumentError catch (e) {
       return e.message as String?;
@@ -203,19 +226,24 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
             onSelected: () => editor.removeMotion(name),
           ),
         ];
+      case TokenAside(:var name):
+        return tokenMenu(editor, widget.tokens, name, onRename: rename);
     }
   }
 
-  /// Everything that can be open here: the motions, then the parameters.
+  /// Everything that can be open here: the motions, the parameters, then
+  /// the tokens.
   List<SceneAside> _openable() => [
     for (var name in editor.motions.keys) MotionAside(name),
     for (var p in editor.doc.params) ParamAside(p.name),
+    for (var t in editor.doc.tokens) TokenAside(t.name),
   ];
 
   List<MenuEntry> _switcher(SceneAside open) {
     var all = _openable();
     var motions = all.whereType<MotionAside>().toList();
     var params = all.whereType<ParamAside>().toList();
+    var tokens = all.whereType<TokenAside>().toList();
     return [
       if (motions.isNotEmpty) const MenuHeader('Motions'),
       for (var m in motions)
@@ -230,6 +258,13 @@ class _SceneDrawerHeaderState extends State<SceneDrawerHeader> {
           p.name,
           icon: p == open ? Icons.check : null,
           onSelected: p == open ? null : () => widget.onPick(p),
+        ),
+      if (tokens.isNotEmpty) const MenuHeader('Tokens'),
+      for (var t in tokens)
+        MenuItem(
+          t.name,
+          icon: t == open ? Icons.check : null,
+          onSelected: t == open ? null : () => widget.onPick(t),
         ),
     ];
   }

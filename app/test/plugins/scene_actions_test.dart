@@ -171,6 +171,87 @@ void main() {
     expect(result['strayScenes'], 0);
   });
 
+  group('tokens across the group', () {
+    late String library;
+    setUp(() {
+      writeScene('BannerScene', withMotion: false);
+      writeScene('OtherScene', withMotion: false);
+      library = p.join(root.path, 'demo', 'brand.tokens.dart');
+      File(library).writeAsStringSync('''
+$sceneTokensFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+final brandTokens = [
+  const Token<SceneColor>('brand', SceneColor(0xFFE8632B)),
+];
+''');
+      var declaration = File(p.join(root.path, 'demo', sceneGroupFileName));
+      declaration.writeAsStringSync(
+        attachLibraryIn(
+          declaration.readAsStringSync(),
+          declaration.path,
+          library,
+          refuse: (r) => fail(r),
+        )!,
+      );
+      // Both scenes read the token, spelled by hand the way the tool would.
+      for (var name in ['BannerScene', 'OtherScene']) {
+        var file = File(p.join(root.path, 'demo', '$name.scene.dart'));
+        var source = file.readAsStringSync();
+        expect(source, contains('fill: SceneColor(0xFF2B1B12)'));
+        file.writeAsStringSync(
+          source
+              .replaceFirst(
+                'fill: SceneColor(0xFF2B1B12)',
+                'fill: tokens.brand',
+              )
+              .replaceFirst(
+                'class $name extends SceneDefinition {',
+                'class $name({final SceneTokens tokens = const SceneTokens()}) '
+                    'extends SceneDefinition {',
+              ),
+        );
+      }
+    });
+
+    test('readers are found in every scene of the group', () async {
+      var core_ = core();
+      await core_.invoke('list');
+      var readers = core_.tokenReaders(
+        '.',
+        library,
+        'brand',
+        except: {p.join(root.path, 'demo', 'BannerScene.scene.dart')},
+      );
+      expect(readers.map((r) => '$r'), ['OtherScene · root.fill']);
+      expect(core_.tokenReaders('.', library, 'brand'), hasLength(2));
+      expect(core_.tokenReaders('.', library, 'nope'), isEmpty);
+    });
+
+    test('a rename rewrites the closed files, and they parse after', () async {
+      var core_ = core();
+      await core_.invoke('list');
+      var open = p.join(root.path, 'demo', 'BannerScene.scene.dart');
+      var touched = core_.renameTokenInFiles(
+        '.',
+        library,
+        'brand',
+        'accent',
+        except: {open},
+      );
+      expect(touched.map(p.basename), ['OtherScene.scene.dart']);
+      var other = File(p.join(root.path, 'demo', 'OtherScene.scene.dart'))
+          .readAsStringSync();
+      expect(other, contains('fill: tokens.accent'));
+      expect(other, isNot(contains('tokens.brand')));
+      expect(
+        File(open).readAsStringSync(),
+        contains('fill: tokens.brand'),
+        reason: "the open file is its editor's to rename",
+      );
+    });
+  });
+
   test('a scene file outside any group is counted, not listed', () async {
     File(p.join(root.path, 'lib', 'loose.scene.dart'))
       ..parent.createSync(recursive: true)

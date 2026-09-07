@@ -12,6 +12,7 @@ import '../../ui/tappable.dart';
 import '../../ui/tree_row.dart';
 import '../editor.dart';
 import 'outline_sections.dart';
+import 'tokens_host.dart';
 import 'modifiers.dart';
 
 /// The scene's nodes as a tree: one row per node, folded per frame, selected
@@ -30,7 +31,15 @@ class SceneTreePanel extends StatefulWidget {
     this.sceneClassName,
     this.onOpenMotion,
     this.onOpenParam,
+    this.onOpenToken,
+    this.tokens,
   });
+
+  /// See [SceneOutlineSections.onOpenToken].
+  final ValueChanged<String>? onOpenToken;
+
+  /// See [SceneOutlineSections.tokens].
+  final SceneTokensHost? tokens;
 
   final SceneEditor editor;
 
@@ -231,6 +240,8 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
                 child: SceneOutlineSections(
                   editor,
                   sceneClassName: widget.sceneClassName,
+                  onOpenToken: widget.onOpenToken,
+                  tokens: widget.tokens,
                   onOpenMotion: widget.onOpenMotion,
                   onOpenParam: widget.onOpenParam,
                 ),

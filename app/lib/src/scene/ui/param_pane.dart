@@ -4,10 +4,13 @@ import 'package:flutterware/scene_authoring.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
+import '../../ui/action_button.dart';
+import '../../ui/context_menu.dart';
 import '../editor.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
 import 'swatches.dart';
+import 'tokens_host.dart';
 
 /// The parameter kinds a person can declare, with the word the UI uses and
 /// the type the file spells. A list is declared in the file, not here: its
@@ -99,10 +102,14 @@ List<MenuEntry> paramMenu(
 /// what reads it, each a step to that node. A list opens as its table
 /// instead; this is every other kind.
 class SceneParamPane extends StatelessWidget {
-  const SceneParamPane(this.editor, this.name, {super.key});
+  const SceneParamPane(this.editor, this.name, {super.key, this.tokens});
 
   final SceneEditor editor;
   final String name;
+
+  /// The group's libraries, for SHARE: the parameter becomes a token of
+  /// one of them and every scene of the group may read it.
+  final SceneTokensHost? tokens;
 
   @override
   Widget build(BuildContext context) {
@@ -176,6 +183,46 @@ class SceneParamPane extends StatelessWidget {
                       ),
                   ],
                 ),
+                if (tokens case var host? when host.libraries.isNotEmpty)
+                  if (p.kind != SceneParamKind.list)
+                    Padding(
+                      padding: const EdgeInsets.only(top: FwSpacing.lg),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Builder(
+                          builder: (context) => FwActionButton(
+                            label: 'Share',
+                            tooltip:
+                                'A token of the group, with this default — '
+                                'every scene may read it; this parameter goes',
+                            onPressed: () async {
+                              var box =
+                                  context.findRenderObject()! as RenderBox;
+                              var at = box.localToGlobal(
+                                Offset(0, box.size.height),
+                              );
+                              await showContextMenu(context, at, [
+                                const MenuHeader('Share into'),
+                                for (var library in host.libraries)
+                                  MenuItem(
+                                    library.symbol,
+                                    icon: Icons.ios_share_outlined,
+                                    onSelected: () => editor.shareParam(
+                                      p.name,
+                                      (name, kind, value) => library.add(
+                                        name,
+                                        kind,
+                                        value: value,
+                                        taken: host.takenIn(editor),
+                                      ),
+                                    ),
+                                  ),
+                              ]);
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
               ],
             ),
           ),

@@ -447,6 +447,32 @@ pane, the library pane minus modes, *new library*. Add, rename, retype,
 value editing, delete, readers, refusals. The two moves (§4.6). Rename and
 delete across groups (§4.7). Lands: **tokens are managed in the editor.**
 
+**T2 landed 2026-09-07.** `TokensLibrary` (app/lib/src/scene/
+tokens_library.dart) is the document: one per `*.tokens.dart`, its own
+journal, dirty flag and save door, emitted through `emitTokensLibrary`
+and re-parsed before writing, adopting a disk version as one undo. The
+workspace holds the group's libraries, listens, and `retokenize`s every
+open file on a change: a value token's readers take the value in the
+current mode, a style's readers take the new value on every property
+inherited from the old one, a reference to a gone token is dropped — no
+scene journal entry, the edit is undone in the library. The autosave
+writes libraries beside scene files (`SceneSavable`), the directory
+watcher adopts or holds a library that moved on disk the way it does a
+scene, and the write regenerates every listing group's `scene_args.dart`
+through the scan. Outline: a Tokens section under Motions with one
+divider per library (its `+` adds a token of a kind, or a style) and one
+for the app's exports; the section's `+` also creates a library in the
+group's folder and lists it. Drawer: a token pane — the value in the
+kind's control, one column per mode the library names, a style's fields
+each unset-able, readers here and elsewhere in the group, *Make local*;
+an export opens read-only. The parameter pane gains *Share* into a
+library. Rename runs readers-first (the editor holds an alias through the
+gap), then the library, then the closed files of every listing group
+(`renameTokenInFiles`); delete is refused while anything reads the token
+anywhere (`tokenReaders`). Not built: the library pane with the mode list
+(T3), and a library's own comments do not survive its first write — it is
+the editor's file, the scene-file rule.
+
 **T3 — modes in the panel.** Add, rename, delete a mode; a value per mode
 for every kind including styles; the canvas picker reads the union's mode
 list. Lands: light and dark authored in the editor rather than in a file.

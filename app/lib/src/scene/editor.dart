@@ -98,6 +98,12 @@ class MotionAside extends SceneAside {
   const MotionAside(super.name);
 }
 
+/// A token of the group — a library's, or one the app exports — by name.
+/// Not the file's own, but read from it, and opened in the same drawer.
+class TokenAside extends SceneAside {
+  const TokenAside(super.name);
+}
+
 class SceneEditor extends SceneListenable {
   SceneEditor(this.doc, {Map<String, MotionDocument> motions = const {}})
     : motions = {...motions};
@@ -117,9 +123,30 @@ class SceneEditor extends SceneListenable {
   set activeMotion(String? name) {
     if (_activeMotion == name) return;
     _activeMotion = name;
-    if (name != null) _openParam = null;
+    if (name != null) {
+      _openParam = null;
+      _openToken = null;
+    }
     _drawerCollapsed = false;
     clearKeySelection();
+    notifyListeners();
+  }
+
+  /// The token open in the drawer, or null — a library's, to edit its
+  /// value; an export's, to see what it is and who reads it.
+  String? get openToken =>
+      doc.tokenNamed(_openToken ?? '') == null ? null : _openToken;
+  String? _openToken;
+
+  set openToken(String? name) {
+    if (_openToken == name) return;
+    _openToken = name;
+    if (name != null) {
+      _activeMotion = null;
+      _openParam = null;
+      clearKeySelection();
+    }
+    _drawerCollapsed = false;
     notifyListeners();
   }
 
@@ -135,19 +162,181 @@ class SceneEditor extends SceneListenable {
     _openParam = name;
     if (name != null) {
       _activeMotion = null;
+      _openToken = null;
       clearKeySelection();
     }
     _drawerCollapsed = false;
     notifyListeners();
   }
 
-  /// What the drawer under the canvas is showing — a motion or a parameter
-  /// — or null. The outline highlights exactly this row.
-  SceneAside? get drawer => switch ((activeMotion, openParam)) {
-    (var m?, _) => MotionAside(m),
-    (_, var p?) => ParamAside(p),
+  /// What the drawer under the canvas is showing — a motion, a parameter or
+  /// a token — or null. The outline highlights exactly this row.
+  SceneAside? get drawer => switch ((activeMotion, openParam, openToken)) {
+    (var m?, _, _) => MotionAside(m),
+    (_, var p?, _) => ParamAside(p),
+    (_, _, var t?) => TokenAside(t),
     _ => null,
   };
+
+  // ---------------------------------------------------------------------
+  // Tokens are declared elsewhere — a library the editor owns, an export
+  // the app owns — and this document only reads them. These are the doors
+  // through which a change out there reaches the nodes here, and the two
+  // moves between a scene's own parameter and the group's shared token.
+  // ---------------------------------------------------------------------
+
+  /// Takes a new declaration list — a library edited, a token added or
+  /// gone — and moves every reader with it. Not a journal entry: the edit
+  /// lives in the library, and is undone there. A value token's readers
+  /// take its value (in the current mode); a style's readers take the new
+  /// value on every property that was inherited from the old one; a
+  /// reference to a token that is gone is dropped, as an edit would drop
+  /// it.
+  void retokenize(List<SceneTokenDecl> next) {
+    var old = {for (var t in doc.tokens) t.name: t};
+    doc.edit(() {
+      doc.tokens
+        ..clear()
+        ..addAll(next);
+      for (var (node, _) in doc.walk()) {
+        for (var e in node.bindings.entries.toList()) {
+          switch (e.value) {
+            case TokenRef(:var name):
+              var decl = doc.tokenNamed(name);
+              if (decl != null && decl.hasValue && !decl.isStyle) {
+                setSceneProperty(node, e.key, decl.valueIn(doc.tokenMode));
+              }
+            case StyleRef(:var name):
+              var was = old[name]?.style;
+              var now = doc.tokenNamed(name)?.style;
+              if (now == null) continue;
+              for (var f in now.values.entries) {
+                var current = getSceneProperty(node, f.key);
+                // Inherited from the old style, or never set by it: follow.
+                if (was == null ||
+                    !was.sets(f.key) ||
+                    current == was.values[f.key]) {
+                  setSceneProperty(node, f.key, f.value);
+                }
+              }
+            default:
+              break;
+          }
+        }
+      }
+      reconcileBindings(doc);
+    });
+    if (_openToken != null && doc.tokenNamed(_openToken!) == null) {
+      _openToken = null;
+    }
+    notifyListeners();
+  }
+
+  /// Every binding of this document to [from] now reads [to] — a library
+  /// renamed a token, and this is one of its readers. Journaled here too:
+  /// the file's text changes, and undoing the rename in the library without
+  /// undoing it here would leave a name nothing declares.
+  void renameTokenRefs(String from, String to) {
+    var readers = readersOfToken(from);
+    if (readers.isEmpty) return;
+    if (_openToken == from) _openToken = to;
+    // The library renames after its readers do, so [to] is not declared
+    // yet: an alias holds the references through the reconcile, and the
+    // library's own notification replaces the whole list a moment later.
+    var decl = doc.tokenNamed(from);
+    if (decl != null && doc.tokenNamed(to) == null) {
+      doc.tokens.add(
+        decl.style != null
+            ? SceneTokenDecl.style(to, decl.style!)
+            : decl.isExport
+            ? SceneTokenDecl.export(to, decl.type)
+            : SceneTokenDecl(to, decl.kind!, decl.value!, modes: decl.modes),
+      );
+    }
+    perform('Rename token $from', () {
+      for (var (node, prop) in readers) {
+        node.bindings[prop] = switch (node.bindings[prop]) {
+          StyleRef() => StyleRef(to),
+          _ => TokenRef(to),
+        };
+        if (tokenMarkerName(getSceneProperty(node, prop)) == from) {
+          setSceneProperty(node, prop, tokenMarker(to));
+        }
+      }
+    });
+  }
+
+  /// SHARE: the parameter [name] becomes a token of [library], read by the
+  /// group; every reader here follows and the parameter goes. The value is
+  /// the parameter's default — the mockup, which is what a token is too.
+  /// Refused for a list (a token is not data) and for a name the group
+  /// already uses; the library's own journal holds the token, this one the
+  /// rebinding, so undoing the move is two undos.
+  void shareParam(
+    String name,
+    void Function(String name, SceneParamKind kind, Object value) declare,
+  ) {
+    var decl = doc.paramNamed(name);
+    if (decl == null) throw ArgumentError('no parameter "$name"');
+    if (decl.kind == SceneParamKind.list) {
+      throw ArgumentError('"$name" is a list — a token is one value');
+    }
+    if (doc.tokenNamed(name) != null) {
+      throw ArgumentError('the group already has a token "$name"');
+    }
+    for (var (node, prop) in readersOf(name)) {
+      if (prop == 'repeat' || node.bindings[prop] is ItemRef) {
+        throw ArgumentError('"$name" feeds a table — a token cannot');
+      }
+    }
+    declare(name, decl.kind, decl.defaultValue);
+    // The library's listeners have retokenized this document by now; a
+    // caller with no workspace has not, and the reference must resolve.
+    if (doc.tokenNamed(name) == null) {
+      doc.tokens.add(SceneTokenDecl(name, decl.kind, decl.defaultValue));
+    }
+    if (_openParam == name) {
+      _openParam = null;
+      _openToken = name;
+    }
+    perform('Share $name', () {
+      for (var (node, prop) in readersOf(name)) {
+        node.bindings[prop] = TokenRef(name);
+      }
+      doc.params.removeWhere((p) => p.name == name);
+    });
+  }
+
+  /// MAKE LOCAL: the token [name] becomes a parameter of this scene, with
+  /// the token's value (in the current mode) as its default; every reader
+  /// here follows; the token stays in its library for the other scenes.
+  /// Modes do not come along — a parameter has none. Refused for a style
+  /// (several properties) and an export (no value here).
+  void localizeToken(String name) {
+    var decl = doc.tokenNamed(name);
+    if (decl == null) throw ArgumentError('no token "$name"');
+    if (decl.isStyle) {
+      throw ArgumentError('"$name" is a style — a parameter holds one value');
+    }
+    if (!decl.hasValue) {
+      throw ArgumentError('"$name" is the app\'s — there is no value here');
+    }
+    if (paramNameProblem(name) case var problem?) {
+      throw ArgumentError(problem);
+    }
+    var kind = decl.kind!;
+    var value = decl.valueIn(doc.tokenMode)!;
+    if (_openToken == name) {
+      _openToken = null;
+      _openParam = name;
+    }
+    perform('Make $name local', () {
+      doc.params.add(SceneParamDecl(name, kind, value));
+      for (var (node, prop) in readersOfToken(name)) {
+        node.bindings[prop] = ParamRef(name);
+      }
+    });
+  }
 
   /// The token mode the artboard shows — a mode name from the declaration,
   /// or null for the default set. View state: not journaled, not written.

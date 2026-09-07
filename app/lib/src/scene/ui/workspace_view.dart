@@ -14,6 +14,8 @@ import 'list_table.dart';
 import 'param_pane.dart';
 import 'shortcuts.dart';
 import 'timeline.dart';
+import 'token_pane.dart';
+import 'tokens_host.dart';
 import 'tree_panel.dart';
 
 /// The scene workspace: tree · canvas over timeline · inspector.
@@ -42,9 +44,14 @@ class SceneWorkspaceView extends StatefulWidget {
     this.canvasTrailing = const [],
     this.pane,
     this.externals = const [],
+    this.tokens,
   });
 
   final SceneEditor editor;
+
+  /// The group's libraries and the doors past this file — see
+  /// [SceneOutlineSections.tokens].
+  final SceneTokensHost? tokens;
 
   /// The widgets the app declares — see [SceneInspector.externals].
   final List<ExternalWidgetDecl> externals;
@@ -102,8 +109,14 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
     editor.openParam = name;
   }
 
+  void _openToken(String name) {
+    _closeMotion();
+    editor.openToken = name;
+  }
+
   void _openMotion(String name) {
     editor.openParam = null;
+    editor.openToken = null;
     editor.activeMotion = name;
     // A motion that was closed comes back on the picture; one already open
     // is unchanged.
@@ -113,6 +126,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
   void _closeDrawer() {
     _closeMotion();
     editor.openParam = null;
+    editor.openToken = null;
   }
 
   /// How tall the drawer is, dragged by hand. Null until dragged: two fifths
@@ -141,6 +155,8 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                     sceneClassName: widget.sceneClassName,
                     onOpenMotion: _openMotion,
                     onOpenParam: _openParam,
+                    onOpenToken: _openToken,
+                    tokens: widget.tokens,
                   ),
                 ),
                 Container(width: 1, color: line),
@@ -170,10 +186,12 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                             Container(height: 1, color: line),
                             SceneDrawerHeader(
                               editor,
+                              tokens: widget.tokens,
                               onClose: _closeDrawer,
                               onPick: (pick) => switch (pick) {
                                 MotionAside(:var name) => _openMotion(name),
                                 ParamAside(:var name) => _openParam(name),
+                                TokenAside(:var name) => _openToken(name),
                               },
                             ),
                             if (shown) ...[
@@ -205,7 +223,16 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                                     editor.doc.paramNamed(name)?.kind ==
                                             SceneParamKind.list
                                         ? SceneListTable(editor, name)
-                                        : SceneParamPane(editor, name),
+                                        : SceneParamPane(
+                                            editor,
+                                            name,
+                                            tokens: widget.tokens,
+                                          ),
+                                  TokenAside(:var name) => SceneTokenPane(
+                                    editor,
+                                    name,
+                                    host: widget.tokens,
+                                  ),
                                 },
                               ),
                             ],

@@ -21,6 +21,7 @@ import '../../scene/skeletons.dart';
 import '../../scene/import/variables.dart';
 import '../../scene/scene_file.dart';
 import '../../scene/tokens_file.dart';
+import '../../scene/workspace.dart';
 import '../../utils/string/plural.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -41,6 +42,20 @@ const _pluginDescription =
 
 /// Scenes listed by name before the rest become a count.
 const _projectedScenes = 12;
+
+/// One property of one scene reading a token — what a delete names and a
+/// rename follows.
+class SceneTokenReader {
+  SceneTokenReader(this.scenePath, this.sceneClass, this.node, this.prop);
+
+  final String scenePath;
+  final String sceneClass;
+  final String node;
+  final String prop;
+
+  @override
+  String toString() => '$sceneClass · $node.$prop';
+}
 
 /// What scene groups, scenes and token libraries a project has, and where.
 ///
@@ -236,6 +251,111 @@ class SceneCore extends PluginCore {
     );
     if (edited != null) declaration.writeAsStringSync(edited);
   }
+
+  // --- Tokens across the group ---------------------------------------------
+
+  /// The groups listing the library at [libraryPath].
+  List<SceneGroupEntry> groupsListing(String package, String libraryPath) {
+    var scan = scanFor(package) ?? discoverPackage(rootFor(package));
+    var wanted = p.canonicalize(libraryPath);
+    return [
+      for (var group in scan.groups)
+        if (vocabularyFor(
+          package,
+          group,
+        ).libraries.any((l) => p.canonicalize(l.entry.path) == wanted))
+          group,
+    ];
+  }
+
+  /// Every property reading [token] in every scene of every group listing
+  /// [libraryPath], except the scene files in [except] — the open ones,
+  /// whose editors know their own readers. Parsed fresh from disk, so a
+  /// rename or a delete is judged against what the files say now.
+  List<SceneTokenReader> tokenReaders(
+    String package,
+    String libraryPath,
+    String token, {
+    Set<String> except = const {},
+  }) {
+    var skip = {for (var e in except) p.canonicalize(e)};
+    var readers = <SceneTokenReader>[];
+    for (var group in groupsListing(package, libraryPath)) {
+      var tokens = vocabularyFor(package, group).tokens;
+      for (var scene in group.scenes) {
+        if (skip.contains(p.canonicalize(scene.path))) continue;
+        var parsed = parseSceneFile(
+          File(scene.path).readAsStringSync(),
+          tokens: tokens,
+        );
+        var doc = parsed.doc;
+        if (doc == null) continue;
+        for (var (node, _) in doc.walk()) {
+          for (var e in node.bindings.entries) {
+            var name = switch (e.value) {
+              TokenRef(:var name) || StyleRef(:var name) => name,
+              _ => null,
+            };
+            if (name == token) {
+              readers.add(
+                SceneTokenReader(scene.path, scene.className, node.name, e.key),
+              );
+            }
+          }
+        }
+      }
+    }
+    return readers;
+  }
+
+  /// Rewrites every closed scene file reading [from] so it reads [to] —
+  /// the half of a rename the open editors cannot do. [vocabulary] is the
+  /// group's tokens as they will be once the library is written, so the
+  /// rewritten file parses against them. Returns the files touched.
+  List<String> renameTokenInFiles(
+    String package,
+    String libraryPath,
+    String from,
+    String to, {
+    Set<String> except = const {},
+  }) {
+    var touched = <String>[];
+    var skip = {for (var e in except) p.canonicalize(e)};
+    for (var group in groupsListing(package, libraryPath)) {
+      var before = vocabularyFor(package, group).tokens;
+      var after = [
+        for (var t in before)
+          if (t.name == from) _renamedDecl(t, to) else t,
+      ];
+      for (var scene in group.scenes) {
+        if (skip.contains(p.canonicalize(scene.path))) continue;
+        var source = File(scene.path).readAsStringSync();
+        var opened = SceneFile.open(
+          scene.path,
+          source,
+          declaredArgs: vocabularyFor(package, group).declaredArgs,
+          tokens: before,
+        );
+        var file = opened.file;
+        if (file == null) continue;
+        if (file.editor.readersOfToken(from).isEmpty) continue;
+        file.editor.renameTokenRefs(from, to);
+        file.editor.retokenize(after);
+        var refusals = file.save(
+          (path, text) => File(path).writeAsStringSync(text),
+        );
+        if (refusals.isEmpty) touched.add(scene.path);
+      }
+    }
+    return touched;
+  }
+
+  static SceneTokenDecl _renamedDecl(SceneTokenDecl t, String name) =>
+      t.style != null
+      ? SceneTokenDecl.style(name, t.style!)
+      : t.isExport
+      ? SceneTokenDecl.export(name, t.type)
+      : SceneTokenDecl(name, t.kind!, t.value!, modes: t.modes);
 
   // --- Rendering -----------------------------------------------------------
 

@@ -24,6 +24,8 @@ import '../../scene/guest.dart';
 import '../../scene/scene_file.dart';
 import '../../scene/playback.dart';
 import '../../scene/tokens_file.dart';
+import '../../scene/tokens_library.dart';
+import '../../scene/ui/tokens_host.dart';
 import '../../scene/ui/workspace_view.dart';
 import '../../scene/watch.dart';
 import '../../scene/workspace.dart';
@@ -107,6 +109,123 @@ class _ScenePanelState extends State<_ScenePanel>
   /// The group the open file belongs to — what it is parsed against and
   /// which folder's host the guest boots.
   SceneGroupEntry? _group;
+
+  /// The libraries opened here, by path — one document per file, shared by
+  /// every scene of every group that lists it, kept across scene opens so
+  /// an unsaved edit survives switching scenes.
+  final _libraries = <String, TokensLibrary>{};
+
+  /// The library at [path], read once and kept; null when it does not
+  /// parse, with the reason in the note.
+  TokensLibrary? _libraryAt(String path) {
+    var canonical = p.canonicalize(path);
+    if (_libraries[canonical] case var open?) return open;
+    var opened = TokensLibrary.open(path, File(path).readAsStringSync());
+    if (!opened.ok) {
+      _note = '${p.basename(path)}: ${opened.refusals.first}';
+      return null;
+    }
+    return _libraries[canonical] = opened.library!;
+  }
+
+  /// The group's libraries as live documents, in the declaration's order.
+  List<TokensLibrary> _groupLibraries() {
+    var package = _package;
+    var group = _group;
+    if (package == null || group == null) return const [];
+    return [
+      for (var l in _core.vocabularyFor(package, group).libraries)
+        ?_libraryAt(l.entry.path),
+    ];
+  }
+
+  /// The vocabulary the open file is parsed against — the libraries as
+  /// they are NOW, unsaved edits included, then the exports.
+  List<SceneTokenDecl> _liveTokens(List<TokensLibrary> libraries) => [
+    for (var l in libraries) ...l.tokens,
+    ..._vocabulary().exports,
+  ];
+
+  /// The doors the token surfaces need past this one file.
+  SceneTokensHost _tokensHost(SceneWorkspace workspace) {
+    var package = _package!;
+    var group = _group!;
+    Set<String> openPaths() => {for (var f in workspace.openFiles) f.path};
+    List<String> elsewhere(String name) {
+      var library = workspace.libraryOf(name);
+      if (library == null) return const [];
+      return [
+        for (var file in workspace.openFiles)
+          if (!identical(file, workspace.active))
+            for (var (node, prop) in file.editor.readersOfToken(name))
+              '${file.className} · ${node.name}.$prop',
+        for (var r in _core.tokenReaders(
+          package,
+          library.path,
+          name,
+          except: openPaths(),
+        ))
+          '$r',
+      ];
+    }
+
+    return SceneTokensHost(
+      libraries: workspace.libraries,
+      onNewLibrary: () async {
+        try {
+          var path = await _core.createLibrary(
+            package,
+            _core.groupPathFor(package, group),
+            group.name,
+            attachTo: group,
+          );
+          if (_libraryAt(path) case var library?) {
+            workspace.addLibrary(library);
+          }
+          setState(() => _note = '');
+        } on Object catch (e) {
+          setState(() => _note = '$e');
+        }
+      },
+      rename: (name, wanted) {
+        var library = workspace.libraryOf(name);
+        if (library == null) {
+          throw ArgumentError("\"$name\" is the app's — rename it in the app");
+        }
+        var taken = workspace.tokenNames..remove(name);
+        if (library.nameProblem(wanted, renaming: name, taken: taken)
+            case var problem?) {
+          throw ArgumentError(problem);
+        }
+        // Readers first, the library after: an editor holds an alias
+        // through the gap, and the closed files are rewritten against the
+        // vocabulary as it will be.
+        for (var file in workspace.openFiles) {
+          file.editor.renameTokenRefs(name, wanted);
+        }
+        library.rename(name, wanted, taken: taken);
+        var touched = _core.renameTokenInFiles(
+          package,
+          library.path,
+          name,
+          wanted,
+          except: openPaths(),
+        );
+        if (touched.isNotEmpty) {
+          setState(() {
+            _note = 'renamed in ${touched.map(p.basename).join(', ')} too';
+          });
+        }
+      },
+      deleteProblem: (name) {
+        var others = elsewhere(name);
+        return others.isEmpty ? null : 'read by ${others.join(', ')}';
+      },
+      delete: (name) => workspace.libraryOf(name)?.delete(name),
+      readersElsewhere: elsewhere,
+    );
+  }
+
   String _note = '';
 
   /// One playback per motion opened, by file and name — a playback owns a
@@ -228,6 +347,7 @@ class _ScenePanelState extends State<_ScenePanel>
     _autosave.bind(null);
     _guest?.dispose();
     _guest = null;
+    _workspace?.dispose();
     _workspace = null;
     _group = null;
     _note = '';
@@ -246,11 +366,12 @@ class _ScenePanelState extends State<_ScenePanel>
       return;
     }
     _group = group;
+    var libraries = _groupLibraries();
     var opened = SceneFile.open(
       entry.path,
       File(entry.path).readAsStringSync(),
       declaredArgs: _declaredArgs(),
-      tokens: _tokens(),
+      tokens: _liveTokens(libraries),
     );
     if (!opened.ok) {
       setState(() {
@@ -264,7 +385,13 @@ class _ScenePanelState extends State<_ScenePanel>
     var file = opened.file!;
     setState(() {
       _guest?.dispose();
-      _workspace = SceneWorkspace(file, resolveNested: _resolveNested);
+      _workspace?.dispose();
+      _workspace = SceneWorkspace(
+        file,
+        resolveNested: _resolveNested,
+        libraries: libraries,
+        tokensFor: _liveTokens,
+      );
       _guest = SceneGuest(
         widget.plugin.sessionFor(package),
         file.editor,
@@ -303,6 +430,37 @@ class _ScenePanelState extends State<_ScenePanel>
     var adopted = <String>[];
     var refused = <String>[];
     var held = <String>[];
+    // A library that moved on disk: our own write comes back as an event,
+    // an edit somebody else made is adopted when this editor has nothing
+    // to lose, and held otherwise — the scene files' rule.
+    for (var library in workspace.libraries.toList()) {
+      if (!paths.contains(p.canonicalize(library.path))) continue;
+      String source;
+      try {
+        source = File(library.path).readAsStringSync();
+      } on FileSystemException {
+        continue;
+      }
+      if (library.matchesDisk(source)) {
+        _autosave.resume(library.path);
+        continue;
+      }
+      if (library.isDirty) {
+        held.add(library.fileName);
+        _autosave.suspend(
+          library.path,
+          '${library.fileName} changed on disk — save to keep yours',
+        );
+        continue;
+      }
+      var refusals = library.adopt(source);
+      if (refusals.isEmpty) {
+        adopted.add(library.fileName);
+        _autosave.resume(library.path);
+      } else {
+        refused.add('${library.fileName}: ${refusals.first}');
+      }
+    }
     for (var file in workspace.openFiles.toList()) {
       if (!paths.contains(p.canonicalize(file.path))) continue;
       String source;
@@ -398,7 +556,12 @@ class _ScenePanelState extends State<_ScenePanel>
 
   Map<String, Set<String>> _declaredArgs() => _vocabulary().declaredArgs;
 
-  List<SceneTokenDecl> _tokens() => _vocabulary().tokens;
+  /// The tokens as the open workspace holds them, or the scan's when
+  /// nothing is open.
+  List<SceneTokenDecl> _tokens() => switch (_workspace) {
+    var w? => _liveTokens(w.libraries),
+    null => _vocabulary().tokens,
+  };
 
   /// A nested scene is another scene file of the same group, found by the
   /// class it declares. Opened fresh here; the workspace keeps the one copy
@@ -915,6 +1078,7 @@ class _ScenePanelState extends State<_ScenePanel>
             key: ValueKey(workspace.active.path),
             editor,
             externals: _externals(),
+            tokens: _tokensHost(workspace),
             playbackFor: (motion) => _playbackFor(workspace.active, motion),
             sceneClassName: workspace.active.className,
             status: _guest?.status,

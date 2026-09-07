@@ -95,14 +95,21 @@ class SceneAutosave {
     }
   }
 
-  /// The breadcrumb moved: edits now arrive from a different file's editor.
+  /// The breadcrumb moved, or a library was edited: edits now arrive from a
+  /// different file's editor, or something not on the breadcrumb owes a
+  /// write.
   void _onWorkspace() {
     var editor = _workspace?.editor;
-    if (identical(editor, _editor)) return;
-    _editor?.removeListener(_onEdit);
-    _editor = editor;
-    _revision = editor?.revision;
-    editor?.addListener(_onEdit);
+    if (!identical(editor, _editor)) {
+      _editor?.removeListener(_onEdit);
+      _editor = editor;
+      _revision = editor?.revision;
+      editor?.addListener(_onEdit);
+    }
+    if (_workspace?.anyDirty == true && _timer == null) {
+      _timer = Timer(quiet, _fire);
+      _set(SceneSaveState.pending, _note);
+    }
   }
 
   /// Armed by a change to the document, never by a change to the selection.

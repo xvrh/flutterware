@@ -3,7 +3,7 @@
 // pure surface and a skeleton spells Flutter imports in its text.
 import 'group_file.dart';
 import 'scene_file.dart';
-import 'tokens_file.dart';
+import 'tokens_library.dart';
 
 /// The skeleton `New group` writes: nothing declared yet, a bare wrapper.
 String emitGroupSkeleton() =>
@@ -31,16 +31,7 @@ final $sceneGroupSymbol = SceneGroup(
 );
 ''';
 
-/// The skeleton `New library` writes: an empty list, the editor's own.
+/// The skeleton `New library` writes: an empty library, the editor's own
+/// from its first byte.
 String emitTokensSkeleton(String symbol) =>
-    '''
-$sceneTokensFileMarker
-// Owned by the flutterware scene editor, which reads and writes this whole
-// file. A token is `Token<T>('name', value, modes: {…})`; every scene of a
-// group that lists `$symbol` reads it as `tokens.name`. Hand edits are
-// welcome inside the grammar; anything outside it is refused with a line
-// number rather than silently dropped.
-import 'package:flutterware/scene_authoring.dart';
-
-final $symbol = <Token<Object>>[];
-''';
+    emitTokensLibrary(const [], symbol: symbol);
