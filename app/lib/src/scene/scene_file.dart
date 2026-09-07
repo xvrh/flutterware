@@ -73,6 +73,7 @@ import 'package:dart_style/dart_style.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
 
 import 'group_file.dart';
+import 'paint_grammar.dart';
 import 'motion_file.dart';
 import 'tokens_file.dart';
 
@@ -400,7 +401,7 @@ void _emitNode(
           n.bindings.containsKey(p.name) ||
           (p.sides ?? const []).any(n.bindings.containsKey);
       var inherited = style != null && style.sets(p.name)
-          ? v == style.values[p.name]
+          ? sceneValuesEqual(v, style.values[p.name])
           : isSceneDefault(p, v);
       if (inherited && !bound) continue;
       switch (p.kind) {
@@ -424,6 +425,8 @@ void _emitNode(
           props.add(
             '${p.name}: [${(v! as List<double?>).map(_track).join(', ')}]',
           );
+        case ScenePropKind.layers:
+          props.add('${p.name}: ${emitSceneLayers(v! as List<TextLayer>)}');
         case ScenePropKind.choice:
           props.add(
             '${p.name}: ${p.choices!.typeName}.${p.choices!.nameOf(v!)}',
@@ -533,7 +536,7 @@ String? _styleArg(TextNode t, _Scope scope, String? Function(String prop) ref) {
     if (p.name == 'text') continue;
     var v = p.read(t);
     var inherited = style != null && style.sets(p.name)
-        ? v == style.values[p.name]
+        ? sceneValuesEqual(v, style.values[p.name])
         : isSceneDefault(p, v);
     if (inherited && !t.bindings.containsKey(p.name)) continue;
     deltas.add('${p.name}: ${ref(p.name) ?? scenePropLiteral(p, v)}');
@@ -560,6 +563,7 @@ String scenePropLiteral(SceneProp p, Object? v) => switch (p.kind) {
   ScenePropKind.boolean => '$v',
   ScenePropKind.color => _color(v! as SceneColor),
   ScenePropKind.choice => '${p.choices!.typeName}.${p.choices!.nameOf(v!)}',
+  ScenePropKind.layers => emitSceneLayers(v! as List<TextLayer>),
   ScenePropKind.size ||
   ScenePropKind.sizes ||
   ScenePropKind.edges => throw ArgumentError('${p.name} has no one spelling'),
@@ -1566,6 +1570,11 @@ class _Parser {
               p.write(n, (p.read(n)! as SceneQuad).withSide(k, v));
             });
           }
+        case ScenePropKind.layers:
+          _take(named, p.name, (e) {
+            var layers = readSceneLayers(e, refuse);
+            if (layers != null) p.write(n, layers);
+          });
         case ScenePropKind.sizes:
           _take(named, p.name, (e) {
             if (e is! ListLiteral) {

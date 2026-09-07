@@ -109,6 +109,311 @@ enum SceneTextDecoration { none, underline, overline, lineThrough }
 /// bridge indexes it.
 enum SceneTextDecorationStyle { solid, double, dotted, dashed, wavy }
 
+/// A point in a box, in the -1..1 space Flutter's `Alignment` uses — where a
+/// gradient starts and ends.
+class SceneAlignment {
+  const SceneAlignment(this.x, this.y);
+
+  final double x;
+  final double y;
+
+  static const topLeft = SceneAlignment(-1, -1);
+  static const topCenter = SceneAlignment(0, -1);
+  static const topRight = SceneAlignment(1, -1);
+  static const centerLeft = SceneAlignment(-1, 0);
+  static const center = SceneAlignment(0, 0);
+  static const centerRight = SceneAlignment(1, 0);
+  static const bottomLeft = SceneAlignment(-1, 1);
+  static const bottomCenter = SceneAlignment(0, 1);
+  static const bottomRight = SceneAlignment(1, 1);
+
+  List<double> toWire() => [x, y];
+
+  static SceneAlignment fromWire(Object? raw, SceneAlignment fallback) =>
+      switch (raw) {
+        List l when l.length == 2 => SceneAlignment(
+          (l[0] as num).toDouble(),
+          (l[1] as num).toDouble(),
+        ),
+        _ => fallback,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SceneAlignment && other.x == x && other.y == y;
+
+  @override
+  int get hashCode => Object.hash(x, y);
+
+  @override
+  String toString() => 'SceneAlignment($x, $y)';
+}
+
+/// What a pass paints with: one colour, or a gradient across the box.
+///
+/// Built for text layers, and shaped for `fill` to adopt the day a frame's
+/// fill becomes a list of paints (master plan §6) — a second notion of paint
+/// is the thing to avoid, not a second user of this one. Radial and sweep are
+/// the same shape with a different geometry and are not built yet; the wire
+/// tags the kind so adding one is additive.
+sealed class ScenePaint {
+  const ScenePaint();
+
+  Object toWire();
+
+  /// Total, like every `fromWire` here: an unreadable payload is null rather
+  /// than a throw, and null means "the text's own colour".
+  static ScenePaint? fromWire(Object? raw) => switch (raw) {
+    // A bare number is a solid colour — the cheapest spelling, and what a
+    // colour already travels as everywhere else.
+    num argb => SolidPaint(SceneColor(argb.toInt())),
+    Map m when m['k'] == 'linear' => LinearPaint(
+      colors: [
+        for (var c in (m['colors'] as List? ?? const []))
+          SceneColor((c as num).toInt()),
+      ],
+      stops: switch (m['stops']) {
+        List l => [for (var s in l) (s as num).toDouble()],
+        _ => null,
+      },
+      begin: SceneAlignment.fromWire(m['begin'], SceneAlignment.topCenter),
+      end: SceneAlignment.fromWire(m['end'], SceneAlignment.bottomCenter),
+    ),
+    _ => null,
+  };
+}
+
+class SolidPaint extends ScenePaint {
+  const SolidPaint(this.color);
+
+  final SceneColor color;
+
+  @override
+  Object toWire() => color.argb;
+
+  @override
+  bool operator ==(Object other) => other is SolidPaint && other.color == color;
+
+  @override
+  int get hashCode => color.hashCode;
+
+  @override
+  String toString() => 'SolidPaint($color)';
+}
+
+/// A gradient down the box by default, which is what a metal or a sunset
+/// face wants. [stops] null spreads the colours evenly.
+class LinearPaint extends ScenePaint {
+  const LinearPaint({
+    required this.colors,
+    this.stops,
+    this.begin = SceneAlignment.topCenter,
+    this.end = SceneAlignment.bottomCenter,
+  });
+
+  final List<SceneColor> colors;
+  final List<double>? stops;
+  final SceneAlignment begin;
+  final SceneAlignment end;
+
+  @override
+  Object toWire() => {
+    'k': 'linear',
+    'colors': [for (var c in colors) c.argb],
+    'stops': ?stops,
+    'begin': begin.toWire(),
+    'end': end.toWire(),
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is LinearPaint &&
+      _sameList(other.colors, colors) &&
+      _sameList(other.stops, stops) &&
+      other.begin == begin &&
+      other.end == end;
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAll(colors),
+    Object.hashAll(stops ?? []),
+    begin,
+    end,
+  );
+
+  @override
+  String toString() => 'LinearPaint($colors)';
+}
+
+/// Whether two property values are the same value.
+///
+/// `==` is not enough, because one property kind is a LIST and two lists with
+/// the same contents are not `==` each other. Every place that asks "is this
+/// what the style says" or "is this still the default" goes through here, or
+/// an inherited paint stack reads as an override — which is exactly what it
+/// did before this existed.
+bool sceneValuesEqual(Object? a, Object? b) => switch ((a, b)) {
+  (List x, List y) => _sameList(x, y),
+  _ => a == b,
+};
+
+bool _sameList<T>(List<T>? a, List<T>? b) {
+  if (a == null || b == null) return a == b;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+/// How a stroke turns a corner. Declaration order matches Flutter's, because
+/// the bridge indexes it.
+enum SceneStrokeJoin { miter, round, bevel }
+
+/// One pass over a laid-out paragraph.
+///
+/// A text's paint stack is an ordered list of these, painted back to front,
+/// and the effect space is what combining them reaches: a drop shadow is a
+/// blurred offset fill, an outline is a stroke beneath the fill, sticker type
+/// is stroke-stroke-fill, extruded type is a dozen offset fills under a
+/// gradient one. None of those is a code path (master plan §4.5).
+///
+/// Layers are ANONYMOUS and immutable, and they live on the style rather than
+/// the node: a named per-node stack is a treatment nothing else can share,
+/// which defeats the point of a style. They must be immutable to sit inside a
+/// `const Token<SceneTextStyle>`, so an edit replaces the list and an
+/// animation composes a value rather than mutating one.
+///
+/// **A pass may change paint, never layout.** Every field here is paint; a
+/// metric one would give the passes two layouts to register against, and
+/// every effect would drift by a subpixel that grows along the line.
+sealed class TextLayer {
+  const TextLayer({
+    this.paint,
+    this.blur = 0,
+    this.dx = 0,
+    this.dy = 0,
+    this.opacity = 1,
+  });
+
+  /// Null paints the text's own colour — which is what lets one stack serve
+  /// several colours, and what a run's own colour reaches through.
+  final ScenePaint? paint;
+
+  /// The glyph outline blurred, through a mask filter on this pass's own
+  /// paint. Not the pass composited and blurred: that is a layer save per
+  /// pass, and a different performance story.
+  final double blur;
+  final double dx;
+  final double dy;
+  final double opacity;
+
+  Map<String, Object?> toWire();
+
+  Map<String, Object?> get _common => {
+    'paint': ?paint?.toWire(),
+    if (blur != 0) 'blur': blur,
+    if (dx != 0) 'dx': dx,
+    if (dy != 0) 'dy': dy,
+    if (opacity != 1) 'o': opacity,
+  };
+
+  static TextLayer? fromWire(Object? raw) {
+    if (raw is! Map) return null;
+    var paint = ScenePaint.fromWire(raw['paint']);
+    var blur = (raw['blur'] as num?)?.toDouble() ?? 0;
+    var dx = (raw['dx'] as num?)?.toDouble() ?? 0;
+    var dy = (raw['dy'] as num?)?.toDouble() ?? 0;
+    var opacity = (raw['o'] as num?)?.toDouble() ?? 1;
+    return switch (raw['k']) {
+      'stroke' => StrokeLayer(
+        width: (raw['w'] as num?)?.toDouble() ?? 1,
+        join: switch (raw['j']) {
+          num i when i >= 0 && i < SceneStrokeJoin.values.length =>
+            SceneStrokeJoin.values[i.toInt()],
+          _ => SceneStrokeJoin.round,
+        },
+        paint: paint,
+        blur: blur,
+        dx: dx,
+        dy: dy,
+        opacity: opacity,
+      ),
+      _ => FillLayer(
+        paint: paint,
+        blur: blur,
+        dx: dx,
+        dy: dy,
+        opacity: opacity,
+      ),
+    };
+  }
+}
+
+class FillLayer extends TextLayer {
+  const FillLayer({super.paint, super.blur, super.dx, super.dy, super.opacity});
+
+  @override
+  Map<String, Object?> toWire() => {'k': 'fill', ..._common};
+
+  @override
+  bool operator ==(Object other) =>
+      other is FillLayer &&
+      other.paint == paint &&
+      other.blur == blur &&
+      other.dx == dx &&
+      other.dy == dy &&
+      other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(paint, blur, dx, dy, opacity);
+
+  @override
+  String toString() => 'FillLayer($paint)';
+}
+
+/// A stroke *around* the glyph outline. It widens the mark without touching
+/// the metrics, which is the whole reason several passes stay registered.
+class StrokeLayer extends TextLayer {
+  const StrokeLayer({
+    this.width = 1,
+    this.join = SceneStrokeJoin.round,
+    super.paint,
+    super.blur,
+    super.dx,
+    super.dy,
+    super.opacity,
+  });
+
+  final double width;
+  final SceneStrokeJoin join;
+
+  @override
+  Map<String, Object?> toWire() => {
+    'k': 'stroke',
+    'w': width,
+    if (join != SceneStrokeJoin.round) 'j': join.index,
+    ..._common,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is StrokeLayer &&
+      other.width == width &&
+      other.join == join &&
+      other.paint == paint &&
+      other.blur == blur &&
+      other.dx == dx &&
+      other.dy == dy &&
+      other.opacity == opacity;
+
+  @override
+  int get hashCode => Object.hash(width, join, paint, blur, dx, dy, opacity);
+
+  @override
+  String toString() => 'StrokeLayer($width, $paint)';
+}
+
 /// One property a [SceneTextStyle] may set: the property table's name for
 /// it, and how to read it off a style.
 ///
@@ -140,6 +445,7 @@ const sceneTextStyleFields = <SceneStyleField>[
   SceneStyleField('decorationColor', _sDecorationColor),
   SceneStyleField('decorationThickness', _sDecorationThickness),
   SceneStyleField('decorationStyle', _sDecorationStyle),
+  SceneStyleField('layers', _sLayers),
   SceneStyleField('maxLines', _sMaxLines),
 ];
 
@@ -157,6 +463,7 @@ Object? _sDecoration(SceneTextStyle s) => s.decoration;
 Object? _sDecorationColor(SceneTextStyle s) => s.decorationColor;
 Object? _sDecorationThickness(SceneTextStyle s) => s.decorationThickness;
 Object? _sDecorationStyle(SceneTextStyle s) => s.decorationStyle;
+Object? _sLayers(SceneTextStyle s) => s.layers;
 Object? _sMaxLines(SceneTextStyle s) => s.maxLines;
 
 /// A text style: the text subset of the property table, as one value — what
@@ -186,6 +493,7 @@ class SceneTextStyle {
     this.decorationColor,
     this.decorationThickness,
     this.decorationStyle,
+    this.layers,
     this.maxLines,
   });
 
@@ -212,6 +520,11 @@ class SceneTextStyle {
   final SceneColor? decorationColor;
   final double? decorationThickness;
   final SceneTextDecorationStyle? decorationStyle;
+
+  /// The paint stack, back to front. Null is "this style says nothing about
+  /// paint"; an EMPTY list is a style that says the text is painted once,
+  /// with its own colour — which is how a style clears a stack it inherited.
+  final List<TextLayer>? layers;
   final int? maxLines;
 
   /// A style from the table's own names — what a reader builds when it has
@@ -235,6 +548,7 @@ class SceneTextStyle {
     decorationColor: v['decorationColor'] as SceneColor?,
     decorationThickness: v['decorationThickness'] as double?,
     decorationStyle: v['decorationStyle'] as SceneTextDecorationStyle?,
+    layers: (v['layers'] as List?)?.cast<TextLayer>(),
     maxLines: v['maxLines'] as int?,
   );
 
@@ -265,6 +579,7 @@ class SceneTextStyle {
     SceneColor? decorationColor,
     double? decorationThickness,
     SceneTextDecorationStyle? decorationStyle,
+    List<TextLayer>? layers,
     int? maxLines,
   }) => SceneTextStyle(
     fontFamily: fontFamily ?? this.fontFamily,
@@ -281,17 +596,27 @@ class SceneTextStyle {
     decorationColor: decorationColor ?? this.decorationColor,
     decorationThickness: decorationThickness ?? this.decorationThickness,
     decorationStyle: decorationStyle ?? this.decorationStyle,
+    layers: layers ?? this.layers,
     maxLines: maxLines ?? this.maxLines,
   );
 
   @override
   bool operator ==(Object other) =>
       other is SceneTextStyle &&
-      sceneTextStyleFields.every((f) => f.read(other) == f.read(this));
+      sceneTextStyleFields.every(
+        // One field is a list, and a list is not `==` another with the same
+        // contents — so the comparison is by contents wherever it finds one.
+        (f) => switch ((f.read(this), f.read(other))) {
+          (List a, List b) => _sameList(a, b),
+          var pair => pair.$1 == pair.$2,
+        },
+      );
 
   @override
-  int get hashCode =>
-      Object.hashAll([for (var f in sceneTextStyleFields) f.read(this)]);
+  int get hashCode => Object.hashAll([
+    for (var f in sceneTextStyleFields)
+      if (f.read(this) case var v) v is List ? Object.hashAll(v) : v,
+  ]);
 
   @override
   String toString() =>

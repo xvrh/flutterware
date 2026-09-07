@@ -814,6 +814,7 @@ class TextNode extends SceneNode {
        decorationThickness = style?.decorationThickness ?? 1,
        decorationStyle =
            style?.decorationStyle ?? SceneTextDecorationStyle.solid,
+       layers = [...?style?.layers],
        maxLines = style?.maxLines;
 
   /// The text a node draws. Everything else it draws with is the [style] —
@@ -841,6 +842,10 @@ class TextNode extends SceneNode {
   SceneColor? decorationColor;
   double decorationThickness;
   SceneTextDecorationStyle decorationStyle;
+
+  /// The paint stack, back to front. Empty is the ordinary text: one pass,
+  /// in [color].
+  List<TextLayer> layers;
 
   /// How many lines before it is cut with an ellipsis, or null for as many
   /// as it takes. A banner filled per language is the reason: the layout

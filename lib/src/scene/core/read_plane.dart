@@ -82,7 +82,7 @@ SceneTextStyle? styleOf(SceneDocument doc, SceneNode node) =>
 bool inheritsFromStyle(SceneDocument doc, SceneNode node, String prop) {
   var style = styleOf(doc, node);
   if (style == null || !style.sets(prop)) return false;
-  return getSceneProperty(node, prop) == style.values[prop];
+  return sceneValuesEqual(getSceneProperty(node, prop), style.values[prop]);
 }
 
 /// Writes every property [style] sets onto [node] — applying a style, or
@@ -122,7 +122,10 @@ void applyTokenMode(SceneDocument doc, {String? from}) {
             if (node.bindings.containsKey(f.key)) continue;
             if (was == null ||
                 !was.sets(f.key) ||
-                getSceneProperty(node, f.key) == was.values[f.key]) {
+                sceneValuesEqual(
+                  getSceneProperty(node, f.key),
+                  was.values[f.key],
+                )) {
               setSceneProperty(node, f.key, f.value);
             }
           }

@@ -24,6 +24,8 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:flutterware/scene_authoring.dart';
 
+import 'paint_grammar.dart';
+
 import 'group_file.dart';
 import 'scene_file.dart';
 
@@ -504,7 +506,7 @@ SceneTextStyle? _style(
     var v = arg.argumentExpression;
     var name = arg.name.lexeme;
     var read = switch (fields[name]) {
-      var p? => _styleField(p, v),
+      var p? => _styleField(p, v, refuse),
       null => null,
     };
     if (read == null) {
@@ -524,23 +526,25 @@ SceneTextStyle? _style(
 /// One field of a style literal, by the kind the table gives it. A choice is
 /// `Type.member` — the file's own spelling, checked against the type the
 /// table names.
-Object? _styleField(SceneProp p, Expression v) => switch (p.kind) {
-  ScenePropKind.number => _value(v, SceneParamKind.number),
-  ScenePropKind.integer => switch (_value(v, SceneParamKind.number)) {
-    double d => d.round(),
-    _ => null,
-  },
-  ScenePropKind.string => _value(v, SceneParamKind.string),
-  ScenePropKind.boolean => _value(v, SceneParamKind.bool),
-  ScenePropKind.color => _value(v, SceneParamKind.color),
-  ScenePropKind.choice => switch (v) {
-    PrefixedIdentifier(:var prefix, :var identifier)
-        when prefix.name == p.choices!.typeName =>
-      p.choices!.valueOf(identifier.name),
-    _ => null,
-  },
-  ScenePropKind.size || ScenePropKind.sizes || ScenePropKind.edges => null,
-};
+Object? _styleField(SceneProp p, Expression v, Refuse refuse) =>
+    switch (p.kind) {
+      ScenePropKind.number => _value(v, SceneParamKind.number),
+      ScenePropKind.integer => switch (_value(v, SceneParamKind.number)) {
+        double d => d.round(),
+        _ => null,
+      },
+      ScenePropKind.string => _value(v, SceneParamKind.string),
+      ScenePropKind.boolean => _value(v, SceneParamKind.bool),
+      ScenePropKind.color => _value(v, SceneParamKind.color),
+      ScenePropKind.choice => switch (v) {
+        PrefixedIdentifier(:var prefix, :var identifier)
+            when prefix.name == p.choices!.typeName =>
+          p.choices!.valueOf(identifier.name),
+        _ => null,
+      },
+      ScenePropKind.layers => readSceneLayers(v, refuse),
+      ScenePropKind.size || ScenePropKind.sizes || ScenePropKind.edges => null,
+    };
 
 String? _typeArgument(TypeArgumentList? types) =>
     types != null && types.arguments.length == 1

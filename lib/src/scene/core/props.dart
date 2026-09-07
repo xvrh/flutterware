@@ -45,6 +45,9 @@ enum ScenePropKind {
   /// A list of sizes — a table's column tracks.
   sizes,
 
+  /// A list of [TextLayer]s — a text's paint stack.
+  layers,
+
   /// [SceneEdges]: one number when uniform, four named sides when not.
   edges,
 
@@ -151,6 +154,7 @@ class SceneProp {
     ScenePropKind.color => SceneParamKind.color,
     ScenePropKind.integer ||
     ScenePropKind.sizes ||
+    ScenePropKind.layers ||
     ScenePropKind.choice => null,
   };
 
@@ -160,6 +164,9 @@ class SceneProp {
     ScenePropKind.size => sizeToWire(value as double?),
     ScenePropKind.sizes => [
       for (var c in value! as List<double?>) sizeToWire(c),
+    ],
+    ScenePropKind.layers => [
+      for (var l in value! as List<TextLayer>) l.toWire(),
     ],
     ScenePropKind.edges => (value! as SceneQuad).toWire(),
     ScenePropKind.choice => value == null ? null : choices!.toWire(value),
@@ -177,6 +184,10 @@ class SceneProp {
     ScenePropKind.sizes => switch (raw) {
       List l => [for (var c in l) sizeFromWire(c)],
       _ => <double?>[],
+    },
+    ScenePropKind.layers => switch (raw) {
+      List l => [for (var e in l) ?TextLayer.fromWire(e)],
+      _ => <TextLayer>[],
     },
     ScenePropKind.edges => quad!(raw),
     ScenePropKind.choice => switch (raw) {
@@ -560,6 +571,14 @@ const sceneTextProps = <SceneProp>[
     write: _setDecorationStyle,
   ),
   SceneProp(
+    'layers',
+    ScenePropKind.layers,
+    owner: ScenePropOwner.text,
+    defaultValue: <TextLayer>[],
+    read: _layers,
+    write: _setLayers,
+  ),
+  SceneProp(
     'maxLines',
     ScenePropKind.integer,
     owner: ScenePropOwner.text,
@@ -605,9 +624,10 @@ SceneProp? scenePropNamed(SceneNode node, String name) {
 /// Whether [value] is what the property holds by default — the test that
 /// decides whether it is written at all.
 bool isSceneDefault(SceneProp p, Object? value) => switch (p.kind) {
-  ScenePropKind.sizes =>
-    (value! as List<double?>).isEmpty &&
-        (p.defaultValue! as List<double?>).isEmpty,
+  // A list is never `==` another list with the same contents, so the test is
+  // emptiness — which is what every list property's default is.
+  ScenePropKind.sizes || ScenePropKind.layers =>
+    (value! as List).isEmpty && (p.defaultValue! as List).isEmpty,
   _ => value == p.defaultValue,
 };
 
@@ -716,6 +736,11 @@ void _setColor(SceneNode n, Object? v) =>
 Object? _align(SceneNode n) => (n as TextNode).align;
 void _setAlign(SceneNode n, Object? v) =>
     (n as TextNode).align = v! as SceneTextAlign;
+Object? _layers(SceneNode n) => (n as TextNode).layers;
+// Copied, so the row's const empty default is never handed out as a node's
+// own mutable list — the trap `columns` already answers this way.
+void _setLayers(SceneNode n, Object? v) =>
+    (n as TextNode).layers = [...v! as List<TextLayer>];
 Object? _maxLines(SceneNode n) => (n as TextNode).maxLines;
 void _setMaxLines(SceneNode n, Object? v) =>
     (n as TextNode).maxLines = v as int?;

@@ -256,7 +256,7 @@ class SceneEditor extends SceneListenable {
                 // Inherited from the old style, or never set by it: follow.
                 if (was == null ||
                     !was.sets(f.key) ||
-                    current == was.values[f.key]) {
+                    sceneValuesEqual(current, was.values[f.key])) {
                   setSceneProperty(node, f.key, f.value);
                 }
               }

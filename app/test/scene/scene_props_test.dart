@@ -14,6 +14,26 @@ Object? sample(SceneProp p) => switch (p.kind) {
   ScenePropKind.color => const SceneColor(0xFF123456),
   ScenePropKind.size => p.name == 'width' ? double.infinity : 42.0,
   ScenePropKind.sizes => <double?>[double.infinity, 48, null],
+  ScenePropKind.layers => const <TextLayer>[
+    StrokeLayer(
+      width: 14,
+      join: SceneStrokeJoin.miter,
+      paint: SolidPaint(SceneColor(0xFF120720)),
+      blur: 3,
+      dx: -1,
+      dy: 2,
+      opacity: 0.8,
+    ),
+    FillLayer(
+      paint: LinearPaint(
+        colors: [SceneColor(0xFFFFF3B0), SceneColor(0xFFFFB020)],
+        stops: [0, 1],
+        begin: SceneAlignment.centerLeft,
+        end: SceneAlignment.centerRight,
+      ),
+    ),
+    FillLayer(),
+  ],
   ScenePropKind.edges => p.quad!([1.0, 2.0, 3.0, 4.0]),
   ScenePropKind.choice => p.choices!.values.firstWhere(
     (v) => v != p.defaultValue,
