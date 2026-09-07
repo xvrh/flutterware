@@ -7,6 +7,7 @@ import '../../ui/tappable.dart';
 import '../../ui/action_button.dart';
 import '../../ui/context_menu.dart';
 import '../editor.dart';
+import 'drawer_pane.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
 import 'swatches.dart';
@@ -116,118 +117,50 @@ class SceneParamPane extends StatelessWidget {
     var p = editor.doc.paramNamed(name);
     if (p == null) return const SizedBox.shrink();
     var readers = editor.readersOf(p.name);
-    var colors = context.colors;
-    var caption = context.type.caption.copyWith(color: colors.mut2);
-    return Container(
-      key: ValueKey('pane:param:${p.name}'),
-      color: colors.panel,
-      padding: const EdgeInsets.all(FwSpacing.lg),
-      alignment: Alignment.topLeft,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: FwSpacing.xxl,
-        children: [
-          SizedBox(
-            width: 320,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: FwSpacing.xs),
-                  child: Text('Default', style: caption),
-                ),
-                _control(context, p),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: FwSpacing.xs),
-                  child: Text(
-                    readers.isEmpty ? 'Read by nothing yet' : 'Read by',
-                    style: caption,
-                  ),
-                ),
-                if (readers.isEmpty)
-                  Text(
-                    'Right-click a property of a node to bind it here.',
-                    style: context.type.micro.copyWith(color: colors.mut2),
-                  ),
-                Wrap(
-                  spacing: FwSpacing.md,
-                  runSpacing: FwSpacing.xxs,
-                  children: [
-                    for (var (node, prop) in readers)
-                      Tappable(
-                        onTap: () => editor.select(node),
-                        borderRadius: BorderRadius.circular(
-                          context.radii.radiusSmall,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: FwSpacing.xs,
-                            vertical: FwSpacing.xxs,
-                          ),
-                          child: Text(
-                            '${node.name} · $prop',
-                            style: context.type.mono.copyWith(
-                              color: colors.accentDark,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                if (tokens case var host? when host.libraries.isNotEmpty)
-                  if (p.kind != SceneParamKind.list)
-                    Padding(
-                      padding: const EdgeInsets.only(top: FwSpacing.lg),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Builder(
-                          builder: (context) => FwActionButton(
-                            label: 'Share',
-                            tooltip:
-                                'A token of the group, with this default — '
-                                'every scene may read it; this parameter goes',
-                            onPressed: () async {
-                              var box =
-                                  context.findRenderObject()! as RenderBox;
-                              var at = box.localToGlobal(
-                                Offset(0, box.size.height),
-                              );
-                              await showContextMenu(context, at, [
-                                const MenuHeader('Share into'),
-                                for (var library in host.libraries)
-                                  MenuItem(
-                                    library.symbol,
-                                    icon: Icons.ios_share_outlined,
-                                    onSelected: () => editor.shareParam(
-                                      p.name,
-                                      (name, kind, value) => library.add(
-                                        name,
-                                        kind,
-                                        value: value,
-                                        taken: host.takenIn(editor),
-                                      ),
-                                    ),
-                                  ),
-                              ]);
-                            },
-                          ),
-                        ),
+    Widget? share;
+    if (tokens case var host? when host.libraries.isNotEmpty) {
+      if (p.kind != SceneParamKind.list) {
+        share = Builder(
+          builder: (context) => FwActionButton(
+            label: 'Share',
+            tooltip:
+                'A token of the group, with this default — '
+                'every scene may read it; this parameter goes',
+            onPressed: () async {
+              var box = context.findRenderObject()! as RenderBox;
+              var at = box.localToGlobal(Offset(0, box.size.height));
+              await showContextMenu(context, at, [
+                const MenuHeader('Share into'),
+                for (var library in host.libraries)
+                  MenuItem(
+                    library.symbol,
+                    icon: Icons.ios_share_outlined,
+                    onSelected: () => editor.shareParam(
+                      p.name,
+                      (name, kind, value) => library.add(
+                        name,
+                        kind,
+                        value: value,
+                        taken: host.takenIn(editor),
                       ),
                     ),
-              ],
-            ),
+                  ),
+              ]);
+            },
           ),
-        ],
-      ),
+        );
+      }
+    }
+    return DrawerPane(
+      key: ValueKey('pane:param:${p.name}'),
+      sections: [
+        DrawerSection(
+          title: 'Default',
+          width: 320,
+          child: _control(context, p),
+        ),
+        readersSection(context, editor, readers, action: share),
+      ],
     );
   }
 

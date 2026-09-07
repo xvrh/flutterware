@@ -11,6 +11,7 @@ import 'package:flutterware_app/src/scene/tokens_library.dart';
 import 'package:flutterware_app/src/scene/ui/library_pane.dart';
 import 'package:flutterware_app/src/scene/ui/token_pane.dart';
 import 'package:flutterware_app/src/scene/ui/tokens_host.dart';
+import 'package:flutterware_app/src/ui/tappable.dart';
 import 'package:flutterware_app/src/scene/workspace.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -68,10 +69,18 @@ void main() {
     home: Material(child: SizedBox(height: 400, child: child)),
   );
 
+  /// The drawer's width: three columns side by side.
+  void wide(WidgetTester tester) {
+    tester.view.physicalSize = const Size(1400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+  }
+
   testWidgets('adds a mode by name, shows it, renames and deletes it', (
     tester,
   ) async {
     var editor = file.editor;
+    wide(tester);
     await tester.pumpWidget(
       host(
         SceneLibraryPane(
@@ -81,7 +90,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('1 token differs'), findsOneWidget);
+    expect(find.text('1 differs'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('library:add-mode')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(EditableText), 'dense');
@@ -90,7 +99,7 @@ void main() {
     expect(library.modes, ['dark', 'dense']);
     expect(editor.tokenModes, ['dark', 'dense'], reason: 'the picker');
     expect(editor.tokenMode, 'dense', reason: 'the artboard shows it');
-    expect(find.text('same as default everywhere'), findsOneWidget);
+    expect(find.text('same as default'), findsOneWidget);
     // Click shows a mode on the canvas; double-click renames it.
     await tester.tap(find.byKey(const ValueKey('library:mode:dark')));
     await tester.pumpAndSettle();
@@ -117,6 +126,7 @@ void main() {
     tester,
   ) async {
     var imported = <String>[];
+    wide(tester);
     await tester.pumpWidget(
       host(
         SceneLibraryPane(
@@ -130,7 +140,7 @@ void main() {
       ),
     );
     expect(find.textContaining('Nothing imported yet'), findsOneWidget);
-    expect(find.text('Import variables…'), findsOneWidget);
+    expect(find.text('import…'), findsOneWidget);
     library.merge(
       importVariables(
         File('test/scene/fixtures/variables.json').readAsStringSync(),
@@ -144,17 +154,16 @@ void main() {
       find.textContaining('Kept, not in the design file: brand, title'),
       findsOneWidget,
     );
-    await tester.tap(find.text('Import again…'));
+    await tester.tap(find.text('import again…'));
     await tester.pumpAndSettle();
     expect(imported, [library.path]);
     // The button's done state holds a timer.
     await tester.pump(const Duration(seconds: 5));
   });
 
-  testWidgets("a style's pane edits one mode's style at a time", (
-    tester,
-  ) async {
+  testWidgets("a style's pane is one column per mode", (tester) async {
     var editor = file.editor;
+    wide(tester);
     await tester.pumpWidget(
       host(
         SceneTokenPane(
@@ -165,15 +174,36 @@ void main() {
       ),
     );
     expect(find.byKey(const ValueKey('style-mode:default')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('style-mode:dark')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Same as the default'), findsOneWidget);
+    expect(find.byKey(const ValueKey('style-mode:dark')), findsOneWidget);
+    // The dark column has no style of its own: the link is a fact, not
+    // a door.
+    expect(find.text('same as default'), findsOneWidget);
+    expect(find.byType(Tappable), isNot(findsNothing));
     library.setStyle('title', const SceneTextStyle(fontSize: 40), mode: 'dark');
     await tester.pumpAndSettle();
-    expect(find.text('The style in dark.'), findsOneWidget);
-    expect(find.text('same as default'), findsOneWidget);
     await tester.tap(find.text('same as default'));
     await tester.pumpAndSettle();
-    expect(library.named('title')!.modes, isEmpty);
+    expect(library.named('title')!.modes, isEmpty, reason: 'the link resets');
+  });
+
+  testWidgets("a value's pane is one column per mode too", (tester) async {
+    var editor = file.editor;
+    wide(tester);
+    await tester.pumpWidget(
+      host(
+        SceneTokenPane(
+          editor,
+          'brand',
+          host: SceneTokensHost(libraries: [library]),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('token-mode:default')), findsOneWidget);
+    expect(find.byKey(const ValueKey('token-mode:dark')), findsOneWidget);
+    expect(find.text('Read by'), findsOneWidget);
+    expect(find.text('root · fill'), findsOneWidget);
+    await tester.tap(find.text('same as default'));
+    await tester.pumpAndSettle();
+    expect(library.named('brand')!.modes, isEmpty);
   });
 }

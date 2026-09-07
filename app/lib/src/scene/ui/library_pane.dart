@@ -2,13 +2,13 @@ import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 
-import '../../ui/action_button.dart';
 import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../tokens_library.dart';
+import 'drawer_pane.dart';
 import 'inline_name.dart';
 import 'tokens_host.dart';
 
@@ -51,60 +51,65 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
   Widget build(BuildContext context) {
     var library = widget.host?.libraryAt(widget.path);
     var colors = context.colors;
-    var caption = context.type.caption.copyWith(color: colors.mut2);
     if (library == null) {
-      return Container(
+      return DrawerPane(
         key: ValueKey('pane:library:${widget.path}'),
-        color: colors.panel,
-        padding: const EdgeInsets.all(FwSpacing.lg),
-        alignment: Alignment.topLeft,
-        child: Text("Not one of the group's libraries.", style: caption),
+        sections: [
+          DrawerSection(
+            title: 'Library',
+            child: Text(
+              "Not one of the group's libraries.",
+              style: context.type.micro.copyWith(color: colors.mut2),
+            ),
+          ),
+        ],
       );
     }
     return AnimatedBuilder(
       animation: library.listenable,
-      builder: (context, _) => Container(
+      builder: (context, _) => DrawerPane(
         key: ValueKey('pane:library:${widget.path}'),
-        color: colors.panel,
-        alignment: Alignment.topLeft,
-        // The drawer is a band; an import's refusals can outgrow it.
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(FwSpacing.lg),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: FwSpacing.xxl,
-            children: [
-              SizedBox(width: 360, child: _modes(context, library, caption)),
-              Expanded(child: _tokens(context, library, caption)),
-            ],
+        sections: [
+          DrawerSection(
+            title: 'Modes',
+            width: 260,
+            trailing: _naming == ''
+                ? null
+                : DrawerLink(
+                    '+ mode',
+                    key: const ValueKey('library:add-mode'),
+                    onTap: () => setState(() => _naming = ''),
+                  ),
+            child: _modes(context, library),
           ),
-        ),
+          DrawerSection(
+            title: library.fileName,
+            child: _tokens(context, library),
+          ),
+          DrawerSection(
+            title: 'Design file',
+            width: 260,
+            trailing: switch (widget.host?.importInto) {
+              var importInto? => DrawerLink(
+                library.importNote == null ? 'import…' : 'import again…',
+                onTap: () => importInto(library.path),
+              ),
+              null => null,
+            },
+            child: _import(context, library),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _modes(
-    BuildContext context,
-    TokensLibrary library,
-    TextStyle caption,
-  ) {
+  Widget _modes(BuildContext context, TokensLibrary library) {
     var colors = context.colors;
     var editor = widget.editor;
-    var modes = library.modes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: FwSpacing.xs),
-          child: Text('Modes', style: caption),
-        ),
-        Text(
-          'One set of values behind the same references. A token shows its '
-          'default in a mode until it is given a value there.',
-          style: context.type.micro.copyWith(color: colors.mut2),
-        ),
-        const SizedBox(height: FwSpacing.sm),
         _modeRow(
           context,
           library,
@@ -114,16 +119,16 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
               '${library.tokens.length} '
               '${library.tokens.length == 1 ? 'token' : 'tokens'}',
         ),
-        for (var mode in modes)
+        for (var mode in library.modes)
           _modeRow(
             context,
             library,
             mode,
             label: mode,
             facts: switch (library.differingIn(mode)) {
-              0 => 'same as default everywhere',
-              1 => '1 token differs',
-              var n => '$n tokens differ',
+              0 => 'same as default',
+              1 => '1 differs',
+              var n => '$n differ',
             },
           ),
         if (_naming == '')
@@ -145,33 +150,16 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
               },
               onCancel: () => setState(() => _naming = null),
             ),
-          )
-        else
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Tappable(
-              key: const ValueKey('library:add-mode'),
-              onTap: () => setState(() => _naming = ''),
-              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: FwSpacing.xs,
-                  vertical: FwSpacing.xxs,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: FwSpacing.xs,
-                  children: [
-                    Icon(Icons.add, size: FwIconSize.sm, color: colors.accent),
-                    Text(
-                      'Add mode',
-                      style: context.type.body.copyWith(color: colors.accent),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ),
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.sm),
+          child: Text(
+            'One set of values behind the same references; click one to '
+            'show it on the canvas. A token shows its default in a mode '
+            'until it is given a value there.',
+            style: context.type.micro.copyWith(color: colors.mut2),
+          ),
+        ),
       ],
     );
   }
@@ -262,9 +250,12 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
                         ),
                       ),
               ),
-              Text(
-                facts,
-                style: context.type.caption.copyWith(color: colors.mut2),
+              Flexible(
+                child: Text(
+                  facts,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.type.caption.copyWith(color: colors.mut2),
+                ),
               ),
             ],
           ),
@@ -273,95 +264,69 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
     );
   }
 
-  Widget _tokens(
-    BuildContext context,
-    TokensLibrary library,
-    TextStyle caption,
-  ) {
+  Widget _tokens(BuildContext context, TokensLibrary library) {
     var colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    if (library.tokens.isEmpty) {
+      return Text(
+        'No token yet — + on the library in the tree adds one.',
+        style: context.type.micro.copyWith(color: colors.mut2),
+      );
+    }
+    return Wrap(
+      spacing: FwSpacing.md,
+      runSpacing: FwSpacing.xxs,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: FwSpacing.xs),
-          child: Text(library.fileName, style: caption),
-        ),
-        if (library.tokens.isEmpty)
-          Text(
-            'No token yet — + on the library in the tree adds one.',
-            style: context.type.micro.copyWith(color: colors.mut2),
-          ),
-        Wrap(
-          spacing: FwSpacing.md,
-          runSpacing: FwSpacing.xxs,
-          children: [
-            for (var t in library.tokens)
-              Tappable(
-                onTap: () =>
-                    (widget.onOpenToken ?? (n) => widget.editor.openToken = n)(
-                      t.name,
-                    ),
-                borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: FwSpacing.xs,
-                    vertical: FwSpacing.xxs,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: FwSpacing.xs,
-                    children: [
-                      Icon(
-                        tokenIcon(t),
-                        size: FwIconSize.sm,
-                        color: colors.mut,
-                      ),
-                      Text(
-                        t.name,
-                        style: context.type.mono.copyWith(
-                          color: colors.accentDark,
-                        ),
-                      ),
-                      Text(
-                        tokenValueLabel(t),
-                        style: context.type.caption.copyWith(
-                          color: colors.mut2,
-                        ),
-                      ),
-                    ],
-                  ),
+        for (var t in library.tokens)
+          Tappable(
+            onTap: () =>
+                (widget.onOpenToken ?? (n) => widget.editor.openToken = n)(
+                  t.name,
                 ),
+            borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: FwSpacing.xs,
+                vertical: FwSpacing.xxs,
               ),
-          ],
-        ),
-        ..._import(context, library, caption),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: FwSpacing.xs,
+                children: [
+                  Icon(tokenIcon(t), size: FwIconSize.sm, color: colors.mut),
+                  Text(
+                    t.name,
+                    style: context.type.mono.copyWith(color: colors.accentDark),
+                  ),
+                  Text(
+                    tokenValueLabel(t),
+                    style: context.type.caption.copyWith(color: colors.mut2),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
 
   /// The design file this library draws from: what the last import did,
-  /// what it refused and what it left alone — and the door to the next.
-  List<Widget> _import(
-    BuildContext context,
-    TokensLibrary library,
-    TextStyle caption,
-  ) {
+  /// what it refused and what it left alone.
+  Widget _import(BuildContext context, TokensLibrary library) {
     var colors = context.colors;
     var micro = context.type.micro.copyWith(color: colors.mut2);
+    var caption = context.type.caption.copyWith(color: colors.mut2);
     var note = library.importNote;
-    return [
-      Padding(
-        padding: const EdgeInsets.only(top: FwSpacing.lg, bottom: FwSpacing.xs),
-        child: Text('Design file', style: caption),
-      ),
-      if (note == null)
-        Text(
-          "Nothing imported yet. A design file's variables merge in by "
-          'name: yours stay, theirs update.',
-          style: micro,
-        )
-      else ...[
+    if (note == null) {
+      return Text(
+        "Nothing imported yet. A design file's variables merge in by "
+        'name: yours stay, theirs update.',
+        style: micro,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
         Text(
           'Imported ${note.from} on ${note.when} — ${note.summary}.',
           key: const ValueKey('library:import-note'),
@@ -381,18 +346,6 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
           ),
         ],
       ],
-      if (widget.host?.importInto case var importInto?)
-        Padding(
-          padding: const EdgeInsets.only(top: FwSpacing.md),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: FwActionButton(
-              label: note == null ? 'Import variables…' : 'Import again…',
-              tooltip: "A design file's variables JSON, merged in by name",
-              onPressed: () => importInto(library.path),
-            ),
-          ),
-        ),
-    ];
+    );
   }
 }
