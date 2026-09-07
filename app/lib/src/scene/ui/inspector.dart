@@ -324,6 +324,18 @@ class SceneInspector extends StatelessWidget {
   ) {
     var kind = bindableKind(node, prop);
     if (kind == null) return child;
+    // Bound to the app's own value: there is nothing here to edit — the
+    // guest draws it — so the control gives way to the fact.
+    if (node.bindings[prop] case TokenRef(:var name)
+        when doc.tokenNamed(name)?.isExport == true) {
+      child = Padding(
+        padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
+        child: Text(
+          '← tokens.$name · from the app',
+          style: context.type.caption.copyWith(color: context.colors.mut2),
+        ),
+      );
+    }
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onSecondaryTapDown: (d) {
@@ -334,7 +346,11 @@ class SceneInspector extends StatelessWidget {
         ];
         var tokens = [
           for (var t in doc.tokens)
-            if (t.kind == kind) t,
+            if (t.kind == kind && t.hasValue) t,
+        ];
+        var exports = [
+          for (var t in doc.tokens)
+            if (t.kind == kind && t.isExport) t,
         ];
         showContextMenu(context, d.globalPosition, [
           MenuHeader(_propLabel(prop)),
@@ -373,6 +389,19 @@ class SceneInspector extends StatelessWidget {
                   t.name,
                   icon: Icons.style_outlined,
                   shortcut: _tokenValue(t),
+                  onSelected: () => editor.bindToken(node, prop, t.name),
+                ),
+            ],
+            // The app's own values of this kind: a name to pick, and the
+            // canvas to see the result on — the editor holds no value.
+            if (exports.isNotEmpty) ...[
+              const MenuDivider(),
+              const MenuHeader('From the app'),
+              for (var t in exports)
+                MenuItem(
+                  t.name,
+                  icon: Icons.ios_share_outlined,
+                  shortcut: t.type,
                   onSelected: () => editor.bindToken(node, prop, t.name),
                 ),
             ],
@@ -720,6 +749,7 @@ class SceneInspector extends StatelessWidget {
       _ => null,
     };
     var style = styleOf(doc, t);
+    var boundDecl = bound == null ? null : doc.tokenNamed(bound);
     var colors = context.colors;
     var caption = context.type.caption.copyWith(color: colors.mut2);
     return [
@@ -732,12 +762,24 @@ class SceneInspector extends StatelessWidget {
             FwChoice(
               value: s.name,
               label: 'tokens.${s.name}',
-              detail: s.style!.values.keys.map(_propLabel).join(' · '),
+              detail: s.style == null
+                  ? 'from the app'
+                  : s.style!.values.keys.map(_propLabel).join(' · '),
             ),
         ],
         onChanged: (name) =>
             name == null ? editor.detachStyle(t) : editor.applyStyle(t, name),
       ),
+      // An export's style: the app's own, laid under the values here by
+      // the canvas. Nothing to inherit or reset — what is set here is set.
+      if (boundDecl?.isExport == true)
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          child: Text(
+            "the app's ${boundDecl!.type}, under the values here",
+            style: caption,
+          ),
+        ),
       if (style != null)
         Padding(
           padding: const EdgeInsets.only(top: FwSpacing.xs),
@@ -1330,7 +1372,7 @@ class SceneInspector extends StatelessWidget {
     };
     var tokens = [
       for (var t in doc.tokens)
-        if (t.isOpaque && t.type == arg.typeName) t,
+        if (t.isExport && t.type == arg.typeName) t,
     ];
     return Padding(
       padding: const EdgeInsets.only(bottom: FwSpacing.md),

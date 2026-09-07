@@ -24,6 +24,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:flutterware/scene_authoring.dart';
 
+import 'group_file.dart';
 import 'scene_file.dart';
 
 /// The symbol a library's list is called when nothing derives one — the
@@ -195,13 +196,19 @@ TokensParse parseTokensFile(
   return TokensParse(parseTokenElements(list, refuse), refusals, imports);
 }
 
-/// The `Token<…>(…)` elements of one list literal — a library's list, or
-/// the `exports:` of a group declaration. A name declared twice in the
-/// same list is refused.
+/// The `Token<…>(…)` elements of one list literal — a library's list, or,
+/// with [exports], the `exports:` of a group declaration. A name declared
+/// twice in the same list is refused.
+///
+/// A library holds VALUES: literals of the four kinds and text styles,
+/// which the editor draws and compares against. An export is the app's
+/// own — a name and a type, the expression never read — so there the type
+/// argument is all that is recorded, and any type is welcome.
 List<SceneTokenDecl> parseTokenElements(
   ListLiteral list,
-  void Function(int offset, String construct, String message) refuse,
-) {
+  void Function(int offset, String construct, String message) refuse, {
+  bool exports = false,
+}) {
   var tokens = <SceneTokenDecl>[];
   var names = <String>{};
   for (var element in list.elements) {
@@ -209,7 +216,7 @@ List<SceneTokenDecl> parseTokenElements(
       refuse(element.offset, 'element', 'expected a Token<…>(…)');
       continue;
     }
-    var decl = _token(element, refuse);
+    var decl = _token(element, refuse, exports: exports);
     if (decl == null) continue;
     if (!names.add(decl.name)) {
       refuse(
@@ -233,8 +240,9 @@ List<String> declarationImports(CompilationUnit unit, String source) => [
 
 SceneTokenDecl? _token(
   Expression e,
-  void Function(int, String, String) refuse,
-) {
+  void Function(int, String, String) refuse, {
+  bool exports = false,
+}) {
   String? typeName;
   ArgumentList? args;
   switch (e) {
@@ -288,6 +296,20 @@ SceneTokenDecl? _token(
     refuse(nameArg.offset, 'token name', 'a token name is an identifier');
     return null;
   }
+  if (exports) {
+    // The app's own: the expression is its business, and a mode would be
+    // a value the editor cannot see either.
+    if (named.isNotEmpty) {
+      refuse(
+        named.first.offset,
+        'modes',
+        "an export is the app's own value and has no modes here — the app "
+            'picks one where it builds it',
+      );
+      return null;
+    }
+    return SceneTokenDecl.export(nameArg.value, typeName);
+  }
   var kind = _tokenKinds[typeName];
   // A text style: a bundle the editor renders, applied whole to a text.
   if (typeName == 'SceneTextStyle') {
@@ -302,18 +324,16 @@ SceneTokenDecl? _token(
     var style = _style(positional[1].argumentExpression, refuse);
     return style == null ? null : SceneTokenDecl.style(nameArg.value, style);
   }
-  // Not a value type: the app's own object. Named, typed, never read.
+  // Not a value type: the app's own object, which a library cannot hold —
+  // the editor writes a library, and it cannot write what it cannot see.
   if (kind == null) {
-    if (named.isNotEmpty) {
-      refuse(
-        named.first.offset,
-        'modes',
-        "a $typeName token is the app's own object and has no modes here — "
-            'the app picks one where it builds it',
-      );
-      return null;
-    }
-    return SceneTokenDecl.opaque(nameArg.value, typeName);
+    refuse(
+      e.offset,
+      'token type',
+      "a $typeName is the app's own — a library holds values the editor "
+          "draws; export it from the group's $sceneGroupFileName instead",
+    );
+    return null;
   }
   var value = _value(positional[1].argumentExpression, kind);
   if (value == null) {

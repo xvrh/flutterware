@@ -393,6 +393,16 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
         ]),
   };
   readSceneProps(node, json);
+  // Which properties read the app's own values — kept as bindings, so the
+  // host resolves them against the exports it holds (`bindExternals`).
+  if (json['exports'] case Map exports) {
+    for (var e in exports.entries) {
+      var prop = '${e.key}';
+      node.bindings[prop] = prop == styleBindingKey
+          ? StyleRef('${e.value}')
+          : TokenRef('${e.value}');
+    }
+  }
 
   if (json['fx'] case List fx when fx.length == 4) {
     double at(int i) => (fx[i] as num).toDouble();

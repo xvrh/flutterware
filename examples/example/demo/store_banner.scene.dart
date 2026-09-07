@@ -23,13 +23,13 @@ class StoreBanner({
     y: -90,
     width: 460,
     height: 460,
-    fill: SceneColor(0xFF4A2F1F),
+    fill: tokens.shopBrand,
     opacity: 0.7,
     circle: true,
   );
   late final cup = TextNode('☕', x: 700, y: 120, fontSize: 180);
   late final title = TextNode(headline, style: tokens.title, color: tokens.ink);
-  late final sub = TextNode(subtitle, style: tokens.body);
+  late final sub = TextNode(subtitle, style: tokens.shopSubtitle);
   late final ctaLabel = TextNode(
     cta,
     fontSize: 17,

@@ -69,26 +69,34 @@ String emitSceneArgs({
   List<String> declarationImports = const [],
   bool entries = true,
 }) {
-  var hasOpaqueTokens = tokens.any((t) => t.isOpaque);
+  var hasOpaqueTokens = tokens.any((t) => t.isExport);
+  var converts = tokens.any(
+    (t) => t.isExport && (t.type == 'Color' || t.type == 'TextStyle'),
+  );
   var out = StringBuffer(_header)
     ..writeln()
     ..writeln("import 'package:flutterware/scene_authoring.dart';");
-  // The declaration's imports may already bring the widgets library in
-  // through material or cupertino; a second door to it is a lint in a file
-  // nobody edits.
-  var widgetsCovered = declarationImports.any((i) {
-    var path = _importPath(i);
-    return (path == 'package:flutter/material.dart' ||
-            path == 'package:flutter/cupertino.dart') &&
-        !i.contains(' as ') &&
-        !i.contains(' show ');
-  });
+  // The declaration's imports may bring material or cupertino in, which
+  // already carry the widgets library; a second door to it is a lint in a
+  // file nobody edits. Such an import is emitted whole, below, whatever it
+  // showed: the entries need `Widget` and `Builder` from it too.
+  var designLibraries = {
+    for (var i in declarationImports)
+      if (!i.contains(' as ') &&
+          (_importPath(i) == 'package:flutter/material.dart' ||
+              _importPath(i) == 'package:flutter/cupertino.dart'))
+        _importPath(i),
+  };
+  var widgetsCovered = entries && designLibraries.isNotEmpty;
   if (entries) {
     out.writeln("import 'package:flutter/widget_previews.dart';");
     if (!widgetsCovered) out.writeln("import 'package:flutter/widgets.dart';");
     out
       ..writeln("import 'package:flutterware/previews.dart';")
       ..writeln("import 'package:flutterware/scene.dart';");
+  } else if (converts) {
+    // The bridge, for `sceneColorOf` and `sceneTextStyleOf`.
+    out.writeln("import 'package:flutterware/scene.dart';");
   }
   // The declaration files' own imports come along, because an opaque type —
   // `ButtonStyle`, `app.Thing` — is spelled here exactly as it was spelled
@@ -96,7 +104,7 @@ String emitSceneArgs({
   // uses is a warning in a file nobody edits.
   var opaqueTypes = {
     for (var t in tokens)
-      if (t.isOpaque) t.type,
+      if (t.isExport) t.type,
     for (var w in externals)
       for (var a in w.args)
         if (!isValueArgType(a.typeName)) a.typeName,
@@ -120,7 +128,12 @@ String emitSceneArgs({
   ];
   var packages = [
     for (var i in needed)
-      if (i.contains("'package:")) i,
+      if (i.contains("'package:"))
+        designLibraries.contains(_importPath(i)) && entries
+            ? "import '${_importPath(i)}';"
+            : i,
+    for (var d in designLibraries)
+      if (entries && !needed.any((i) => _importPath(i) == d)) "import '$d';",
   ]..sort();
   for (var i in packages) {
     out.writeln(i);
@@ -342,11 +355,11 @@ void _argsClass(
 void _tokensClass(StringBuffer out, List<SceneTokenDecl> tokens) {
   var values = [
     for (var t in tokens)
-      if (!t.isOpaque) t,
+      if (t.hasValue) t,
   ];
   var opaque = [
     for (var t in tokens)
-      if (t.isOpaque) t,
+      if (t.isExport) t,
   ];
   var formals = values.isEmpty
       ? ''
@@ -389,13 +402,20 @@ void _tokensClass(StringBuffer out, List<SceneTokenDecl> tokens) {
         '  static const modes = <String, $sceneTokensClassName>{${[for (var m in modeNames) "'$m': $m"].join(', ')}};',
       );
   }
+  // An export is a getter: the app's own value, read from the group at
+  // the moment a scene asks, and converted to the editor's type where the
+  // scene needs that — a `Color` on `fill`, a `TextStyle` on `style:`.
   for (var t in opaque) {
+    var read = "_token('${t.name}')! as ${t.typeName}";
+    var (type, expr) = switch (t.type) {
+      'Color' => ('SceneColor', 'sceneColorOf($read)'),
+      'TextStyle' => ('SceneTextStyle', 'sceneTextStyleOf($read)'),
+      _ => (t.typeName, read),
+    };
     out
       ..writeln()
       ..writeln("  /// The app's own, as the group exports it.")
-      ..writeln(
-        "  ${t.typeName} get ${t.name} => _token('${t.name}')! as ${t.typeName};",
-      );
+      ..writeln('  $type get ${t.name} => $expr;');
   }
   if (opaque.isNotEmpty) {
     out
@@ -431,7 +451,35 @@ List<String> _neededImports(List<String> directives, Set<String> types) {
       byUri[uri] = d;
     }
   }
-  return byUri.values.toList();
+  return [for (var d in byUri.values) _narrowShow(d, types)].nonNulls.toList();
+}
+
+/// A `show` list cut down to the names this file spells — the declaration
+/// may show more than an export's type, and a shown name nothing uses is a
+/// warning in a file nobody edits. Null when nothing shown is used.
+String? _narrowShow(String directive, Set<String> types) {
+  var match = RegExp(r'\bshow\s+([^;]+);').firstMatch(directive);
+  if (match == null) return directive;
+  var prefix = RegExp(r'\bas\s+(\w+)').firstMatch(directive)?.group(1);
+  var wanted = {
+    for (var t in types)
+      if (prefix == null && !t.contains('.'))
+        t
+      else if (prefix != null && t.startsWith('$prefix.'))
+        t.substring(prefix.length + 1),
+  };
+  var shown = match.group(1)!.split(',').map((n) => n.trim()).toList();
+  var kept = [
+    for (var n in shown)
+      if (wanted.contains(n)) n,
+  ];
+  if (kept.isEmpty) return null;
+  if (kept.length == shown.length) return directive;
+  return directive.replaceRange(
+    match.start,
+    match.end,
+    'show ${kept.join(', ')};',
+  );
 }
 
 /// `foo.dart` from `import 'foo.dart' as x;`.

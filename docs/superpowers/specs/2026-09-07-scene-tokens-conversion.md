@@ -418,6 +418,28 @@ store banner reads one of them. Lands: **a user re-exports an existing
 palette by naming it, and sees it on the canvas.** This is the part the
 2026-09-07 feedback was about.
 
+**T1 landed 2026-09-07.** `SceneTokenDecl` carries an owner; an export is
+read as a name and a type (`Token<Color>` → colour kind, `Token<TextStyle>`
+→ style, anything else opaque), never a value, and a library refuses the
+app's own object with a pointer to `scenes.dart`. Two things the build
+settled against the plan's wording:
+
+- **The name travels as the binding, not as a marker in the value slot.**
+  The wire already carries every node's bindings; the guest reads
+  `fill → token:shopBrand` there and puts the app's colour on the node in
+  `bindExternals` (`resolveExports`). The value slot keeps a stand-in of
+  its kind in the editor's model, which the file never spells because the
+  reference is the value. An argument still carries the marker, as before.
+- **A `TextStyle` export is laid under by the default side of
+  equal-means-inherited.** The guest applies the app's style to every text
+  property still at its default and leaves the spelled ones — which is
+  exactly `fontSize ?? style?.fontSize ?? 16` on the compiled plane, so the
+  two agree without the editor knowing the style's fields.
+
+Demo: `shopBrand` (the shop's seed colour) fills the store banner's glow
+and `shopSubtitle` (an italic the editor cannot name, on the canvas all
+the same) is the subtitle's style; `ctaStyle` stays an opaque export.
+
 **T2 — the library document and its panel.** `TokensFile` beside
 `SceneFile` in the workspace, one per library, shared by every open scene
 that lists it, autosaved and disk-watched. The outline section, the token

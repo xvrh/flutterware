@@ -9,9 +9,9 @@
 
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutter/widget_previews.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutterware/previews.dart';
 import 'package:flutterware/scene.dart';
+import 'package:flutter/material.dart';
 
 import 'sample.scene.dart';
 import 'sample_nested.scene.dart';
@@ -135,6 +135,16 @@ class SceneTokens {
 
   /// Every mode the declaration names, by name.
   static const modes = <String, SceneTokens>{'dark': dark};
+
+  /// The app's own, as the group exports it.
+  SceneColor get accent => sceneColorOf(_token('accent')! as Color);
+
+  /// The app's own, as the group exports it.
+  SceneTextStyle get heading =>
+      sceneTextStyleOf(_token('heading')! as TextStyle);
+
+  static Object? _token(String name) =>
+      scenes.tokens.firstWhere((t) => t.name == name).value;
 }
 
 /// The declaration an arguments class was generated from —

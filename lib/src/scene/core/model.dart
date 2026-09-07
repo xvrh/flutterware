@@ -101,19 +101,37 @@ class SceneParamDecl {
 /// can only name and pass: it reaches an external widget's argument through
 /// `tokens.name`, and never the canvas. Its [type] is the declaration's type
 /// argument, verbatim, so the generated class can spell it back.
+/// Who owns a token: the editor (a library, values it wrote and can draw)
+/// or the app (an export, a name and a type the editor never sees inside).
+enum SceneTokenOwner { library, export }
+
 class SceneTokenDecl {
+  /// A library value: the editor holds it, draws it and compares against it.
   SceneTokenDecl(
     this.name,
     SceneParamKind this.kind,
     Object this.value, {
     this.modes = const {},
-  }) : type = _typeOf(kind);
+  }) : type = _typeOf(kind),
+       owner = SceneTokenOwner.library,
+       _styleType = false;
 
-  /// A token the editor cannot see into: the name and the type, no value.
-  const SceneTokenDecl.opaque(this.name, this.type)
-    : kind = null,
+  /// An export: the app's own value, named and typed, never read. The type
+  /// decides where the editor offers it — a `Color` on colour properties, a
+  /// `TextStyle` in a text's style slot, a `double` on numbers — and
+  /// anything else is OPAQUE: only an external widget's argument of that
+  /// type can take it. The guest resolves the name; the editor never holds
+  /// the value, so an export binding is never auto-detached.
+  SceneTokenDecl.export(this.name, this.type)
+    : owner = SceneTokenOwner.export,
+      kind = _exportKinds[type],
       value = null,
-      modes = const {};
+      modes = const {},
+      _styleType = _exportStyleTypes.contains(type);
+
+  /// An export of a type the editor only names — kept for the callers that
+  /// spell it; [SceneTokenDecl.export] says the same for any type.
+  SceneTokenDecl.opaque(String name, String type) : this.export(name, type);
 
   /// A text style: a bundle of table values the editor renders and a text
   /// node takes whole, with each property still its own to override. No
@@ -121,9 +139,30 @@ class SceneTokenDecl {
   const SceneTokenDecl.style(this.name, SceneTextStyle this.value)
     : kind = null,
       type = 'SceneTextStyle',
-      modes = const {};
+      modes = const {},
+      owner = SceneTokenOwner.library,
+      _styleType = true;
 
   final String name;
+
+  final SceneTokenOwner owner;
+
+  /// Whether the app owns this: a name and a type, no value here.
+  bool get isExport => owner == SceneTokenOwner.export;
+
+  final bool _styleType;
+
+  /// The types an export may declare for the editor's own kinds. The app's
+  /// type comes first — `Color` — and the editor's is accepted too.
+  static const _exportKinds = {
+    'Color': SceneParamKind.color,
+    'SceneColor': SceneParamKind.color,
+    'double': SceneParamKind.number,
+    'String': SceneParamKind.string,
+    'bool': SceneParamKind.bool,
+  };
+
+  static const _exportStyleTypes = {'TextStyle', 'SceneTextStyle'};
 
   /// The value kind, or null for an opaque token.
   final SceneParamKind? kind;
@@ -140,17 +179,25 @@ class SceneTokenDecl {
   /// that is the same everywhere, and always for an opaque one.
   final Map<String, Object> modes;
 
-  bool get isStyle => value is SceneTextStyle;
+  /// A text style — a library's, whose fields the editor holds, or an
+  /// export's, which the guest lays under the text's own values.
+  bool get isStyle => _styleType;
 
   /// The app's own object — neither a value the editor renders nor a style.
   bool get isOpaque => kind == null && !isStyle;
 
-  /// The style, for a style token.
+  /// Whether the editor holds a value for this: a library token does, an
+  /// export never does.
+  bool get hasValue => !isExport;
+
+  /// The style, for a library style token; null for an export's, whose
+  /// fields only the app knows.
   SceneTextStyle? get style =>
       value is SceneTextStyle ? value! as SceneTextStyle : null;
 
   /// The value in [mode], or the default when the token does not name it —
-  /// which is the rule the generated `SceneTokens.<mode>` set follows.
+  /// which is the rule the generated `SceneTokens.<mode>` set follows. Null
+  /// for an export.
   Object? valueIn(String? mode) => mode == null ? value : modes[mode] ?? value;
 
   String get typeName => type;
@@ -1300,11 +1347,28 @@ class SceneDocument extends SceneListenable {
     'selected': [...selected],
   };
 
+  /// `{prop: exportName}` for every binding of [n] to an export — a token
+  /// the app owns and this document only names.
+  Map<String, String> _exportsOf(SceneNode n) {
+    var out = <String, String>{};
+    for (var e in n.bindings.entries) {
+      var name = switch (e.value) {
+        TokenRef(:var name) || StyleRef(:var name) => name,
+        _ => null,
+      };
+      if (name != null && tokenNamed(name)?.isExport == true) {
+        out[e.key] = name;
+      }
+    }
+    return out;
+  }
+
   Map<String, dynamic> _json(SceneNode n) {
     var tx = n.fxRendered('translateX') as double;
     var ty = n.fxRendered('translateY') as double;
     var scale = n.fxRendered('scale') as double;
     var rotate = n.fxRendered('rotate') as double;
+    var exports = _exportsOf(n);
     return {
       'name': n.name,
       // The picture: every table property off its default, the composed
@@ -1317,6 +1381,10 @@ class SceneDocument extends SceneListenable {
       // [translateX, translateY, scale, rotate°], applied about the center.
       if (tx != 0 || ty != 0 || scale != 1 || rotate != 0)
         'fx': [tx, ty, scale, rotate],
+      // The app's own values, by name: the picture cannot hold them — this
+      // end never had them — so the host, which does, is told which
+      // property reads which export and draws it over the stand-in here.
+      if (exports.isNotEmpty) 'exports': exports,
       ...switch (n) {
         FrameNode f => {
           'kind': 'frame',

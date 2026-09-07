@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import '../previews/playhead.dart';
 import 'core/model.dart';
 import 'core/motion_model.dart';
+import 'core/props.dart';
 import 'core/motion_runtime.dart';
 import 'core/values.dart';
 import 'flutter_bridge.dart';
@@ -651,11 +652,59 @@ void bindExternals(
   var byEntry = {for (var w in declarations) w.entry: w};
   var byName = {for (var t in tokens) t.name: t.value};
   for (var (node, _) in doc.walk()) {
+    resolveExports(node, byName);
     if (node is! ExternalNode) continue;
     var build = byEntry[node.entry]?.build;
     node.builder = build == null
         ? null
         : (args) => build(resolveTokenArgs(args, byName));
+  }
+}
+
+/// Puts the app's own values on the properties of [node] bound to them.
+///
+/// An EXPORT — `Token<Color>('brand', AppColors.brand)` in the group's
+/// declaration — reaches the editor as a name; the editor never holds the
+/// value and sends the binding as it is. This end holds the object, so a
+/// `fill` bound to `brand` takes the app's colour here, a `double` a number,
+/// a `String` text. A `TextStyle` in the style slot is laid UNDER the
+/// text's own values: every property the app's style sets and the text
+/// left at its default takes the style's — the resolution the compiled
+/// `TextNode(…, style: tokens.title)` does with `fontSize ?? style?.
+/// fontSize ?? 16`, so the two planes agree.
+void resolveExports(SceneNode node, Map<String, Object?> exports) {
+  for (var e in node.bindings.entries) {
+    var prop = e.key;
+    switch (e.value) {
+      case TokenRef(:var name) when !prop.startsWith('args.'):
+        if (!exports.containsKey(name)) continue;
+        var value = switch (exports[name]) {
+          Color c => c.scene,
+          SceneColor c => c,
+          num n => n.toDouble(),
+          String s => s,
+          bool b => b,
+          _ => null,
+        };
+        if (value != null) setSceneProperty(node, prop, value);
+      case StyleRef(:var name) when node is TextNode:
+        var style = switch (exports[name]) {
+          TextStyle s => sceneTextStyleOf(s),
+          SceneTextStyle s => s,
+          _ => null,
+        };
+        if (style == null) continue;
+        var props = {for (var p in scenePropsOf(node)) p.name: p};
+        for (var f in style.values.entries) {
+          var prop = props[f.key];
+          if (prop == null) continue;
+          if (isSceneDefault(prop, prop.read(node))) {
+            setSceneProperty(node, f.key, f.value);
+          }
+        }
+      default:
+        break;
+    }
   }
 }
 

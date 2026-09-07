@@ -54,6 +54,13 @@ final scenes = SceneGroup(
     ),
   ],
   exports: [
+    // The app's own values, re-exported by name: a scene reads
+    // `tokens.shopBrand` as a colour and `tokens.shopSubtitle` as a text
+    // style, the editor offers each where its type fits, and this process
+    // draws them — the italic in the subtitle is the app's, unnamed in the
+    // editor and on the canvas all the same.
+    const Token<Color>('shopBrand', app.brandColor),
+    const Token<TextStyle>('shopSubtitle', app.subtitleStyle),
     // The app's own look for its call to action: named here, filled into
     // `OrderButtonArgs(style: tokens.ctaStyle)` by a scene, built by this
     // process — only this app ever sees inside a ButtonStyle.

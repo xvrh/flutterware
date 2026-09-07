@@ -141,6 +141,16 @@ class Drink {
   final (Color, Color) colors;
 }
 
+/// The shop's own colour and copy style, named so a scene can read them:
+/// `demo/scenes.dart` exports these, and the scene editor offers them by
+/// name — the canvas, which is this app, draws the value.
+const brandColor = Color(0xFF6F4E37);
+const subtitleStyle = TextStyle(
+  fontSize: 18,
+  fontStyle: FontStyle.italic,
+  color: Color(0xFFD8C9BD),
+);
+
 const drinks = [
   Drink('cappuccino', 'Cappuccino', 4.20, '☕', (
     Color(0xFFB08968),

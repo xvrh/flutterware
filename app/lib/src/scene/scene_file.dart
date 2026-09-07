@@ -462,8 +462,9 @@ void _emitNode(
       out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
       props.add(ref('text') ?? _str(t.text));
-      if (style != null) {
-        var name = (n.bindings[styleBindingKey]! as StyleRef).name;
+      // The binding, not the style: an export's style has no fields here
+      // and is still the text's.
+      if (n.bindings[styleBindingKey] case StyleRef(:var name)) {
         props.add('$styleBindingKey: ${scope.tokensFormal}.$name');
       }
       table(skip: const {'text'});
@@ -1622,9 +1623,9 @@ class _Parser {
           _refuseUnknownToken(v);
           continue;
         }
-        // An opaque token has no value here: the argument carries the
-        // NAME, and the guest that compiled the declaration resolves it.
-        out[arg.name.lexeme] = token.isOpaque
+        // An export has no value here: the argument carries the NAME, and
+        // the guest that compiled the declaration resolves it.
+        out[arg.name.lexeme] = token.isExport
             ? tokenMarker(token.name)
             : token.value;
         refs[arg.name.lexeme] = TokenRef(token.name);
@@ -1760,8 +1761,19 @@ class _Parser {
       return _refused;
     }
     n.bindings[prop] = TokenRef(decl.name);
+    // An export: the binding is the whole of it. The property keeps a
+    // stand-in of its kind; the guest draws the app's own value over it.
+    if (decl.isExport) return getSceneProperty(n, prop) ?? _standIn(kind);
     return decl.value;
   }
+
+  static Object _standIn(SceneParamKind kind) => switch (kind) {
+    SceneParamKind.color => const SceneColor(0x00000000),
+    SceneParamKind.number => 0.0,
+    SceneParamKind.string => '',
+    SceneParamKind.bool => false,
+    SceneParamKind.list => const <Object?>[],
+  };
 
   /// `style: tokens.title` — a shared text style, applied whole: every
   /// property it sets lands on the node, and the node's own arguments,
@@ -1781,18 +1793,19 @@ class _Parser {
       _refuseUnknownToken(e);
       return;
     }
-    var style = decl.style;
-    if (style == null) {
+    if (!decl.isStyle) {
       refuse(
         e.offset,
         'token type',
         '"${e.identifier.name}" is a ${decl.typeName} — a style is a '
-            'SceneTextStyle token',
+            'SceneTextStyle token, or a TextStyle the app exports',
       );
       return;
     }
     n.bindings[styleBindingKey] = StyleRef(decl.name);
-    writeStyle(n, style);
+    // An export's style is laid under the node's values by the guest; the
+    // file spells only what the node sets itself.
+    if (decl.style case var style?) writeStyle(n, style);
   }
 
   void _refuseUnknownToken(PrefixedIdentifier e) {

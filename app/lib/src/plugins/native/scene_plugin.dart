@@ -1503,8 +1503,9 @@ class _NewLibraryButtonState extends State<_NewLibraryButton> {
                   selected: _group ?? -1,
                   onChanged: (i) => rebuild(() {
                     _group = i < 0 ? null : i;
-                    if (i >= 0)
+                    if (i >= 0) {
                       _folder.text = widget.folderOf(widget.groups[i]);
+                    }
                   }),
                 ),
               if (refusal != null)

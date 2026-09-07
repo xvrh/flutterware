@@ -216,7 +216,7 @@ GroupParse parseGroupFile(
         }
       case 'exports':
         if (value is ListLiteral) {
-          exports = parseTokenElements(value, refuse);
+          exports = parseTokenElements(value, refuse, exports: true);
         } else {
           refuse(value.offset, 'exports', 'exports is a list of Token<…>(…)');
         }

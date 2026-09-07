@@ -20,6 +20,23 @@ extension SceneFontWeightToFlutter on SceneFontWeight {
   FontWeight get flutter => FontWeight.values[index];
 }
 
+/// The app's colour as the scene core spells it — what the generated
+/// `SceneTokens` getter for a `Color` export returns, and what the guest
+/// puts on a property bound to one.
+SceneColor sceneColorOf(Color color) => color.scene;
+
+/// The properties of the app's text style the table knows — size, weight
+/// and colour. The rest (family, letter spacing, height) is the app's to
+/// draw: the guest renders with the app's own `TextStyle` underneath, so
+/// nothing is lost on the canvas, only unnamed in the editor.
+SceneTextStyle sceneTextStyleOf(TextStyle style) => SceneTextStyle(
+  fontSize: style.fontSize,
+  weight: style.fontWeight == null
+      ? null
+      : SceneFontWeight.values[FontWeight.values.indexOf(style.fontWeight!)],
+  color: style.color?.scene,
+);
+
 extension SceneTextAlignToFlutter on SceneTextAlign {
   TextAlign get flutter => TextAlign.values[index];
 }

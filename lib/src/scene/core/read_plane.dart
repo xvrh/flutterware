@@ -105,7 +105,7 @@ void applyTokenMode(SceneDocument doc) {
     for (var entry in node.bindings.entries) {
       if (entry.value case TokenRef(:var name)) {
         var decl = doc.tokenNamed(name);
-        if (decl == null || decl.isOpaque || decl.isStyle) continue;
+        if (decl == null || !decl.hasValue || decl.isStyle) continue;
         setSceneProperty(node, entry.key, decl.valueIn(doc.tokenMode));
       }
     }
@@ -284,15 +284,28 @@ List<String> reconcileBindings(SceneDocument doc) {
     for (var entry in node.bindings.entries.toList()) {
       var prop = entry.key;
       // A style is several properties, each the node's to override: an edit
-      // is never a detach here. Only a token that is gone drops it.
+      // is never a detach here. Only a token that is gone, or no longer a
+      // style, drops it — an export's style is one the editor cannot see
+      // into, and it stays.
       if (prop == styleBindingKey) {
-        if (styleOf(doc, node) == null) {
+        var name = switch (entry.value) {
+          StyleRef(:var name) => name,
+          _ => null,
+        };
+        if (name == null || doc.tokenNamed(name)?.isStyle != true) {
           node.bindings.remove(prop);
           dropped.add('${node.name}.$prop');
         }
         continue;
       }
       var current = getSceneProperty(node, prop);
+      // An export has no value here to be cleared or to drift from: the
+      // binding is the whole of it, and only an unbind or the token going
+      // away ends it.
+      if (entry.value case TokenRef(:var name)
+          when doc.tokenNamed(name)?.isExport == true) {
+        continue;
+      }
       // A property that was cleared — a fill removed, a size set to hug —
       // no longer reads anything.
       if (current == null) {
@@ -327,7 +340,7 @@ List<String> reconcileBindings(SceneDocument doc) {
             if (tokenMarkerName(current) != null) {
               setSceneProperty(node, prop, null);
             }
-          } else if (!decl.isOpaque && decl.valueIn(doc.tokenMode) != current) {
+          } else if (decl.hasValue && decl.valueIn(doc.tokenMode) != current) {
             node.bindings.remove(prop);
             dropped.add('${node.name}.$prop');
           }

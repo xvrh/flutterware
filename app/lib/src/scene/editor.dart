@@ -683,6 +683,15 @@ class SceneEditor extends SceneListenable {
         '"$token" is a text style — apply it to a text, not to a property',
       );
     }
+    // An export on an external widget's argument: the argument carries the
+    // NAME, whatever the export's type, and the widget takes the object.
+    if (decl.isExport && node is ExternalNode && prop.startsWith('args.')) {
+      perform('Bind $prop to tokens.$token', () {
+        node.bindings[prop] = TokenRef(token);
+        setSceneProperty(node, prop, tokenMarker(token));
+      });
+      return;
+    }
     if (decl.isOpaque) {
       if (node is! ExternalNode || !prop.startsWith('args.')) {
         throw ArgumentError(
@@ -708,7 +717,11 @@ class SceneEditor extends SceneListenable {
     }
     perform('Bind $prop to tokens.$token', () {
       node.bindings[prop] = TokenRef(token);
-      setSceneProperty(node, prop, decl.valueIn(doc.tokenMode));
+      // An export has no value here: the property keeps what it shows and
+      // the guest draws the app's own over it.
+      if (decl.hasValue) {
+        setSceneProperty(node, prop, decl.valueIn(doc.tokenMode));
+      }
     });
   }
 
@@ -729,8 +742,7 @@ class SceneEditor extends SceneListenable {
   void applyStyle(SceneNode node, String token) {
     var decl = doc.tokenNamed(token);
     if (decl == null) throw ArgumentError('no token "$token"');
-    var style = decl.style;
-    if (style == null) {
+    if (!decl.isStyle) {
       throw ArgumentError('"$token" is a ${decl.typeName}, not a text style');
     }
     if (node is! TextNode) {
@@ -738,9 +750,12 @@ class SceneEditor extends SceneListenable {
         '"${node.name}" is not a text — a style is a text\'s',
       );
     }
+    var style = decl.style;
     perform('Apply style $token', () {
       node.bindings[styleBindingKey] = StyleRef(token);
-      writeStyle(node, style);
+      // An export's style is the app's: the guest lays it under the values
+      // here, and nothing is written into them.
+      if (style != null) writeStyle(node, style);
     });
   }
 

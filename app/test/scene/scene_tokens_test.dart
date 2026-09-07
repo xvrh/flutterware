@@ -20,22 +20,34 @@ import 'package:flutterware_app/src/scene/ui/swatches.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
 const _declaration = '''
-import 'package:flutter/material.dart' show ButtonStyle, FilledButton;
 import 'package:flutterware/scene_authoring.dart';
-
-import 'shop.dart' as app;
 
 final sceneTokens = [
   const Token<SceneColor>('brand', SceneColor(0xFFE8632B)),
   const Token<double>('radius', 28),
   Token<String>('cta', 'Order now'),
   const Token<bool>('compact', false),
-  Token<ButtonStyle>('ctaStyle', FilledButton.styleFrom()),
-  Token<app.Decor>('decor', app.decor),
 ];
 ''';
 
-final _tokens = parseTokensFile(_declaration).tokens;
+/// The app's own objects are EXPORTS, declared in the group beside the
+/// widgets — a library holds only values the editor can draw.
+const _exports = '''
+import 'package:flutter/material.dart' show ButtonStyle, FilledButton;
+import 'package:flutterware/scene_authoring.dart';
+
+import 'shop.dart' as app;
+
+final scenes = SceneGroup(exports: [
+  Token<ButtonStyle>('ctaStyle', FilledButton.styleFrom()),
+  Token<app.Decor>('decor', app.decor),
+]);
+''';
+
+final _tokens = [
+  ...parseTokensFile(_declaration).tokens,
+  ...parseGroupFile(_exports).exports,
+];
 
 const _scene =
     '''
@@ -103,6 +115,16 @@ final sceneTokens = [
         parseTokensFile('final things = [];').refusals.single.construct,
         'no declarations',
       );
+    });
+
+    test("refuses the app's own object: a library holds values", () {
+      var parsed = parseTokensFile('''
+final sceneTokens = [
+  Token<ButtonStyle>('cta', FilledButton.styleFrom()),
+];
+''');
+      expect(parsed.refusals.single.construct, 'token type');
+      expect(parsed.refusals.single.message, contains('export'));
     });
   });
 
@@ -319,14 +341,15 @@ final sceneTokens = [
 
   group('an opaque token', () {
     test('is read as a name and a type, its imports kept', () {
-      var parsed = parseTokensFile(_declaration);
+      var parsed = parseGroupFile(_exports);
       expect(parsed.refusals, isEmpty);
-      var style = parsed.tokens.firstWhere((t) => t.name == 'ctaStyle');
+      var style = parsed.exports.firstWhere((t) => t.name == 'ctaStyle');
       expect(style.isOpaque, isTrue);
+      expect(style.isExport, isTrue);
       expect(style.type, 'ButtonStyle');
       expect(style.value, isNull);
       expect(
-        parsed.tokens.firstWhere((t) => t.name == 'decor').type,
+        parsed.exports.firstWhere((t) => t.name == 'decor').type,
         'app.Decor',
       );
       expect(parsed.imports, [
@@ -340,7 +363,8 @@ final sceneTokens = [
         externals: [],
         scenes: [],
         tokens: _tokens,
-        declarationImports: parseTokensFile(_declaration).imports,
+        declarationImports: parseGroupFile(_exports).imports,
+        entries: false,
       );
       expect(
         source,
@@ -359,9 +383,8 @@ final sceneTokens = [
       expect(source, contains("import 'scenes.dart';"));
       expect(
         source,
-        contains(
-          "import 'package:flutter/material.dart' show ButtonStyle, FilledButton;",
-        ),
+        contains("import 'package:flutter/material.dart' show ButtonStyle;"),
+        reason: 'the show list is cut to what this file spells',
       );
       expect(source, contains("import 'shop.dart' as app;"));
       // A value token is still a const field.
@@ -387,6 +410,7 @@ final scenes = SceneGroup(widgets: [
         externals: externals.widgets,
         scenes: [],
         declarationImports: externals.imports,
+        entries: false,
       );
       expect(source, contains('final ButtonStyle? style;'));
       expect(source, contains('style: style)'), reason: 'no fx reader');

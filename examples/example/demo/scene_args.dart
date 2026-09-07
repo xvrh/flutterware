@@ -390,6 +390,13 @@ class SceneTokens {
   static const modes = <String, SceneTokens>{'dark': dark};
 
   /// The app's own, as the group exports it.
+  SceneColor get shopBrand => sceneColorOf(_token('shopBrand')! as Color);
+
+  /// The app's own, as the group exports it.
+  SceneTextStyle get shopSubtitle =>
+      sceneTextStyleOf(_token('shopSubtitle')! as TextStyle);
+
+  /// The app's own, as the group exports it.
   ButtonStyle get ctaStyle => _token('ctaStyle')! as ButtonStyle;
 
   static Object? _token(String name) =>

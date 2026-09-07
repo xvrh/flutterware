@@ -126,7 +126,10 @@ final sceneTokens = [
 ];
 ''');
     expect(parsed.tokens.single.modes, {'dense': 4.0, 'wide': 12.0});
-    expect(parsed.refusals.map((r) => r.construct), ['mode name', 'modes']);
+    expect(parsed.refusals.map((r) => r.construct), [
+      'mode name',
+      'token type',
+    ], reason: "the app's own object is an export, not a library value");
   });
 
   test(
