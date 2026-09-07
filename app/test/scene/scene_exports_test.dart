@@ -141,7 +141,7 @@ final scenes = SceneGroup(exports: [
       expect(out, contains('fill: t.accent'));
       expect(
         out,
-        contains("TextNode('Hello', style: t.heading, fontSize: 12)"),
+        contains("TextNode('Hello', style: t.heading.copyWith(fontSize: 12))"),
       );
       expect(_emit(_parse(out).doc!), out);
     });
@@ -239,7 +239,15 @@ final scenes = SceneGroup(exports: [
         expect(style.fontSize, 22);
         expect(style.weight, SceneFontWeight.w600);
         expect(style.color, const SceneColor(0xFF112233));
-        expect(style.values.keys, ['fontSize', 'weight', 'color']);
+        expect(style.fontFamily, 'Serif');
+        expect(style.letterSpacing, 2);
+        expect(style.values.keys, [
+          'fontFamily',
+          'fontSize',
+          'weight',
+          'letterSpacing',
+          'color',
+        ]);
         expect(
           sceneColorOf(const Color(0xFF0000FF)),
           const SceneColor(0xFF0000FF),
@@ -275,7 +283,20 @@ final scenes = SceneGroup(exports: [
       ),
     );
     await tester.pump();
-    // The text's colour swatches: the last swatch row on the panel.
+    // The text's colour swatches: the last swatch row on the panel — and
+    // the panel is a lazy list, so it has to be scrolled to before it is
+    // built at all.
+    await tester.scrollUntilVisible(
+      find.text('Color'),
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byType(SceneInspector),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pump();
     await tester.tapAt(
       tester.getCenter(find.byType(SceneSwatches).last),
       buttons: kSecondaryButton,

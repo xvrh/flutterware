@@ -37,6 +37,30 @@ void main() {
     }
   });
 
+  test('decoration style order matches Flutter, and the line switches', () {
+    expect(
+      SceneTextDecorationStyle.values.map((v) => v.name),
+      TextDecorationStyle.values.map((v) => v.name),
+    );
+    for (var v in SceneTextDecorationStyle.values) {
+      expect(v.flutter.name, v.name);
+    }
+    // TextDecoration is a combinable set, not an enum: it cannot be indexed
+    // and is switched instead, so each member is named here on purpose.
+    expect(SceneTextDecoration.none.flutter, TextDecoration.none);
+    expect(SceneTextDecoration.underline.flutter, TextDecoration.underline);
+    expect(SceneTextDecoration.overline.flutter, TextDecoration.overline);
+    expect(SceneTextDecoration.lineThrough.flutter, TextDecoration.lineThrough);
+  });
+
+  test('a case is applied to the string, never to the file', () {
+    expect(SceneTextCase.none.apply('press start'), 'press start');
+    expect(SceneTextCase.upper.apply('press start'), 'PRESS START');
+    expect(SceneTextCase.lower.apply('Press START'), 'press start');
+    expect(SceneTextCase.title.apply('press start'), 'Press Start');
+    expect(SceneTextCase.title.apply(''), '');
+  });
+
   test('colors and rects round-trip through the bridge', () {
     const argb = 0xB34A64D0;
     expect(const SceneColor(argb).flutter.toARGB32(), argb);

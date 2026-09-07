@@ -527,15 +527,18 @@ sealed class SceneNode {
     return v;
   }
 
+  /// The authored value a track composes over. The imposed properties have
+  /// no row — they are fx-only — and `fill` reads transparent rather than
+  /// null so a composed one has something to lerp from; everything else the
+  /// table already knows how to read, which is what keeps this from being a
+  /// switch that has to be remembered when a row is added.
   Object _fxBase(String prop) => switch (prop) {
-    'opacity' => opacity,
     'translateX' || 'translateY' || 'rotate' => 0.0,
     'scale' => 1.0,
-    'fontSize' => (this as TextNode).fontSize,
-    'color' => (this as TextNode).color,
-    'gap' => (this as FrameNode).gap,
     'fill' => fill ?? const SceneColor(0x00000000),
-    _ => throw ArgumentError('no animatable property "$prop"'),
+    _ =>
+      scenePropNamed(this, prop)?.read(this) ??
+          (throw ArgumentError('no animatable property "$prop"')),
   };
 
   /// Mint an app-side fx writer. Handles are the only app surface — two
@@ -796,26 +799,48 @@ class TextNode extends SceneNode {
     super.opacity,
     super.visible,
     SceneTextStyle? style,
-    double? fontSize,
-    SceneFontWeight? weight,
-    SceneColor? color,
-    SceneTextAlign? align,
-    int? maxLines,
-  }) : fontSize = fontSize ?? style?.fontSize ?? 16,
-       weight = weight ?? style?.weight ?? SceneFontWeight.w400,
-       color = color ?? style?.color ?? const SceneColor(0xFF1A1A1A),
-       align = align ?? style?.align ?? SceneTextAlign.left,
-       maxLines = maxLines ?? style?.maxLines;
+  }) : fontFamily = style?.fontFamily,
+       fontSize = style?.fontSize ?? 16,
+       weight = style?.weight ?? SceneFontWeight.w400,
+       italic = style?.italic ?? false,
+       letterSpacing = style?.letterSpacing ?? 0,
+       wordSpacing = style?.wordSpacing ?? 0,
+       lineHeight = style?.lineHeight ?? 1.15,
+       color = style?.color ?? const SceneColor(0xFF1A1A1A),
+       align = style?.align ?? SceneTextAlign.left,
+       textCase = style?.textCase ?? SceneTextCase.none,
+       decoration = style?.decoration ?? SceneTextDecoration.none,
+       decorationColor = style?.decorationColor,
+       decorationThickness = style?.decorationThickness ?? 1,
+       decorationStyle =
+           style?.decorationStyle ?? SceneTextDecorationStyle.solid,
+       maxLines = style?.maxLines;
 
-  /// The argument, then the [style], then the default — the resolution a
-  /// constructor cannot tell apart afterwards, which is why the fields below
-  /// are plain values and the style itself is not kept: what was passed is
-  /// the override, and the file spells exactly that.
+  /// The text a node draws. Everything else it draws with is the [style] —
+  /// there is no second slot, and no per-property parameter beside it: an
+  /// override is a delta on the style (`tokens.title.copyWith(fontSize:
+  /// 60)`), which is what keeps this constructor the same size whether the
+  /// table carries six text properties or thirty (master plan §4.5).
   String text;
+
+  /// The fields below are the style RESOLVED — the style's value where it
+  /// set one, the table's default where it did not. The style itself is not
+  /// kept, because the file spells the delta and the editor recomputes it:
+  /// equal to the style is inherited, and there is no flag saying otherwise.
+  String? fontFamily;
   double fontSize;
   SceneFontWeight weight;
+  bool italic;
+  double letterSpacing;
+  double wordSpacing;
+  double lineHeight;
   SceneColor color;
   SceneTextAlign align;
+  SceneTextCase textCase;
+  SceneTextDecoration decoration;
+  SceneColor? decorationColor;
+  double decorationThickness;
+  SceneTextDecorationStyle decorationStyle;
 
   /// How many lines before it is cut with an ellipsis, or null for as many
   /// as it takes. A banner filled per language is the reason: the layout

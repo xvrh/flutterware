@@ -1,4 +1,4 @@
-//@flutterware:scene=0.8
+//@flutterware:scene=0.9
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
@@ -15,9 +15,11 @@ class PromoBadge({
 }) extends SceneDefinition {
   late final text = TextNode(
     label,
-    fontSize: 14,
-    weight: SceneFontWeight.w700,
-    color: SceneColor(0xFFFFFFFF),
+    style: SceneTextStyle(
+      fontSize: 14,
+      weight: SceneFontWeight.w700,
+      color: SceneColor(0xFFFFFFFF),
+    ),
   );
   @override
   late final root = FrameNode(

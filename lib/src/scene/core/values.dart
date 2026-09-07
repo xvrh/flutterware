@@ -75,55 +75,223 @@ enum SceneCrossAxisAlignment { start, end, center, stretch, baseline }
 /// that is what the file spells and what it becomes.
 enum SceneTextAlign { left, right, center, justify }
 
+/// How a text's case is forced, whatever the string says. Not a Flutter
+/// property — the renderer applies it to the string — but a design tool's,
+/// and the reason a kicker can be typed in the language it reads in and
+/// still be drawn in caps.
+enum SceneTextCase {
+  none,
+  upper,
+  lower,
+  title;
+
+  /// [text] as this case draws it. The string in the file is left alone —
+  /// a kicker is typed in the language it reads in and drawn in caps, and
+  /// what an importer or a translator sees is still the sentence.
+  String apply(String text) => switch (this) {
+    none => text,
+    upper => text.toUpperCase(),
+    lower => text.toLowerCase(),
+    title =>
+      text
+          .split(' ')
+          .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+          .join(' '),
+  };
+}
+
+/// The line a text carries. Flutter's `TextDecoration` is a set rather than
+/// an enum, so the bridge switches rather than indexing; one line is what a
+/// design tool offers and what an import brings.
+enum SceneTextDecoration { none, underline, overline, lineThrough }
+
+/// How that line is drawn; declaration order matches Flutter's, because the
+/// bridge indexes it.
+enum SceneTextDecorationStyle { solid, double, dotted, dashed, wavy }
+
+/// One property a [SceneTextStyle] may set: the property table's name for
+/// it, and how to read it off a style.
+///
+/// [SceneTextStyle.values], equality and the emitter's inherit test all walk
+/// this list, so a field missing from it does not exist as far as sharing is
+/// concerned — which is why `scene_props_test.dart` pins it to the table's
+/// text rows in both directions. A const object cannot compute a map from
+/// its own parameters, so the fields stay fields and this is what makes them
+/// one organ anyway.
+class SceneStyleField {
+  const SceneStyleField(this.name, this.read);
+
+  final String name;
+  final Object? Function(SceneTextStyle style) read;
+}
+
+const sceneTextStyleFields = <SceneStyleField>[
+  SceneStyleField('fontFamily', _sFamily),
+  SceneStyleField('fontSize', _sSize),
+  SceneStyleField('weight', _sWeight),
+  SceneStyleField('italic', _sItalic),
+  SceneStyleField('letterSpacing', _sLetterSpacing),
+  SceneStyleField('wordSpacing', _sWordSpacing),
+  SceneStyleField('lineHeight', _sLineHeight),
+  SceneStyleField('color', _sColor),
+  SceneStyleField('align', _sAlign),
+  SceneStyleField('textCase', _sCase),
+  SceneStyleField('decoration', _sDecoration),
+  SceneStyleField('decorationColor', _sDecorationColor),
+  SceneStyleField('decorationThickness', _sDecorationThickness),
+  SceneStyleField('decorationStyle', _sDecorationStyle),
+  SceneStyleField('maxLines', _sMaxLines),
+];
+
+Object? _sFamily(SceneTextStyle s) => s.fontFamily;
+Object? _sSize(SceneTextStyle s) => s.fontSize;
+Object? _sWeight(SceneTextStyle s) => s.weight;
+Object? _sItalic(SceneTextStyle s) => s.italic;
+Object? _sLetterSpacing(SceneTextStyle s) => s.letterSpacing;
+Object? _sWordSpacing(SceneTextStyle s) => s.wordSpacing;
+Object? _sLineHeight(SceneTextStyle s) => s.lineHeight;
+Object? _sColor(SceneTextStyle s) => s.color;
+Object? _sAlign(SceneTextStyle s) => s.align;
+Object? _sCase(SceneTextStyle s) => s.textCase;
+Object? _sDecoration(SceneTextStyle s) => s.decoration;
+Object? _sDecorationColor(SceneTextStyle s) => s.decorationColor;
+Object? _sDecorationThickness(SceneTextStyle s) => s.decorationThickness;
+Object? _sDecorationStyle(SceneTextStyle s) => s.decorationStyle;
+Object? _sMaxLines(SceneTextStyle s) => s.maxLines;
+
 /// A text style: the text subset of the property table, as one value — what
-/// a token names and a `TextNode` takes as `style:`, so five properties are
-/// shared in one move and each may still be overridden on the node.
+/// a token names and a `TextNode` takes as `style:`, so a whole typographic
+/// treatment is shared in one move.
 ///
 /// Every field is nullable, because a style sets what it sets: a style that
-/// says only `weight` leaves size and colour to the node. The rule a node
-/// applies is `fontSize ?? style?.fontSize ?? 16` — the argument, then the
-/// style, then the default — which is also what the file spells: a property
-/// written on the node is an override, one absent is inherited, and one
-/// written equal to the style's is indistinguishable from inherited and
-/// follows the style (master plan §4.3, decided).
+/// says only `weight` leaves size and colour to the table's defaults. A node
+/// spells ONE of these and nothing else — an override is
+/// `tokens.title.copyWith(fontSize: 60)`, a delta on the style rather than a
+/// property beside it (master plan §4.5). A property written equal to the
+/// style's is indistinguishable from an inherited one and follows the style;
+/// there is no override flag, by decision.
 class SceneTextStyle {
   const SceneTextStyle({
+    this.fontFamily,
     this.fontSize,
     this.weight,
+    this.italic,
+    this.letterSpacing,
+    this.wordSpacing,
+    this.lineHeight,
     this.color,
     this.align,
+    this.textCase,
+    this.decoration,
+    this.decorationColor,
+    this.decorationThickness,
+    this.decorationStyle,
     this.maxLines,
   });
 
+  /// The family name as the app declares it in its pubspec, or null to take
+  /// whatever the surrounding `DefaultTextStyle` gives.
+  final String? fontFamily;
   final double? fontSize;
   final SceneFontWeight? weight;
+  final bool? italic;
+
+  /// Tracking, in logical pixels — negative tightens, which is what a
+  /// display size almost always wants.
+  final double? letterSpacing;
+  final double? wordSpacing;
+
+  /// Leading, as a multiple of the font size.
+  final double? lineHeight;
   final SceneColor? color;
   final SceneTextAlign? align;
+  final SceneTextCase? textCase;
+  final SceneTextDecoration? decoration;
+
+  /// Null means the line takes the text's own colour.
+  final SceneColor? decorationColor;
+  final double? decorationThickness;
+  final SceneTextDecorationStyle? decorationStyle;
   final int? maxLines;
+
+  /// A style from the table's own names — what a reader builds when it has
+  /// values by name rather than by field, and the inverse of [values].
+  ///
+  /// Hand-written for the same reason [copyWith] is: a const object cannot
+  /// build itself out of a map, so this is the constructor the table cannot
+  /// derive and `scene_props_test.dart` pins instead.
+  factory SceneTextStyle.fromValues(Map<String, Object?> v) => SceneTextStyle(
+    fontFamily: v['fontFamily'] as String?,
+    fontSize: v['fontSize'] as double?,
+    weight: v['weight'] as SceneFontWeight?,
+    italic: v['italic'] as bool?,
+    letterSpacing: v['letterSpacing'] as double?,
+    wordSpacing: v['wordSpacing'] as double?,
+    lineHeight: v['lineHeight'] as double?,
+    color: v['color'] as SceneColor?,
+    align: v['align'] as SceneTextAlign?,
+    textCase: v['textCase'] as SceneTextCase?,
+    decoration: v['decoration'] as SceneTextDecoration?,
+    decorationColor: v['decorationColor'] as SceneColor?,
+    decorationThickness: v['decorationThickness'] as double?,
+    decorationStyle: v['decorationStyle'] as SceneTextDecorationStyle?,
+    maxLines: v['maxLines'] as int?,
+  );
 
   /// The properties this style sets, by the table's name — what an emitter
   /// compares a node against, and what an inspector marks as inherited.
   Map<String, Object> get values => {
-    'fontSize': ?fontSize,
-    'weight': ?weight,
-    'color': ?color,
-    'align': ?align,
-    'maxLines': ?maxLines,
+    for (var f in sceneTextStyleFields) f.name: ?f.read(this),
   };
 
   bool sets(String prop) => values.containsKey(prop);
 
+  /// This style with [values] laid over it — the delta spelling a node uses,
+  /// and the one place the file says "that treatment, but bigger". A null
+  /// argument is "not given": a style cannot unset a property, because
+  /// resetting to the style is what the editor does instead.
+  SceneTextStyle copyWith({
+    String? fontFamily,
+    double? fontSize,
+    SceneFontWeight? weight,
+    bool? italic,
+    double? letterSpacing,
+    double? wordSpacing,
+    double? lineHeight,
+    SceneColor? color,
+    SceneTextAlign? align,
+    SceneTextCase? textCase,
+    SceneTextDecoration? decoration,
+    SceneColor? decorationColor,
+    double? decorationThickness,
+    SceneTextDecorationStyle? decorationStyle,
+    int? maxLines,
+  }) => SceneTextStyle(
+    fontFamily: fontFamily ?? this.fontFamily,
+    fontSize: fontSize ?? this.fontSize,
+    weight: weight ?? this.weight,
+    italic: italic ?? this.italic,
+    letterSpacing: letterSpacing ?? this.letterSpacing,
+    wordSpacing: wordSpacing ?? this.wordSpacing,
+    lineHeight: lineHeight ?? this.lineHeight,
+    color: color ?? this.color,
+    align: align ?? this.align,
+    textCase: textCase ?? this.textCase,
+    decoration: decoration ?? this.decoration,
+    decorationColor: decorationColor ?? this.decorationColor,
+    decorationThickness: decorationThickness ?? this.decorationThickness,
+    decorationStyle: decorationStyle ?? this.decorationStyle,
+    maxLines: maxLines ?? this.maxLines,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is SceneTextStyle &&
-      other.fontSize == fontSize &&
-      other.weight == weight &&
-      other.color == color &&
-      other.align == align &&
-      other.maxLines == maxLines;
+      sceneTextStyleFields.every((f) => f.read(other) == f.read(this));
 
   @override
-  int get hashCode => Object.hash(fontSize, weight, color, align, maxLines);
+  int get hashCode =>
+      Object.hashAll([for (var f in sceneTextStyleFields) f.read(this)]);
 
   @override
   String toString() =>

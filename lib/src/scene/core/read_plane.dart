@@ -204,6 +204,8 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
     // A number filling a text slot is ordinary in a repeated row — a
     // quantity is a number and reads as one, not as "12.0".
     ScenePropKind.string => switch (value) {
+      // A nullable string property — a font family — takes "nothing set".
+      null => null,
       double d when d == d.roundToDouble() && d.abs() < 1e15 => '${d.round()}',
       _ => '$value',
     },

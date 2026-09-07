@@ -38,6 +38,46 @@ void main() {
     }
   });
 
+  test("the style fields are the table's text subset, both ways", () {
+    var rows = [
+      for (var p in sceneTextProps)
+        if (p.name != 'text') p.name,
+    ];
+    expect(
+      sceneTextStyleFields.map((f) => f.name),
+      rows,
+      reason: 'a style sets exactly the text rows, in the same order',
+    );
+  });
+
+  test('a style round-trips through its own values, and copyWith deltas', () {
+    var set = <String, Object>{};
+    for (var p in sceneTextProps) {
+      if (p.name == 'text') continue;
+      set[p.name] = sample(p)!;
+    }
+    var style = SceneTextStyle.fromValues(set);
+    expect(style.values, set, reason: 'fromValues is the inverse of values');
+    // Every field survives a copy, and a delta lands on exactly one of them.
+    expect(style.copyWith(), style);
+    var bigger = style.copyWith(fontSize: 99);
+    expect(bigger.fontSize, 99);
+    expect(bigger.copyWith(fontSize: style.fontSize), style);
+  });
+
+  test('a node built from a style reads every property back', () {
+    var set = <String, Object>{};
+    for (var p in sceneTextProps) {
+      if (p.name == 'text') continue;
+      set[p.name] = sample(p)!;
+    }
+    var node = TextNode('x', style: SceneTextStyle.fromValues(set));
+    for (var p in sceneTextProps) {
+      if (p.name == 'text') continue;
+      expect(p.read(node), set[p.name], reason: p.name);
+    }
+  });
+
   for (var p in sceneProps) {
     test('${p.name} reads back what it writes, and starts at its default', () {
       var node = fresh(p);

@@ -5,13 +5,18 @@
 // One organ, several hosts. The wire and the authored JSON encode and
 // decode by walking it; the file emitter and parser spell and read by it;
 // the read plane gets, sets and types a property by it; a copy and an undo
-// restore move values by it. What it cannot derive is the constructor — a
-// scene file IS a call to it, so the named parameters stay hand-written
-// Dart — and the renderer, which is what a property MEANS. A test pins the
-// table to the constructors; adding a property is a row here, a parameter
-// with its field, a renderer case, and a named parameter on `animate()` if
-// it animates. Four places pinned to each other, instead of twenty-five
-// pinned by nothing.
+// restore move values by it; a motion composes over the base it reads here.
+// What it cannot derive is the constructor — a scene file IS a call to it,
+// so the named parameters stay hand-written Dart — and the renderer, which
+// is what a property MEANS. A test pins the table to the constructors;
+// adding a property is a row here, a field, a renderer case, and a named
+// parameter on `animate()` if it animates. Four places pinned to each other,
+// instead of twenty-five pinned by nothing.
+//
+// The TEXT rows are the subset a [SceneTextStyle] carries, and they are
+// pinned to `sceneTextStyleFields` in both directions — a text node spells
+// no property of its own, only one style (master plan §4.5), so a row added
+// here without a field there would be authorable and unshareable.
 import 'model.dart';
 import 'values.dart';
 
@@ -213,6 +218,21 @@ const _aligns = SceneChoices(
   SceneTextAlign.values,
   nameOf: _enumName,
 );
+const _cases = SceneChoices(
+  'SceneTextCase',
+  SceneTextCase.values,
+  nameOf: _enumName,
+);
+const _decorations = SceneChoices(
+  'SceneTextDecoration',
+  SceneTextDecoration.values,
+  nameOf: _enumName,
+);
+const _decorationStyles = SceneChoices(
+  'SceneTextDecorationStyle',
+  SceneTextDecorationStyle.values,
+  nameOf: _enumName,
+);
 String _enumName(Object v) => (v as Enum).name;
 
 /// Every node's properties, in the order the file writes them.
@@ -402,8 +422,11 @@ const sceneFrameProps = <SceneProp>[
   ),
 ];
 
-/// A text's own properties. The text itself is the positional argument and
-/// is read and written through the table too, but spelled by hand.
+/// A text's own properties — the table's TEXT SUBSET, which is exactly what
+/// a [SceneTextStyle] may carry and what `sceneTextStyleFields` names. The
+/// text itself is the positional argument and is read and written through
+/// the table too, but spelled by hand; everything else here is spelled
+/// inside the node's one `style:` argument.
 const sceneTextProps = <SceneProp>[
   SceneProp(
     'text',
@@ -412,6 +435,13 @@ const sceneTextProps = <SceneProp>[
     defaultValue: '',
     read: _text,
     write: _setText,
+  ),
+  SceneProp(
+    'fontFamily',
+    ScenePropKind.string,
+    owner: ScenePropOwner.text,
+    read: _fontFamily,
+    write: _setFontFamily,
   ),
   SceneProp(
     'fontSize',
@@ -432,6 +462,43 @@ const sceneTextProps = <SceneProp>[
     write: _setWeight,
   ),
   SceneProp(
+    'italic',
+    ScenePropKind.boolean,
+    owner: ScenePropOwner.text,
+    defaultValue: false,
+    read: _italic,
+    write: _setItalic,
+  ),
+  SceneProp(
+    'letterSpacing',
+    ScenePropKind.number,
+    owner: ScenePropOwner.text,
+    defaultValue: 0.0,
+    animatable: true,
+    read: _letterSpacing,
+    write: _setLetterSpacing,
+  ),
+  SceneProp(
+    'wordSpacing',
+    ScenePropKind.number,
+    owner: ScenePropOwner.text,
+    defaultValue: 0.0,
+    animatable: true,
+    read: _wordSpacing,
+    write: _setWordSpacing,
+  ),
+  // A multiple of the font size, and 1.15 because that is what the renderer
+  // used to hardcode: the default moves nothing, and now a file can reach it.
+  SceneProp(
+    'lineHeight',
+    ScenePropKind.number,
+    owner: ScenePropOwner.text,
+    defaultValue: 1.15,
+    animatable: true,
+    read: _lineHeight,
+    write: _setLineHeight,
+  ),
+  SceneProp(
     'color',
     ScenePropKind.color,
     owner: ScenePropOwner.text,
@@ -448,6 +515,49 @@ const sceneTextProps = <SceneProp>[
     choices: _aligns,
     read: _align,
     write: _setAlign,
+  ),
+  SceneProp(
+    'textCase',
+    ScenePropKind.choice,
+    owner: ScenePropOwner.text,
+    defaultValue: SceneTextCase.none,
+    choices: _cases,
+    read: _textCase,
+    write: _setTextCase,
+  ),
+  SceneProp(
+    'decoration',
+    ScenePropKind.choice,
+    owner: ScenePropOwner.text,
+    defaultValue: SceneTextDecoration.none,
+    choices: _decorations,
+    read: _decoration,
+    write: _setDecoration,
+  ),
+  SceneProp(
+    'decorationColor',
+    ScenePropKind.color,
+    owner: ScenePropOwner.text,
+    read: _decorationColor,
+    write: _setDecorationColor,
+  ),
+  SceneProp(
+    'decorationThickness',
+    ScenePropKind.number,
+    owner: ScenePropOwner.text,
+    defaultValue: 1.0,
+    animatable: true,
+    read: _decorationThickness,
+    write: _setDecorationThickness,
+  ),
+  SceneProp(
+    'decorationStyle',
+    ScenePropKind.choice,
+    owner: ScenePropOwner.text,
+    defaultValue: SceneTextDecorationStyle.solid,
+    choices: _decorationStyles,
+    read: _decorationStyle,
+    write: _setDecorationStyle,
   ),
   SceneProp(
     'maxLines',
@@ -564,6 +674,36 @@ void _setCrossAlign(SceneNode n, Object? v) =>
 
 Object? _text(SceneNode n) => (n as TextNode).text;
 void _setText(SceneNode n, Object? v) => (n as TextNode).text = v! as String;
+Object? _fontFamily(SceneNode n) => (n as TextNode).fontFamily;
+void _setFontFamily(SceneNode n, Object? v) =>
+    (n as TextNode).fontFamily = v as String?;
+Object? _italic(SceneNode n) => (n as TextNode).italic;
+void _setItalic(SceneNode n, Object? v) => (n as TextNode).italic = v! as bool;
+Object? _letterSpacing(SceneNode n) => (n as TextNode).letterSpacing;
+void _setLetterSpacing(SceneNode n, Object? v) =>
+    (n as TextNode).letterSpacing = (v! as num).toDouble();
+Object? _wordSpacing(SceneNode n) => (n as TextNode).wordSpacing;
+void _setWordSpacing(SceneNode n, Object? v) =>
+    (n as TextNode).wordSpacing = (v! as num).toDouble();
+Object? _lineHeight(SceneNode n) => (n as TextNode).lineHeight;
+void _setLineHeight(SceneNode n, Object? v) =>
+    (n as TextNode).lineHeight = (v! as num).toDouble();
+Object? _textCase(SceneNode n) => (n as TextNode).textCase;
+void _setTextCase(SceneNode n, Object? v) =>
+    (n as TextNode).textCase = v! as SceneTextCase;
+Object? _decoration(SceneNode n) => (n as TextNode).decoration;
+void _setDecoration(SceneNode n, Object? v) =>
+    (n as TextNode).decoration = v! as SceneTextDecoration;
+Object? _decorationColor(SceneNode n) => (n as TextNode).decorationColor;
+void _setDecorationColor(SceneNode n, Object? v) =>
+    (n as TextNode).decorationColor = v as SceneColor?;
+Object? _decorationThickness(SceneNode n) =>
+    (n as TextNode).decorationThickness;
+void _setDecorationThickness(SceneNode n, Object? v) =>
+    (n as TextNode).decorationThickness = (v! as num).toDouble();
+Object? _decorationStyle(SceneNode n) => (n as TextNode).decorationStyle;
+void _setDecorationStyle(SceneNode n, Object? v) =>
+    (n as TextNode).decorationStyle = v! as SceneTextDecorationStyle;
 Object? _fontSize(SceneNode n) => (n as TextNode).fontSize;
 void _setFontSize(SceneNode n, Object? v) =>
     (n as TextNode).fontSize = (v! as num).toDouble();

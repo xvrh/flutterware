@@ -14,6 +14,7 @@ import 'package:flutterware/scene_authoring.dart';
 import '../externals_file.dart';
 
 import '../../ui/context_menu.dart';
+import '../../ui/disclosure.dart';
 import '../../ui/design/design.dart';
 import '../../ui/action_button.dart';
 import '../../ui/menu.dart';
@@ -668,6 +669,22 @@ class SceneInspector extends StatelessWidget {
       ),
     ),
     const SizedBox(height: FwSpacing.md),
+    _label(context, 'Typeface'),
+    _bindable(
+      context,
+      t,
+      'fontFamily',
+      TextFormField(
+        key: ValueKey('family:${t.name}:${t.bindings['fontFamily']}'),
+        initialValue: t.fontFamily ?? '',
+        decoration: const InputDecoration(hintText: "the app's own"),
+        onChanged: (v) => _door(
+          'fontFamily',
+          () => t.fontFamily = v.trim().isEmpty ? null : v.trim(),
+        ),
+      ),
+    ),
+    const SizedBox(height: FwSpacing.md),
     _row([
       _number(
         'fontSize',
@@ -694,6 +711,24 @@ class SceneInspector extends StatelessWidget {
         ],
       ),
     ]),
+    // Tracking and leading, together: they are read together and a display
+    // size wants both moved at once.
+    _row([
+      _number(
+        'letterSpacing',
+        'Tracking',
+        _shown(t, 'letterSpacing', t.letterSpacing),
+        SceneNumberShape.of(propSpecFor(t, 'letterSpacing')),
+        apply: (v) => t.letterSpacing = v,
+      ),
+      _number(
+        'lineHeight',
+        'Leading',
+        _shown(t, 'lineHeight', t.lineHeight),
+        SceneNumberShape.of(propSpecFor(t, 'lineHeight')),
+        apply: (v) => t.lineHeight = v,
+      ),
+    ]),
     _row([
       Builder(
         builder: (context) => Column(
@@ -713,12 +748,23 @@ class SceneInspector extends StatelessWidget {
           ],
         ),
       ),
-      _number(
-        'maxLines',
-        'Max lines (0 = all)',
-        (t.maxLines ?? 0).toDouble(),
-        const SceneNumberShape(perPixel: 0.1, decimals: 0, min: 0, softMax: 10),
-        apply: (v) => t.maxLines = v < 1 ? null : v.round(),
+      Builder(
+        builder: (context) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _label(context, 'Case'),
+            FwPicker<SceneTextCase>(
+              selected: t.textCase,
+              choices: const [
+                FwChoice(value: SceneTextCase.none, label: 'As typed'),
+                FwChoice(value: SceneTextCase.upper, label: 'UPPER'),
+                FwChoice(value: SceneTextCase.lower, label: 'lower'),
+                FwChoice(value: SceneTextCase.title, label: 'Title'),
+              ],
+              onChanged: (v) => _door('textCase', () => t.textCase = v),
+            ),
+          ],
+        ),
       ),
     ]),
     _label(context, 'Color'),
@@ -731,6 +777,138 @@ class SceneInspector extends StatelessWidget {
         allowNone: false,
         onPick: (c) => _set('color', c!, () => t.color = c),
       ),
+    ),
+    const SizedBox(height: FwSpacing.md),
+    // The rest is real and rarely touched, which is the whole argument for
+    // putting it behind one tap rather than at the bottom of a column
+    // nobody scrolls.
+    Disclosure(
+      label: 'More type',
+      children: [
+        _row([
+          Builder(
+            builder: (context) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _label(context, 'Style'),
+                FwPicker<bool>(
+                  selected: t.italic,
+                  choices: const [
+                    FwChoice(value: false, label: 'Roman'),
+                    FwChoice(value: true, label: 'Italic'),
+                  ],
+                  onChanged: (v) => _door('italic', () => t.italic = v),
+                ),
+              ],
+            ),
+          ),
+          _number(
+            'wordSpacing',
+            'Word spacing',
+            _shown(t, 'wordSpacing', t.wordSpacing),
+            SceneNumberShape.of(propSpecFor(t, 'wordSpacing')),
+            apply: (v) => t.wordSpacing = v,
+          ),
+        ]),
+        _row([
+          Builder(
+            builder: (context) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _label(context, 'Decoration'),
+                FwPicker<SceneTextDecoration>(
+                  selected: t.decoration,
+                  choices: const [
+                    FwChoice(value: SceneTextDecoration.none, label: 'None'),
+                    FwChoice(
+                      value: SceneTextDecoration.underline,
+                      label: 'Underline',
+                    ),
+                    FwChoice(
+                      value: SceneTextDecoration.overline,
+                      label: 'Overline',
+                    ),
+                    FwChoice(
+                      value: SceneTextDecoration.lineThrough,
+                      label: 'Strikethrough',
+                    ),
+                  ],
+                  onChanged: (v) => _door('decoration', () => t.decoration = v),
+                ),
+              ],
+            ),
+          ),
+          _number(
+            'maxLines',
+            'Max lines (0 = all)',
+            (t.maxLines ?? 0).toDouble(),
+            const SceneNumberShape(
+              perPixel: 0.1,
+              decimals: 0,
+              min: 0,
+              softMax: 10,
+            ),
+            apply: (v) => t.maxLines = v < 1 ? null : v.round(),
+          ),
+        ]),
+        if (t.decoration != SceneTextDecoration.none) ...[
+          _row([
+            Builder(
+              builder: (context) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _label(context, 'Line style'),
+                  FwPicker<SceneTextDecorationStyle>(
+                    selected: t.decorationStyle,
+                    choices: const [
+                      FwChoice(
+                        value: SceneTextDecorationStyle.solid,
+                        label: 'Solid',
+                      ),
+                      FwChoice(
+                        value: SceneTextDecorationStyle.double,
+                        label: 'Double',
+                      ),
+                      FwChoice(
+                        value: SceneTextDecorationStyle.dotted,
+                        label: 'Dotted',
+                      ),
+                      FwChoice(
+                        value: SceneTextDecorationStyle.dashed,
+                        label: 'Dashed',
+                      ),
+                      FwChoice(
+                        value: SceneTextDecorationStyle.wavy,
+                        label: 'Wavy',
+                      ),
+                    ],
+                    onChanged: (v) =>
+                        _door('decorationStyle', () => t.decorationStyle = v),
+                  ),
+                ],
+              ),
+            ),
+            _number(
+              'decorationThickness',
+              'Line thickness',
+              _shown(t, 'decorationThickness', t.decorationThickness),
+              SceneNumberShape.of(propSpecFor(t, 'decorationThickness')),
+              apply: (v) => t.decorationThickness = v,
+            ),
+          ]),
+          _label(context, 'Line color'),
+          _bindable(
+            context,
+            t,
+            'decorationColor',
+            SceneSwatches(
+              current: t.decorationColor,
+              onPick: (c) =>
+                  _door('decorationColor', () => t.decorationColor = c),
+            ),
+          ),
+        ],
+      ],
     ),
   ];
 

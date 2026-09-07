@@ -321,9 +321,10 @@ void main() {
       editor.select(editor.doc.nodeNamed('headline'));
       await tester.pump();
       // The content field sits below the geometry; the inspector scrolls.
-      await scrollInspectorTo(tester, find.byType(TextFormField));
+      // First of the two: the typeface field is the other one.
+      await scrollInspectorTo(tester, find.byType(TextFormField).first);
       await tester.enterText(
-        find.byType(TextFormField),
+        find.byType(TextFormField).first,
         'Fresh coffee, sooner',
       );
       await tester.pump();
@@ -355,9 +356,10 @@ void main() {
       );
       await tester.tap(find.text('headline'));
       await tester.pump();
-      await scrollInspectorTo(tester, find.byType(TextFormField));
+      // First of the two: the typeface field is the other one.
+      await scrollInspectorTo(tester, find.byType(TextFormField).first);
       await tester.enterText(
-        find.byType(TextFormField),
+        find.byType(TextFormField).first,
         'Fresh coffee, sooner',
       );
       await tester.pump();

@@ -73,7 +73,7 @@ void main() {
     test('refuses a field that is not one; a style is whole per mode', () {
       var parsed = parseTokensFile('''
 final sceneTokens = [
-  Token<SceneTextStyle>('a', SceneTextStyle(letterSpacing: 2)),
+  Token<SceneTextStyle>('a', SceneTextStyle(kerning: 2)),
   Token<SceneTextStyle>('b', SceneTextStyle(fontSize: 10), modes: {'dark': SceneTextStyle(fontSize: 12, color: SceneColor(0xFFFFFFFF))}),
   Token<SceneTextStyle>('c', SceneTextStyle(fontSize: 10), modes: {'dark': 3}),
 ];
@@ -202,11 +202,11 @@ final sceneTokens = [
       () {
         var parsed = _parse(_scene);
         var out = _emit(parsed.doc!);
+        expect(out, contains('style: t.title.copyWith(color: t.ink)'));
         expect(
           out,
-          contains("TextNode('Hello', style: t.title, color: t.ink)"),
+          contains("TextNode('Sub', style: t.body.copyWith(fontSize: 24))"),
         );
-        expect(out, contains("TextNode('Sub', style: t.body, fontSize: 24)"));
         expect(out, isNot(contains('weight: SceneFontWeight.w700')));
         expect(_emit(_parse(out).doc!), out);
         // Overridden back to the style's own value: the override disappears.
@@ -221,13 +221,18 @@ final sceneTokens = [
       },
     );
 
-    test('refuses a style that is not a token, or not a style', () {
+    test('takes its own style, and refuses what is not one', () {
+      // A literal is a node's OWN type, and legal: it is the only way to
+      // spell a treatment nothing else shares (master plan §4.5).
       var parsed = _parse(
         _scene.replaceAll(
           'style: t.title',
           'style: SceneTextStyle(fontSize: 10)',
         ),
       );
+      expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
+      expect((parsed.doc!.nodeNamed('headline')! as TextNode).fontSize, 10);
+      parsed = _parse(_scene.replaceAll('style: t.title', 'style: 12'));
       expect(parsed.refusals.single.construct, 'style');
       parsed = _parse(_scene.replaceAll('style: t.title', 'style: t.ink'));
       expect(parsed.refusals.single.construct, 'token type');
@@ -255,7 +260,7 @@ final sceneTokens = [
       expect(inheritsFromStyle(e.doc, plain, 'fontSize'), isFalse);
       expect(
         _emit(e.doc),
-        contains("TextNode('Plain', style: t.title, fontSize: 60)"),
+        contains("TextNode('Plain', style: t.title.copyWith(fontSize: 60))"),
       );
       e.resetToStyle(plain, 'fontSize');
       expect(plain.fontSize, 54);
@@ -267,7 +272,8 @@ final sceneTokens = [
       expect(
         out,
         contains(
-          "TextNode( 'Plain', fontSize: 54, weight: SceneFontWeight.w700",
+          "TextNode( 'Plain', style: SceneTextStyle( fontSize: 54, "
+          'weight: SceneFontWeight.w700, align: SceneTextAlign.center, ), )',
         ),
       );
     });
@@ -301,9 +307,9 @@ final sceneTokens = [
     });
   });
 
-  test('a compiled text resolves argument, then style, then default', () {
+  test('a compiled text resolves a delta, then the style, then default', () {
     const style = SceneTextStyle(fontSize: 20, weight: SceneFontWeight.w600);
-    var t = TextNode('x', style: style, fontSize: 30);
+    var t = TextNode('x', style: style.copyWith(fontSize: 30));
     expect(t.fontSize, 30);
     expect(t.weight, SceneFontWeight.w600);
     expect(t.color, const SceneColor(0xFF1A1A1A));
