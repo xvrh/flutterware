@@ -1,8 +1,11 @@
 // A library open in the drawer: its modes, added by name, renamed and
 // deleted there; and a style's pane editing one mode's style at a time.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
+import 'package:flutterware_app/src/scene/import/variables.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/tokens_library.dart';
 import 'package:flutterware_app/src/scene/ui/library_pane.dart';
@@ -108,6 +111,44 @@ void main() {
     expect(editor.tokenMode, isNull);
     expect(file.scene.root.fill, const SceneColor(0xFFE8632B));
     expect(find.text('night'), findsNothing);
+  });
+
+  testWidgets('shows the last import, and the door to the next', (
+    tester,
+  ) async {
+    var imported = <String>[];
+    await tester.pumpWidget(
+      host(
+        SceneLibraryPane(
+          file.editor,
+          library.path,
+          host: SceneTokensHost(
+            libraries: [library],
+            importInto: (path) async => imported.add(path),
+          ),
+        ),
+      ),
+    );
+    expect(find.textContaining('Nothing imported yet'), findsOneWidget);
+    expect(find.text('Import variables…'), findsOneWidget);
+    library.merge(
+      importVariables(
+        File('test/scene/fixtures/variables.json').readAsStringSync(),
+      ),
+      from: 'variables.json',
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('library:import-note')), findsOneWidget);
+    expect(find.text('Not imported'), findsOneWidget);
+    expect(
+      find.textContaining('Kept, not in the design file: brand, title'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Import again…'));
+    await tester.pumpAndSettle();
+    expect(imported, [library.path]);
+    // The button's done state holds a timer.
+    await tester.pump(const Duration(seconds: 5));
   });
 
   testWidgets("a style's pane edits one mode's style at a time", (

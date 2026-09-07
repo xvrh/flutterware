@@ -24,7 +24,13 @@ class SceneTokensHost {
     this.delete,
     this.deleteProblem,
     this.readersElsewhere,
+    this.importInto,
   });
+
+  /// Picks a design file's variables JSON and merges it into the library
+  /// at [path] — the open document, so the pane follows and the autosave
+  /// writes. Null hides the door.
+  final Future<void> Function(String path)? importInto;
 
   /// The libraries the open file's group lists, in the declaration's order.
   final List<TokensLibrary> libraries;

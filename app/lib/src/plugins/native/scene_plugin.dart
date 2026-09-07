@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
@@ -21,6 +22,7 @@ import '../../scene/group_file.dart';
 import '../../scene/autosave.dart';
 import '../../scene/editor.dart';
 import '../../scene/guest.dart';
+import '../../scene/import/variables.dart';
 import '../../scene/scene_file.dart';
 import '../../scene/playback.dart';
 import '../../scene/tokens_file.dart';
@@ -223,7 +225,33 @@ class _ScenePanelState extends State<_ScenePanel>
       },
       delete: (name) => workspace.libraryOf(name)?.delete(name),
       readersElsewhere: elsewhere,
+      importInto: (path) async {
+        var library = workspace.libraryAt(path);
+        if (library == null) return;
+        var json = await _pickVariables();
+        if (json == null) return;
+        try {
+          var note = library.merge(
+            importVariables(json.readAsStringSync()),
+            from: p.basename(json.path),
+          );
+          setState(() => _note = 'Imported ${note.from}: ${note.summary}');
+        } on Object catch (e) {
+          setState(() => _note = '$e');
+        }
+      },
     );
+  }
+
+  /// The design file's variables JSON, chosen by hand; null when the
+  /// picker was backed out of.
+  Future<File?> _pickVariables() async {
+    var picked = await openFile(
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'Variables JSON', extensions: ['json']),
+      ],
+    );
+    return picked == null ? null : File(picked.path);
   }
 
   String _note = '';
@@ -978,6 +1006,13 @@ class _ScenePanelState extends State<_ScenePanel>
                         ),
                     if (groups.isEmpty)
                       const MenuItem('No groups to attach to'),
+                    const MenuDivider(),
+                    MenuItem(
+                      'Import variables…',
+                      icon: Icons.download_outlined,
+                      shortcut: "a design file's JSON",
+                      onSelected: () => _importInto(package, library.path),
+                    ),
                   ]);
                 },
                 borderRadius: BorderRadius.circular(context.radii.radiusSmall),
@@ -995,6 +1030,29 @@ class _ScenePanelState extends State<_ScenePanel>
         ],
       ),
     );
+  }
+
+  /// From the package page: the library on disk, merged through the core
+  /// — the panel has no document open for it there.
+  Future<void> _importInto(String package, String libraryPath) async {
+    var json = await _pickVariables();
+    if (json == null) return;
+    try {
+      var report = await _core.importTokens(
+        package: package,
+        jsonPath: json.path,
+        library: libraryPath,
+      );
+      setState(
+        () => _note =
+            'Imported ${p.basename(json.path)} into ${report['symbol']}: '
+            '${report['added']} added · ${report['updated']} updated · '
+            '${report['unchanged']} unchanged · '
+            '${(report['kept']! as List).length} kept',
+      );
+    } on Object catch (e) {
+      setState(() => _note = '$e');
+    }
   }
 
   Future<void> _createGroup(String package, String folder) async {

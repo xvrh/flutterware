@@ -6,7 +6,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
+import 'package:clock/clock.dart';
 import 'package:flutterware_app/src/scene/autosave.dart';
+import 'package:flutterware_app/src/scene/import/variables.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/tokens_file.dart';
 import 'package:flutterware_app/src/scene/tokens_library.dart';
@@ -179,6 +181,74 @@ void main() {
         contains("modes: {'dark': SceneTextStyle(fontSize: 12)}"),
       );
       expect(TokensLibrary.open(library.path, out).library!.emit(), out);
+    });
+
+    test('merges a design file in by name, and says what it did', () {
+      var library = TokensLibrary.open('/pkg/lib/brand.tokens.dart', '''
+$sceneTokensFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+const brandTokensModes = ['dense'];
+
+final brandTokens = [
+  const Token<SceneColor>('brandPrimary', SceneColor(0xFF000000), modes: {'dense': SceneColor(0xFF000001)}),
+  const Token<double>('radiusCard', 28, modes: {'defaultMode': 28}),
+  const Token<SceneTextStyle>('copyCTA', SceneTextStyle(fontSize: 12)),
+  const Token<bool>('showBadge', false),
+  const Token<double>('espresso', 3),
+];
+''').library!;
+      var import = importVariables(
+        File('test/scene/fixtures/variables.json').readAsStringSync(),
+      );
+      var note = withClock(
+        Clock.fixed(DateTime(2026, 9, 7, 14, 2)),
+        () => library.merge(import, from: 'variables.json'),
+      );
+      expect(note.when, '2026-09-07 14:02');
+      expect(note.updated, 2, reason: 'brandPrimary, showBadge');
+      expect(note.unchanged, 1, reason: 'radiusCard is 28 there too');
+      expect(note.added, import.tokens.length - 4);
+      expect(note.kept, ['espresso']);
+      expect(note.notImported, hasLength(import.refusals.length + 1));
+      expect(
+        note.notImported.last,
+        contains('"copyCTA" is a style here, the file has a string'),
+      );
+      var primary = library.named('brandPrimary')!;
+      expect(primary.value, const SceneColor(0xFFE8632B), reason: 'theirs');
+      expect(
+        primary.modes['dense'],
+        const SceneColor(0xFF000001),
+        reason: 'a mode only this library names stays',
+      );
+      expect(primary.modes['darkMode'], const SceneColor(0xFFFF804D));
+      expect(library.named('copyCTA')!.isStyle, isTrue, reason: 'kept');
+      expect(library.named('espresso')!.value, 3.0);
+      expect(library.modes, containsAll(['dense', 'light', 'darkMode']));
+      expect(library.importNote, same(note));
+      var out = library.emit();
+      expect(
+        out,
+        contains(
+          '// Imported from variables.json on 2026-09-07 14:02 — '
+          '${note.summary}.',
+        ),
+      );
+      expect(out, contains('// Kept, not in the design file: espresso'));
+      var again = TokensLibrary.open(library.path, out).library!;
+      expect(again.importNote?.when, '2026-09-07 14:02');
+      expect(again.importNote?.notImported, note.notImported);
+      expect(again.importNote?.kept, ['espresso']);
+      expect(again.emit(), out, reason: 'the note survives the round trip');
+      // One journal entry.
+      library.undo();
+      expect(
+        library.named('brandPrimary')!.value,
+        const SceneColor(0xFF000000),
+      );
+      expect(library.importNote, isNull);
+      expect(library.named('brandSecondary'), isNull);
     });
 
     test('refuses a style edit on a value and a value on a style', () {

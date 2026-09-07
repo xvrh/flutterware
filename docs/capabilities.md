@@ -1666,18 +1666,17 @@ fw run scene newLibrary [--package=…] --name=<string> [--folder=…] [--group=
 
 #### `importTokens` — Import tokens
 
-Writes a token library from a design file's variables — the JSON its REST API answers for local variables, saved to a file. Every variable becomes a Token with its modes; what cannot be one is refused by name. Replaces a library a previous import wrote; one the editor or a hand wrote is kept unless force is set.
+Merges a design file's variables into a token library — the JSON its REST API answers for local variables, saved to a file. By name: a token the file knows takes its value and modes, a new one is added, one the file does not have is kept and listed; a name held here as another kind is refused by name, as is a variable that cannot be a token. The report is written into the library, where the panel shows it.
 
 ```sh
-fw run scene importTokens [--package=…] --file=<string> [--library=…] [--force=…]
+fw run scene importTokens [--package=…] --file=<string> [--library=…]
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | string | no | — | Which declared package; the first when omitted. |
 | `file` | string | yes | — | The saved response, by path. |
-| `library` | string | no | — | The library file to write, relative to the package — lib/design/brand.tokens.dart. Default: imported.tokens.dart in the first group's folder. |
-| `force` | boolean | no | — | Default false. |
+| `library` | string | no | — | The library file to merge into, created when missing — relative to the package, lib/design/brand.tokens.dart. Default: imported.tokens.dart in the first group's folder. |
 
 
 ### `flutterware.render`

@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 
+import '../../ui/action_button.dart';
 import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
@@ -65,15 +66,18 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
       builder: (context, _) => Container(
         key: ValueKey('pane:library:${widget.path}'),
         color: colors.panel,
-        padding: const EdgeInsets.all(FwSpacing.lg),
         alignment: Alignment.topLeft,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: FwSpacing.xxl,
-          children: [
-            SizedBox(width: 360, child: _modes(context, library, caption)),
-            Expanded(child: _tokens(context, library, caption)),
-          ],
+        // The drawer is a band; an import's refusals can outgrow it.
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(FwSpacing.lg),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: FwSpacing.xxl,
+            children: [
+              SizedBox(width: 360, child: _modes(context, library, caption)),
+              Expanded(child: _tokens(context, library, caption)),
+            ],
+          ),
         ),
       ),
     );
@@ -331,7 +335,64 @@ class _SceneLibraryPaneState extends State<SceneLibraryPane> {
               ),
           ],
         ),
+        ..._import(context, library, caption),
       ],
     );
+  }
+
+  /// The design file this library draws from: what the last import did,
+  /// what it refused and what it left alone — and the door to the next.
+  List<Widget> _import(
+    BuildContext context,
+    TokensLibrary library,
+    TextStyle caption,
+  ) {
+    var colors = context.colors;
+    var micro = context.type.micro.copyWith(color: colors.mut2);
+    var note = library.importNote;
+    return [
+      Padding(
+        padding: const EdgeInsets.only(top: FwSpacing.lg, bottom: FwSpacing.xs),
+        child: Text('Design file', style: caption),
+      ),
+      if (note == null)
+        Text(
+          "Nothing imported yet. A design file's variables merge in by "
+          'name: yours stay, theirs update.',
+          style: micro,
+        )
+      else ...[
+        Text(
+          'Imported ${note.from} on ${note.when} — ${note.summary}.',
+          key: const ValueKey('library:import-note'),
+          style: context.type.body,
+        ),
+        if (note.notImported.isNotEmpty) ...[
+          const SizedBox(height: FwSpacing.xs),
+          Text('Not imported', style: caption),
+          for (var line in note.notImported)
+            Text(line, style: micro.copyWith(color: colors.warningText)),
+        ],
+        if (note.kept.isNotEmpty) ...[
+          const SizedBox(height: FwSpacing.xs),
+          Text(
+            'Kept, not in the design file: ${note.kept.join(', ')}',
+            style: micro,
+          ),
+        ],
+      ],
+      if (widget.host?.importInto case var importInto?)
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.md),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FwActionButton(
+              label: note == null ? 'Import variables…' : 'Import again…',
+              tooltip: "A design file's variables JSON, merged in by name",
+              onPressed: () => importInto(library.path),
+            ),
+          ),
+        ),
+    ];
   }
 }

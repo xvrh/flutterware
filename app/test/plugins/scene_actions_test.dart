@@ -87,6 +87,7 @@ void main() {
       expect(result['symbol'], 'importedTokens');
       expect(result['modes'], ['light', 'darkMode', 'defaultMode']);
       expect((result['tokens']! as List).length, 8);
+      expect(result['added'], 8);
       expect((result['refusals']! as List).length, 2);
       expect(result['listedBy'], ['demo'], reason: 'attached to its group');
       var written = File(p.join(root.path, 'demo', 'imported.tokens.dart'));
@@ -107,30 +108,65 @@ void main() {
       var args = File(p.join(root.path, 'demo', 'scene_args.dart'));
       expect(args.readAsStringSync(), contains('class SceneTokens {'));
       expect(args.readAsStringSync(), contains('static const darkMode'));
-      // Importing again replaces the file it wrote, without being asked.
-      await core().invoke('importTokens', arguments: {'file': fixture});
-      expect(written.existsSync(), isTrue);
+      expect(written.readAsStringSync(), contains('// Imported from '));
+      // Importing again finds everything as it left it.
+      var again =
+          (await core().invoke('importTokens', arguments: {'file': fixture}))!
+              as Map<String, Object?>;
+      expect(again['added'], 0);
+      expect(again['unchanged'], 8);
     });
 
-    test('keeps a library not written by an import unless forced', () async {
+    test('merges into a library the editor wrote, keeping its own', () async {
       writeScene('BannerScene', withMotion: false);
-      var written = File(p.join(root.path, 'demo', 'imported.tokens.dart'))
-        ..writeAsStringSync(emitTokensSkeleton('importedTokens'));
+      var written = File(p.join(root.path, 'demo', 'brand.tokens.dart'))
+        ..writeAsStringSync('''
+$sceneTokensFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+final brandTokens = [
+  const Token<SceneColor>('brandPrimary', SceneColor(0xFF000000)),
+  const Token<double>('espresso', 3),
+];
+''');
+      var result =
+          (await core().invoke(
+                'importTokens',
+                arguments: {
+                  'file': fixture,
+                  'library': 'demo/brand.tokens.dart',
+                },
+              ))!
+              as Map<String, Object?>;
+      expect(result['symbol'], 'brandTokens');
+      expect(result['updated'], 1);
+      expect(result['added'], 7);
+      expect(result['kept'], ['espresso']);
+      var source = written.readAsStringSync();
+      expect(source, contains("'espresso', 3"));
+      expect(source, contains('SceneColor(0xFFE8632B)'));
+      expect(source, contains('// Kept, not in the design file: espresso'));
+      var args = File(p.join(root.path, 'demo', 'scene_args.dart'));
+      expect(args.readAsStringSync(), contains('final double espresso;'));
+    });
+
+    test('a library the reader refuses is not merged into', () async {
+      writeScene('BannerScene', withMotion: false);
+      File(p.join(root.path, 'demo', 'broken.tokens.dart'))
+          .writeAsStringSync('final brokenTokens = 3;');
       expect(
-        () => core().invoke('importTokens', arguments: {'file': fixture}),
+        () => core().invoke(
+          'importTokens',
+          arguments: {'file': fixture, 'library': 'demo/broken.tokens.dart'},
+        ),
         throwsA(
           isA<StateError>().having(
             (e) => e.message,
             'message',
-            contains('not written by an import'),
+            contains('refused by the library reader'),
           ),
         ),
       );
-      await core().invoke(
-        'importTokens',
-        arguments: {'file': fixture, 'force': 'true'},
-      );
-      expect(written.readAsStringSync(), contains('brandPrimary'));
     });
 
     test('a missing file, or one with nothing in it, is refused', () {

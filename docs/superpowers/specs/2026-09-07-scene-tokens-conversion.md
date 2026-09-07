@@ -511,6 +511,27 @@ title's dark weight moved the canvas's headline and came back.
 Lands: a design file's variables refresh a library the user has also edited,
 without losing either side.
 
+**T4 landed 2026-09-07.** `TokensLibrary.merge(import, from:)` is the one
+door, one journal entry: a token the design file knows takes its value and
+modes (a mode only the library names stays on it); a new one is added; one
+the file does not have is kept and listed; a name the library holds as
+another kind — a style, a number where the file has a string — is refused by
+name beside the file's own refusals; modes are unioned into the declared
+list. The report is an `ImportNote` written INTO the library file as comment
+lines under the header (`// Imported from X on YYYY-MM-DD HH:MM — n added ·
+n updated · n unchanged · n kept.`, then `// Not imported:` lines and `//
+Kept, not in the design file: …`) and parsed back on open/adopt, so the pane
+shows it after a restart and after an import the CLI ran — the only way a
+report crosses processes. `importTokens` merges into the library it is
+given (opened from disk, or new), refuses one the reader refuses, and
+returns added/updated/unchanged/kept/refusals; `--force`, the *imported*
+marker, `isImportedTokensFile` and `emitImportedTokens` are gone. UI: the
+library pane's *Design file* block (note, refusals, kept list) with *Import
+variables…* / *Import again…* through a native file picker onto the OPEN
+document (autosave writes; no disk race); the package page's library menu
+has the same entry through the core. The pane now scrolls: a refusal list
+outgrew the drawer on the first live run.
+
 **Not planned, welcome when cheap:** the guest reporting each export's
 resolved value on connect, so an app colour gets a swatch in the menu. A
 bonus, never a dependency.

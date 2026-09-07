@@ -11,10 +11,12 @@
 //
 // Pure Dart: `fw`, a codemod and the panel edit a library through the same
 // door.
+import 'package:clock/clock.dart';
 import 'package:dart_style/dart_style.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:path/path.dart' as p;
 
+import 'import/variables.dart';
 import 'scene_file.dart';
 import 'tokens_file.dart';
 import 'workspace.dart';
@@ -29,15 +31,109 @@ class TokensLibraryOpen {
   bool get ok => library != null;
 }
 
+/// What the last import into a library did — kept in the file, as comment
+/// lines under the header the reader recognises, so the pane can show it
+/// after a restart and after an import the CLI ran. Written by [merge].
+class ImportNote {
+  const ImportNote({
+    required this.from,
+    required this.when,
+    required this.added,
+    required this.updated,
+    required this.unchanged,
+    this.kept = const [],
+    this.notImported = const [],
+  });
+
+  /// The design file, as named to the import — a file name.
+  final String from;
+
+  /// When, to the minute, as written: `2026-09-07 14:02`.
+  final String when;
+
+  final int added;
+  final int updated;
+  final int unchanged;
+
+  /// Library tokens the design file does not know, left alone.
+  final List<String> kept;
+
+  /// What did not become a token, each `what — reason`: the design file's
+  /// refusals, and the library's — a name already taken by another kind.
+  final List<String> notImported;
+
+  String get summary =>
+      '$added added · $updated updated · $unchanged unchanged · '
+      '${kept.length} kept';
+
+  /// The comment block, one line each; what [parse] reads back.
+  String emit() {
+    var out = StringBuffer()
+      ..writeln('// Imported from $from on $when — $summary.');
+    if (notImported.isNotEmpty) {
+      out.writeln('// Not imported:');
+      for (var line in notImported) {
+        out.writeln('//   $line');
+      }
+    }
+    if (kept.isNotEmpty) {
+      out.writeln('// Kept, not in the design file: ${kept.join(', ')}');
+    }
+    return '$out';
+  }
+
+  static final _head = RegExp(
+    r'^// Imported from (.+) on (\S+ \S+) — (\d+) added · (\d+) updated · '
+    r'(\d+) unchanged · (\d+) kept\.$',
+  );
+
+  /// The note in [source], or null when it carries none.
+  static ImportNote? parse(String source) {
+    var lines = source.split('\n');
+    for (var (i, line) in lines.indexed) {
+      var m = _head.firstMatch(line);
+      if (m == null) continue;
+      var notImported = <String>[];
+      var kept = <String>[];
+      var j = i + 1;
+      if (j < lines.length && lines[j] == '// Not imported:') {
+        j++;
+        while (j < lines.length && lines[j].startsWith('//   ')) {
+          notImported.add(lines[j].substring(5));
+          j++;
+        }
+      }
+      const keptHead = '// Kept, not in the design file: ';
+      if (j < lines.length && lines[j].startsWith(keptHead)) {
+        kept = lines[j].substring(keptHead.length).split(', ');
+      }
+      return ImportNote(
+        from: m[1]!,
+        when: m[2]!,
+        added: int.parse(m[3]!),
+        updated: int.parse(m[4]!),
+        unchanged: int.parse(m[5]!),
+        kept: kept,
+        notImported: notImported,
+      );
+    }
+    return null;
+  }
+}
+
 class TokensLibrary extends SceneListenable implements SceneSavable {
   TokensLibrary({
     required this.path,
     List<SceneTokenDecl> tokens = const [],
     List<String> modes = const [],
     String? source,
+    this.importNote,
   }) : tokens = [...tokens],
        declaredModes = [...modes],
        _disk = source;
+
+  /// The last import into this file, or null — see [ImportNote].
+  ImportNote? importNote;
 
   /// Read a file through the parse door — its list symbol derived from its
   /// name, the way discovery derives it.
@@ -50,6 +146,7 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
         tokens: parsed.tokens,
         modes: parsed.modes,
         source: source,
+        importNote: ImportNote.parse(source),
       ),
       const [],
     );
@@ -134,8 +231,8 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
   // --- Journal -------------------------------------------------------------
 
   static const _journalCap = 100;
-  final _undo = <(String, List<SceneTokenDecl>, List<String>)>[];
-  final _redo = <(String, List<SceneTokenDecl>, List<String>)>[];
+  final _undo = <(String, List<SceneTokenDecl>, List<String>, ImportNote?)>[];
+  final _redo = <(String, List<SceneTokenDecl>, List<String>, ImportNote?)>[];
   String? _openMerge;
 
   bool get canUndo => _undo.isNotEmpty;
@@ -152,7 +249,7 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
         _openMerge == mergeKey;
     _openMerge = mergeKey;
     if (!merge) {
-      _undo.add((label, List.of(tokens), List.of(declaredModes)));
+      _undo.add((label, List.of(tokens), List.of(declaredModes), importNote));
       if (_undo.length > _journalCap) _undo.removeAt(0);
       _redo.clear();
     }
@@ -165,14 +262,15 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   void undo() {
     if (_undo.isEmpty) return;
-    var (label, before, modes) = _undo.removeLast();
-    _redo.add((label, List.of(tokens), List.of(declaredModes)));
+    var (label, before, modes, note) = _undo.removeLast();
+    _redo.add((label, List.of(tokens), List.of(declaredModes), importNote));
     tokens
       ..clear()
       ..addAll(before);
     declaredModes
       ..clear()
       ..addAll(modes);
+    importNote = note;
     _openMerge = null;
     _revision++;
     notifyListeners();
@@ -180,14 +278,15 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   void redo() {
     if (_redo.isEmpty) return;
-    var (label, after, modes) = _redo.removeLast();
-    _undo.add((label, List.of(tokens), List.of(declaredModes)));
+    var (label, after, modes, note) = _redo.removeLast();
+    _undo.add((label, List.of(tokens), List.of(declaredModes), importNote));
     tokens
       ..clear()
       ..addAll(after);
     declaredModes
       ..clear()
       ..addAll(modes);
+    importNote = note;
     _revision++;
     notifyListeners();
   }
@@ -395,9 +494,89 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
     perform('Delete token $name', () => tokens.removeAt(i));
   }
 
+  // --- Import --------------------------------------------------------------
+
+  /// Merges a design file's variables in, by name, as one undoable step —
+  /// the library is the user's, the design file a source it draws from. A
+  /// token the file knows takes the file's value and modes (a mode only
+  /// this library names stays); one it does not know is added; one the
+  /// file does not have is kept and listed. A name the library holds as
+  /// another kind — a style, a string where the file has a colour — is
+  /// refused by name rather than replaced. Modes are unioned. The report
+  /// is also written into the file as the [importNote].
+  ImportNote merge(VariablesImport import, {required String from}) {
+    var when = clock.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    var stamp =
+        '${when.year}-${two(when.month)}-${two(when.day)} '
+        '${two(when.hour)}:${two(when.minute)}';
+    var added = 0, updated = 0, unchanged = 0;
+    var notImported = [for (var r in import.refusals) '$r'];
+    var seen = <String>{};
+    var next = List.of(tokens);
+    for (var t in import.tokens) {
+      seen.add(t.name);
+      var i = next.indexWhere((x) => x.name == t.name);
+      if (i < 0) {
+        next.add(t.decl);
+        added++;
+        continue;
+      }
+      var have = next[i];
+      if (have.isExport || have.isStyle || have.kind != t.kind) {
+        var what = have.isStyle ? 'a style' : 'a ${have.kind?.name}';
+        notImported.add(
+          '${t.source} — "${t.name}" is $what here, the file has a '
+          '${t.kind.name}',
+        );
+        continue;
+      }
+      var merged = SceneTokenDecl(
+        t.name,
+        t.kind,
+        t.value,
+        modes: {...have.modes, ...t.modes},
+      );
+      if (merged.value == have.value && _sameModes(merged.modes, have.modes)) {
+        unchanged++;
+      } else {
+        next[i] = merged;
+        updated++;
+      }
+    }
+    var kept = [
+      for (var t in tokens)
+        if (!seen.contains(t.name)) t.name,
+    ];
+    var note = ImportNote(
+      from: from,
+      when: stamp,
+      added: added,
+      updated: updated,
+      unchanged: unchanged,
+      kept: kept,
+      notImported: notImported,
+    );
+    perform('Import from $from', () {
+      tokens
+        ..clear()
+        ..addAll(next);
+      for (var m in import.modeNames) {
+        if (!modes.contains(m)) declaredModes.add(m);
+      }
+      importNote = note;
+    });
+    return note;
+  }
+
+  static bool _sameModes(Map<String, Object> a, Map<String, Object> b) =>
+      a.length == b.length &&
+      a.entries.every((e) => b.containsKey(e.key) && b[e.key] == e.value);
+
   // --- File ----------------------------------------------------------------
 
-  String emit() => emitTokensLibrary(tokens, symbol: symbol, modes: modes);
+  String emit() =>
+      emitTokensLibrary(tokens, symbol: symbol, modes: modes, note: importNote);
 
   /// Emit, refuse to write anything the parser would reject, and hand the
   /// text to [write]. Returns the refusals — empty on success.
@@ -425,6 +604,7 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
       declaredModes
         ..clear()
         ..addAll(parsed.modes);
+      importNote = ImportNote.parse(source);
     });
     _disk = source;
     _savedRevision = _revision;
@@ -472,8 +652,15 @@ String emitTokensLibrary(
   List<SceneTokenDecl> tokens, {
   required String symbol,
   List<String> modes = const [],
+  ImportNote? note,
 }) {
-  var out = StringBuffer(tokensLibraryHeader)
+  var out = StringBuffer(tokensLibraryHeader);
+  if (note != null) {
+    out
+      ..writeln('//')
+      ..write(note.emit());
+  }
+  out
     ..writeln("import 'package:flutterware/scene_authoring.dart';")
     ..writeln();
   if (modes.isNotEmpty) {
@@ -523,7 +710,7 @@ String _valueLiteral(Object value) => switch (value) {
   SceneColor c =>
     'SceneColor(0x${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0')})',
   String s =>
-    "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'\$')}'",
+    "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'$')}'",
   double d => d == d.roundToDouble() && d.abs() < 1e15 ? '${d.round()}' : '$d',
   var v => '$v',
 };

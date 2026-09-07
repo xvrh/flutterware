@@ -1,4 +1,5 @@
-// A design file's variables, as saved JSON, becoming `scene_tokens.dart`.
+// A design file's variables, as saved JSON, becoming tokens — merged into a
+// library by [TokensLibrary.merge].
 //
 // The smallest slice of the importer, pulled forward (master plan, M5½):
 // variables need no node import at all, and they put real data against the
@@ -25,8 +26,6 @@
 import 'dart:convert';
 
 import 'package:flutterware/scene_authoring.dart';
-
-import '../tokens_file.dart';
 
 /// One variable that became a token: the identifier it got, where it came
 /// from, its kind, its default value and the value in every mode.
@@ -370,81 +369,3 @@ class _Importer {
     'yield',
   };
 }
-
-/// The line that marks a tokens file as the importer's, so the next import
-/// may replace it without asking. A file without it is somebody's own.
-const importedTokensMarker = '// imported from';
-
-/// Whether [source] is a library file this importer wrote: the library
-/// marker on the first line, the import note on the second.
-bool isImportedTokensFile(String source) {
-  var lines = source.split('\n');
-  return lines.length > 1 &&
-      isTokensFile(source) &&
-      lines[1].startsWith(importedTokensMarker);
-}
-
-/// A library file from an import: the library marker, the import note,
-/// then one `Token<…>` per variable with its modes, in the design file's
-/// order, under [symbol] — the list name the file's own name derives. What
-/// [parseTokensFile] reads back, so the round trip is the test.
-String emitImportedTokens(
-  VariablesImport import, {
-  required String from,
-  String symbol = sceneTokensSymbol,
-}) {
-  var out = StringBuffer('''
-$sceneTokensFileMarker
-$importedTokensMarker $from
-//
-// The design file's variables, as tokens. Each is `Token<T>('name', value,
-// modes: {…})` — the value is the collection's default mode, `modes` names
-// every mode. Every scene of a group that lists `$symbol` reads them through
-// its tokens formal: `fill: tokens.brandPrimary`.
-//
-// Written by an import, and replaced by the next one: a hand edit here is
-// lost then. Refusals, if any, are listed at the end.
-import 'package:flutterware/scene_authoring.dart';
-
-const ${modesSymbolFor(symbol)} = [${import.modeNames.map((m) => "'$m'").join(', ')}];
-
-final $symbol = [
-''');
-  for (var t in import.tokens) {
-    out.writeln('  // ${t.source}');
-    var modes = t.modes.isEmpty
-        ? ''
-        : ', modes: {${[for (var e in t.modes.entries) "'${e.key}': ${_literal(e.value)}"].join(', ')}}';
-    out.writeln(
-      "  ${t.kind == SceneParamKind.color ? '' : 'const '}"
-      "Token<${_type(t.kind)}>('${t.name}', ${_literal(t.value)}$modes),",
-    );
-  }
-  out.writeln('];');
-  if (import.refusals.isNotEmpty) {
-    out
-      ..writeln()
-      ..writeln('// Not imported:');
-    for (var r in import.refusals) {
-      out.writeln('//   $r');
-    }
-  }
-  return '$out';
-}
-
-String _type(SceneParamKind kind) => switch (kind) {
-  SceneParamKind.color => 'SceneColor',
-  SceneParamKind.number => 'double',
-  SceneParamKind.string => 'String',
-  SceneParamKind.bool => 'bool',
-  SceneParamKind.list => 'List<Object?>',
-};
-
-String _literal(Object value) => switch (value) {
-  SceneColor c =>
-    'const SceneColor(0x${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0')})',
-  String s =>
-    "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'\$')}'",
-  double d => d == d.roundToDouble() && d.abs() < 1e15 ? '${d.round()}' : '$d',
-  var v => '$v',
-};

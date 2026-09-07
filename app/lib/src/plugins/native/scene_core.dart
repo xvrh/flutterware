@@ -21,6 +21,7 @@ import '../../scene/skeletons.dart';
 import '../../scene/import/variables.dart';
 import '../../scene/scene_file.dart';
 import '../../scene/tokens_file.dart';
+import '../../scene/tokens_library.dart';
 import '../../scene/workspace.dart';
 import '../../utils/string/plural.dart';
 import '../plugin_core.dart';
@@ -605,11 +606,13 @@ class SceneCore extends PluginCore {
       'importTokens',
       'Import tokens',
       description:
-          "Writes a token library from a design file's variables — the "
+          "Merges a design file's variables into a token library — the "
           'JSON its REST API answers for local variables, saved to a file. '
-          'Every variable becomes a Token with its modes; what cannot be one '
-          'is refused by name. Replaces a library a previous import wrote; '
-          'one the editor or a hand wrote is kept unless force is set.',
+          'By name: a token the file knows takes its value and modes, a new '
+          'one is added, one the file does not have is kept and listed; a '
+          'name held here as another kind is refused by name, as is a '
+          'variable that cannot be a token. The report is written into the '
+          'library, where the panel shows it.',
       parameters: [
         _packageParameter,
         ActionParameter(
@@ -622,29 +625,23 @@ class SceneCore extends PluginCore {
           'library',
           'Library',
           description:
-              'The library file to write, relative to the package — '
-              'lib/design/brand$sceneTokensFileSuffix. Default: '
-              "imported$sceneTokensFileSuffix in the first group's folder.",
+              'The library file to merge into, created when missing — '
+              'relative to the package, lib/design/brand'
+              '$sceneTokensFileSuffix. Default: imported'
+              "$sceneTokensFileSuffix in the first group's folder.",
           required: false,
-        ),
-        ActionParameter(
-          'force',
-          'Replace a file not written by an import',
-          kind: ActionParameterKind.boolean,
-          required: false,
-          description: 'Default false.',
         ),
       ],
     ),
   ];
 
-  /// The import door: read, refuse, write, and rescan so the generated
-  /// vocabulary follows. Returns what was written and what was not.
+  /// The import door: read, merge into the library (opened from disk, or
+  /// new), write, and rescan so the generated vocabulary follows. Returns
+  /// the report — what was added, updated, kept and refused.
   Future<Map<String, Object?>> importTokens({
     required String package,
     required String jsonPath,
     String? library,
-    bool force = false,
   }) async {
     var file = File(jsonPath);
     if (!file.existsSync()) {
@@ -676,20 +673,23 @@ class SceneCore extends PluginCore {
       var folder = scan.groups.firstOrNull?.directory ?? rootFor(package);
       target = File(p.join(folder, 'imported$sceneTokensFileSuffix'));
     }
-    if (target.existsSync() &&
-        !force &&
-        !isImportedTokensFile(target.readAsStringSync())) {
-      throw StateError(
-        '${p.relative(target.path, from: host.worktree.path)} was not written '
-        'by an import — pass force to replace it',
-      );
-    }
     var symbol = tokensSymbolFor(target.path);
-    var source = emitImportedTokens(
-      imported,
-      from: p.basename(jsonPath),
-      symbol: symbol,
-    );
+    TokensLibrary document;
+    if (target.existsSync()) {
+      var opened = TokensLibrary.open(target.path, target.readAsStringSync());
+      if (!opened.ok) {
+        throw StateError(
+          '${p.relative(target.path, from: host.worktree.path)} is refused '
+          'by the library reader — fix it first: '
+          '${opened.refusals.join('; ')}',
+        );
+      }
+      document = opened.library!;
+    } else {
+      document = TokensLibrary(path: target.path);
+    }
+    var note = document.merge(imported, from: p.basename(jsonPath));
+    var source = document.emit();
     // The file the tool writes has to be one the tool reads: the parser is
     // the grader, before anything lands on disk.
     var check = parseTokensFile(source, symbol: symbol);
@@ -731,7 +731,11 @@ class SceneCore extends PluginCore {
           {'name': t.name, 'type': t.decl.typeName, 'from': t.source},
       ],
       'modes': imported.modeNames,
-      'refusals': [for (var r in imported.refusals) '$r'],
+      'added': note.added,
+      'updated': note.updated,
+      'unchanged': note.unchanged,
+      'kept': note.kept,
+      'refusals': note.notImported,
       'listedBy': [
         for (var group
             in (scanFor(package)?.groups ?? const <SceneGroupEntry>[]))
@@ -863,11 +867,6 @@ class SceneCore extends PluginCore {
             ),
           },
           library: arguments['library'] as String?,
-          force: switch (arguments['force']) {
-            bool b => b,
-            'true' => true,
-            _ => false,
-          },
         );
       case 'video':
         return exportVideo(

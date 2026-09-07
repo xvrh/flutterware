@@ -16,6 +16,7 @@ import 'package:flutterware_app/src/scene/group_file.dart';
 import 'package:flutterware_app/src/scene/import/variables.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/tokens_file.dart';
+import 'package:flutterware_app/src/scene/tokens_library.dart';
 
 void main() {
   var json = File('test/scene/fixtures/variables.json').readAsStringSync();
@@ -85,9 +86,20 @@ void main() {
     );
   });
 
+  /// A fresh library with the import merged in — the file the CLI writes.
+  String emitted({String symbol = sceneTokensSymbol}) {
+    var library = TokensLibrary(
+      path:
+          '/pkg/lib/${symbol == sceneTokensSymbol ? 'scene' : 'imported'}'
+          '$sceneTokensFileSuffix',
+    );
+    library.merge(import, from: 'variables.json');
+    return library.emit();
+  }
+
   test('the written file reads back to the same tokens, modes included', () {
-    var source = emitImportedTokens(import, from: 'variables.json');
-    expect(isImportedTokensFile(source), isTrue);
+    var source = emitted();
+    expect(source, contains('// Imported from variables.json on '));
     expect(source, contains('// Not imported:'));
     var parsed = parseTokensFile(source);
     expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
@@ -103,9 +115,7 @@ void main() {
   });
 
   test('the generated class carries one static set per mode', () {
-    var decls = parseTokensFile(
-      emitImportedTokens(import, from: 'variables.json'),
-    ).tokens;
+    var decls = parseTokensFile(emitted()).tokens;
     var source = emitSceneArgs(externals: [], scenes: [], tokens: decls);
     expect(source, contains('static const darkMode = SceneTokens('));
     expect(source, contains('brandPrimary: SceneColor(0xFFFF804D)'));
@@ -137,13 +147,8 @@ final sceneTokens = [
     () {
       var dir = Directory.systemTemp.createTempSync('fw_tokens_import');
       addTearDown(() => dir.deleteSync(recursive: true));
-      File('${dir.path}/imported.tokens.dart').writeAsStringSync(
-        emitImportedTokens(
-          import,
-          from: 'variables.json',
-          symbol: 'importedTokens',
-        ),
-      );
+      File('${dir.path}/imported.tokens.dart')
+          .writeAsStringSync(emitted(symbol: 'importedTokens'));
       File('${dir.path}/$sceneGroupFileName').writeAsStringSync('''
 $sceneGroupFileMarker
 import 'package:flutterware/scene.dart';
