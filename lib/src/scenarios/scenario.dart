@@ -116,6 +116,10 @@ void scenario(
   // the folder said otherwise — see [scenarioAmbientKeyboard] for what off
   // restores.
   var keyboard = scenarioAmbientKeyboard ?? true;
+  // The folder's shadow policy, captured here for the reason the keyboard is.
+  // On unless the folder said otherwise — see [runScenarios] for what
+  // `flutter_test`'s own default paints instead, and what it buys.
+  var shadows = scenarioAmbientShadows ?? true;
   // The folder's network policy, captured here for the reason the two above
   // are — and *only* the folder's. The rest of the ladder is resolved when the
   // body runs, in [_reachOf]: under the runner, `scenarioRunArgs` is armed per
@@ -174,6 +178,7 @@ void scenario(
           assignment,
           source,
           keyboard,
+          shadows,
           _reachOf(network, folderReach, description, noticeKey),
           statedNetwork: network != null,
           noticeKey: noticeKey,
@@ -385,6 +390,7 @@ Future<void> _runScenario(
   ScenarioAssignment? assignment,
   String? source,
   bool wantsKeyboard,
+  bool wantsShadows,
   ScenarioNetwork reach, {
   required bool statedNetwork,
   required String noticeKey,
@@ -438,6 +444,11 @@ Future<void> _runScenario(
   // harness's, the same as the fonts and the clock.
   var priorCursor = EditableText.debugDeterministicCursor;
   EditableText.debugDeterministicCursor = true;
+  // `flutter_test` hard-codes this true and asserts at the end of the body
+  // that nobody left it moved, so a folder that wants real shadows can only
+  // have them for the length of a scenario — which is the length that paints.
+  var priorShadows = debugDisableShadows;
+  debugDisableShadows = !wantsShadows;
   var assets = ScenarioAssetBundle();
   // One policy for the scenario, shared by every replay of its splits the way
   // the bundle and the keyboard are — a real connection pool that a branch
@@ -630,6 +641,7 @@ Future<void> _runScenario(
     // the end of the body, before tearDowns run.
     state.disposeSemantics();
     EditableText.debugDeterministicCursor = priorCursor;
+    debugDisableShadows = priorShadows;
     // Before the tearDowns for the reason the semantics handle is: the binding
     // asserts no timer is pending at the end of the body, and a live keepalive
     // connection holds one.

@@ -346,6 +346,32 @@ an iOS-profile scenario measures its default text as Roboto — close, not SF.
 and measures the real thing; treat its captures as the authoritative ones,
 and bare `flutter test` as the assertion lane it is.
 
+## Shadows: real, unlike every other test
+
+`flutter_test` sets `debugDisableShadows` in its binding's constructor, for
+every test it runs. A `BoxShadow` then paints with its blur dropped — a solid,
+hard-edged copy of the shape, offset — and a Material `elevation:` stops being
+a shadow at all: `RenderPhysicalShape` strokes the outline at `elevation * 2`
+in the shadow colour instead. Both are stand-ins, and both look like a bug in
+your design system rather than a property of the lane.
+
+The default is right where it comes from. Shadow rasterisation is not promised
+pixel-identical from one engine version to the next, so a golden that carried
+one would break on a Flutter bump for no reason anybody wrote. It is wrong
+here: every picture a scenario or a preview takes is looked at, and the
+comparisons this harness makes — `drift` between two runs, `previews compare`
+across a branch — are on one machine and one SDK, where a blur is
+deterministic.
+
+So scenarios and previews render shadows for real. A folder that would rather
+have upstream's back — a suite whose pictures are gated across Flutter
+versions — says so once, and gets them byte for byte:
+
+```dart
+Future<void> testExecutable(FutureOr<void> Function() testMain) =>
+    runScenarios(testMain, shadows: false);
+```
+
 ## 3D and Flutter GPU: the lane decides which backend
 
 A scenario can render `package:flutter_gpu` — and a whole 3D engine on top of

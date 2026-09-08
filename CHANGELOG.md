@@ -1,5 +1,28 @@
 ## Unreleased
 
+- **Shadows are real, in both harnesses.** `flutter_test` sets
+  `debugDisableShadows` for every test it runs, so a `BoxShadow` was painted
+  with its blur dropped — a solid, hard-edged copy of the shape — and a
+  Material `elevation:` came out as a stroked outline `elevation * 2` wide.
+  That is the right default for a golden file, whose job is to survive an
+  engine bump; it is the wrong one for a picture somebody looks at, and every
+  picture a scenario or a preview takes is looked at. A consumer found it the
+  way it gets found: a customer screenshot with a hard band under a button.
+
+  Scenarios and previews now render shadows for real. The cost is the one
+  upstream's default buys off — shadow rasterisation is not promised stable
+  from one engine to the next — and it lands on comparisons that cross a
+  Flutter bump, not on the run-to-run and branch-to-branch ones `drift` and
+  `previews compare` actually make. A folder that would rather keep upstream's
+  says so once, and gets its old pictures back byte for byte:
+
+  ```dart
+  Future<void> testExecutable(FutureOr<void> Function() testMain) =>
+      runScenarios(testMain, shadows: false);
+  ```
+
+  A suite adopting this version sees every shadowed surface move once.
+
 - **The motion plugin and `package:flutterware/motion.dart` are gone.** The
   scene plugin (`flutterware.scene`) replaces both: a scene and the motion
   that animates it live in one `*.scene.dart` the editor owns, the app renders
