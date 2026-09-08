@@ -921,10 +921,36 @@ class SceneInspector extends StatelessWidget {
       _ => null,
     };
     var boundDecl = bound == null ? null : doc.tokenNamed(bound);
+    var sets = styleOf(doc, t)?.values.keys.toList() ?? const <String>[];
     var colors = context.colors;
     var caption = context.type.caption.copyWith(color: colors.mut2);
     return [
-      _label(context, 'Style'),
+      // The style IS the link — `tokens.display.copyWith(…)` in the file —
+      // so the label line carries the same icon a bound property's chip
+      // does, and the rows below mark only where the node diverges.
+      Padding(
+        padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+        child: Row(
+          children: [
+            Expanded(child: Text('Style', style: caption)),
+            if (bound != null)
+              Tooltip(
+                // What the style drives, in full. The picker's own detail
+                // line has to truncate, and a reader asking "does this style
+                // decide my leading" has nowhere else to look now that an
+                // inherited row says nothing.
+                message: sets.isEmpty
+                    ? "the app's own, under the values here"
+                    : 'Sets ${sets.map(_propLabel).join(', ')}',
+                child: Icon(
+                  Icons.link,
+                  size: FwIconSize.sm,
+                  color: colors.accent,
+                ),
+              ),
+          ],
+        ),
+      ),
       FwPicker<String?>(
         selected: bound,
         choices: [

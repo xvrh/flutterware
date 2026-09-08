@@ -45,13 +45,22 @@ enum PropertyOrigin {
   bool get isBound => this != own && this != style;
 }
 
-/// What a style says about one property, in the label's own line: the name
-/// it inherits from, or the way back when the node has typed over it.
+/// A property the node has typed over its style: the broken link, and the
+/// way back.
+///
+/// One icon carries every state of "something else drives this" — faint for
+/// a property nothing drives yet, solid on a binding's chip, broken here —
+/// so the panel has one vocabulary rather than a link idiom for bindings and
+/// an arrow idiom for styles.
+///
+/// An INHERITED property shows nothing. Under a style, inheriting is the
+/// normal state; marking a dozen rows with the same name is noise, and the
+/// file says the same thing — `tokens.display.copyWith(weight: …)` names the
+/// override and nothing else. What is worth a mark is the divergence.
 ///
 /// Its own widget because the paint stack is a style property like any other
-/// and does not fit in a [PropertyRow] — it is a list with a header of its
-/// own — and the marker has to read identically in both places or the panel
-/// is back to two vocabularies.
+/// and does not fit in a [PropertyRow] — it draws a list with a header of
+/// its own — and the mark has to read identically in both places.
 class PropertyOriginMark extends StatelessWidget {
   const PropertyOriginMark({
     super.key,
@@ -68,18 +77,21 @@ class PropertyOriginMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (origin != PropertyOrigin.style) return const SizedBox.shrink();
-    var colors = context.colors;
-    var caption = context.type.caption.copyWith(color: colors.mut2);
-    if (!overridden) {
-      return Text(
-        '\u2190 $sourceName',
-        style: caption.copyWith(color: colors.mut3),
-      );
+    if (origin != PropertyOrigin.style || !overridden) {
+      return const SizedBox.shrink();
     }
-    return Tappable(
-      onTap: onReset,
-      child: Text('reset', style: caption.copyWith(color: colors.accent)),
+    return Tooltip(
+      message:
+          'Typed over ${sourceName ?? 'the style'} — click to take its '
+          'value back',
+      child: Tappable(
+        onTap: onReset,
+        child: Icon(
+          Icons.link_off,
+          size: FwIconSize.sm,
+          color: context.colors.accent,
+        ),
+      ),
     );
   }
 }
@@ -215,7 +227,11 @@ class _PropertyRowState extends State<PropertyRow> {
   /// are the properties something else can drive.
   List<Widget> _marker(BuildContext context, TextStyle caption) {
     var colors = context.colors;
-    if (widget.origin == PropertyOrigin.style) {
+    // Typed over a style: the broken link takes the slot. The plug is still
+    // there on a right-click — a property under a style can still be bound to
+    // a parameter — but two icons in a 129px label line is a crowd, and this
+    // is the one that has something to say.
+    if (widget.origin == PropertyOrigin.style && widget.overridden) {
       return [
         PropertyOriginMark(
           origin: widget.origin,
