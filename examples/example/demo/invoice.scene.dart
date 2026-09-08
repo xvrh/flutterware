@@ -68,8 +68,8 @@ class Invoice({
       fontSize: 11,
       weight: SceneFontWeight.w600,
       color: SceneColor(0xFF6B5A52),
-      align: SceneTextAlign.right,
     ),
+    align: SceneTextAlign.right,
   );
   late final headAmount = TextNode(
     'Amount',
@@ -77,8 +77,8 @@ class Invoice({
       fontSize: 11,
       weight: SceneFontWeight.w600,
       color: SceneColor(0xFF6B5A52),
-      align: SceneTextAlign.right,
     ),
+    align: SceneTextAlign.right,
   );
   late final headRow = FrameNode(
     fill: SceneColor(0xFFF3E9E1),
@@ -90,11 +90,13 @@ class Invoice({
       TextNode(line.item, style: SceneTextStyle(fontSize: 12)),
       TextNode(
         line.qty,
-        style: SceneTextStyle(fontSize: 12, align: SceneTextAlign.right),
+        style: SceneTextStyle(fontSize: 12),
+        align: SceneTextAlign.right,
       ),
       TextNode(
         line.amount,
-        style: SceneTextStyle(fontSize: 12, align: SceneTextAlign.right),
+        style: SceneTextStyle(fontSize: 12),
+        align: SceneTextAlign.right,
       ),
     ],
     borderColor: SceneColor(0xFFEDE4DC),

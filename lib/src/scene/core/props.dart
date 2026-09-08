@@ -13,10 +13,10 @@
 // parameter on `animate()` if it animates. Four places pinned to each other,
 // instead of twenty-five pinned by nothing.
 //
-// The TEXT rows are the subset a [SceneTextStyle] carries, and they are
-// pinned to `sceneTextStyleFields` in both directions — a text node spells
-// no property of its own, only one style (master plan §4.5), so a row added
-// here without a field there would be authorable and unshareable.
+// The STYLE rows are the subset a [SceneTextStyle] carries, and they are
+// pinned to `sceneTextStyleFields` in both directions, so a row added there
+// without a field here would be authorable and unshareable. A text's other
+// rows are its own, spelled beside the style (master plan §4.5).
 import 'model.dart';
 import 'values.dart';
 
@@ -433,12 +433,20 @@ const sceneFrameProps = <SceneProp>[
   ),
 ];
 
-/// A text's own properties — the table's TEXT SUBSET, which is exactly what
-/// a [SceneTextStyle] may carry and what `sceneTextStyleFields` names. The
-/// text itself is the positional argument and is read and written through
-/// the table too, but spelled by hand; everything else here is spelled
-/// inside the node's one `style:` argument.
-const sceneTextProps = <SceneProp>[
+/// What a text spells for itself, beside its style.
+///
+/// The line the two lists are drawn on is whether the property describes the
+/// TYPE or the PARAGRAPH. A face, a size, a tracking, a stack of paint
+/// passes are the treatment, and sharing them across a poster and a card is
+/// the point of a style. Where the lines break and how they sit in the box
+/// are the box's business: two texts in one display face routinely differ on
+/// both, and a shared style that decided them would be one nobody could
+/// share. Flutter draws the same line — `align` and `maxLines` are `Text`'s
+/// arguments, not `TextStyle`'s.
+///
+/// The text itself is the positional argument, read and written through the
+/// table like the rest but spelled by hand.
+const sceneTextOwnProps = <SceneProp>[
   SceneProp(
     'text',
     ScenePropKind.string,
@@ -447,6 +455,29 @@ const sceneTextProps = <SceneProp>[
     read: _text,
     write: _setText,
   ),
+  SceneProp(
+    'align',
+    ScenePropKind.choice,
+    owner: ScenePropOwner.text,
+    defaultValue: SceneTextAlign.left,
+    choices: _aligns,
+    read: _align,
+    write: _setAlign,
+  ),
+  SceneProp(
+    'maxLines',
+    ScenePropKind.integer,
+    owner: ScenePropOwner.text,
+    read: _maxLines,
+    write: _setMaxLines,
+  ),
+];
+
+/// The table's STYLE SUBSET: exactly what a [SceneTextStyle] carries, and
+/// exactly what `sceneTextStyleFields` names — pinned both ways, so a row
+/// added here without a field there would be authorable and unshareable.
+/// Every one of these is spelled inside the node's one `style:` argument.
+const sceneStyleProps = <SceneProp>[
   SceneProp(
     'fontFamily',
     ScenePropKind.string,
@@ -519,15 +550,6 @@ const sceneTextProps = <SceneProp>[
     write: _setColor,
   ),
   SceneProp(
-    'align',
-    ScenePropKind.choice,
-    owner: ScenePropOwner.text,
-    defaultValue: SceneTextAlign.left,
-    choices: _aligns,
-    read: _align,
-    write: _setAlign,
-  ),
-  SceneProp(
     'textCase',
     ScenePropKind.choice,
     owner: ScenePropOwner.text,
@@ -578,14 +600,10 @@ const sceneTextProps = <SceneProp>[
     read: _layers,
     write: _setLayers,
   ),
-  SceneProp(
-    'maxLines',
-    ScenePropKind.integer,
-    owner: ScenePropOwner.text,
-    read: _maxLines,
-    write: _setMaxLines,
-  ),
 ];
+
+/// Every property a text carries, its own and its style's.
+const sceneTextProps = <SceneProp>[...sceneTextOwnProps, ...sceneStyleProps];
 
 const sceneShapeProps = <SceneProp>[
   SceneProp(

@@ -46,7 +46,6 @@ class ArcadePoster({
       letterSpacing: -4,
       lineHeight: 0.95,
       color: SceneColor(0xFFFFF3B0),
-      align: SceneTextAlign.center,
       textCase: SceneTextCase.upper,
       layers: [
         FillLayer(paint: SolidPaint(SceneColor(0xFF120720)), dx: 9, dy: 9),
@@ -71,6 +70,7 @@ class ArcadePoster({
         ),
       ],
     ),
+    align: SceneTextAlign.center,
   );
   late final scoreLine = TextNode(
     score,

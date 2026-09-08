@@ -58,22 +58,20 @@ void main() {
     }
   });
 
-  test("the style fields are the table's text subset, both ways", () {
-    var rows = [
-      for (var p in sceneTextProps)
-        if (p.name != 'text') p.name,
-    ];
+  test("the style fields are the table's style subset, both ways", () {
     expect(
       sceneTextStyleFields.map((f) => f.name),
-      rows,
-      reason: 'a style sets exactly the text rows, in the same order',
+      sceneStyleProps.map((p) => p.name),
+      reason: 'a style sets exactly the style rows, in the same order',
     );
+    // The rest of a text's rows are its own — the positional text, and the
+    // two the paragraph decides rather than the type.
+    expect(sceneTextOwnProps.map((p) => p.name), ['text', 'align', 'maxLines']);
   });
 
   test('a style round-trips through its own values, and copyWith deltas', () {
     var set = <String, Object>{};
-    for (var p in sceneTextProps) {
-      if (p.name == 'text') continue;
+    for (var p in sceneStyleProps) {
       set[p.name] = sample(p)!;
     }
     var style = SceneTextStyle.fromValues(set);
@@ -87,13 +85,11 @@ void main() {
 
   test('a node built from a style reads every property back', () {
     var set = <String, Object>{};
-    for (var p in sceneTextProps) {
-      if (p.name == 'text') continue;
+    for (var p in sceneStyleProps) {
       set[p.name] = sample(p)!;
     }
     var node = TextNode('x', style: SceneTextStyle.fromValues(set));
-    for (var p in sceneTextProps) {
-      if (p.name == 'text') continue;
+    for (var p in sceneStyleProps) {
       expect(p.read(node), set[p.name], reason: p.name);
     }
   });

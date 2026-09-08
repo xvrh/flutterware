@@ -472,11 +472,11 @@ void _emitNode(
       out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
       props.add(ref('text') ?? _str(t.text));
-      // Every text property is spelled INSIDE the one style argument — the
-      // node has no second slot for them (master plan §4.5), so the table
-      // skips the whole text subset here.
+      // Every property of the TREATMENT is spelled inside the one style
+      // argument, so the table skips the style subset here; align and
+      // maxLines are the paragraph's and stay the node's own arguments.
       if (_styleArg(t, scope, ref) case var arg?) props.add(arg);
-      table(skip: _textPropNames);
+      table(skip: _styleArgNames);
       out.write('TextNode(${props.join(', ')})');
     case ShapeNode _:
       table();
@@ -505,9 +505,20 @@ void _emitNode(
   }
 }
 
-/// Every text property by name — what the node's own argument list skips,
-/// because the style argument spells all of them.
-final _textPropNames = {for (var p in sceneTextProps) p.name};
+/// What the style argument spells, by name — what the node's own argument
+/// list skips. `text` rides with them because it is the positional.
+final _styleArgNames = {'text', for (var p in sceneStyleProps) p.name};
+
+/// What a style literal or a `copyWith` may name — every text property but
+/// the positional, which is WIDER than what a style carries. `align` and
+/// `maxLines` moved out to the node's own arguments, and a file that still
+/// spells them inside the style is read rather than refused: they land on
+/// the node, and the next save writes them where they belong. Same courtesy
+/// the 0.8 files get.
+final _styleFieldNames = {
+  for (var p in sceneTextProps)
+    if (p.name != 'text') p.name,
+};
 
 /// `style: tokens.title`, `style: tokens.title.copyWith(fontSize: 60)` or
 /// `style: SceneTextStyle(fontSize: 180)` — a text node's whole typographic
@@ -532,8 +543,7 @@ String? _styleArg(TextNode t, _Scope scope, String? Function(String prop) ref) {
   // against nothing and the delta is measured from the table's defaults.
   var style = bound == null ? null : scope.tokens[bound]?.styleIn(scope.mode);
   var deltas = <String>[];
-  for (var p in sceneTextProps) {
-    if (p.name == 'text') continue;
+  for (var p in sceneStyleProps) {
     var v = p.read(t);
     var inherited = style != null && style.sets(p.name)
         ? sceneValuesEqual(v, style.values[p.name])
@@ -1896,7 +1906,7 @@ class _Parser {
         );
       }
     }
-    _applyProps(n, named, only: _textPropNames);
+    _applyProps(n, named, only: _styleFieldNames);
     _refuseRest(what, named);
   }
 

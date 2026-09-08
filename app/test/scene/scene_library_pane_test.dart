@@ -201,7 +201,7 @@ void main() {
         weight: SceneFontWeight.w700,
         letterSpacing: 8,
         textCase: SceneTextCase.upper,
-        maxLines: 2,
+        wordSpacing: 3,
         layers: [
           StrokeLayer(width: 6, paint: SolidPaint(SceneColor(0xFF000000))),
           FillLayer(),
@@ -228,7 +228,7 @@ void main() {
     expect(style.fontFamily, 'Bungee');
     expect(style.letterSpacing, 8);
     expect(style.textCase, SceneTextCase.upper);
-    expect(style.maxLines, 2);
+    expect(style.wordSpacing, 3);
     expect(style.layers, hasLength(2));
   });
 

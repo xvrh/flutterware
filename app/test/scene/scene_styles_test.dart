@@ -25,9 +25,9 @@ final sceneTokens = [
   const Token<SceneColor>('ink', SceneColor(0xFF111111)),
   const Token<SceneTextStyle>(
     'title',
-    SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700, align: SceneTextAlign.center),
+    SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700, textCase: SceneTextCase.upper),
   ),
-  const Token<SceneTextStyle>('body', SceneTextStyle(fontSize: 20, color: SceneColor(0xFFD8C9BD), maxLines: 2)),
+  const Token<SceneTextStyle>('body', SceneTextStyle(fontSize: 20, lineHeight: 1.4, color: SceneColor(0xFFD8C9BD))),
 ];
 ''';
 
@@ -64,13 +64,13 @@ void main() {
       expect(title.typeName, 'SceneTextStyle');
       expect(title.style!.fontSize, 54);
       expect(title.style!.weight, SceneFontWeight.w700);
-      expect(title.style!.align, SceneTextAlign.center);
+      expect(title.style!.textCase, SceneTextCase.upper);
       expect(title.style!.color, isNull);
-      expect(parsed.tokens[2].style!.maxLines, 2);
+      expect(parsed.tokens[2].style!.lineHeight, 1.4);
       expect(parsed.tokens[2].style!.values.keys, [
         'fontSize',
+        'lineHeight',
         'color',
-        'maxLines',
       ]);
     });
 
@@ -100,10 +100,10 @@ final sceneTokens = [
         flat,
         contains(
           'this.title = const SceneTextStyle( fontSize: 54.0, '
-          'weight: SceneFontWeight.w700, align: SceneTextAlign.center, )',
+          'weight: SceneFontWeight.w700, textCase: SceneTextCase.upper, )',
         ),
       );
-      expect(flat, contains('color: SceneColor(0xFFD8C9BD), maxLines: 2'));
+      expect(flat, contains('lineHeight: 1.4, color: SceneColor(0xFFD8C9BD)'));
     });
   });
 
@@ -113,10 +113,10 @@ final sceneTokens = [
   const Token<SceneColor>('ink', SceneColor(0xFF111111)),
   const Token<SceneTextStyle>(
     'title',
-    SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700, align: SceneTextAlign.center),
+    SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700, textCase: SceneTextCase.upper),
     modes: {'dark': SceneTextStyle(fontSize: 40, weight: SceneFontWeight.w900, color: SceneColor(0xFFFFFFFF))},
   ),
-  const Token<SceneTextStyle>('body', SceneTextStyle(fontSize: 20, color: SceneColor(0xFFD8C9BD), maxLines: 2)),
+  const Token<SceneTextStyle>('body', SceneTextStyle(fontSize: 20, color: SceneColor(0xFFD8C9BD))),
 ];
 ''').tokens;
 
@@ -189,13 +189,13 @@ final sceneTokens = [
       expect(headline.bindings[styleBindingKey], const StyleRef('title'));
       expect(headline.fontSize, 54);
       expect(headline.weight, SceneFontWeight.w700);
-      expect(headline.align, SceneTextAlign.center);
+      expect(headline.textCase, SceneTextCase.upper);
       expect(headline.color, const SceneColor(0xFF111111), reason: 'override');
       expect(headline.bindings['color'], const TokenRef('ink'));
       var sub = doc.nodeNamed('sub')! as TextNode;
       expect(sub.fontSize, 24, reason: "its own, over the style's 20");
       expect(sub.color, const SceneColor(0xFFD8C9BD));
-      expect(sub.maxLines, 2);
+      expect(sub.lineHeight, 1.4);
       expect(inheritsFromStyle(doc, sub, 'fontSize'), isFalse);
       expect(inheritsFromStyle(doc, sub, 'color'), isTrue);
       expect(inheritsFromStyle(doc, headline, 'color'), isFalse);
@@ -277,7 +277,7 @@ final sceneTokens = [
         out,
         contains(
           "TextNode( 'Plain', style: SceneTextStyle( fontSize: 54, "
-          'weight: SceneFontWeight.w700, align: SceneTextAlign.center, ), )',
+          'weight: SceneFontWeight.w700, textCase: SceneTextCase.upper, ), )',
         ),
       );
     });
@@ -426,6 +426,32 @@ final sceneTokens = [
     expect(t.fontSize, 54, reason: "the style's value came back");
     expect(find.byIcon(Icons.link_off), findsNothing);
     expect(find.byTooltip('display decides this'), findsNWidgets(2));
+  });
+
+  test('a file spelling align inside the style opens, and converges', () {
+    // align and maxLines left the style on 2026-09-08. A scene file is real
+    // Dart, so one that spells them inside its style stops compiling — but
+    // the parser reads them rather than refusing, puts them on the node, and
+    // the next save writes them where they belong. The same courtesy the 0.8
+    // files get for their text properties.
+    var parsed = parseSceneFile('''
+$sceneFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+class Poster() extends SceneDefinition {
+  late final title = TextNode('ARCADE', style: SceneTextStyle(fontSize: 54, align: SceneTextAlign.center, maxLines: 2));
+  @override
+  late final root = FrameNode(children: [title]);
+}
+''');
+    expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
+    var t = parsed.doc!.nodeNamed('title')! as TextNode;
+    expect(t.align, SceneTextAlign.center);
+    expect(t.maxLines, 2);
+    var out = emitSceneFile(parsed.doc!, className: 'Poster');
+    expect(out, contains('style: SceneTextStyle(fontSize: 54)'));
+    expect(out, contains('align: SceneTextAlign.center'));
+    expect(out, contains('maxLines: 2'));
   });
 
   test('the wire spells a style apart from a token', () {

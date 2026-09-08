@@ -798,6 +798,12 @@ class TextNode extends SceneNode {
     super.maxHeight,
     super.opacity,
     super.visible,
+    // The paragraph's own, not the type's: two texts in one display face
+    // routinely differ on both, so a shared style deciding them would be one
+    // nobody could share. Flutter draws the same line — these are `Text`'s
+    // arguments, not `TextStyle`'s.
+    this.align = SceneTextAlign.left,
+    this.maxLines,
     SceneTextStyle? style,
   }) : fontFamily = style?.fontFamily,
        fontSize = style?.fontSize ?? 16,
@@ -807,21 +813,20 @@ class TextNode extends SceneNode {
        wordSpacing = style?.wordSpacing ?? 0,
        lineHeight = style?.lineHeight ?? 1.15,
        color = style?.color ?? const SceneColor(0xFF1A1A1A),
-       align = style?.align ?? SceneTextAlign.left,
        textCase = style?.textCase ?? SceneTextCase.none,
        decoration = style?.decoration ?? SceneTextDecoration.none,
        decorationColor = style?.decorationColor,
        decorationThickness = style?.decorationThickness ?? 1,
        decorationStyle =
            style?.decorationStyle ?? SceneTextDecorationStyle.solid,
-       layers = [...?style?.layers],
-       maxLines = style?.maxLines;
+       layers = [...?style?.layers];
 
-  /// The text a node draws. Everything else it draws with is the [style] —
-  /// there is no second slot, and no per-property parameter beside it: an
-  /// override is a delta on the style (`tokens.title.copyWith(fontSize:
-  /// 60)`), which is what keeps this constructor the same size whether the
-  /// table carries six text properties or thirty (master plan §4.5).
+  /// The text a node draws. The TYPE it is drawn in is the [style] — there
+  /// is no per-property parameter beside it, because an override is a delta
+  /// on the style (`tokens.title.copyWith(fontSize: 60)`), which is what
+  /// keeps this constructor the same size whether the table carries six
+  /// style properties or thirty. What a text does spell for itself is its
+  /// PARAGRAPH — [align] and [maxLines] (master plan §4.5).
   String text;
 
   /// The fields below are the style RESOLVED — the style's value where it

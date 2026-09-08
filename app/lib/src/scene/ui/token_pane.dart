@@ -374,11 +374,9 @@ class SceneTokenPane extends StatelessWidget {
           number('lineHeight', 'Leading', 1.15),
         ]),
         row([
-          choice<SceneTextAlign>('align', 'Align', const [
-            FwChoice(value: SceneTextAlign.left, label: 'Left'),
-            FwChoice(value: SceneTextAlign.center, label: 'Center'),
-            FwChoice(value: SceneTextAlign.right, label: 'Right'),
-            FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
+          choice<bool>('italic', 'Slant', const [
+            FwChoice(value: false, label: 'Roman'),
+            FwChoice(value: true, label: 'Italic'),
           ]),
           choice<SceneTextCase>('textCase', 'Case', const [
             FwChoice(value: SceneTextCase.none, label: 'As typed'),
@@ -401,13 +399,7 @@ class SceneTokenPane extends StatelessWidget {
         Disclosure(
           label: 'More type',
           children: [
-            row([
-              choice<bool>('italic', 'Style', const [
-                FwChoice(value: false, label: 'Roman'),
-                FwChoice(value: true, label: 'Italic'),
-              ]),
-              number('wordSpacing', 'Word spacing', 0),
-            ]),
+            number('wordSpacing', 'Word spacing', 0),
             const Gap(FwSpacing.md),
             row([
               choice<SceneTextDecoration>('decoration', 'Decoration', const [
@@ -425,27 +417,6 @@ class SceneTokenPane extends StatelessWidget {
                   label: 'Strikethrough',
                 ),
               ]),
-              // An int, not a double: the field scrubs a number and the
-              // style holds a count, so it rounds on the way in and unsets
-              // at zero.
-              field(
-                'maxLines',
-                'Max lines',
-                SceneNumberField(
-                  value: (style.maxLines ?? 0).toDouble(),
-                  shape: const SceneNumberShape(
-                    perPixel: 0.1,
-                    decimals: 0,
-                    min: 0,
-                    softMax: 10,
-                  ),
-                  onChanged: (v) => put('maxLines', v < 1 ? null : v.round()),
-                  onCommit: (v) {
-                    put('maxLines', v < 1 ? null : v.round());
-                    library.endMerge();
-                  },
-                ),
-              ),
             ]),
             if (style.decoration != null &&
                 style.decoration != SceneTextDecoration.none) ...[

@@ -439,14 +439,12 @@ const sceneTextStyleFields = <SceneStyleField>[
   SceneStyleField('wordSpacing', _sWordSpacing),
   SceneStyleField('lineHeight', _sLineHeight),
   SceneStyleField('color', _sColor),
-  SceneStyleField('align', _sAlign),
   SceneStyleField('textCase', _sCase),
   SceneStyleField('decoration', _sDecoration),
   SceneStyleField('decorationColor', _sDecorationColor),
   SceneStyleField('decorationThickness', _sDecorationThickness),
   SceneStyleField('decorationStyle', _sDecorationStyle),
   SceneStyleField('layers', _sLayers),
-  SceneStyleField('maxLines', _sMaxLines),
 ];
 
 Object? _sFamily(SceneTextStyle s) => s.fontFamily;
@@ -457,14 +455,12 @@ Object? _sLetterSpacing(SceneTextStyle s) => s.letterSpacing;
 Object? _sWordSpacing(SceneTextStyle s) => s.wordSpacing;
 Object? _sLineHeight(SceneTextStyle s) => s.lineHeight;
 Object? _sColor(SceneTextStyle s) => s.color;
-Object? _sAlign(SceneTextStyle s) => s.align;
 Object? _sCase(SceneTextStyle s) => s.textCase;
 Object? _sDecoration(SceneTextStyle s) => s.decoration;
 Object? _sDecorationColor(SceneTextStyle s) => s.decorationColor;
 Object? _sDecorationThickness(SceneTextStyle s) => s.decorationThickness;
 Object? _sDecorationStyle(SceneTextStyle s) => s.decorationStyle;
 Object? _sLayers(SceneTextStyle s) => s.layers;
-Object? _sMaxLines(SceneTextStyle s) => s.maxLines;
 
 /// A text style: the text subset of the property table, as one value — what
 /// a token names and a `TextNode` takes as `style:`, so a whole typographic
@@ -487,14 +483,12 @@ class SceneTextStyle {
     this.wordSpacing,
     this.lineHeight,
     this.color,
-    this.align,
     this.textCase,
     this.decoration,
     this.decorationColor,
     this.decorationThickness,
     this.decorationStyle,
     this.layers,
-    this.maxLines,
   });
 
   /// The family name as the app declares it in its pubspec, or null to take
@@ -512,7 +506,6 @@ class SceneTextStyle {
   /// Leading, as a multiple of the font size.
   final double? lineHeight;
   final SceneColor? color;
-  final SceneTextAlign? align;
   final SceneTextCase? textCase;
   final SceneTextDecoration? decoration;
 
@@ -525,7 +518,6 @@ class SceneTextStyle {
   /// paint"; an EMPTY list is a style that says the text is painted once,
   /// with its own colour — which is how a style clears a stack it inherited.
   final List<TextLayer>? layers;
-  final int? maxLines;
 
   /// A style from the table's own names — what a reader builds when it has
   /// values by name rather than by field, and the inverse of [values].
@@ -542,14 +534,12 @@ class SceneTextStyle {
     wordSpacing: v['wordSpacing'] as double?,
     lineHeight: v['lineHeight'] as double?,
     color: v['color'] as SceneColor?,
-    align: v['align'] as SceneTextAlign?,
     textCase: v['textCase'] as SceneTextCase?,
     decoration: v['decoration'] as SceneTextDecoration?,
     decorationColor: v['decorationColor'] as SceneColor?,
     decorationThickness: v['decorationThickness'] as double?,
     decorationStyle: v['decorationStyle'] as SceneTextDecorationStyle?,
     layers: (v['layers'] as List?)?.cast<TextLayer>(),
-    maxLines: v['maxLines'] as int?,
   );
 
   /// The properties this style sets, by the table's name — what an emitter
@@ -573,14 +563,12 @@ class SceneTextStyle {
     double? wordSpacing,
     double? lineHeight,
     SceneColor? color,
-    SceneTextAlign? align,
     SceneTextCase? textCase,
     SceneTextDecoration? decoration,
     SceneColor? decorationColor,
     double? decorationThickness,
     SceneTextDecorationStyle? decorationStyle,
     List<TextLayer>? layers,
-    int? maxLines,
   }) => SceneTextStyle(
     fontFamily: fontFamily ?? this.fontFamily,
     fontSize: fontSize ?? this.fontSize,
@@ -590,14 +578,12 @@ class SceneTextStyle {
     wordSpacing: wordSpacing ?? this.wordSpacing,
     lineHeight: lineHeight ?? this.lineHeight,
     color: color ?? this.color,
-    align: align ?? this.align,
     textCase: textCase ?? this.textCase,
     decoration: decoration ?? this.decoration,
     decorationColor: decorationColor ?? this.decorationColor,
     decorationThickness: decorationThickness ?? this.decorationThickness,
     decorationStyle: decorationStyle ?? this.decorationStyle,
     layers: layers ?? this.layers,
-    maxLines: maxLines ?? this.maxLines,
   );
 
   @override

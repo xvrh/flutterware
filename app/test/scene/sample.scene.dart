@@ -41,7 +41,8 @@ class SampleScene({
       TextNode(line.label, style: SceneTextStyle(fontSize: 11)),
       TextNode(
         line.value,
-        style: SceneTextStyle(fontSize: 11, align: SceneTextAlign.right),
+        style: SceneTextStyle(fontSize: 11),
+        align: SceneTextAlign.right,
       ),
     ],
     layout: NodeLayout.row,

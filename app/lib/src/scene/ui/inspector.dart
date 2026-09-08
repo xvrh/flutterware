@@ -729,6 +729,24 @@ class SceneInspector extends StatelessWidget {
         onChanged: (v) => _door('text', () => t.text = v),
       ),
     ),
+    // The paragraph's own: where the lines break and how they sit in the
+    // box. Two texts in one display face routinely differ on both, which is
+    // why a shared style does not decide them.
+    _row([
+      _choice(t, 'align', 'Align', t.align, const [
+        FwChoice(value: SceneTextAlign.left, label: 'Left'),
+        FwChoice(value: SceneTextAlign.center, label: 'Center'),
+        FwChoice(value: SceneTextAlign.right, label: 'Right'),
+        FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
+      ], (v) => _door('align', () => t.align = v)),
+      _number(
+        'maxLines',
+        'Max lines',
+        (t.maxLines ?? 0).toDouble(),
+        const SceneNumberShape(perPixel: 0.1, decimals: 0, min: 0, softMax: 10),
+        apply: (v) => t.maxLines = v < 1 ? null : v.round(),
+      ),
+    ]),
     ..._styleHeader(context, t),
     Container(
       margin: const EdgeInsets.only(bottom: FwSpacing.md),
@@ -811,28 +829,13 @@ class SceneInspector extends StatelessWidget {
         apply: (v) => t.lineHeight = v,
       ),
     ]),
-    _row([
-      _number(
-        'wordSpacing',
-        'Word spacing',
-        _shown(t, 'wordSpacing', t.wordSpacing),
-        SceneNumberShape.of(propSpecFor(t, 'wordSpacing')),
-        apply: (v) => t.wordSpacing = v,
-      ),
-      _number(
-        'maxLines',
-        'Max lines',
-        (t.maxLines ?? 0).toDouble(),
-        const SceneNumberShape(perPixel: 0.1, decimals: 0, min: 0, softMax: 10),
-        apply: (v) => t.maxLines = v < 1 ? null : v.round(),
-      ),
-    ]),
-    _choice(t, 'align', 'Align', t.align, const [
-      FwChoice(value: SceneTextAlign.left, label: 'Left'),
-      FwChoice(value: SceneTextAlign.center, label: 'Center'),
-      FwChoice(value: SceneTextAlign.right, label: 'Right'),
-      FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
-    ], (v) => _door('align', () => t.align = v)),
+    _number(
+      'wordSpacing',
+      'Word spacing',
+      _shown(t, 'wordSpacing', t.wordSpacing),
+      SceneNumberShape.of(propSpecFor(t, 'wordSpacing')),
+      apply: (v) => t.wordSpacing = v,
+    ),
     _prop(
       context,
       t,

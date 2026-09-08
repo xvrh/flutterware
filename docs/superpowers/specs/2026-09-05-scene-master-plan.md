@@ -218,7 +218,28 @@ Token<SceneTextStyle>` — so an edit replaces the list, and an animation
 composes a value at read time, which is what `fxRendered` already does for
 `fontSize` and `color` (`view.dart:273`).
 
-**`SceneTextStyle` is the text subset of the property table**, walked rather
+*Narrowed 2026-09-08, in discussion:* **`align` and `maxLines` came back out
+of the style.** The line the two lists are drawn on is whether a property
+describes the TYPE or the PARAGRAPH. A face, a size, a tracking, a stack of
+paint passes are the treatment, and sharing them across a poster and a card
+is the whole point of a style. Where the lines break and how they sit in the
+box are the box's business: two texts in one display face routinely differ on
+both, and a shared style that decided them would be one nobody could share.
+Flutter draws the same line — `align` and `maxLines` are `Text`'s arguments,
+not `TextStyle`'s. So the table's text rows split: `sceneTextOwnProps` (the
+positional `text`, plus those two) and `sceneStyleProps`, and it is the
+SECOND that is pinned to `sceneTextStyleFields`. `textCase` was considered
+alongside them and kept: it is a treatment — a display style that is always
+uppercase is a real thing to share — even though Flutter has no such field.
+
+This is a **breaking change to the scene grammar**, and a scene file is real
+Dart, so a file spelling `align:` inside its style stops compiling until it
+is rewritten. The parser is deliberately lenient in the other direction: it
+still reads both inside a style literal or a `copyWith`, puts them on the
+node, and the next save writes them where they belong — the same courtesy
+the 0.8 files get.
+
+**`SceneTextStyle` is the style subset of the property table**, walked rather
 than the five hand-written fields it is today. Then `values`, `sets`,
 equality, the emitter's inherit test, the token literal, the token parse and
 the inspector's *from `title`* row all walk one list, and a new text property
@@ -239,8 +260,8 @@ the table's text rows in both directions, which is what makes the two lists
 one. The property that made the difference is `==`: a field forgotten there
 is a silent bug, and it now cannot be forgotten.
 
-**A node spells a style and nothing else.** `TextNode(headline, style:
-tokens.display.copyWith(letterSpacing: -6))`. This is the reversal of §7.1:
+**A node spells a style and its paragraph.** `TextNode(headline, style:
+tokens.display.copyWith(letterSpacing: -6), align: SceneTextAlign.center)`. This is the reversal of §7.1:
 an override is no longer the property spelled beside the style, it is a delta
 ON the style — and an in-file `SceneTextStyle(…)` literal becomes legal,
 because it is the only way to say a node's own type. Bindings survive
