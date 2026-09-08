@@ -26,9 +26,11 @@ import '../../previews/devices.dart' show orientationParameterDoc;
 import '../../scenarios/authoring.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/discovery.dart';
+import '../../scenarios/film_encode.dart';
 import '../../scenarios/opaque_png.dart';
 import '../../scenarios/run_dirs.dart';
 import '../../scenarios/runner.dart';
+import '../../scene/export/video.dart' show VideoEncoder;
 import '../../scenarios/web_export.dart';
 import '../../scenarios/web_report.dart';
 import '../../utils/base_href.dart';
@@ -49,6 +51,10 @@ const _pluginDescription =
 /// The action that writes a run out as a page, named once so the CLI, the
 /// dialog and the command the dialog echoes cannot drift apart.
 const webExportActionId = 'export';
+
+/// `video` — one scenario, rendered as a film. See
+/// `docs/superpowers/specs/2026-09-08-scenario-video-design.md`.
+const videoActionId = 'video';
 
 /// One scenario's latest panel-driven run — what the flow page renders.
 ///
@@ -1509,6 +1515,202 @@ class ScenariosCore extends PluginCore {
           ],
         ),
         PluginAction(
+          videoActionId,
+          'Render a video',
+          returns: Artifact,
+          description:
+              'Renders one scenario as an mp4 — the app moving under a cursor '
+              'that travels, presses and types, paced for somebody watching '
+              'rather than for a suite. For a landing page, a README or a '
+              'release note. It is a second run of the same scenario: the '
+              'verbs are the same, the pacing is not, and nothing it captures '
+              'is evidence. Needs `ffmpeg` on PATH.',
+          parameters: [
+            ActionParameter(
+              'package',
+              'Package',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Which declared package',
+              options: [
+                for (var path in packages)
+                  ActionOption(path, label: path == '.' ? 'root' : path),
+              ],
+            ),
+            const ActionParameter(
+              'file',
+              'File',
+              kind: ActionParameterKind.string,
+              required: true,
+              description:
+                  'The scenario file, package-relative — as `list` reports it',
+            ),
+            const ActionParameter(
+              'scenario',
+              'Scenario',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Which scenario in that file. Optional where the file holds '
+                  'exactly one; refused with the names where it holds more.',
+            ),
+            const ActionParameter(
+              'branch',
+              'Branch',
+              repeatable: true,
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Which branch to take at a `split`, outermost first — one '
+                  'per split. A film is one path, so a scenario that splits '
+                  'is refused until it is told which.',
+            ),
+            ActionParameter(
+              'device',
+              'Device',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'Which device to film it on',
+              options: [for (var id in deviceIds) ActionOption(id)],
+            ),
+            ActionParameter(
+              'orientation',
+              'Orientation',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: orientationParameterDoc,
+              options: [for (var id in orientationIds) ActionOption(id)],
+            ),
+            const ActionParameter(
+              'language',
+              'Language',
+              kind: ActionParameterKind.string,
+              required: false,
+              description: 'A locale tag — `fr`, `fr-CA`',
+            ),
+            const ActionParameter(
+              'brightness',
+              'Brightness',
+              kind: ActionParameterKind.choice,
+              required: false,
+              description: 'light or dark',
+              options: [ActionOption('light'), ActionOption('dark')],
+            ),
+            const ActionParameter(
+              'scale',
+              'Scale',
+              kind: ActionParameterKind.string,
+              required: false,
+              defaultValue: '3',
+              description:
+                  'Output pixels per logical pixel. Three by default and not '
+                  'one: every player insists on `yuv420p`, which halves the '
+                  'colour resolution, and rendering above the size the clip '
+                  'is watched at is what keeps UI text crisp under it.',
+            ),
+            const ActionParameter(
+              'fps',
+              'Frames a second',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '30',
+              description:
+                  'Of the film and of the fake clock alike — a pump advances '
+                  "time by exactly one frame, so the curves are the app's own "
+                  'with nothing dropped.',
+            ),
+            const ActionParameter(
+              'travel',
+              'Travel (ms)',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '350',
+              description: 'How long the cursor takes to fly to its target',
+            ),
+            const ActionParameter(
+              'aim',
+              'Aim (ms)',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '140',
+              description:
+                  'The beat between arriving and pressing. Nobody lands on a '
+                  'button and presses it in the same instant, and without this '
+                  'every verb reads as hurried.',
+            ),
+            const ActionParameter(
+              'dwell',
+              'Dwell (ms)',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '600',
+              description:
+                  'The hold after a verb has settled — reading time. The app '
+                  'keeps running through it, so a spinner keeps spinning.',
+            ),
+            const ActionParameter(
+              'open',
+              'Opening hold (ms)',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '500',
+              description:
+                  'The hold on the first screen, before anything is '
+                  'touched',
+            ),
+            const ActionParameter(
+              'press',
+              'Press (ms)',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '120',
+              description: 'The cursor is down and the verb has not fired yet',
+            ),
+            const ActionParameter(
+              'close',
+              'Closing hold (ms)',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '800',
+              description:
+                  'The final hold, so the clip does not cut on the frame the '
+                  'last verb landed on',
+            ),
+            const ActionParameter(
+              'crf',
+              'Quality',
+              kind: ActionParameterKind.integer,
+              required: false,
+              defaultValue: '18',
+              description:
+                  'What `libx264` aims at, lower being better and bigger. '
+                  'Cheap either way: the render moves far more pixels than '
+                  'the encode does.',
+            ),
+            const ActionParameter(
+              'preset',
+              'Encoder preset',
+              kind: ActionParameterKind.string,
+              required: false,
+              defaultValue: 'slow',
+              description:
+                  'The `libx264` preset. The whole span from `medium` to '
+                  '`ultrafast` is 15% of a render, so `slow` is nearly free '
+                  'here.',
+            ),
+            const ActionParameter(
+              'output',
+              'Output file',
+              kind: ActionParameterKind.string,
+              required: false,
+              description:
+                  'Where the mp4 goes, worktree-relative unless absolute. '
+                  'Defaults to `build/flutterware/video/<scenario>.mp4` under '
+                  'the package.',
+            ),
+          ],
+        ),
+        PluginAction(
           'new',
           'New scenario',
           returns: ScenarioNewResult,
@@ -1916,6 +2118,7 @@ class ScenariosCore extends PluginCore {
       'run' => _run(arguments),
       'diff' => _diff(arguments),
       webExportActionId => _exportWeb(arguments),
+      videoActionId => _video(arguments),
       'new' => _new(arguments),
       'shots' => _shots(arguments),
       'read' => _read(arguments),
@@ -3685,6 +3888,252 @@ class ScenariosCore extends PluginCore {
     );
   }
 
+  /// One scenario, rendered as a film.
+  ///
+  /// A second run of the same body, paced for a viewer: the harness keeps
+  /// every frame it pumps and spends fake time on beats no scenario contains —
+  /// the cursor's travel to a button, the pause after a screen arrives — and
+  /// this end encodes those frames *while they are being drawn*. See
+  /// `docs/superpowers/specs/2026-09-08-scenario-video-design.md`.
+  ///
+  /// Nothing it produces is evidence: it captures no screenshots, no trees and
+  /// no semantics, and its report is thrown away. The panel's step pictures
+  /// and the flow canvas remain what a run is for.
+  Future<Artifact> _video(Map<String, Object?> arguments) =>
+      renderVideo(arguments);
+
+  /// [_video], with somewhere to put the progress.
+  ///
+  /// Public and callable directly, like [exportWeb] and for the same reason: a
+  /// render takes tens of seconds and `Job` has no progress event to carry the
+  /// frame count in, so the dialog that asks for one calls this instead of
+  /// going through `Session.invoke`. The behaviour is identical either way —
+  /// this *is* the action.
+  Future<Artifact> renderVideo(
+    Map<String, Object?> arguments, {
+    void Function(ScenarioFilmProgress progress)? onProgress,
+  }) async {
+    // Before anything is compiled or rendered. Learning that ffmpeg is absent
+    // after a minute of rendering is a bad way to learn it.
+    if (!await VideoEncoder.available) throw StateError(VideoEncoder.missing);
+
+    var paths = _requested(arguments);
+    if (paths.length > 1) {
+      throw ArgumentError(
+        'Which package? A film is one scenario. Declared: '
+        '${packages.join(', ')}',
+      );
+    }
+    var path = paths.single;
+    var file = arguments['file'] as String?;
+    if (file == null || file.isEmpty) {
+      throw ArgumentError(
+        '`file` names the scenario file to film — as `list` reports it. A '
+        'film is one scenario, so there is no "all of them" here.',
+      );
+    }
+    var scenario = switch (arguments['scenario']) {
+      String named when named.isNotEmpty => named,
+      _ => await _theOneScenarioIn(path, file),
+    };
+    var branches = _branchList(arguments['branch']);
+
+    // Frames live in a scratch directory nobody keeps: the drain deletes each
+    // one as it feeds it, and what is left at the end is the two JSON files
+    // and whatever a failure stopped it from eating.
+    var scratch = Directory.systemTemp.createTempSync('fw-film');
+    var settings = FilmSettings(
+      directory: p.join(scratch.path, 'frames'),
+      fps: _positive(arguments['fps'], 'fps')?.round() ?? 30,
+      scale: _positive(arguments['scale'], 'scale') ?? 3,
+      branches: branches,
+      open:
+          _millis(arguments['open'], 'open') ??
+          const Duration(milliseconds: 500),
+      travel:
+          _millis(arguments['travel'], 'travel') ??
+          const Duration(milliseconds: 350),
+      aim:
+          _millis(arguments['aim'], 'aim') ?? const Duration(milliseconds: 140),
+      press:
+          _millis(arguments['press'], 'press') ??
+          const Duration(milliseconds: 120),
+      dwell:
+          _millis(arguments['dwell'], 'dwell') ??
+          const Duration(milliseconds: 600),
+      close:
+          _millis(arguments['close'], 'close') ??
+          const Duration(milliseconds: 800),
+    );
+    var output = switch (arguments['output'] as String?) {
+      var given? when given.isNotEmpty => _absolute(given),
+      _ => p.join(
+        packageRootFor(path),
+        'build',
+        'flutterware',
+        'video',
+        '${_slug(scenario)}.mp4',
+      ),
+    };
+
+    var watch = Stopwatch()..start();
+    _setBusy(path, const Status.info('rendering the film…'));
+    try {
+      var running = _runnerFor(path).run(
+        outDir: p.join(scratch.path, 'run'),
+        file: file,
+        scenario: scenario,
+        axes: _axesFrom(arguments),
+        unspecifiedDevice: defaultScenarioDeviceId,
+        // A film is not evidence, so no step is photographed. The frames are
+        // the whole product and the run's own pictures would be a second
+        // rendering of screens the film already holds.
+        pixels: ScenarioPixels.none,
+        film: settings,
+      );
+      ScenarioFilm film;
+      try {
+        film = await ScenarioFilmEncode(
+          directory: settings.directory,
+          output: output,
+          preset: arguments['preset'] as String? ?? 'slow',
+          crf: _positive(arguments['crf'], 'crf')?.round() ?? 18,
+        ).drain(running, onProgress: onProgress);
+      } catch (error) {
+        // The render's own failure is the useful one — the drain only saw the
+        // frames stop coming. Awaited first so that a harness that threw says
+        // so, and the drain's account is what is left when it did not.
+        await running;
+        rethrow;
+      }
+      var report = await running;
+      // A film of a scenario that broke halfway is not a deliverable: it ends
+      // mid-flow and looks like the app failing. The failure is the news.
+      if (_filmFailure(report) case var failed?) {
+        File(output).deleteSync();
+        throw StateError(
+          '`$scenario` did not finish, so there is no film:\n\n$failed',
+        );
+      }
+      watch.stop();
+      return Artifact(
+        kind: Artifact.mp4,
+        address: Address(
+          worktree: host.worktree.name,
+          plugin: host.id,
+          segments: scenarioSegments(path, file: file, scenario: scenario),
+        ),
+        path: _relative(film.file.path),
+        meta: {
+          'scenario': scenario,
+          'file': file,
+          if (branches.isNotEmpty) 'branches': branches,
+          'frames': film.frames,
+          'fps': film.fps,
+          'size': [film.width, film.height],
+          'durationMs': film.duration.inMilliseconds,
+          'renderMs': watch.elapsedMilliseconds,
+          'bytes': film.file.lengthSync(),
+          if (film.dropped > 0) 'dropped': film.dropped,
+          'beats': film.beats.length,
+        },
+      );
+    } finally {
+      _setBusy(path, null);
+      if (scratch.existsSync()) scratch.deleteSync(recursive: true);
+    }
+  }
+
+  /// The scenario in [file], when it holds exactly one — or a refusal naming
+  /// the ones it holds.
+  ///
+  /// A film is one scenario and most files are one scenario, so naming it
+  /// twice is a papercut nobody needs. The refusal lists the names rather than
+  /// picking the first: which flow is worth a video is not a guess this can
+  /// make.
+  Future<String> _theOneScenarioIn(String path, String file) async {
+    _rescan(path);
+    await _scans[path];
+    var found = [
+      for (var ref in _results[path]?.scenarios ?? const <ScenarioRef>[])
+        if (selectsFile(file, ref.file)) ref,
+    ];
+    if (found.length == 1) return found.single.name;
+    if (found.isEmpty) {
+      throw ArgumentError.value(
+        file,
+        'file',
+        await _selectorMiss(path, file: file, scenario: null),
+      );
+    }
+    throw ArgumentError.value(
+      file,
+      'scenario',
+      'that file holds ${found.length} scenarios, and a film is one of them. '
+          'Name it: ${found.map((ref) => '`${ref.name}`').join(', ')}',
+    );
+  }
+
+  /// Whichever scenario of a film run came back red, in its own words.
+  ///
+  /// The caught errors first: a refusal a verb threw — a `split` a film was
+  /// not told which way to take — lands there with its whole message, which is
+  /// the one thing worth handing back. A failed step's `failure` says the same
+  /// sentence where the step got far enough to be captured.
+  String? _filmFailure(Map<String, Object?> report) {
+    for (var scenario in (report['scenarios'] as List?) ?? const []) {
+      var record = (scenario as Map).cast<String, Object?>();
+      if (record['ok'] == true || record['skipped'] == true) continue;
+      for (var error in (record['errors'] as List?) ?? const []) {
+        if ((error as Map)['error'] case String said when said.isNotEmpty) {
+          return said;
+        }
+      }
+      for (var step in (record['steps'] as List?) ?? const []) {
+        if ((step as Map)['failure'] case String said when said.isNotEmpty) {
+          return said;
+        }
+      }
+      return 'it failed without saying why';
+    }
+    return report['error'] as String?;
+  }
+
+  static double? _positive(Object? raw, String name) {
+    if (raw == null) return null;
+    var value = switch (raw) {
+      num it => it.toDouble(),
+      String it => double.tryParse(it),
+      _ => null,
+    };
+    if (value == null || value <= 0) {
+      throw ArgumentError.value(raw, name, 'a number above zero');
+    }
+    return value;
+  }
+
+  static Duration? _millis(Object? raw, String name) {
+    if (raw == null) return null;
+    var value = switch (raw) {
+      num it => it.toDouble(),
+      String it => double.tryParse(it),
+      _ => null,
+    };
+    if (value == null || value < 0) {
+      throw ArgumentError.value(raw, name, 'milliseconds, zero or more');
+    }
+    return Duration(microseconds: (value * 1000).round());
+  }
+
+  /// A file name from a scenario's own name.
+  static String _slug(String name) {
+    var slug = name
+        .toLowerCase()
+        .replaceAll(RegExp('[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    return slug.isEmpty ? 'film' : slug;
+  }
+
   Future<ScenarioWebExportResult> _exportWeb(Map<String, Object?> arguments) =>
       exportWeb(arguments);
 
@@ -3767,6 +4216,18 @@ class ScenariosCore extends PluginCore {
   }
 
   /// A comma-separated axis list, trimmed and emptied of blanks.
+  /// The branches a film was told to take, outermost first.
+  ///
+  /// Never comma-split, unlike an axis list: a branch is a label an author
+  /// wrote in a sentence, and `pay by card, then refund` is a plausible one.
+  /// Repeat the argument instead.
+  static List<String> _branchList(Object? raw) => switch (raw) {
+    null => const [],
+    List list => [for (var item in list) '$item'],
+    String one => one.isEmpty ? const [] : [one],
+    var other => throw ArgumentError.value(other, 'branch', 'a branch label'),
+  };
+
   static List<String> _axisList(Object? raw, String name) {
     if (raw == null) return const [];
     if (raw is List) return [for (var item in raw) '$item'.trim()];

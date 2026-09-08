@@ -12,6 +12,7 @@ import '../../previews/devices.dart';
 import '../../previews/web_server.dart';
 import '../../delta/branch_delta.dart';
 import '../../delta/change_marks.dart';
+import '../../scenarios/video_dialog.dart';
 import '../../scenarios/web_export_dialog.dart';
 import '../../scenarios/artifacts.dart';
 import '../../scenarios/artifacts_io.dart';
@@ -1524,6 +1525,7 @@ class _ScenarioPageState extends State<_ScenarioPage> {
           _RunSplitButton(
             enabled: !running,
             onRun: _start,
+            onExportVideo: () => unawaited(_exportVideo(context, run)),
             recordMotion: widget.core.recordMotion,
             onToggleRecordMotion: () =>
                 widget.core.setRecordMotion(!widget.core.recordMotion),
@@ -1539,6 +1541,27 @@ class _ScenarioPageState extends State<_ScenarioPage> {
       ),
     );
   }
+
+  /// Renders this scenario as a video, at the device the page is framed on.
+  ///
+  /// Per scenario rather than per package, unlike the web export beside it: a
+  /// page is a whole suite and a film is one flow, so this belongs where the
+  /// flow is. In the run menu because it *is* a run — a second one, paced for
+  /// a viewer — and because a reel is a rarer thing to want than a run.
+  Future<void> _exportVideo(BuildContext context, ScenarioPanelRun? run) =>
+      showScenarioVideoDialog(
+        context,
+        render: widget.core.renderVideo,
+        scenario: widget.scenario,
+        file: widget.file,
+        package: widget.package,
+        pluginId: widget.core.id,
+        nameThePackage: widget.core.packages.length > 1,
+        // What the page is showing, which is what the reader means by "this
+        // scenario" — including the device a folder profile resolved for a
+        // run that named none.
+        device: widget.axes.device ?? run?.device,
+      );
 
   /// Steps this run captured while something on them was still moving.
   ///
@@ -1684,6 +1707,7 @@ class _RunSplitButton extends StatelessWidget {
     required this.enabled,
     required this.onRun,
     required this.onFullRestart,
+    required this.onExportVideo,
     required this.recordMotion,
     required this.onToggleRecordMotion,
   });
@@ -1691,6 +1715,10 @@ class _RunSplitButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onRun;
   final VoidCallback onFullRestart;
+
+  /// Renders this scenario as a video — a run of its own, and the rarest of
+  /// the choices here, so it sits under the arrow rather than beside it.
+  final VoidCallback onExportVideo;
 
   /// Whether the next run records every transition's frames — the switch for
   /// the ~70ms a transition it costs, next to the other rare run choices.
@@ -1737,6 +1765,12 @@ class _RunSplitButton extends StatelessWidget {
                     ? Icons.check_box_outlined
                     : Icons.check_box_outline_blank,
                 onSelected: enabled ? onToggleRecordMotion : null,
+              ),
+              const MenuDivider(),
+              MenuItem(
+                'Render a video…',
+                icon: Icons.movie_outlined,
+                onSelected: enabled ? onExportVideo : null,
               ),
               const MenuDivider(),
               MenuItem(

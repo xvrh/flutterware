@@ -236,6 +236,7 @@ class _Gated extends ScenarioRunner {
     int? expandTranslations,
     bool narrowestDevice = false,
     bool captureNative = false,
+    FilmSettings? film,
     Duration? recordInterval,
     double? recordScale,
     int recordMaxFrames = 90,

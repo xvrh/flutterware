@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../devices.dart';
+import 'film.dart';
 import 'motion.dart';
 import 'network.dart';
 import 'pixels.dart';
@@ -29,6 +30,7 @@ class ScenarioRunArgs {
     this.captureNative = false,
     this.pixels = ScenarioPixels.all,
     this.record,
+    this.film,
     this.clockOrigin,
     this.assignment,
     this.expandTranslations,
@@ -90,6 +92,7 @@ class ScenarioRunArgs {
       captureNative: captureNative,
       pixels: pixels,
       record: record,
+      film: film,
       clockOrigin: clockOrigin,
       network: network,
       // The scenario reads its axes off the assignment, so the device the
@@ -209,6 +212,15 @@ class ScenarioRunArgs {
   /// step ended on — which is what a bare `flutter test` and every CLI run
   /// do, and what costs nothing.
   final MotionRecording? record;
+
+  /// Set when this run is rendering a **film** rather than gathering evidence:
+  /// every pumped frame is kept, the verbs are paced for a viewer rather than
+  /// for a suite, and a cursor is drawn over the frames on the way out.
+  ///
+  /// Exclusive with [record] by construction rather than by assertion — the
+  /// two want the same seam and want opposite things from it — and the harness
+  /// refuses a request that asks for both.
+  final FilmSettings? film;
 
   /// The axes above, in the vocabulary a scenario body reads —
   /// `ScenarioTester.assignment`.
