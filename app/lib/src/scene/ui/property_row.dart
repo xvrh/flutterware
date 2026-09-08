@@ -45,6 +45,45 @@ enum PropertyOrigin {
   bool get isBound => this != own && this != style;
 }
 
+/// What a style says about one property, in the label's own line: the name
+/// it inherits from, or the way back when the node has typed over it.
+///
+/// Its own widget because the paint stack is a style property like any other
+/// and does not fit in a [PropertyRow] — it is a list with a header of its
+/// own — and the marker has to read identically in both places or the panel
+/// is back to two vocabularies.
+class PropertyOriginMark extends StatelessWidget {
+  const PropertyOriginMark({
+    super.key,
+    required this.origin,
+    this.sourceName,
+    this.overridden = false,
+    this.onReset,
+  });
+
+  final PropertyOrigin origin;
+  final String? sourceName;
+  final bool overridden;
+  final VoidCallback? onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    if (origin != PropertyOrigin.style) return const SizedBox.shrink();
+    var colors = context.colors;
+    var caption = context.type.caption.copyWith(color: colors.mut2);
+    if (!overridden) {
+      return Text(
+        '\u2190 $sourceName',
+        style: caption.copyWith(color: colors.mut3),
+      );
+    }
+    return Tappable(
+      onTap: onReset,
+      child: Text('reset', style: caption.copyWith(color: colors.accent)),
+    );
+  }
+}
+
 /// A label, a control, and where the value comes from.
 class PropertyRow extends StatefulWidget {
   const PropertyRow({
@@ -177,18 +216,12 @@ class _PropertyRowState extends State<PropertyRow> {
   List<Widget> _marker(BuildContext context, TextStyle caption) {
     var colors = context.colors;
     if (widget.origin == PropertyOrigin.style) {
-      if (!widget.overridden) {
-        return [
-          Text(
-            '← ${widget.sourceName}',
-            style: caption.copyWith(color: colors.mut3),
-          ),
-        ];
-      }
       return [
-        Tappable(
-          onTap: widget.onReset,
-          child: Text('reset', style: caption.copyWith(color: colors.accent)),
+        PropertyOriginMark(
+          origin: widget.origin,
+          sourceName: widget.sourceName,
+          overridden: widget.overridden,
+          onReset: widget.onReset,
         ),
       ];
     }

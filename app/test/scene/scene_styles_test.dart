@@ -316,6 +316,33 @@ final sceneTokens = [
     expect(TextNode('y').fontSize, 16);
   });
 
+  test('a style carries the paint stack, inherited and overridden', () {
+    // The stack is a style property like every other, and the one the panel
+    // could not say that about: it draws its own list with its own header,
+    // so it does not fit in a property row and had no marker at all.
+    const stack = [
+      StrokeLayer(width: 8, paint: SolidPaint(SceneColor(0xFF120720))),
+      FillLayer(),
+    ];
+    var t = TextNode('Hi', name: 'headline');
+    var doc = SceneDocument(FrameNode(name: 'root')..children.add(t))
+      ..tokens.add(
+        const SceneTokenDecl.style('display', SceneTextStyle(layers: stack)),
+      );
+    var editor = SceneEditor(doc);
+    editor.applyStyle(t, 'display');
+    expect(t.layers, hasLength(2), reason: 'the style wrote its stack');
+    expect(inheritsFromStyle(doc, t, 'layers'), isTrue);
+    t.layers = [...t.layers, const FillLayer(dx: 2)];
+    expect(
+      inheritsFromStyle(doc, t, 'layers'),
+      isFalse,
+      reason: 'a list is compared by contents, not by identity',
+    );
+    editor.resetToStyle(t, 'layers');
+    expect(inheritsFromStyle(doc, t, 'layers'), isTrue);
+  });
+
   test('the wire spells a style apart from a token', () {
     expect(const StyleRef('title').toWire(), 'style:title');
     expect(SceneBinding.fromWire('style:title'), const StyleRef('title'));

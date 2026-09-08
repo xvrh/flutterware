@@ -32,6 +32,7 @@ class SceneLayerList extends StatefulWidget {
     required this.fontSize,
     required this.color,
     required this.onChanged,
+    this.marker,
   });
 
   /// A text node's own stack, or a shared style's — the control is the same
@@ -48,6 +49,12 @@ class SceneLayerList extends StatefulWidget {
   final Color color;
 
   final LayersChanged onChanged;
+
+  /// Where the stack comes from, for the header's right edge — a shared
+  /// style's `← name`, or the way back when this text has typed over it. The
+  /// paint stack is a style property like every other one, and the panel
+  /// says so in the same words here as it does on a row.
+  final Widget? marker;
 
   @override
   State<SceneLayerList> createState() => _SceneLayerListState();
@@ -109,6 +116,10 @@ class _SceneLayerListState extends State<SceneLayerList> {
         Row(
           children: [
             Expanded(child: Text('Paint', style: caption)),
+            if (widget.marker != null) ...[
+              widget.marker!,
+              const Gap(FwSpacing.sm),
+            ],
             _addButton(context),
           ],
         ),

@@ -52,7 +52,16 @@ SceneEditor _editor() {
     SceneTokenDecl('brand', SceneParamKind.color, const SceneColor(0xFFE8632B)),
     SceneTokenDecl.style(
       'display',
-      const SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700),
+      const SceneTextStyle(
+        fontSize: 54,
+        weight: SceneFontWeight.w700,
+        // A treatment is a style property like any other: the panel says
+        // where the stack came from in the same words it uses on a row.
+        layers: [
+          StrokeLayer(width: 8, paint: SolidPaint(SceneColor(0xFF120720))),
+          FillLayer(),
+        ],
+      ),
     ),
   ]);
   var headline = doc.nodeNamed('headline')! as TextNode;

@@ -805,6 +805,12 @@ class SceneInspector extends StatelessWidget {
       layers: t.layers,
       fontSize: t.fontSize,
       color: Color(t.color.argb),
+      marker: PropertyOriginMark(
+        origin: _originOf(t, 'layers'),
+        sourceName: _sourceOf(t, 'layers'),
+        overridden: !inheritsFromStyle(doc, t, 'layers'),
+        onReset: () => editor.resetToStyle(t, 'layers'),
+      ),
       onChanged: (next, {required label, mergeKey}) =>
           editor.perform(label, () => t.layers = next, mergeKey: mergeKey),
     ),
