@@ -70,6 +70,15 @@ class VideoEncoder {
     /// Exposed anyway, because a caller who wants the trade should be able to
     /// take it; just not by default.
     String preset = 'medium',
+
+    /// The quality `libx264` aims at, lower being better, or null for its own
+    /// default of 23.
+    ///
+    /// The other half of the trade the preset does not buy: since the export
+    /// is bound on moving pixels rather than on encoding them, a clip somebody
+    /// is going to *watch* can afford 18 and the file it costs, where a clip
+    /// in a pipeline should not pay for it.
+    int? crf,
   }) async {
     var file = File(output);
     file.parent.createSync(recursive: true);
@@ -87,6 +96,7 @@ class VideoEncoder {
         '-i', '-',
         '-c:v', 'libx264',
         '-preset', preset,
+        if (crf != null) ...['-crf', '$crf'],
         // Even dimensions: yuv420p subsamples chroma 2×2, so an odd width
         // fails the encoder outright. Motion renders at a device's pixel
         // ratio, which makes odd sizes ordinary rather than exotic.
@@ -118,6 +128,27 @@ class VideoEncoder {
   }
 
   static const executable = 'ffmpeg';
+
+  /// Whether [executable] is on PATH and runs.
+  ///
+  /// Asked *before* a render rather than discovered by [start] after it:
+  /// learning that ffmpeg is missing costs nothing here and costs a whole
+  /// render there, and the two failures read very differently to whoever is
+  /// waiting.
+  static Future<bool> get available async {
+    try {
+      var probe = await Process.run(executable, ['-version']);
+      return probe.exitCode == 0;
+    } on ProcessException {
+      return false;
+    }
+  }
+
+  /// What to say when it is not.
+  static const missing =
+      'video export needs `ffmpeg` on PATH, and it is not there. '
+      '`brew install ffmpeg` on macOS, `apt install ffmpeg` on Debian and '
+      'Ubuntu, `winget install ffmpeg` on Windows.';
 
   final Process _process;
   final StringBuffer _errors;

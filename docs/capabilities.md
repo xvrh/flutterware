@@ -1531,6 +1531,46 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `capture-scale` | string | no | — | Screenshot pixels per logical pixel, up to 4. A page is read on a retina screen, so 2 is worth the bytes where 1 is right for a panel. |
 | `clock` | string | no | — | An ISO-8601 timestamp `clock.now()` starts at, or `now` for the wall clock. Omitted, the project's pin applies and two exported pages of the same suite are comparable. |
 
+#### `video` — Render a video
+
+Renders one scenario as an mp4 — the app moving under a cursor that travels, presses and types, paced for somebody watching rather than for a suite. For a landing page, a README or a release note. It is a second run of the same scenario: the verbs are the same, the pacing is not, and nothing it captures is evidence. Needs `ffmpeg` on PATH.
+
+```sh
+fw run scenarios video [--package=…] --file=<string> [--scenario=…] [--branch=…] [--device=…] [--orientation=…] [--language=…] [--brightness=…] [--scale=…] [--fps=…] [--travel=…] [--aim=…] [--dwell=…] [--open=…] [--press=…] [--close=…] [--crf=…] [--preset=…] [--output=…]
+```
+
+Returns `Artifact`:
+
+```
+kind: String   # A MIME type where one fits — see the constants above.
+address: String   # What this is an artifact of, axes included.
+path: String?   # Where it was written, when it was written.
+text: String?   # The content itself, for artifacts small enough that making the reader open a file is worse than carrying it.
+meta: Map<String, Object?>?   # Anything the producer wants the reader to know: timings, compile stats, exit codes.
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | choice | no | — | Which declared package |
+| `file` | string | yes | — | The scenario file, package-relative — as `list` reports it |
+| `scenario` | string | no | — | Which scenario in that file. Optional where the file holds exactly one; refused with the names where it holds more. |
+| `branch` | string | no | — | Which branch to take at a `split`, outermost first — one per split. A film is one path, so a scenario that splits is refused until it is told which. |
+| `device` | choice | no | — | Which device to film it on |
+| `orientation` | choice | no | — | Which way up the device is — `portrait` (the default) or `landscape`. An axis on top of `device` rather than a device of its own, so `ipad` plus `landscape` is the same iPad on its side: the screen trades width for height, and the safe areas become the ones that device declares for landscape (a phone loses its status bar rather than moving it). Ignored by anything that cannot turn, which is every desktop size and `fit`. |
+| `language` | string | no | — | A locale tag — `fr`, `fr-CA` |
+| `brightness` | choice | no | — | light or dark |
+| `scale` | string | no | 3 | Output pixels per logical pixel. Three by default and not one: every player insists on `yuv420p`, which halves the colour resolution, and rendering above the size the clip is watched at is what keeps UI text crisp under it. |
+| `fps` | integer | no | 30 | Of the film and of the fake clock alike — a pump advances time by exactly one frame, so the curves are the app's own with nothing dropped. |
+| `travel` | integer | no | 350 | How long the cursor takes to fly to its target |
+| `aim` | integer | no | 140 | The beat between arriving and pressing. Nobody lands on a button and presses it in the same instant, and without this every verb reads as hurried. |
+| `dwell` | integer | no | 600 | The hold after a verb has settled — reading time. The app keeps running through it, so a spinner keeps spinning. |
+| `open` | integer | no | 500 | The hold on the first screen, before anything is touched |
+| `press` | integer | no | 120 | The cursor is down and the verb has not fired yet |
+| `close` | integer | no | 800 | The final hold, so the clip does not cut on the frame the last verb landed on |
+| `crf` | integer | no | 18 | What `libx264` aims at, lower being better and bigger. Cheap either way: the render moves far more pixels than the encode does. |
+| `preset` | string | no | slow | The `libx264` preset. The whole span from `medium` to `ultrafast` is 15% of a render, so `slow` is nearly free here. |
+| `output` | string | no | — | Where the mp4 goes, worktree-relative unless absolute. Defaults to `build/flutterware/video/<scenario>.mp4` under the package. |
+
 #### `new` — New scenario
 
 Writes a runnable scenario file where the package keeps them, and reports the command that runs it. The scaffold pumps a stub app and drives it, so it passes as written — replace the stub with your own widget. Start here when you have never written one: it is the API, in a file that already works.

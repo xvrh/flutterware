@@ -90,6 +90,29 @@ class ScenarioMotionFrames {
   bool get hasMotion => bytes.length > 1;
 }
 
+/// What a settle loop hands its frames to.
+///
+/// Two things record a run's frames and they want opposite lifetimes: the
+/// panel's recorder ([ScenarioMotionRecorder]) banks one transition and hands
+/// the lot over when the step captures, while a film (`ScenarioFilm`) keeps
+/// every frame of the whole scenario and has to spill them to disk as it
+/// goes. The loops care about neither — they pump, they hand over, and they
+/// let the sink say when it needs a turn of the real event loop.
+abstract class ScenarioFrameSink {
+  /// The fake time between frames — what the loop pumps by while this sink is
+  /// following it.
+  Duration get interval;
+
+  /// Keeps the frame currently on screen.
+  void capture(WidgetTester tester);
+
+  /// A chance to pay for what has been banked, after a frame was captured.
+  ///
+  /// Nothing for a sink that drains at the step; a `runAsync` and a batch of
+  /// files for one that cannot hold a film in memory.
+  Future<void> flush(WidgetTester tester) async {}
+}
+
 /// Collects one transition's frames, a handle at a time.
 ///
 /// The mechanism the whole feature rests on: `toImageSync` returns without
@@ -97,7 +120,7 @@ class ScenarioMotionFrames {
 /// for the pixels once, later, in the single `runAsync` the capture already
 /// opens. A `toImage` per frame would need a `runAsync` per frame, and that
 /// fixed cost is what makes the naive version 25× slower.
-class ScenarioMotionRecorder {
+class ScenarioMotionRecorder implements ScenarioFrameSink {
   ScenarioMotionRecorder(this.settings);
 
   final MotionRecording settings;
@@ -109,7 +132,13 @@ class ScenarioMotionRecorder {
   /// animation that ended there.
   var _dropped = 0;
 
+  @override
   Duration get interval => settings.interval;
+
+  /// Nothing: the frames are banked until the step captures, which is what
+  /// makes one `runAsync` pay for a whole transition. See [drain].
+  @override
+  Future<void> flush(WidgetTester tester) async {}
 
   /// Keeps the frame currently on screen.
   ///
@@ -118,6 +147,7 @@ class ScenarioMotionRecorder {
   /// may not fail one. Before the first `pumpWidget` there is no layer to
   /// read, which is not an error but the first frame of a movie that has not
   /// started.
+  @override
   void capture(WidgetTester tester) {
     if (_frames.length >= settings.maxFrames) {
       _dropped++;

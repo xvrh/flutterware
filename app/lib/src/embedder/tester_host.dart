@@ -396,7 +396,17 @@ class TesterHost {
       // that deadlocks any `tester.runAsync` that itself loads an asset, and
       // is why `flutter test` hangs on a scenario that generates a PDF. The
       // program gives the boot a real-async turn instead.
+      //
+      // **And not inherited either**, which is why the parent's environment is
+      // copied by hand rather than taken. `flutter test` sets that variable in
+      // the process it runs a test in, so a guest spawned from inside one — an
+      // integration test, this repo's own film dump — used to inherit a path
+      // to the *host* package's bundle and answer every asset read from it:
+      // the app under test then fails with "the asset does not exist" for
+      // files that are sitting in its own bundle.
+      includeParentEnvironment: false,
       environment: {
+        ...Platform.environment,
         'FLUTTER_TEST': 'true',
         // Windows resolves a loaded DLL's *own* dependencies through the
         // executable's directory and PATH, not through the directory the DLL
@@ -408,7 +418,7 @@ class TesterHost {
           'PATH':
               '${p.join(_assetsDir!, nativeAssetsDirName)};'
               '${Platform.environment['PATH'] ?? ''}',
-      },
+      }..remove('UNIT_TEST_ASSETS'),
       // `flutter test` runs the tester from the package root, so a fixture
       // read at a relative path resolves there. Inherited, this would be
       // wherever `fw` happened to be started from.

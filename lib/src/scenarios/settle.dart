@@ -39,9 +39,10 @@ const _frameInterval = Duration(milliseconds: 100);
 /// frame and leaves every earlier one with a hole in it.
 ///
 /// This is also the one place a run records **motion**: a policy that owns its
-/// pump loop hands every frame to the [ScenarioMotionRecorder] a run passes,
-/// and pumps at that recorder's finer interval while it does. One seam, and
-/// no verb had to learn anything.
+/// pump loop hands every frame to the [ScenarioFrameSink] a run passes, and
+/// pumps at that sink's finer interval while it does. One seam, and no verb
+/// had to learn anything — a panel recording a transition and a film
+/// recording a whole scenario arrive here as the same hook.
 sealed class Settle {
   const Settle();
 
@@ -171,7 +172,7 @@ sealed class Settle {
   /// every frame of the movie behind it is a hole.
   Future<bool> apply(
     WidgetTester tester, {
-    ScenarioMotionRecorder? record,
+    ScenarioFrameSink? record,
     Future<void> Function()? land,
   });
 }
@@ -188,7 +189,7 @@ class _Budgeted extends Settle {
   @override
   Future<bool> apply(
     WidgetTester tester, {
-    ScenarioMotionRecorder? record,
+    ScenarioFrameSink? record,
     Future<void> Function()? land,
   }) async {
     // Our own loop rather than `pumpAndSettle(timeout:)`: the SDK's version
@@ -206,6 +207,7 @@ class _Budgeted extends Settle {
       await tester.pump(interval);
       elapsed += interval;
       record?.capture(tester);
+      await record?.flush(tester);
     } while (tester.binding.hasScheduledFrame && elapsed < budget);
     return !tester.binding.hasScheduledFrame;
   }
@@ -222,7 +224,7 @@ class _Elapsed extends Settle {
   @override
   Future<bool> apply(
     WidgetTester tester, {
-    ScenarioMotionRecorder? record,
+    ScenarioFrameSink? record,
     Future<void> Function()? land,
   }) async {
     // [_Budgeted]'s loop kept in the same shape on purpose — same interval,
@@ -235,6 +237,7 @@ class _Elapsed extends Settle {
       await tester.pump(interval);
       elapsed += interval;
       record?.capture(tester);
+      await record?.flush(tester);
     } while (elapsed < budget);
     return !tester.binding.hasScheduledFrame;
   }
@@ -249,12 +252,13 @@ class _None extends Settle {
   @override
   Future<bool> apply(
     WidgetTester tester, {
-    ScenarioMotionRecorder? record,
+    ScenarioFrameSink? record,
     Future<void> Function()? land,
   }) async {
     await land?.call();
     await tester.pump();
     record?.capture(tester);
+    await record?.flush(tester);
     return !tester.binding.hasScheduledFrame;
   }
 }
@@ -271,7 +275,7 @@ class _Frames extends Settle {
   @override
   Future<bool> apply(
     WidgetTester tester, {
-    ScenarioMotionRecorder? record,
+    ScenarioFrameSink? record,
     Future<void> Function()? land,
   }) async {
     // [interval] is the author's, not the recorder's: `Settle.frames(3)` says
@@ -280,6 +284,7 @@ class _Frames extends Settle {
       await land?.call();
       await tester.pump(interval);
       record?.capture(tester);
+      await record?.flush(tester);
     }
     return !tester.binding.hasScheduledFrame;
   }
@@ -291,7 +296,7 @@ class _Full extends Settle {
   @override
   Future<bool> apply(
     WidgetTester tester, {
-    ScenarioMotionRecorder? record,
+    ScenarioFrameSink? record,
     Future<void> Function()? land,
   }) async {
     // Around the loop, because `pumpAndSettle` owns its own and there is

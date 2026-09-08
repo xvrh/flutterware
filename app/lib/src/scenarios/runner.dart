@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 // ignore: implementation_imports
 import 'package:flutterware/src/scenarios/network_mode.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/scenarios/film_settings.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/scenarios/pixels.dart';
 import 'package:meta/meta.dart';
@@ -16,6 +19,10 @@ import 'harness_entrypoint.dart';
 /// Which steps a run photographs, as callers of [ScenarioRunner.run] name it.
 // ignore: implementation_imports
 export 'package:flutterware/src/scenarios/pixels.dart';
+
+/// How a run renders a film, as callers of [ScenarioRunner.run] name it.
+// ignore: implementation_imports
+export 'package:flutterware/src/scenarios/film_settings.dart' show FilmSettings;
 
 /// One scenario listed by the live harness — ground truth, where the scan is
 /// provisional.
@@ -303,6 +310,14 @@ class ScenarioRunner {
     /// When no device is named, frame each file on the *narrowest* device its
     /// folder profile declares instead of the first — the probe's geometry.
     bool narrowestDevice = false,
+
+    /// Render this run as a **film**: every pumped frame kept at the film's
+    /// own pace, the verbs given a cursor that travels and presses, and the
+    /// frames written to [FilmSettings.directory] for an encoder to drain.
+    ///
+    /// A film is one scenario and one path through it, so a run that asks for
+    /// one names the scenario and — where it splits — its branches.
+    FilmSettings? film,
   }) => _host.exclusive(() async {
     var wasWarm = _host.isWarm;
     await _host.ensureGuest();
@@ -332,6 +347,23 @@ class ScenarioRunner {
           'recordIntervalMs': '${recordInterval.inMilliseconds}',
           if (recordScale != null) 'recordScale': '$recordScale',
           'recordMaxFrames': '$recordMaxFrames',
+        },
+        // A film's settings travel whole, because every one of them changes
+        // what the frames *are*: the pace they were pumped at, the size they
+        // were drawn at, and the path through the scenario that produced them.
+        if (film case var film?) ...{
+          'filmDir': film.directory,
+          'filmFps': '${film.fps}',
+          'filmScale': '${film.scale}',
+          if (film.branches.isNotEmpty)
+            'filmBranches': jsonEncode(film.branches),
+          'filmOpenMs': '${film.open.inMilliseconds}',
+          'filmTravelMs': '${film.travel.inMilliseconds}',
+          'filmAimMs': '${film.aim.inMilliseconds}',
+          'filmPressMs': '${film.press.inMilliseconds}',
+          'filmDwellMs': '${film.dwell.inMilliseconds}',
+          'filmCloseMs': '${film.close.inMilliseconds}',
+          'filmMaxFrames': '${film.maxFrames}',
         },
         if (clock ?? projectClock case var origin?)
           'clock': origin.toIso8601String(),

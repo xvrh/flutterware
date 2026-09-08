@@ -125,7 +125,7 @@ Future<({bool settled, bool landed})> landRealWork(
   required bool settled,
   required RealWorkBudget budget,
   ScenarioAssetBundle? assets,
-  ScenarioMotionRecorder? record,
+  ScenarioFrameSink? record,
   void Function()? beforePump,
 }) async {
   if (!settled) {
@@ -145,6 +145,7 @@ Future<({bool settled, bool landed})> landRealWork(
     // but without the last of them the movie ends on a frame the still does
     // not match, which is the hole this whole file exists to close.
     record?.capture(tester);
+    await record?.flush(tester);
     // Read again rather than repeated: the turns above may have drawn the
     // frame the policy was waiting on — a spinner whose future landed — and
     // a strict policy would otherwise fail a screen that is now quiet.

@@ -25,6 +25,7 @@ import '../inspect/guest_inspect.dart';
 import '../real_work/tracker.dart';
 import 'async_watchdog.dart';
 import '../app_events/events.dart';
+import 'film.dart';
 import 'fonts.dart';
 import 'motion.dart';
 import 'network.dart';
@@ -678,6 +679,7 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       null => null,
       var raw => int.parse(raw),
     },
+    film: _parseFilm(args, number),
     record: switch (number('recordIntervalMs')) {
       null => null,
       var interval => MotionRecording(
@@ -710,11 +712,59 @@ ScenarioRunArgs? _parseRunArgs(Map<String, String> args) {
       !runArgs.captureNative &&
       runArgs.pixels == ScenarioPixels.all &&
       runArgs.record == null &&
+      runArgs.film == null &&
       runArgs.clockOrigin == null &&
       runArgs.network == null &&
       runArgs.assignment == null &&
       runArgs.expandTranslations == null;
   return untouched ? null : runArgs;
+}
+
+/// The film settings a render request carries, or null for every ordinary run.
+///
+/// `filmDir` is what turns it on: everything else has a default, and a request
+/// that names a directory is a request for a video in it. Refused beside
+/// `record` rather than silently preferred — the two want the same seam and
+/// opposite things from it, and a caller that asked for both has misunderstood
+/// which run this is.
+FilmSettings? _parseFilm(
+  Map<String, String> args,
+  double? Function(String key) number,
+) {
+  var directory = args['filmDir'];
+  if (directory == null) return null;
+  if (args['recordIntervalMs'] != null) {
+    throw ArgumentError(
+      'a run renders a film or records motion, not both: `filmDir` asks for '
+      "every frame of the scenario at the film's own pace, and "
+      '`recordIntervalMs` asks for the frames of each transition at the '
+      "panel's. Drop one.",
+    );
+  }
+  Duration? beat(String key) => switch (number(key)) {
+    null => null,
+    var ms => Duration(microseconds: (ms * 1000).round()),
+  };
+  var defaults = FilmSettings(directory: directory);
+  return FilmSettings(
+    directory: directory,
+    fps: number('filmFps')?.round() ?? defaults.fps,
+    scale: number('filmScale') ?? defaults.scale,
+    branches: switch (args['filmBranches']) {
+      null => const [],
+      // JSON rather than a comma-separated list: a branch is a label an author
+      // wrote in a sentence, and `'pay by card, then refund'` is a plausible
+      // one.
+      var raw => [for (var name in jsonDecode(raw) as List) '$name'],
+    },
+    open: beat('filmOpenMs') ?? defaults.open,
+    travel: beat('filmTravelMs') ?? defaults.travel,
+    aim: beat('filmAimMs') ?? defaults.aim,
+    press: beat('filmPressMs') ?? defaults.press,
+    dwell: beat('filmDwellMs') ?? defaults.dwell,
+    close: beat('filmCloseMs') ?? defaults.close,
+    maxFrames: number('filmMaxFrames')?.round() ?? defaults.maxFrames,
+  );
 }
 
 Future<Map<String, Object?>> _run(

@@ -20,6 +20,7 @@ import '../translations/index.dart';
 import 'aim.dart';
 import 'asset_bundle.dart';
 import 'async_watchdog.dart';
+import 'film.dart';
 import '../app_events/events.dart';
 import '../devices.dart';
 import 'keyboard.dart';
@@ -444,8 +445,34 @@ Future<void> _runScenario(
   var network = ScenarioNetworkPolicy(reach);
   scenarioNetworkModesRun.add(reach);
   var restoreNetwork = installScenarioNetwork(network);
+  // A film renders one scenario: a second one's frames would land in the same
+  // directory and encode as one clip. Which scenario is the host's to select,
+  // and this only refuses to guess.
+  var film = switch (scenarioRunArgs?.film) {
+    null => null,
+    var settings => startFilm(
+      settings,
+      scenario: description,
+      // The film pumps frames of its own between the verbs, and the software
+      // keyboard moves on this hook — the same one every settle policy gives
+      // it. Without it the slab stands still through a whole beat and arrives
+      // after the typing it belongs to.
+      beforePump: keyboard.step,
+      // What the cursor will be drawn as. A phone is touched and a window is
+      // pointed at, and the stage already knows which this is.
+      touch: switch (assignment?.orientedDevice?.platform) {
+        DevicePlatform.macos ||
+        DevicePlatform.windows ||
+        DevicePlatform.linux => false,
+        _ => true,
+      },
+    ),
+  };
   _countFrames(tester);
-  var state = _ReplayState();
+  var state = _ReplayState(
+    branches: film?.settings.branches,
+    scenario: description,
+  );
   // Under the runner only: every exception the binding sees goes into the
   // harness's buffer *before* the binding aggregates. Two exceptions in one
   // test otherwise reach the report as the sentence "Multiple exceptions (2)
@@ -528,6 +555,7 @@ Future<void> _runScenario(
         assets,
         keyboard,
         network,
+        film,
       );
       // Reachable from outside the body while the body runs, for the one
       // reader that needs it there: the harness's deadline.
@@ -535,6 +563,9 @@ Future<void> _runScenario(
       try {
         await body(s);
         s._flushPending();
+        // The closing hold, once the body is through: a film that cut on the
+        // frame its last verb happened to land on would end mid-gesture.
+        await film?.close(tester);
       } catch (error, stack) {
         var inContext = s._inContext(error);
         // The binding reports this rethrow only after the body — after the
@@ -581,6 +612,16 @@ Future<void> _runScenario(
       stderr.writeln('[flutterware] $said');
     }
   } finally {
+    // Whatever happened — a film cut short by a failure is still a film, and
+    // its timeline is what says how many frames there are and where they
+    // stop. Never allowed to throw over the failure that got us here.
+    if (film != null) {
+      try {
+        await film.finish(tester);
+      } catch (error) {
+        stderr.writeln('[flutterware] the film could not be written: $error');
+      }
+    }
     // Unconditional, because the chain above is: the binding asserts at the
     // end that it got its own handler back.
     FlutterError.onError = priorOnError;
@@ -681,7 +722,10 @@ void _countFrames(WidgetTester tester) {
 /// What survives across a scenario's replays: which paths ran, which step
 /// positions were already captured, and the global step numbering.
 class _ReplayState {
-  final plan = _SplitPlan();
+  _ReplayState({List<String>? branches, String scenario = ''})
+    : plan = _SplitPlan(stated: branches, scenario: scenario);
+
+  final _SplitPlan plan;
 
   SemanticsHandle? _semantics;
 
@@ -719,25 +763,74 @@ class _ReplayState {
 /// [advance] bumps the deepest split that still has an unvisited branch and
 /// drops everything after it.
 class _SplitPlan {
+  _SplitPlan({this.stated, this.scenario = ''});
+
+  /// The branches a **film** was told to take, outermost first — null for
+  /// every ordinary run, which walks all of them.
+  ///
+  /// A film is one path through the scenario and which path it is is the
+  /// author's call: a suite wants every branch and a video wants the one
+  /// worth watching, so the enumeration below is replaced by a walk of what
+  /// was named rather than defaulted to the first of each.
+  final List<String>? stated;
+
+  /// Whose splits these are, for the refusal.
+  final String scenario;
+
   final _stack = <({int choice, int count})>[];
   var _cursor = 0;
 
   void beginRun() => _cursor = 0;
 
   /// The branch to take at the next split of the current run.
-  int choose(int count) {
+  int choose(List<String> names) {
     if (_cursor < _stack.length) return _stack[_cursor++].choice;
-    _stack.add((choice: 0, count: count));
+    var choice = stated == null ? 0 : _stated(names);
+    // Pushed in both modes, because the choice path is half of every capture's
+    // position: a stated walk that recorded nothing here would give the first
+    // step after a split the same key as the first step before it, and the
+    // second of them would be recognised as already captured and skipped.
+    _stack.add((choice: choice, count: names.length));
     _cursor++;
-    return 0;
+    return choice;
+  }
+
+  /// The stated branch for the split now being entered, or the refusal that
+  /// says what could have been named.
+  int _stated(List<String> names) {
+    var stated = this.stated!;
+    var quoted = [for (var name in names) '`$name`'];
+    // `a`, `b` and `c` — a list of four joined by three "and"s reads as one
+    // long name.
+    var listed = quoted.length < 2
+        ? quoted.join()
+        : '${quoted.take(quoted.length - 1).join(', ')} and ${quoted.last}';
+    if (_cursor >= stated.length) {
+      throw ScenarioFilmRefusal(
+        '`$scenario` splits into $listed, and a film is one path. Name it: '
+        "--branch='${names.first}'. Nested splits take one --branch each, "
+        'outermost first.',
+      );
+    }
+    var wanted = stated[_cursor];
+    var index = names.indexOf(wanted);
+    if (index < 0) {
+      throw ScenarioFilmRefusal(
+        '`$scenario` has no branch called `$wanted` here — it splits into '
+        '$listed.',
+      );
+    }
+    return index;
   }
 
   /// The choices consumed so far this run — the position key's path half.
   String get path =>
       [for (var entry in _stack.take(_cursor)) entry.choice].join('.');
 
-  /// Moves to the next unvisited path; false when every path has run.
+  /// Moves to the next unvisited path; false when every path has run — and
+  /// false at once for a film, which walks the one path it was given.
   bool advance() {
+    if (stated != null) return false;
     while (_stack.isNotEmpty && _stack.last.choice + 1 >= _stack.last.count) {
       _stack.removeLast();
     }
@@ -787,6 +880,7 @@ class ScenarioTester {
     this.assets,
     this._keyboard,
     this.network,
+    this._film,
   );
 
   /// The real tester — the escape hatch to the full `flutter_test` surface.
@@ -929,6 +1023,18 @@ class ScenarioTester {
       ? ScenarioMotionRecorder(scenarioRunArgs!.record!)
       : null;
 
+  /// The film being rendered, when this run is rendering one — created once
+  /// per scenario, above the replay loop, because a film spans the whole of
+  /// one path and not one branch of it.
+  final ScenarioFilm? _film;
+
+  /// What the settle loops hand their frames to.
+  ///
+  /// One or the other, never both: an evidence run banks a transition for the
+  /// panel and a film run keeps everything and spills it to disk, and the
+  /// harness refuses a request that asks for the two at once.
+  late final ScenarioFrameSink? _sink = _recorder ?? _film;
+
   Future<void> pumpWidget(Widget widget, {Shot? shot, Settle? settle}) => _step(
     shot,
     settle,
@@ -1030,6 +1136,7 @@ class ScenarioTester {
     () async {
       var finder = await _resolve(target, 'tap');
       _aimAt(finder);
+      await _approach('tap');
       await tester.tap(finder, warnIfMissed: false);
     },
     verb: 'tap',
@@ -1042,6 +1149,7 @@ class ScenarioTester {
     () async {
       var finder = await _resolve(target, 'longPress');
       _aimAt(finder);
+      await _approach('longPress');
       await tester.longPress(finder, warnIfMissed: false);
     },
     verb: 'longPress',
@@ -1068,7 +1176,25 @@ class ScenarioTester {
       // region the text lands in is the honest one. A point target would
       // otherwise box the render object under the finger.
       _aimAt(editable);
-      await tester.enterText(editable, text);
+      await _approach('enterText');
+      // A film types; a run sets the value. The verb hands the setter over
+      // rather than the film reaching for the editable, so what lands in the
+      // field is the same call either way — see [ScenarioFilm.type].
+      if (_film case var film?) {
+        await film.type(
+          tester,
+          text,
+          (value) => tester.enterText(editable, value),
+          // Measured rather than remembered, and deliberately not through
+          // [_aimAt]: the mark on the step is where the verb *aimed*, which is
+          // the frame it acted on, and the cursor following the field up is a
+          // different question asked ten frames later.
+          follow: () =>
+              _boundsOf(editable.evaluate().firstOrNull?.renderObject)?.center,
+        );
+      } else {
+        await tester.enterText(editable, text);
+      }
     },
     verb: 'enterText',
     target: describeTarget(target),
@@ -1100,7 +1226,10 @@ class ScenarioTester {
     () async {
       var finder = await _resolve(target, 'drag');
       _aimAt(finder, by: by);
-      if (duration == null) {
+      await _approach('drag');
+      if (_film case var film?) {
+        await film.dragBy(tester, by, over: duration);
+      } else if (duration == null) {
         await tester.drag(finder, by, warnIfMissed: false);
       } else {
         await tester.timedDrag(finder, by, duration, warnIfMissed: false);
@@ -1140,7 +1269,10 @@ class ScenarioTester {
       // where it is told, and a point over nothing drags nothing silently,
       // where every finder verb would have refused.
       _aimAtPoint(from, by: by);
-      if (duration == null) {
+      await _approach('dragFrom');
+      if (_film case var film?) {
+        await film.dragBy(tester, by, over: duration);
+      } else if (duration == null) {
         await tester.dragFrom(from, by);
       } else {
         await tester.timedDragFrom(from, by, duration);
@@ -1242,6 +1374,34 @@ class ScenarioTester {
         if (finder.evaluate().isNotEmpty) return;
       }
       try {
+        // A film walks it with a thumb. Same walk, same step, same stopping
+        // condition — and the same tail, so the alignment it ends on and the
+        // refusal it throws are the SDK's rather than a second version of
+        // them. See [ScenarioFilm.scroll].
+        if ((_film, _boundsOf(scrollables.first.renderObject)) case (
+          var film?,
+          var pane?,
+        )) {
+          await film.scroll(
+            tester,
+            pane: pane,
+            by: switch ((scrollables.first.widget as Scrollable)
+                .axisDirection) {
+              AxisDirection.up => Offset(0, step),
+              AxisDirection.down => Offset(0, -step),
+              AxisDirection.left => Offset(step, 0),
+              AxisDirection.right => Offset(-step, 0),
+            },
+            until: () => finder.evaluate().isNotEmpty,
+            maxScrolls: maxScrolls,
+          );
+          // `dragUntilVisible`'s own last line, and its own way of failing: an
+          // empty `single` is the `StateError` the catch below turns into the
+          // exhaustion message.
+          await Scrollable.ensureVisible(finder.evaluate().single);
+          await tester.pump();
+          return;
+        }
         await tester.scrollUntilVisible(
           finder,
           step,
@@ -1590,6 +1750,23 @@ class ScenarioTester {
     );
   }
 
+  /// Flies the film's cursor to what the verb just measured, and presses.
+  ///
+  /// Nothing at all on an ordinary run — there is no cursor, and the verb goes
+  /// straight from resolving its target to touching it. On a film run this is
+  /// the only moment both halves are true: the box has been measured, and the
+  /// app has not been touched yet.
+  ///
+  /// Called by the verbs with a finger and by no others. `scrollTo` and the
+  /// keyboard verbs act on a *region* — which pane, which way — and a mark
+  /// promising a contact point they never make would be the picture lying
+  /// about the gesture.
+  Future<void> _approach(String verb) async {
+    if ((_film, _aim) case (var film?, var aim?)) {
+      await film.approach(tester, aim, verb: verb);
+    }
+  }
+
   /// The mark for a verb aimed at a bare point — [dragFrom].
   ///
   /// A box of no size, which is the honest shape of what the author said: a
@@ -1764,7 +1941,13 @@ class ScenarioTester {
       // otherwise a movie of a tap opens on the frame after the tap and the
       // "before" is nowhere in it.
       _recorder?.capture(tester);
+      // The film's frames are continuous, so there is nothing to bank here —
+      // what it wants is the *name* of the stretch about to be filmed. A verb
+      // with a finger re-marks this from inside [_approach], with the travel
+      // and the press between the two marks.
+      _film?.act(verb: verb, target: target);
       result = await action();
+      _film?.release();
       // One purse for the whole step: the policy's frames draw whatever has
       // announced itself as they go — otherwise fake time runs the transition
       // out in a few real milliseconds and every frame of the movie behind the
@@ -1774,7 +1957,7 @@ class ScenarioTester {
       var budget = RealWorkBudget(trackedWait: null);
       settled = await policy.apply(
         tester,
-        record: _recorder,
+        record: _sink,
         // The keyboard rides the same between-frames hook the real work does,
         // and for a related reason: it has to move *between* the policy's
         // frames or the slide is not in them. Writing the view schedules a
@@ -1793,7 +1976,7 @@ class ScenarioTester {
         settled: settled,
         budget: budget,
         assets: assets,
-        record: _recorder,
+        record: _sink,
         beforePump: _keyboard.step,
       );
       // After the landing and not before it: a strict policy is red about
@@ -1826,6 +2009,10 @@ class ScenarioTester {
       adopt: adopt,
       autoShotNeedsFrames: autoShotNeedsFrames,
     );
+    // After the capture rather than before it, so the film changes neither
+    // what the step's picture is of nor whether a verb that drew nothing is
+    // allowed to skip its shot.
+    await _film?.dwell(tester);
     return result;
   }
 
@@ -1874,7 +2061,7 @@ class ScenarioTester {
   Future<void> split(Map<String, Future<void> Function()> branches) async {
     if (branches.isEmpty) return;
     var names = branches.keys.toList();
-    var name = names[_state.plan.choose(names.length)];
+    var name = names[_state.plan.choose(names)];
     // A new segment: positions restart under the extended choice path, and
     // the branch's first capture wears the label.
     _ordinal = 0;
