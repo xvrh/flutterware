@@ -7,12 +7,16 @@
 // So the graders here are the round trip on both sides of that line, the
 // constructor resolving the same way a parsed node does, and the editor's
 // three doors: apply, override (any edit), reset.
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
 import 'package:flutterware_app/src/scene/args_codegen.dart';
 import 'package:flutterware_app/src/scene/editor.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:flutterware_app/src/scene/tokens_file.dart';
+import 'package:flutterware_app/src/scene/ui/inspector.dart';
+import 'package:flutterware_app/src/ui/theme.dart';
 
 const _declaration = '''
 import 'package:flutterware/scene_authoring.dart';
@@ -341,6 +345,87 @@ final sceneTokens = [
     );
     editor.resetToStyle(t, 'layers');
     expect(inheritsFromStyle(doc, t, 'layers'), isTrue);
+  });
+
+  testWidgets('the panel separates all three states a property can be in', (
+    tester,
+  ) async {
+    // Under a style a property is in one of three states, and the panel has
+    // to tell them apart: the style decides it, the node has typed over it,
+    // or the style says nothing about it and the value is the node's own.
+    // Marking only the override made the first and the last identical, which
+    // is the same as never saying which properties the style is made of.
+    var t = TextNode('Hi', name: 'headline');
+    var doc = SceneDocument(FrameNode(name: 'root')..children.add(t))
+      ..tokens.add(
+        const SceneTokenDecl.style(
+          'display',
+          SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700),
+        ),
+      );
+    var editor = SceneEditor(doc)..applyStyle(t, 'display');
+    editor.select(t);
+    // The panel is a lazy list: a viewport taller than the test surface
+    // builds only what fits on it, and the type section is below the fold.
+    tester.view.physicalSize = const Size(400, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: appTheme,
+        home: Scaffold(
+          body: AnimatedBuilder(
+            animation: editor.listenable,
+            builder: (context, _) => Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 320,
+                height: 1600,
+                child: SceneInspector(editor),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      find.byIcon(Icons.link_off),
+      findsNothing,
+      reason: 'nothing is typed over yet',
+    );
+    // The tooltip is what separates the style's mark from the plug every
+    // free property carries — both are a link icon, and only one of them
+    // says whose value this is.
+    expect(
+      find.byTooltip('display decides this'),
+      findsNWidgets(2),
+      reason: 'fontSize and weight, and nothing else the style leaves alone',
+    );
+
+    // The editor coalesces its notification onto a post-frame callback, so
+    // a single pump paints the frame that schedules it and not the one that
+    // shows it.
+    editor.perform('Size', () => t.fontSize = 66);
+    await tester.pump();
+    await tester.pump();
+    // ignore: avoid_print
+    expect(
+      find.byTooltip('Typed over display — click to take its value back'),
+      findsOneWidget,
+    );
+    expect(
+      find.byTooltip('display decides this'),
+      findsOneWidget,
+      reason: 'the overridden row swapped its mark, weight kept its own',
+    );
+
+    await tester.tap(find.byIcon(Icons.link_off));
+    await tester.pump();
+    await tester.pump();
+    expect(t.fontSize, 54, reason: "the style's value came back");
+    expect(find.byIcon(Icons.link_off), findsNothing);
+    expect(find.byTooltip('display decides this'), findsNWidgets(2));
   });
 
   test('the wire spells a style apart from a token', () {

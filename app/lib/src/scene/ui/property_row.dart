@@ -45,18 +45,23 @@ enum PropertyOrigin {
   bool get isBound => this != own && this != style;
 }
 
-/// A property the node has typed over its style: the broken link, and the
-/// way back.
+/// What a shared style says about one property: that it decides it, or that
+/// the node has typed over it and here is the way back.
 ///
 /// One icon carries every state of "something else drives this" — faint for
-/// a property nothing drives yet, solid on a binding's chip, broken here —
-/// so the panel has one vocabulary rather than a link idiom for bindings and
-/// an arrow idiom for styles.
+/// a property nothing drives yet, solid where a style or a binding does,
+/// broken where the node has diverged — so the panel has one vocabulary
+/// rather than a link idiom for bindings and an arrow idiom for styles.
 ///
-/// An INHERITED property shows nothing. Under a style, inheriting is the
-/// normal state; marking a dozen rows with the same name is noise, and the
-/// file says the same thing — `tokens.display.copyWith(weight: …)` names the
-/// override and nothing else. What is worth a mark is the divergence.
+/// Three states, because a property under a style is in one of three and the
+/// panel has to separate all of them: the style decides it, the node has
+/// typed over it, or the style says nothing about it at all and the value is
+/// the node's own. Showing only the override made the first and the last
+/// identical, which is the same as not saying which properties the style is
+/// made of.
+///
+/// The NAME is not repeated per row — that was `← display` twelve times down
+/// a panel. It rides in the tooltip, and in full on the Style row.
 ///
 /// Its own widget because the paint stack is a style property like any other
 /// and does not fit in a [PropertyRow] — it draws a list with a header of
@@ -77,13 +82,20 @@ class PropertyOriginMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (origin != PropertyOrigin.style || !overridden) {
-      return const SizedBox.shrink();
+    if (origin != PropertyOrigin.style) return const SizedBox.shrink();
+    var name = sourceName ?? 'the style';
+    if (!overridden) {
+      return Tooltip(
+        message: '$name decides this',
+        child: Icon(
+          Icons.link,
+          size: FwIconSize.sm,
+          color: context.colors.accent,
+        ),
+      );
     }
     return Tooltip(
-      message:
-          'Typed over ${sourceName ?? 'the style'} — click to take its '
-          'value back',
+      message: 'Typed over $name — click to take its value back',
       child: Tappable(
         onTap: onReset,
         child: Icon(
@@ -227,11 +239,11 @@ class _PropertyRowState extends State<PropertyRow> {
   /// are the properties something else can drive.
   List<Widget> _marker(BuildContext context, TextStyle caption) {
     var colors = context.colors;
-    // Typed over a style: the broken link takes the slot. The plug is still
+    // Under a style: the style's own mark takes the slot. The plug is still
     // there on a right-click — a property under a style can still be bound to
     // a parameter — but two icons in a 129px label line is a crowd, and this
     // is the one that has something to say.
-    if (widget.origin == PropertyOrigin.style && widget.overridden) {
+    if (widget.origin == PropertyOrigin.style) {
       return [
         PropertyOriginMark(
           origin: widget.origin,
