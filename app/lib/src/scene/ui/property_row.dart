@@ -256,7 +256,10 @@ class _PropertyRowState extends State<PropertyRow> {
     if (widget.origin.isBound || widget.onBind == null) return const [];
     return [
       Opacity(
-        opacity: _hovered ? 1 : 0.35,
+        // Measured on the real window rather than in a preview: 0.35 of a
+        // muted grey at 14px is legible in a screenshot and not on a
+        // display, which is the whole job of this mark.
+        opacity: _hovered ? 1 : 0.6,
         child: GestureDetector(
           onTapDown: (d) => widget.onBind!(d.globalPosition),
           child: Padding(

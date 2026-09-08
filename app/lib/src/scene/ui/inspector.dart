@@ -693,7 +693,7 @@ class SceneInspector extends StatelessWidget {
   );
 
   static String _sectionOf(SceneNode node) => switch (node) {
-    TextNode() => 'Type',
+    TextNode() => 'Text',
     FrameNode() => 'Frame',
     ShapeNode() => 'Shape',
     ExternalNode() => 'Widget',
@@ -708,8 +708,12 @@ class SceneInspector extends StatelessWidget {
     ),
   );
 
+  /// A text is two arguments — `TextNode(text, style: …)` — and the panel
+  /// says so: the content, then everything the style carries, inside one
+  /// railed block under its own header. Which properties ARE the style was
+  /// the thing a reader could not see; a fold called *More type* holding
+  /// four of them did not help.
   List<Widget> _textProps(BuildContext context, TextNode t) => [
-    ..._styleRow(context, t),
     _prop(
       context,
       t,
@@ -725,6 +729,25 @@ class SceneInspector extends StatelessWidget {
         onChanged: (v) => _door('text', () => t.text = v),
       ),
     ),
+    ..._styleHeader(context, t),
+    Container(
+      margin: const EdgeInsets.only(bottom: FwSpacing.md),
+      padding: const EdgeInsets.only(left: FwSpacing.md),
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: context.colors.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: _styleFields(context, t),
+      ),
+    ),
+  ];
+
+  /// Every field a [SceneTextStyle] carries, in the order they are reached
+  /// for. Nothing is behind a fold but the decoration family, which is four
+  /// properties nobody sets one of.
+  List<Widget> _styleFields(BuildContext context, TextNode t) => [
     _prop(
       context,
       t,
@@ -756,6 +779,20 @@ class SceneInspector extends StatelessWidget {
         FwChoice(value: SceneFontWeight.w900, label: 'Black'),
       ], (v) => _door('weight', () => t.weight = v)),
     ]),
+    // Slant is a face, so it sits with the face; Case transforms the words,
+    // and the pair is what a display line is set with.
+    _row([
+      _choice(t, 'italic', 'Slant', t.italic, const [
+        FwChoice(value: false, label: 'Roman'),
+        FwChoice(value: true, label: 'Italic'),
+      ], (v) => _door('italic', () => t.italic = v)),
+      _choice(t, 'textCase', 'Case', t.textCase, const [
+        FwChoice(value: SceneTextCase.none, label: 'As typed'),
+        FwChoice(value: SceneTextCase.upper, label: 'UPPER'),
+        FwChoice(value: SceneTextCase.lower, label: 'lower'),
+        FwChoice(value: SceneTextCase.title, label: 'Title'),
+      ], (v) => _door('textCase', () => t.textCase = v)),
+    ]),
     // Tracking and leading, together: they are read together and a display
     // size wants both moved at once.
     _row([
@@ -775,19 +812,27 @@ class SceneInspector extends StatelessWidget {
       ),
     ]),
     _row([
-      _choice(t, 'align', 'Align', t.align, const [
-        FwChoice(value: SceneTextAlign.left, label: 'Left'),
-        FwChoice(value: SceneTextAlign.center, label: 'Center'),
-        FwChoice(value: SceneTextAlign.right, label: 'Right'),
-        FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
-      ], (v) => _door('align', () => t.align = v)),
-      _choice(t, 'textCase', 'Case', t.textCase, const [
-        FwChoice(value: SceneTextCase.none, label: 'As typed'),
-        FwChoice(value: SceneTextCase.upper, label: 'UPPER'),
-        FwChoice(value: SceneTextCase.lower, label: 'lower'),
-        FwChoice(value: SceneTextCase.title, label: 'Title'),
-      ], (v) => _door('textCase', () => t.textCase = v)),
+      _number(
+        'wordSpacing',
+        'Word spacing',
+        _shown(t, 'wordSpacing', t.wordSpacing),
+        SceneNumberShape.of(propSpecFor(t, 'wordSpacing')),
+        apply: (v) => t.wordSpacing = v,
+      ),
+      _number(
+        'maxLines',
+        'Max lines',
+        (t.maxLines ?? 0).toDouble(),
+        const SceneNumberShape(perPixel: 0.1, decimals: 0, min: 0, softMax: 10),
+        apply: (v) => t.maxLines = v < 1 ? null : v.round(),
+      ),
     ]),
+    _choice(t, 'align', 'Align', t.align, const [
+      FwChoice(value: SceneTextAlign.left, label: 'Left'),
+      FwChoice(value: SceneTextAlign.center, label: 'Center'),
+      FwChoice(value: SceneTextAlign.right, label: 'Right'),
+      FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
+    ], (v) => _door('align', () => t.align = v)),
     _prop(
       context,
       t,
@@ -799,8 +844,6 @@ class SceneInspector extends StatelessWidget {
         onPick: (c) => _set('color', c!, () => t.color = c),
       ),
     ),
-    // Above the disclosure and not inside it: a paint stack is the thing a
-    // poster is made of, and once a text has one it is what you come back to.
     SceneLayerList(
       layers: t.layers,
       fontSize: t.fontSize,
@@ -815,48 +858,20 @@ class SceneInspector extends StatelessWidget {
           editor.perform(label, () => t.layers = next, mergeKey: mergeKey),
     ),
     const SizedBox(height: FwSpacing.md),
-    // The rest is real and rarely touched, which is the whole argument for
-    // putting it behind one tap rather than at the bottom of a column
-    // nobody scrolls.
+    // Four properties nobody sets one of, behind the word that names them.
     Disclosure(
-      label: 'More type',
+      label: 'Decoration',
+      initiallyOpen: t.decoration != SceneTextDecoration.none,
       children: [
-        _row([
-          _choice(t, 'italic', 'Style', t.italic, const [
-            FwChoice(value: false, label: 'Roman'),
-            FwChoice(value: true, label: 'Italic'),
-          ], (v) => _door('italic', () => t.italic = v)),
-          _number(
-            'wordSpacing',
-            'Word spacing',
-            _shown(t, 'wordSpacing', t.wordSpacing),
-            SceneNumberShape.of(propSpecFor(t, 'wordSpacing')),
-            apply: (v) => t.wordSpacing = v,
+        _choice(t, 'decoration', 'Line', t.decoration, const [
+          FwChoice(value: SceneTextDecoration.none, label: 'None'),
+          FwChoice(value: SceneTextDecoration.underline, label: 'Underline'),
+          FwChoice(value: SceneTextDecoration.overline, label: 'Overline'),
+          FwChoice(
+            value: SceneTextDecoration.lineThrough,
+            label: 'Strikethrough',
           ),
-        ]),
-        _row([
-          _choice(t, 'decoration', 'Decoration', t.decoration, const [
-            FwChoice(value: SceneTextDecoration.none, label: 'None'),
-            FwChoice(value: SceneTextDecoration.underline, label: 'Underline'),
-            FwChoice(value: SceneTextDecoration.overline, label: 'Overline'),
-            FwChoice(
-              value: SceneTextDecoration.lineThrough,
-              label: 'Strikethrough',
-            ),
-          ], (v) => _door('decoration', () => t.decoration = v)),
-          _number(
-            'maxLines',
-            'Max lines (0 = all)',
-            (t.maxLines ?? 0).toDouble(),
-            const SceneNumberShape(
-              perPixel: 0.1,
-              decimals: 0,
-              min: 0,
-              softMax: 10,
-            ),
-            apply: (v) => t.maxLines = v < 1 ? null : v.round(),
-          ),
-        ]),
+        ], (v) => _door('decoration', () => t.decoration = v)),
         if (t.decoration != SceneTextDecoration.none) ...[
           _row([
             _choice(
@@ -906,16 +921,13 @@ class SceneInspector extends StatelessWidget {
     ),
   ];
 
-  /// The shared text style, when the package declares any: a picker over
-  /// them, and — once one is applied — one word per property it sets,
-  /// saying whether the node inherits it or overrides it, with the way back.
-  /// Equal is inherited, by decision: there is no flag to show.
-  List<Widget> _styleRow(BuildContext context, TextNode t) {
+  /// The block's own header: what the style is, and the shared one it reads
+  /// when the package declares any.
+  List<Widget> _styleHeader(BuildContext context, TextNode t) {
     var styles = [
       for (var s in doc.tokens)
         if (s.isStyle) s,
     ];
-    if (styles.isEmpty) return const [];
     var bound = switch (t.bindings[styleBindingKey]) {
       StyleRef(:var name) => name,
       _ => null,
@@ -925,20 +937,19 @@ class SceneInspector extends StatelessWidget {
     var colors = context.colors;
     var caption = context.type.caption.copyWith(color: colors.mut2);
     return [
-      // The style IS the link — `tokens.display.copyWith(…)` in the file —
-      // so the label line carries the same icon a bound property's chip
-      // does, and the rows below mark only where the node diverges.
       Padding(
         padding: const EdgeInsets.only(bottom: FwSpacing.xs),
         child: Row(
           children: [
-            Expanded(child: Text('Style', style: caption)),
+            Expanded(child: Text('Text style', style: context.type.bodyStrong)),
+            // The style IS the link — `tokens.display.copyWith(…)` in the
+            // file — so the header carries the same icon a bound property's
+            // chip does, and the rows below mark where the node diverges.
             if (bound != null)
               Tooltip(
                 // What the style drives, in full. The picker's own detail
                 // line has to truncate, and a reader asking "does this style
-                // decide my leading" has nowhere else to look now that an
-                // inherited row says nothing.
+                // decide my leading" has nowhere else to look.
                 message: sets.isEmpty
                     ? "the app's own, under the values here"
                     : 'Sets ${sets.map(_propLabel).join(', ')}',
@@ -951,37 +962,39 @@ class SceneInspector extends StatelessWidget {
           ],
         ),
       ),
-      FwPicker<String?>(
-        selected: bound,
-        choices: [
-          const FwChoice(value: null, label: 'none', detail: 'its own values'),
-          for (var s in styles)
-            FwChoice(
-              value: s.name,
-              label: 'tokens.${s.name}',
-              detail: s.style == null
-                  ? 'from the app'
-                  : s.style!.values.keys.map(_propLabel).join(' · '),
+      if (styles.isNotEmpty) ...[
+        FwPicker<String?>(
+          selected: bound,
+          choices: [
+            const FwChoice(
+              value: null,
+              label: 'its own values',
+              detail: 'not shared',
             ),
-        ],
-        onChanged: (name) =>
-            name == null ? editor.detachStyle(t) : editor.applyStyle(t, name),
-      ),
-      // An export's style: the app's own, laid under the values here by
-      // the canvas. Nothing to inherit or reset — what is set here is set.
-      if (boundDecl?.isExport == true)
-        Padding(
-          padding: const EdgeInsets.only(top: FwSpacing.xs),
-          child: Text(
-            "the app's ${boundDecl!.type}, under the values here",
-            style: caption,
-          ),
+            for (var s in styles)
+              FwChoice(
+                value: s.name,
+                label: 'tokens.${s.name}',
+                detail: s.style == null
+                    ? 'from the app'
+                    : s.style!.values.keys.map(_propLabel).join(' · '),
+              ),
+          ],
+          onChanged: (name) =>
+              name == null ? editor.detachStyle(t) : editor.applyStyle(t, name),
         ),
-      // What the style sets and whether the node has typed over it is said
-      // on each property's own row now, where the field is. It used to be a
-      // Wrap of a dozen words up here, which named properties a reader then
-      // had to go and find.
-      const SizedBox(height: FwSpacing.md),
+        // An export's style: the app's own, laid under the values here by
+        // the canvas. Nothing to inherit or reset — what is set here is set.
+        if (boundDecl?.isExport == true)
+          Padding(
+            padding: const EdgeInsets.only(top: FwSpacing.xs),
+            child: Text(
+              "the app's ${boundDecl!.type}, under the values here",
+              style: caption,
+            ),
+          ),
+        const SizedBox(height: FwSpacing.md),
+      ],
     ];
   }
 
