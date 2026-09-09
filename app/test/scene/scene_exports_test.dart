@@ -305,13 +305,13 @@ final scenes = SceneGroup(exports: [
     await tester.pump();
     await tester.pump();
     expect(find.text('FROM THE APP'), findsOneWidget);
-    expect(find.text('accent'), findsOneWidget);
+    expect(find.text('tokens.accent'), findsOneWidget);
     expect(
       find.text('Color'),
       findsAtLeastNWidgets(1),
       reason: 'the type rides along, not a value',
     );
-    await tester.tap(find.text('accent'));
+    await tester.tap(find.text('tokens.accent'));
     await tester.pump();
     await tester.pump();
     var plain = editor.doc.nodeNamed('plain')!;

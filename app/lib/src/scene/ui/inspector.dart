@@ -348,22 +348,33 @@ class SceneInspector extends StatelessWidget {
     Widget control, {
     Widget? trailing,
     bool inline = false,
+    bool strongLabel = false,
   }) {
     var origin = _originOf(node, prop);
-    var bindable = bindableKind(node, prop) != null;
-    var value = origin == PropertyOrigin.appValue
+    var bindable = !sceneBindSources(doc, node, prop).isEmpty;
+    // What the chip says the property currently is. A style has no single
+    // value to show, so it says what it decides instead — which is the one
+    // thing a reader wants from a name like `tokens.title`.
+    var isStyle = resolveSceneKey(node, prop) is SceneStyleKey;
+    var value = origin == PropertyOrigin.appValue || isStyle
         ? null
         : getSceneProperty(node, prop);
+    var styleSets = isStyle ? styleOf(doc, node)?.values.keys : null;
     return PropertyRow(
       label: label,
       origin: origin,
       sourceName: _sourceOf(node, prop),
-      valueLabel: value == null ? null : _shortValue(value),
+      valueLabel: styleSets != null
+          ? styleSets.map(_propLabel).join(' · ')
+          : value == null
+          ? null
+          : _valueLabel(value),
       swatch: value is SceneColor ? Color(value.argb) : null,
       overridden:
           origin == PropertyOrigin.style && !inheritsFromStyle(doc, node, prop),
       trailing: trailing,
       inline: inline,
+      strongLabel: strongLabel,
       onBind: bindable ? (at) => _bindMenu(context, node, prop, at) : null,
       onUnbind: () => editor.unbind(node, prop),
       onOpenSource: switch (node.bindings[prop]) {
@@ -388,8 +399,10 @@ class SceneInspector extends StatelessWidget {
         return doc.tokenNamed(name)?.isExport == true
             ? PropertyOrigin.appValue
             : PropertyOrigin.token;
-      case StyleRef():
-        return PropertyOrigin.token;
+      case StyleRef(:var name):
+        return doc.tokenNamed(name)?.isExport == true
+            ? PropertyOrigin.appValue
+            : PropertyOrigin.token;
       case null:
         break;
     }
@@ -421,95 +434,91 @@ class SceneInspector extends StatelessWidget {
   /// to a token. Reached from the row's plug, and still from a right-click
   /// anywhere on the row.
   void _bindMenu(BuildContext context, SceneNode node, String prop, Offset at) {
-    var kind = bindableKind(node, prop);
-    if (kind == null) return;
+    var sources = sceneBindSources(doc, node, prop);
+    if (sources.isEmpty) return;
     var bound = node.bindings[prop];
-    var candidates = [
-      for (var p in doc.params)
-        if (p.kind == kind) p,
-    ];
-    var tokens = [
-      for (var t in doc.tokens)
-        if (t.kind == kind && t.hasValue) t,
-    ];
-    var exports = [
-      for (var t in doc.tokens)
-        if (t.kind == kind && t.isExport) t,
-    ];
     showContextMenu(context, at, [
       MenuHeader(_propLabel(prop)),
       if (bound != null) ...[
         MenuItem('Reads $bound', icon: Icons.link),
         MenuItem(
-          'Unbind',
+          'Its own values',
           icon: Icons.link_off,
           onSelected: () => editor.unbind(node, prop),
         ),
       ] else ...[
-        MenuItem(
-          'Make a parameter',
-          icon: Icons.add,
-          shortcut: editor.freeParamName(prop),
-          onSelected: () => editor.promote(node, prop),
-        ),
-        if (candidates.isNotEmpty) ...[
+        if (sources.canPromote)
+          MenuItem(
+            'Make a parameter',
+            icon: Icons.add,
+            shortcut: editor.freeParamName(prop),
+            onSelected: () => editor.promote(node, prop),
+          ),
+        if (sources.params.isNotEmpty) ...[
           const MenuDivider(),
           const MenuHeader('Bind to'),
-          for (var p in candidates)
+          for (var p in sources.params)
             MenuItem(
               p.name,
               icon: Icons.link,
               onSelected: () => editor.bind(node, prop, p.name),
             ),
         ],
-        // The package's shared values, of this property's kind. The value
-        // rides along as the shortcut, so a colour can be picked by what it
-        // is and not only by what it is called.
-        if (tokens.isNotEmpty) ...[
+        // The package's shared values, of this property's type. What it is
+        // rides along as the shortcut, so a colour can be picked by its
+        // value and a style by what it sets — not only by their names.
+        if (sources.tokens.isNotEmpty) ...[
           const MenuDivider(),
           const MenuHeader('Tokens'),
-          for (var t in tokens)
+          for (var t in sources.tokens)
             MenuItem(
-              t.name,
+              'tokens.${t.name}',
               icon: Icons.style_outlined,
               shortcut: _tokenValue(t),
-              onSelected: () => editor.bindToken(node, prop, t.name),
+              onSelected: () => _bindToken(node, prop, t),
             ),
         ],
-        // The app's own values of this kind: a name to pick, and the canvas
+        // The app's own values of this type: a name to pick, and the canvas
         // to see the result on — the editor holds no value.
-        if (exports.isNotEmpty) ...[
+        if (sources.exports.isNotEmpty) ...[
           const MenuDivider(),
           const MenuHeader('From the app'),
-          for (var t in exports)
+          for (var t in sources.exports)
             MenuItem(
-              t.name,
+              'tokens.${t.name}',
               icon: Icons.ios_share_outlined,
               shortcut: t.type,
-              onSelected: () => editor.bindToken(node, prop, t.name),
+              onSelected: () => _bindToken(node, prop, t),
             ),
         ],
       ],
     ]);
   }
 
-  /// A resolved value, short enough to ride beside a source name.
-  static String _shortValue(Object value) => switch (value) {
+  /// A style is applied — every property it sets lands on the node and stays
+  /// the node's to override — where an ordinary token is bound.
+  void _bindToken(SceneNode node, String prop, SceneTokenDecl t) =>
+      resolveSceneKey(node, prop) is SceneStyleKey
+      ? editor.applyStyle(node, t.name)
+      : editor.bindToken(node, prop, t.name);
+
+  /// A token's value, short enough for a menu's right edge.
+  static String _tokenValue(SceneTokenDecl t) {
+    if (t.style case var style?) {
+      return 'sets ${style.values.keys.map(_propLabel).join(' · ')}';
+    }
+    return _valueLabel(t.value);
+  }
+
+  /// A value, short enough to ride beside a name — in a bound row's chip
+  /// and at a menu's right edge.
+  static String _valueLabel(Object? value) => switch (value) {
     SceneColor c =>
       '#${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0').substring(2)}',
     double d when d.isInfinite => 'fill',
     double d => d == d.roundToDouble() ? '${d.round()}' : d.toStringAsFixed(2),
     bool b => b ? 'on' : 'off',
     String t => t.length > 18 ? "'${t.substring(0, 17)}…'" : "'$t'",
-    var v => '$v',
-  };
-
-  /// A token's value, short enough for a menu's right edge.
-  static String _tokenValue(SceneTokenDecl t) => switch (t.value) {
-    SceneColor c =>
-      '#${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0').substring(2)}',
-    double d => d == d.roundToDouble() ? '${d.round()}' : '$d',
-    String s => s.length > 16 ? "'${s.substring(0, 15)}…'" : "'$s'",
     var v => '$v',
   };
 
@@ -924,80 +933,36 @@ class SceneInspector extends StatelessWidget {
     ),
   ];
 
-  /// The block's own header: what the style is, and the shared one it reads
-  /// when the package declares any.
+  /// The block's own header, and the shared style it reads — which is one
+  /// property row like every other, because that is what it is. It used to
+  /// be a dropdown, and the dropdown was the reason a reader could not tell
+  /// whether a style was a binding: it looked like a control that set a
+  /// value, listed its options with a second line nobody could read, and
+  /// shared no vocabulary with the plug on every field under it.
   List<Widget> _styleHeader(BuildContext context, TextNode t) {
-    var styles = [
-      for (var s in doc.tokens)
-        if (s.isStyle) s,
-    ];
-    var bound = switch (t.bindings[styleBindingKey]) {
-      StyleRef(:var name) => name,
+    var boundDecl = switch (t.bindings[styleBindingKey]) {
+      StyleRef(:var name) => doc.tokenNamed(name),
       _ => null,
     };
-    var boundDecl = bound == null ? null : doc.tokenNamed(bound);
-    var sets = styleOf(doc, t)?.values.keys.toList() ?? const <String>[];
-    var colors = context.colors;
-    var caption = context.type.caption.copyWith(color: colors.mut2);
     return [
-      Padding(
-        padding: const EdgeInsets.only(bottom: FwSpacing.xs),
-        child: Row(
-          children: [
-            Expanded(child: Text('Text style', style: context.type.bodyStrong)),
-            // The style IS the link — `tokens.display.copyWith(…)` in the
-            // file — so the header carries the same icon a bound property's
-            // chip does, and the rows below mark where the node diverges.
-            if (bound != null)
-              Tooltip(
-                // What the style drives, in full. The picker's own detail
-                // line has to truncate, and a reader asking "does this style
-                // decide my leading" has nowhere else to look.
-                message: sets.isEmpty
-                    ? "the app's own, under the values here"
-                    : 'Sets ${sets.map(_propLabel).join(', ')}',
-                child: Icon(
-                  Icons.link,
-                  size: FwIconSize.sm,
-                  color: colors.accent,
-                ),
-              ),
-          ],
-        ),
+      _prop(
+        context,
+        t,
+        styleBindingKey,
+        'Text style',
+        const SizedBox.shrink(),
+        strongLabel: true,
       ),
-      if (styles.isNotEmpty) ...[
-        FwPicker<String?>(
-          selected: bound,
-          choices: [
-            const FwChoice(
-              value: null,
-              label: 'its own values',
-              detail: 'not shared',
-            ),
-            for (var s in styles)
-              FwChoice(
-                value: s.name,
-                label: 'tokens.${s.name}',
-                detail: s.style == null
-                    ? 'from the app'
-                    : s.style!.values.keys.map(_propLabel).join(' · '),
-              ),
-          ],
-          onChanged: (name) =>
-              name == null ? editor.detachStyle(t) : editor.applyStyle(t, name),
-        ),
-        // An export's style: the app's own, laid under the values here by
-        // the canvas. Nothing to inherit or reset — what is set here is set.
-        if (boundDecl?.isExport == true)
-          Padding(
-            padding: const EdgeInsets.only(top: FwSpacing.xs),
-            child: Text(
-              "the app's ${boundDecl!.type}, under the values here",
-              style: caption,
-            ),
+      // An export's style: the app's own, laid under the values here by the
+      // canvas. Nothing to inherit or reset — what is set here is set.
+      if (boundDecl?.isExport == true)
+        Padding(
+          padding: const EdgeInsets.only(bottom: FwSpacing.md),
+          child: Text(
+            "the app's ${boundDecl!.type}, under the values here",
+            style: context.type.caption.copyWith(color: context.colors.mut2),
           ),
-        const SizedBox(height: FwSpacing.md),
-      ],
+        ),
     ];
   }
 
@@ -1768,7 +1733,10 @@ class SceneInspector extends StatelessWidget {
 
   static double _half(double v) => (v * 2).round() / 2;
 
-  static String _propLabel(String prop) => sceneArgName(prop) ?? prop;
+  static String _propLabel(String prop) => switch (prop) {
+    styleBindingKey => 'Text style',
+    _ => sceneArgName(prop) ?? prop,
+  };
 
   /// The child's declared parameters, each at its override or its default.
   /// A parameter the child does not declare cannot be set here — the args

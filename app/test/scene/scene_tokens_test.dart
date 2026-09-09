@@ -323,14 +323,14 @@ final sceneTokens = [
     await tester.pump();
     await tester.pump();
     expect(find.text('TOKENS'), findsOneWidget);
-    expect(find.text('brand'), findsOneWidget);
+    expect(find.text('tokens.brand'), findsOneWidget);
     expect(
       find.text('#E8632B'),
       findsOneWidget,
       reason: 'the value rides along',
     );
     expect(find.text('radius'), findsNothing, reason: 'a number is not a fill');
-    await tester.tap(find.text('brand'));
+    await tester.tap(find.text('tokens.brand'));
     await tester.pump();
     await tester.pump();
     expect(editor.doc.root.fill, const SceneColor(0xFFE8632B));

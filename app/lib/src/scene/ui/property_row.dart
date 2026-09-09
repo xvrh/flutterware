@@ -113,7 +113,7 @@ class PropertyRow extends StatefulWidget {
   const PropertyRow({
     super.key,
     required this.label,
-    required this.child,
+    this.child = const SizedBox.shrink(),
     this.origin = PropertyOrigin.own,
     this.sourceName,
     this.valueLabel,
@@ -121,6 +121,7 @@ class PropertyRow extends StatefulWidget {
     this.overridden = false,
     this.trailing,
     this.inline = false,
+    this.strongLabel = false,
     this.onBind,
     this.onUnbind,
     this.onOpenSource,
@@ -157,6 +158,10 @@ class PropertyRow extends StatefulWidget {
   /// self-contained control that is already the width of its meaning — a
   /// checkbox — where a row of its own would be three times its height.
   final bool inline;
+
+  /// The label is the heading of a block rather than one field's name — the
+  /// text style, which is a property whose value is a dozen others.
+  final bool strongLabel;
 
   /// Opens the bind menu at a global point. Null on a property nothing can
   /// fill, and then the plug is not there — an affordance that refuses is
@@ -204,7 +209,11 @@ class _PropertyRowState extends State<PropertyRow> {
                       child: Text(
                         widget.label,
                         overflow: TextOverflow.ellipsis,
-                        style: widget.inline ? context.type.body : caption,
+                        style: widget.strongLabel
+                            ? context.type.bodyStrong
+                            : widget.inline
+                            ? context.type.body
+                            : caption,
                       ),
                     ),
                     if (widget.inline && !widget.origin.isBound) ...[

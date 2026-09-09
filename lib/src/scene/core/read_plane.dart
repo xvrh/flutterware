@@ -247,6 +247,77 @@ SceneParamKind? bindableKind(SceneNode node, String prop) =>
       null => null,
     };
 
+/// What can drive [key] on [node]: the sources a bind menu offers, and
+/// whether a parameter can be made of it.
+///
+/// One query, because "what may fill this" is one question. It used to be
+/// three list comprehensions written out at the menu, keyed on
+/// [bindableKind] — which meant a property no PARAMETER could hold offered
+/// nothing at all, even where a token could hold it. A text's style is
+/// exactly that case: no parameter can be a text style, and two kinds of
+/// token can.
+class SceneBindSources {
+  const SceneBindSources({
+    this.params = const [],
+    this.tokens = const [],
+    this.exports = const [],
+    this.canPromote = false,
+  });
+
+  /// Parameters of this scene whose type fits.
+  final List<SceneParamDecl> params;
+
+  /// The package's shared values of this type — the editor holds these.
+  final List<SceneTokenDecl> tokens;
+
+  /// The app's own values of this type. The editor holds none of them; the
+  /// canvas draws what the guest resolves.
+  final List<SceneTokenDecl> exports;
+
+  /// Whether "make a parameter of this" is possible. A scene parameter has
+  /// to be able to HOLD the value, and only some types can be one.
+  final bool canPromote;
+
+  bool get isEmpty =>
+      !canPromote && params.isEmpty && tokens.isEmpty && exports.isEmpty;
+}
+
+SceneBindSources sceneBindSources(
+  SceneDocument doc,
+  SceneNode node,
+  String key,
+) {
+  if (resolveSceneKey(node, key) is SceneStyleKey) {
+    return SceneBindSources(
+      tokens: [
+        for (var t in doc.tokens)
+          if (t.isStyle && t.hasValue) t,
+      ],
+      exports: [
+        for (var t in doc.tokens)
+          if (t.isStyle && t.isExport) t,
+      ],
+    );
+  }
+  var kind = bindableKind(node, key);
+  if (kind == null) return const SceneBindSources();
+  return SceneBindSources(
+    canPromote: true,
+    params: [
+      for (var p in doc.params)
+        if (p.kind == kind) p,
+    ],
+    tokens: [
+      for (var t in doc.tokens)
+        if (t.kind == kind && t.hasValue) t,
+    ],
+    exports: [
+      for (var t in doc.tokens)
+        if (t.kind == kind && t.isExport) t,
+    ],
+  );
+}
+
 /// Read one authored property by the name a [SceneNode.bindings] entry keys
 /// it under — the table's reader, with the two shapes a binding sees
 /// differently: edges as their uniform value, a nested argument at its
