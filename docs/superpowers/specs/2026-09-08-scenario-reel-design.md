@@ -481,6 +481,20 @@ runtime.
    pumps exactly 24 frames more than the take (the stock hold after the first
    tap, 800 ms at 30 fps) and writes 60 more (36 of them the frozen tail).
 
+   *Used in anger the same day:* `examples/example/test/scenarios/mobile/`
+   `brewline_reel.dart` is an edit written against the shop, declared with
+   `scenario(reel:)`, with two cues of its own (`Callout`, `Receipt`). It
+   exercises every verb of the model in one 17 s clip — a device frame and
+   wordmark on a root larger than the app, captions placed by reading where
+   the *next* tap lands, callouts hung over the next target for a **held**
+   pause, a push-in released just after the press so the screen a tap opens
+   arrives at its own size, a typing zoom, a **frozen** cart under a price
+   tag, and a receipt close. Rendered through the video action in 6.6 s.
+   Two things it taught: a caption is one line or it is a paragraph, so the
+   edit truncates and the author shortens; and a push-in that lasts the
+   whole beat magnifies the page transition after it, which is why it
+   releases at the press.
+
 4. **Many sources.** Pool above one: dissolve, grid, replay.
 5. **The desk.** A frame-cache scrub, provenance from a rendered frame back
    to the edit line that made it. Reel selection is done (3).
