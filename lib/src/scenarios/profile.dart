@@ -9,6 +9,7 @@ import 'fonts.dart';
 import 'network.dart';
 import 'settle.dart';
 import 'shots.dart';
+import 'reel.dart';
 
 /// What a folder of scenarios is *for* — the devices and languages worth
 /// offering them in.
@@ -209,6 +210,7 @@ Future<void> runScenarios(
   bool shadows = true,
   ScenarioNetwork? network,
   Settle? settle,
+  ScenarioReelEdit? reel,
 }) async {
   // Under the flutterware runner this is called to *ask* what the folder is
   // for, not to declare anything: the harness reads the profile here and
@@ -228,6 +230,7 @@ Future<void> runScenarios(
     scenarioProbedShadows = shadows;
     scenarioProbedNetwork = network;
     scenarioProbedSettle = settle;
+    scenarioProbedReel = reel;
     return;
   }
 
@@ -248,6 +251,7 @@ Future<void> runScenarios(
   scenarioAmbientShadows = shadows;
   scenarioAmbientNetwork = network;
   scenarioAmbientSettle = settle;
+  scenarioAmbientReel = reel;
   try {
     for (var assignment in assignments) {
       scenarioAmbientAssignment = assignment;
@@ -265,6 +269,7 @@ Future<void> runScenarios(
     scenarioAmbientShadows = null;
     scenarioAmbientNetwork = null;
     scenarioAmbientSettle = null;
+    scenarioAmbientReel = null;
   }
 }
 
@@ -318,6 +323,18 @@ Settle? scenarioAmbientSettle;
 
 /// What the last probed config said about settling.
 Settle? scenarioProbedSettle;
+
+/// The edit the folder being declared right now renders its reels with, or
+/// null where it named none — which is the stock one.
+///
+/// Read by `scenario()` **as it declares**, like [scenarioAmbientSettle] and
+/// for the same reason. A folder is a fair altitude for a house style — one
+/// frame, one caption band, one closing card for every clip a product ships —
+/// and a scenario that names its own `reel:` still wins.
+ScenarioReelEdit? scenarioAmbientReel;
+
+/// What the last probed config said about its reels.
+ScenarioReelEdit? scenarioProbedReel;
 
 /// The shots policy the folder being declared right now asked for, or null
 /// where it asked for nothing.

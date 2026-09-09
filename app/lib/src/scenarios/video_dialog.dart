@@ -79,6 +79,7 @@ String scenarioVideoCommand({
   if (options.scale != 3) '--scale=${_number(options.scale)}',
   if (options.fps != 30) '--fps=${options.fps}',
   if (options.crf != 18) '--crf=${options.crf}',
+  if (options.reel) '--reel=true',
   if (options.output.isNotEmpty) '--output=${_arg(options.output)}',
 ].join(' ');
 
@@ -169,6 +170,7 @@ class _VideoDialogState extends State<_VideoDialog> {
           'scale': '${options.scale}',
           'fps': '${options.fps}',
           'crf': '${options.crf}',
+          if (options.reel) 'reel': 'true',
           if (options.output.isNotEmpty) 'output': options.output,
         },
         onProgress: (progress) {
@@ -218,6 +220,7 @@ class ScenarioVideoOptions {
     this.scale = 3,
     this.fps = 30,
     this.crf = 18,
+    this.reel = false,
     this.branches = const [],
     this.output = '',
   });
@@ -230,6 +233,10 @@ class ScenarioVideoOptions {
   /// What `libx264` aims at, lower being better and bigger.
   final int crf;
 
+  /// Whether the film is cut as a reel — the scenario's own edit, or the
+  /// stock one — rather than shown as it ran under a cursor.
+  final bool reel;
+
   /// Which branch to take at each `split`, outermost first.
   final List<String> branches;
 
@@ -240,12 +247,14 @@ class ScenarioVideoOptions {
     double? scale,
     int? fps,
     int? crf,
+    bool? reel,
     List<String>? branches,
     String? output,
   }) => ScenarioVideoOptions(
     scale: scale ?? this.scale,
     fps: fps ?? this.fps,
     crf: crf ?? this.crf,
+    reel: reel ?? this.reel,
     branches: branches ?? this.branches,
     output: output ?? this.output,
   );
@@ -352,6 +361,29 @@ class ScenarioVideoDialogView extends StatelessWidget {
                         choices: const [
                           FwChoice(value: 30, label: '30 fps'),
                           FwChoice(value: 60, label: '60 fps'),
+                        ],
+                      ),
+                    ),
+                    const Gap(FwSpacing.lg),
+                    _Option(
+                      'Cut',
+                      child: FwPicker<bool>(
+                        selected: options.reel,
+                        onChanged: running
+                            ? (_) {}
+                            : (value) =>
+                                  onOptions(options.copyWith(reel: value)),
+                        choices: const [
+                          FwChoice(
+                            value: false,
+                            label: 'Plain film',
+                            detail: 'the app under a cursor, as it ran',
+                          ),
+                          FwChoice(
+                            value: true,
+                            label: 'Reel',
+                            detail: 'push-ins, captions, a closing card',
+                          ),
                         ],
                       ),
                     ),

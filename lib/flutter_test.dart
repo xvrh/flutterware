@@ -11,6 +11,7 @@ export 'src/previews/harness.dart' show PreviewEntry, runPreviewHarness;
 export 'src/real_work/tracker.dart' show RealWork, TrackedRealWork;
 export 'src/scenarios/aim.dart' show ScenarioAim;
 export 'src/scenarios/asset_bundle.dart' show ScenarioAssetBundle;
+export 'src/scenarios/cues.dart';
 export 'src/scenarios/fonts.dart' show loadScenarioFonts, loadedScenarioFonts;
 export 'src/app_events/events.dart' show AppChannel, AppEvent, recordAppEvent;
 export 'src/scenarios/network.dart'

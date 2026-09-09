@@ -647,6 +647,7 @@ class _FakeRunner extends ScenarioRunner {
     bool narrowestDevice = false,
     bool captureNative = false,
     FilmSettings? film,
+    bool filmReel = false,
     Duration? recordInterval,
     double? recordScale,
     int recordMaxFrames = 90,

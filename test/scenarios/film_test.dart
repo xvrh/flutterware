@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
+import 'package:flutterware/reel.dart';
+import 'package:flutterware/scene_authoring.dart' show SceneColor;
 import 'package:flutterware/src/scenarios/film.dart';
 import 'package:flutterware/src/scenarios/run_args.dart';
 
@@ -19,10 +21,16 @@ void main() {
   void film(
     FilmSettings Function(String directory) settings, {
     ScenarioAssignment? on,
+    Reel? reel,
+    ReelStage Function()? stage,
   }) {
     setUp(() {
       directory = Directory.systemTemp.createTempSync('fw-film');
-      var args = ScenarioRunArgs(film: settings(directory.path));
+      var args = ScenarioRunArgs(
+        film: settings(directory.path),
+        reel: reel,
+        stage: stage?.call(),
+      );
       // `withDevice` is what the harness applies when a run names a device:
       // the geometry, the platform and the assignment the keyboard reads.
       scenarioRunArgs = on == null ? args : args.withDevice(on.device!);
@@ -491,6 +499,384 @@ void main() {
       expect(timeline['dropped']! as int, greaterThan(0));
     });
   });
+
+  group('a dry pass hands its take on', () {
+    film(
+      (directory) => FilmSettings(
+        directory: directory,
+        scale: 1,
+        pixels: false,
+        open: const Duration(milliseconds: 100),
+        travel: const Duration(milliseconds: 200),
+        press: const Duration(milliseconds: 100),
+        dwell: const Duration(milliseconds: 100),
+        close: const Duration(milliseconds: 100),
+      ),
+    );
+
+    scenario('to whoever runs the film pass', reel: const _Edit(), (s) async {
+      await s.pumpWidget(const _App());
+      s.film.emit(const _Basket(3));
+      await s.tap('Fade in');
+    });
+
+    tearDown(() {
+      // What the harness collects between the two passes: the film that
+      // finished, carrying the edit the scenario declared and a take with the
+      // cue *objects* — not their JSON — beside the beats.
+      var finished = takeFinishedFilm();
+      expect(finished, isNotNull);
+      expect(finished!.edit, isA<_Edit>());
+      var take = finished.take;
+      expect(take.dry, isTrue);
+      expect(take.beats.whereType<Tapped>(), hasLength(1));
+      var said = take.beats.whereType<Said>().single;
+      expect(said.cue, const _Basket(3));
+      // Once: the next request's second pass must never be handed this one.
+      expect(takeFinishedFilm(), isNull);
+    });
+  });
+
+  group('a dry pass', () {
+    film(
+      (directory) => FilmSettings(
+        directory: directory,
+        scale: 1,
+        pixels: false,
+        open: const Duration(milliseconds: 100),
+        travel: const Duration(milliseconds: 200),
+        press: const Duration(milliseconds: 100),
+        dwell: const Duration(milliseconds: 100),
+        close: const Duration(milliseconds: 100),
+      ),
+    );
+
+    scenario('pumps every beat and draws none of them', (s) async {
+      s.title('Order a coffee');
+      await s.pumpWidget(const _App());
+      s.film.emit(const _Basket(3));
+      await s.tap('Fade in');
+    });
+
+    tearDown(() {
+      var timeline = _timeline(directory);
+      // The whole point: the timeline is the same account of the same run,
+      // and nothing was rasterised to make it.
+      expect(timeline['dry'], isTrue);
+      expect(timeline['frames']! as int, greaterThan(20));
+      expect(
+        directory.listSync().whereType<File>().where(
+          (file) => file.path.endsWith('.raw'),
+        ),
+        isEmpty,
+      );
+      // No head: nothing can be drained from a pass with no frames, and the
+      // head is what an encoder opens on.
+      expect(
+        File('${directory.path}/${ScenarioFilm.headFileName}').existsSync(),
+        isFalse,
+      );
+      // It still knows how big the film would have been — an edit lays a
+      // stage out against that and there are no pixels to read it off.
+      expect(timeline['width']! as int, greaterThan(0));
+      expect(timeline['height']! as int, greaterThan(0));
+      expect(timeline['composeMs'], 0);
+      expect(timeline['writeMs'], 0);
+    });
+  });
+
+  group('a filmed scenario with a reel', () {
+    // Output ≠ source. Eighteen frames of the app, nine of the same frame
+    // held, six more of the app — 33 output frames out of 24 pumped ones,
+    // which is the whole claim. The freeze lands mid-travel on purpose: with
+    // the cursor moving, a held frame is visibly a held frame.
+    var seen = <_Seen>[];
+    var reel = Reel(
+      shots: [
+        ReelShot(
+          at: Duration.zero,
+          duration: const Duration(milliseconds: 600),
+          frozen: false,
+        ),
+        ReelShot(
+          at: const Duration(milliseconds: 600),
+          duration: const Duration(milliseconds: 300),
+          frozen: true,
+        ),
+        ReelShot(
+          at: const Duration(milliseconds: 900),
+          duration: const Duration(milliseconds: 200),
+          frozen: false,
+        ),
+      ],
+      cues: [
+        CueSpan(
+          at: Duration.zero,
+          duration: const Duration(milliseconds: 300),
+          cue: const ScenarioTitle('Order a coffee'),
+        ),
+      ],
+      // The pause the app arrives in — beat 1, after `pumpWidget`'s own.
+      holds: {1: const Duration(milliseconds: 200)},
+      // On the reel, because a reel's own stage is the one in force: an edit
+      // that built a picture built it for its own timing.
+      stage: _WatchingStage(seen),
+    );
+
+    film(
+      (directory) => FilmSettings(
+        directory: directory,
+        scale: 1,
+        fps: 30,
+        open: const Duration(milliseconds: 100),
+        travel: const Duration(milliseconds: 400),
+        press: const Duration(milliseconds: 100),
+        dwell: const Duration(milliseconds: 100),
+        close: const Duration(milliseconds: 100),
+      ),
+      reel: reel,
+    );
+    setUp(seen.clear);
+
+    scenario('shows what the reel says, for as long as it says', (s) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Fade in');
+    });
+
+    tearDown(() {
+      var frames =
+          directory
+              .listSync()
+              .whereType<File>()
+              .where((file) => file.path.endsWith('.raw'))
+              .toList()
+            ..sort((a, b) => a.path.compareTo(b.path));
+      // 1100ms of reel at 30fps, whatever the run did.
+      expect(frames, hasLength(33));
+
+      // The nine frozen frames are the frame before them, byte for byte —
+      // and the one after is not, because the cursor was travelling through
+      // all of it and a freeze is the picture stopping, not the app.
+      var held = frames[17].readAsBytesSync();
+      for (var i = 18; i <= 26; i++) {
+        expect(frames[i].readAsBytesSync(), held, reason: 'frame $i');
+      }
+      expect(frames[27].readAsBytesSync(), isNot(held));
+
+      // The stage was told what the reel was saying, and only while it said
+      // it: nine frames of title at 30fps.
+      expect(seen, hasLength(33));
+      expect(seen.where((f) => f.title == 'Order a coffee'), hasLength(9));
+      expect(seen.first.at, Duration.zero);
+      // 32/30 of a second: output time is frames, exactly, and not rounded to
+      // a millisecond on the way.
+      expect(seen.last.at, const Duration(microseconds: 1066667));
+
+      // And the hold really pumped: the pause the app arrives in is the
+      // film's own 100ms plus the 200ms the reel asked for.
+      var open = _beats(_timeline(directory))
+          .firstWhere((b) => b['kind'] == 'open');
+      expect(open['durationMs'], 300);
+    });
+  });
+
+  group('a filmed scenario with a scene reel', () {
+    // The take an edit would have read off a dry pass of this scenario, with
+    // every beat shorter than the film will really pump — the projector
+    // drops what the source never reaches, so a take that claims *more*
+    // than the run would end short, and one that claims less ends exactly
+    // where the reel says.
+    Map<String, Object?> phase(
+      String kind,
+      int atMs,
+      int durationMs, {
+      String? verb,
+      String? target,
+      Rect? aim,
+    }) => {
+      'kind': kind,
+      'frame': atMs ~/ 33,
+      'atMs': atMs,
+      'frames': durationMs ~/ 33,
+      'durationMs': durationMs,
+      'verb': ?verb,
+      'target': ?target,
+      if (aim != null)
+        'aim': {'x': aim.left, 'y': aim.top, 'w': aim.width, 'h': aim.height},
+    };
+    var take = Take.decode({
+      'version': 2,
+      'scenario': 'Fade in',
+      'fps': 30,
+      'scale': 1,
+      'width': 800,
+      'height': 600,
+      'screen': {'width': 800, 'height': 600},
+      'frames': 60,
+      'durationMs': 2000,
+      'beats': [
+        phase('act', 0, 33, verb: 'pumpWidget'),
+        phase('open', 33, 100),
+        phase('travel', 133, 100, verb: 'tap'),
+        phase('aim', 233, 66, verb: 'tap'),
+        phase('press', 299, 100, verb: 'tap'),
+        phase(
+          'act',
+          399,
+          33,
+          verb: 'tap',
+          target: '"Fade in"',
+          aim: const Rect.fromLTWH(360, 280, 80, 40),
+        ),
+        phase('dwell', 432, 100),
+        phase('close', 532, 100),
+      ],
+      'cues': [
+        {
+          'atMs': 33,
+          'type': 'ScenarioTitle',
+          'label': 'title: Order a coffee',
+          'data': {'text': 'Order a coffee'},
+        },
+      ],
+    });
+    var reel = const StockSceneReel(
+      holdAfterFirstTap: Duration(milliseconds: 300),
+      // Longer than the closing's 500ms dim, so the last frame is the dim
+      // finished and not a third of the way through it.
+      tail: Duration(milliseconds: 600),
+      // A ground no app has, so the closing — the app dimmed to 35% over
+      // it — is unmistakably the scene's doing and not the app's.
+      ground: SceneColor(0xFFFF0000),
+    ).edit(take);
+
+    film(
+      (directory) => FilmSettings(
+        directory: directory,
+        scale: 1,
+        fps: 30,
+        open: const Duration(milliseconds: 100),
+        travel: const Duration(milliseconds: 400),
+        press: const Duration(milliseconds: 100),
+        dwell: const Duration(milliseconds: 100),
+        close: const Duration(milliseconds: 100),
+      ),
+      reel: reel,
+    );
+
+    scenario("renders the scene over the app, for the reel's length", (
+      s,
+    ) async {
+      await s.pumpWidget(const _App());
+      await s.tap('Fade in');
+    });
+
+    tearDown(() {
+      var frames = directory
+          .listSync()
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.raw'))
+          .length;
+      // Exactly the reel: the take's 632ms, the 300ms hold, the 600ms tail.
+      expect(reel.duration, const Duration(milliseconds: 632 + 300 + 600));
+      expect(frames, (reel.duration.inMilliseconds * 30 / 1000).round());
+      // The hold reached the run: the pause after the tap is the film's own
+      // 100ms plus the 300ms the edit asked for.
+      var dwell = _beats(_timeline(directory))
+          .firstWhere((b) => b['kind'] == 'dwell');
+      expect(dwell['durationMs'], 400);
+      // And the scene is what was drawn — not the bare stage a film falls
+      // back to. The app is black; the closing dims it to 35% over a red
+      // ground, so the last frame is mostly red and the first is not. A
+      // frame count alone let a reel render with no stage at all and pass.
+      var raws =
+          directory
+              .listSync()
+              .whereType<File>()
+              .where((file) => file.path.endsWith('.raw'))
+              .toList()
+            ..sort((a, b) => a.path.compareTo(b.path));
+      expect(_meanRed(raws.first), lessThan(40));
+      expect(_meanRed(raws.last), greaterThan(120));
+    });
+  });
+
+  group('a film a scenario talks to', () {
+    film(
+      (directory) => FilmSettings(
+        directory: directory,
+        scale: 1,
+        pixels: false,
+        open: const Duration(milliseconds: 100),
+        travel: const Duration(milliseconds: 200),
+        press: const Duration(milliseconds: 100),
+        dwell: const Duration(milliseconds: 100),
+        close: const Duration(milliseconds: 100),
+      ),
+    );
+
+    scenario('records what it said, and when', (s) async {
+      await s.pumpWidget(const _App());
+      s.title('Order a coffee');
+      await s.tap('Fade in');
+      s.film.emit(const _Basket(3));
+    });
+
+    tearDown(() {
+      var timeline = _timeline(directory);
+      var cues = [
+        for (var cue in timeline['cues']! as List) cue as Map<String, Object?>,
+      ];
+      expect(cues.map((c) => c['type']), ['ScenarioTitle', '_Basket']);
+      // A cue that can write itself down does; one that cannot still leaves
+      // its name and its words, which is what a person reading the file needs.
+      expect(cues.first['data'], {'text': 'Order a coffee'});
+      expect(cues.last['label'], 'a basket of 3');
+      // And read back, it is a take: beats with types, woven into the order
+      // they happened. The title was said in the breath before the tap — at
+      // the very frame the tap begins on — and a caption that arrives after
+      // the tap it introduces is a caption that arrived late.
+      var take = Take.read(directory.path);
+      expect(take.beats.map((b) => b.runtimeType.toString()), [
+        // `pumpWidget` is a verb with no finger, then the opening hold.
+        'Acted',
+        'Opened',
+        'Said',
+        'Tapped',
+        'Said',
+        'Closed',
+      ]);
+      expect(take.beats.whereType<Said>(), hasLength(2));
+      // Spelled the way every other surface spells a target — quoted, because
+      // `describeTarget` is what wrote it and a step page shows the same.
+      expect(take.beats.whereType<Tapped>().single.label, '"Fade in"');
+      expect(
+        take.beats.whereType<Said>().first.cue,
+        const ScenarioTitle('Order a coffee'),
+      );
+      expect(take.duration.inMilliseconds, greaterThan(0));
+    });
+  });
+}
+
+/// An edit a scenario declares for itself.
+class _Edit extends ScenarioReelEdit {
+  const _Edit();
+
+  @override
+  Reel edit(Take take) => const StockReel().edit(take);
+}
+
+class _Basket implements ScenarioCueData {
+  const _Basket(this.count);
+
+  final int count;
+
+  @override
+  Map<String, Object?> toJson() => {'count': count};
+
+  @override
+  String toString() => 'a basket of $count';
 }
 
 Map<String, Object?> _timeline(Directory directory) => jsonDecode(
@@ -570,4 +956,42 @@ class _App extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// One moment, as the stage under test saw it.
+class _Seen {
+  _Seen(this.at, this.title);
+
+  final Duration at;
+  final String? title;
+}
+
+/// The bare stage, writing down what it was told.
+class _WatchingStage extends ReelStage {
+  _WatchingStage(this.seen);
+
+  final List<_Seen> seen;
+
+  @override
+  Widget build(StageFrame frame) {
+    seen.add(
+      _Seen(frame.at, switch (frame.cue<ScenarioTitle>()?.cue) {
+        ScenarioTitle(:var text) => text,
+        _ => null,
+      }),
+    );
+    return const Stack(children: [Screen(), Pointer()]);
+  }
+}
+
+/// The average red channel of a raw RGBA frame — a cheap "how light is it".
+int _meanRed(File frame) {
+  var bytes = frame.readAsBytesSync();
+  var total = 0;
+  var count = 0;
+  for (var i = 0; i < bytes.length; i += 4 * 64) {
+    total += bytes[i];
+    count++;
+  }
+  return total ~/ count;
 }

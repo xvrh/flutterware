@@ -80,6 +80,7 @@ void main() {
           scale: 2,
           fps: 60,
           crf: 23,
+          reel: true,
           branches: ['a cappuccino', 'large cup'],
           output: 'docs/reel.mp4',
         ),
@@ -88,6 +89,7 @@ void main() {
       expect(line, contains('--scale=2'));
       expect(line, contains('--fps=60'));
       expect(line, contains('--crf=23'));
+      expect(line, contains('--reel=true'));
       expect(line, contains('--device=iphone-13'));
       expect(line, contains('--output=docs/reel.mp4'));
       // One flag per split, never a comma-separated list: a branch is a label
@@ -100,6 +102,7 @@ void main() {
       expect(command(), isNot(contains('--scale')));
       expect(command(), isNot(contains('--fps')));
       expect(command(), isNot(contains('--crf')));
+      expect(command(), isNot(contains('--reel')));
     });
 
     test('every flag it prints is one the action declares', () {
@@ -115,6 +118,7 @@ void main() {
           scale: 2,
           fps: 60,
           crf: 23,
+          reel: true,
           branches: ['left'],
           output: 'docs/reel.mp4',
         ),

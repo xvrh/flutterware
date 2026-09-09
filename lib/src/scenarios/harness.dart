@@ -35,8 +35,10 @@ import 'selector.dart';
 import 'settle.dart';
 import 'stall.dart';
 import 'report.dart';
+import 'reel.dart';
 import 'run_args.dart';
 import 'scenario.dart';
+import 'scene_stage.dart';
 import 'shots.dart';
 import 'run_listener.dart';
 import '../inspect/semantics_capture.dart';
@@ -177,6 +179,7 @@ Future<void> _runHarness(
     shadows: folderShadows,
     networks: folderNetworks,
     settles: folderSettles,
+    reels: folderReels,
   ) = await _probeFolders(
     configs,
   );
@@ -216,6 +219,10 @@ Future<void> _runHarness(
         shadows: folderShadows,
         networks: folderNetworks,
         settles: folderSettles,
+        reels: folderReels,
+        // Two passes rather than one: a dry run for the take, an edit, and
+        // the film under the reel it cut. Only meaningful beside `filmDir`.
+        filmReel: args['filmReel'] == 'true',
         // The host resolved a device id to geometry, or said it had nobody's
         // choice to resolve — in which case the folder's profile speaks and
         // the geometry that did arrive is only the host's fallback.
@@ -421,6 +428,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
   Map<String, bool> shadows = const {},
   Map<String, ScenarioNetwork> networks = const {},
   Map<String, Settle> settles = const {},
+  Map<String, ScenarioReelEdit> reels = const {},
 }) {
   var declarer = Declarer();
   var scenarios = <String, Set<String>>{};
@@ -444,6 +452,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
         scenarioAmbientShadows = _nearest(entry.key, shadows);
         scenarioAmbientNetwork = _nearest(entry.key, networks);
         scenarioAmbientSettle = _nearest(entry.key, settles);
+        scenarioAmbientReel = _nearest(entry.key, reels);
         try {
           entry.value();
         } finally {
@@ -454,6 +463,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
           scenarioAmbientShadows = null;
           scenarioAmbientNetwork = null;
           scenarioAmbientSettle = null;
+          scenarioAmbientReel = null;
         }
         scenarios[entry.key] = sink.toSet();
       });
@@ -476,6 +486,7 @@ Future<
     Map<String, bool> shadows,
     Map<String, ScenarioNetwork> networks,
     Map<String, Settle> settles,
+    Map<String, ScenarioReelEdit> reels,
   })
 >
 _probeFolders(
@@ -487,6 +498,7 @@ _probeFolders(
   var shadows = <String, bool>{};
   var networks = <String, ScenarioNetwork>{};
   var settles = <String, Settle>{};
+  var reels = <String, ScenarioReelEdit>{};
   for (var MapEntry(key: directory, value: config) in configs.entries) {
     scenarioProbing = true;
     scenarioProbedProfile = null;
@@ -495,6 +507,7 @@ _probeFolders(
     scenarioProbedShadows = null;
     scenarioProbedNetwork = null;
     scenarioProbedSettle = null;
+    scenarioProbedReel = null;
     try {
       await config(() {});
       if (scenarioProbedProfile case var profile?) {
@@ -515,6 +528,9 @@ _probeFolders(
       if (scenarioProbedSettle case var policy?) {
         settles[directory] = policy;
       }
+      if (scenarioProbedReel case var edit?) {
+        reels[directory] = edit;
+      }
     } catch (error, stack) {
       stderr.writeln('[harness] $directory config: $error\n$stack');
     } finally {
@@ -525,6 +541,7 @@ _probeFolders(
       scenarioProbedShadows = null;
       scenarioProbedNetwork = null;
       scenarioProbedSettle = null;
+      scenarioProbedReel = null;
     }
   }
   return (
@@ -534,6 +551,7 @@ _probeFolders(
     shadows: shadows,
     networks: networks,
     settles: settles,
+    reels: reels,
   );
 }
 
@@ -777,6 +795,7 @@ FilmSettings? _parseFilm(
     dwell: beat('filmDwellMs') ?? defaults.dwell,
     close: beat('filmCloseMs') ?? defaults.close,
     maxFrames: number('filmMaxFrames')?.round() ?? defaults.maxFrames,
+    pixels: args['filmPixels'] != 'false',
   );
 }
 
@@ -794,6 +813,8 @@ Future<Map<String, Object?>> _run(
   Map<String, bool> shadows = const {},
   Map<String, ScenarioNetwork> networks = const {},
   Map<String, Settle> settles = const {},
+  Map<String, ScenarioReelEdit> reels = const {},
+  bool filmReel = false,
   String? device,
   bool deviceUnspecified = false,
   bool narrowestDevice = false,
@@ -817,6 +838,7 @@ Future<Map<String, Object?>> _run(
     shadows: shadows,
     networks: networks,
     settles: settles,
+    reels: reels,
   );
   var root = declared.root;
 
@@ -991,15 +1013,28 @@ Future<Map<String, Object?>> _run(
           // debugging it with a screen that disagrees with today for no
           // visible reason. Same reasoning as the axes.
           clockOrigin ??= resolvedScenarioClockOrigin;
-          var outcome = await _runOne(
-            entry.load(suite, groups: scope),
-            file: groupFile ?? '',
-            name: name,
-            device: framedDevice,
-            inspector: inspector,
-            outDir: outDir,
-            previous: previousName,
-          );
+          var outcome = filmReel && framedArgs?.film != null
+              ? await _runReel(
+                  entry,
+                  suite,
+                  scope,
+                  args: framedArgs!,
+                  file: groupFile ?? '',
+                  name: name,
+                  device: framedDevice,
+                  inspector: inspector,
+                  outDir: outDir,
+                  previous: previousName,
+                )
+              : await _runOne(
+                  entry.load(suite, groups: scope),
+                  file: groupFile ?? '',
+                  name: name,
+                  device: framedDevice,
+                  inspector: inspector,
+                  outDir: outDir,
+                  previous: previousName,
+                );
           previousName = name;
           outcomes.add(outcome);
           // A scenario that timed out is still running in there, holding the
@@ -1161,6 +1196,82 @@ bool _accountsFor(
       .firstMatch(details.exceptionAsString());
   if (counted != null) return int.parse(counted.group(1)!) <= caught.length;
   return caught.any((c) => identical(c.exception, details.exception));
+}
+
+/// A reel: the same body twice.
+///
+/// Once **dry** — every beat pumped, nothing rasterised — for the take; then
+/// the edit the scenario declared (or the stock one) cuts a [Reel] from it;
+/// then once more, filmed, with the reel deciding what each output frame
+/// shows. Both passes run under the same framing, locale and clock, because
+/// the take is a map of the second run and a map of a different run is no map
+/// at all. The take's timeline lands beside the film's directory, never in
+/// it: a drain watches the film's for a head the dry pass never writes.
+///
+/// The dry pass's own report is what comes back when it failed: the scenario
+/// broke before there was anything to cut, and that is the news. An edit that
+/// throws is reported the same way, against the scenario it was cutting, so a
+/// panel or a CLI shows one failed scenario rather than a harness that fell
+/// over.
+Future<Map<String, Object?>> _runReel(
+  Test entry,
+  Suite suite,
+  List<Group> scope, {
+  required ScenarioRunArgs args,
+  required String file,
+  required String name,
+  required GuestInspector inspector,
+  required String outDir,
+  String? device,
+  String? previous,
+}) async {
+  var film = args.film!;
+  // Anything a previous request left finished is not this request's take.
+  takeFinishedFilm();
+  scenarioRunArgs = args.filming(film.dry('${film.directory}.take'));
+  var dry = await _runOne(
+    entry.load(suite, groups: scope),
+    file: file,
+    name: name,
+    device: device,
+    inspector: inspector,
+    outDir: outDir,
+    previous: previous,
+  );
+  if (dry['ok'] != true || dry['timedOut'] == true) return dry;
+
+  Map<String, Object?> refused(String error, [StackTrace? stack]) =>
+      ScenarioRunOutcome(
+        file: file,
+        name: name,
+        device: device,
+        ok: false,
+        errors: [ScenarioRunError(error: error, stack: stack?.toString())],
+      ).toJson();
+
+  var finished = takeFinishedFilm();
+  if (finished == null) {
+    return refused(
+      'the dry pass of `$name` filmed nothing, so there is no take to cut',
+    );
+  }
+  var edit = finished.edit ?? const StockSceneReel();
+  Reel reel;
+  try {
+    reel = edit.edit(finished.take);
+  } catch (error, stack) {
+    return refused('the edit (${edit.runtimeType}) failed: $error', stack);
+  }
+  scenarioRunArgs = args.filming(film, reel: reel);
+  return _runOne(
+    entry.load(suite, groups: scope),
+    file: file,
+    name: name,
+    device: device,
+    inspector: inspector,
+    outDir: outDir,
+    previous: name,
+  );
 }
 
 Future<Map<String, Object?>> _runOne(

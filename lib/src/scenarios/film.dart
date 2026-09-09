@@ -10,10 +10,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'aim.dart';
-import 'film_cursor.dart';
+import 'cues.dart';
 import 'film_settings.dart';
 import 'motion.dart';
+import 'reel.dart';
+import 'stage.dart';
+import 'take.dart';
 
+export 'cues.dart';
 export 'film_settings.dart';
 
 /// Records a scenario as a film: every pumped frame, the cursor over it, and
@@ -33,6 +37,9 @@ class ScenarioFilm implements ScenarioFrameSink {
     required this.scenario,
     this.touch = true,
     this.beforePump,
+    this.stage = const BareStage(),
+    this.reel,
+    this.edit,
   }) {
     // The checked-mode banner is the app's own widget and a film is of the
     // app, so this is the one thing a film run turns off in the tree it is
@@ -63,7 +70,59 @@ class ScenarioFilm implements ScenarioFrameSink {
   /// beat, and the keyboard would arrive after the typing it is for.
   final void Function()? beforePump;
 
-  late final _cursor = ScenarioFilmCursor(touch: touch);
+  /// What the frames are drawn through — the cursor, and whatever else the
+  /// picture is. [BareStage] is the app with a cursor over it, which is what
+  /// a film was before a stage existed.
+  final ReelStage stage;
+
+  /// The stage in force: the reel's when there is a reel, because an edit
+  /// that built a picture built it for its own timing.
+  ReelStage get _stageInForce => reel?.stage ?? stage;
+
+  /// What the output shows and when, or null for a film that is one output
+  /// frame per pumped frame — which is what a film was before a reel existed.
+  final Reel? reel;
+
+  /// How the scenario asked to be cut, or null where it said nothing.
+  ///
+  /// Carried and not used: a film pumps what it is told and an edit runs
+  /// *between* two films. It rides here so that whoever ran the dry pass
+  /// finds the edit beside the take it is for, without having to know how
+  /// `scenario()` resolved it.
+  final ScenarioReelEdit? edit;
+
+  /// The timeline [finish] wrote, or null until then.
+  Map<String, Object?>? _timeline;
+
+  /// What this film knows about the run it filmed, as types — the dry pass's
+  /// whole product, and what an edit is handed.
+  ///
+  /// Only after [finish]; asked earlier it refuses, because a take of a film
+  /// still running would be a take with no end.
+  Take get take {
+    var timeline = _timeline;
+    if (timeline == null) {
+      throw StateError('the film has not finished, so there is no take yet');
+    }
+    return Take.decode(timeline, cues: said);
+  }
+
+  late final _projector = reel == null
+      ? null
+      : _Projector(reel!, fps: settings.fps);
+
+  MountedStage? _stage;
+
+  /// The frame a freeze repeats.
+  ///
+  /// Held rather than re-read: a frozen shot shows the last thing the app
+  /// drew, and by the time it is written the source frame it came from has
+  /// been rasterised and let go.
+  ui.Image? _held;
+
+  /// The app's own frame in logical pixels, read off the view the first time
+  /// one is captured.
+  Size? _screenSize;
 
   @override
   Duration get interval => settings.frame;
@@ -115,11 +174,7 @@ class ScenarioFilm implements ScenarioFrameSink {
     // film not having started yet.
     var layer = view.debugLayer;
     if (layer is! OffsetLayer) return;
-    var dpr = view.flutterView.devicePixelRatio;
-    var image = layer.toImageSync(
-      Offset.zero & (view.size * dpr),
-      pixelRatio: settings.scale / dpr,
-    );
+    _screenSize ??= view.size;
     if (_pointer case var at?) {
       _samples.add({
         'frame': _frames,
@@ -128,12 +183,27 @@ class ScenarioFilm implements ScenarioFrameSink {
         if (_down) 'down': true,
       });
     }
-    _banked.add(
-      _Banked(image, _pointer, _down, switch (_pressedAt) {
-        null => null,
-        var at => (_frames - at) / settings.fps,
-      }),
-    );
+    if (settings.pixels) {
+      var dpr = view.flutterView.devicePixelRatio;
+      var image = layer.toImageSync(
+        Offset.zero & (view.size * dpr),
+        pixelRatio: settings.scale / dpr,
+      );
+      _banked.add(
+        _Banked(_frames, image, _pointer, _down, switch (_pressedAt) {
+          null => null,
+          var at => (_frames - at) / settings.fps,
+        }),
+      );
+    } else {
+      // A dry pass measures the frame it is not drawing. The size is the one
+      // thing about a film only a rasterised frame usually knows, and an edit
+      // lays its stage out against it — so it is asked of the stage instead,
+      // which is where the answer comes from when there are pixels too.
+      var output = _stageInForce.sizeFor(view.size);
+      _width ??= (output.width * settings.scale).round();
+      _height ??= (output.height * settings.scale).round();
+    }
     _frames++;
   }
 
@@ -167,7 +237,7 @@ class ScenarioFilm implements ScenarioFrameSink {
     var (x, y) = aim.point;
     var to = Offset(x, y);
     var from = _pointer ?? _offstage(tester, to);
-    _mark('travel', verb: verb, target: target);
+    _mark('travel', verb: verb, target: target, aim: aim);
     // What separates a hand from a `lerp`: how long the reach takes, and how
     // the speed is spent along it. See [_travelFor] and [_reach].
     await _hold(
@@ -183,9 +253,9 @@ class ScenarioFilm implements ScenarioFrameSink {
     );
     _pointer = to;
     // Arrived, not yet pressed. See [FilmSettings.aim].
-    _mark('aim', verb: verb, target: target);
+    _mark('aim', verb: verb, target: target, aim: aim);
     await _hold(tester, settings.aim);
-    _mark('press', verb: verb, target: target);
+    _mark('press', verb: verb, target: target, aim: aim);
     _down = true;
     _pressedAt = _frames;
     // A held press is held. `tester.longPress` spends no fake time — it
@@ -198,7 +268,7 @@ class ScenarioFilm implements ScenarioFrameSink {
           ? _longPress
           : settings.press,
     );
-    _mark('act', verb: verb, target: target);
+    _mark('act', verb: verb, target: target, aim: aim);
   }
 
   /// Names the stretch about to be filmed — the verb's own frames.
@@ -206,8 +276,18 @@ class ScenarioFilm implements ScenarioFrameSink {
   /// Marked by every verb, including the ones with no finger: a beat is how
   /// the timeline says what a stretch of film *is*, and a `scrollTo` that
   /// named nothing would leave its frames belonging to whatever came before.
-  void act({String? verb, String? target}) =>
-      _mark('act', verb: verb, target: target);
+  void act({String? verb, String? target, ScenarioAim? aim}) {
+    _verbTarget = target;
+    _mark('act', verb: verb, target: target, aim: aim);
+  }
+
+  /// What the verb now running named, kept from [act].
+  ///
+  /// [approach] runs *inside* the verb and is told the aim but not the word
+  /// the author wrote, and its marks are the ones that survive — the mark
+  /// [act] makes before it covers no frames and is dropped. Without this a
+  /// take reads back a tap that named nothing.
+  String? _verbTarget;
 
   /// How long a `longPress` is held for, when the beat is shorter.
   ///
@@ -395,7 +475,11 @@ class ScenarioFilm implements ScenarioFrameSink {
     var first = !_opened;
     _opened = true;
     _mark(first ? 'open' : 'dwell');
-    await _hold(tester, first ? settings.open : settings.dwell);
+    // The one thing a reel asks of the *run*: more of the app, here, with
+    // nothing being touched. The index is the beat this pause is about to
+    // become — which is what an edit keyed its hold on when it read the take.
+    var extra = reel?.holds[_beats.length] ?? Duration.zero;
+    await _hold(tester, (first ? settings.open : settings.dwell) + extra);
   }
 
   var _opened = false;
@@ -416,24 +500,58 @@ class ScenarioFilm implements ScenarioFrameSink {
   Future<void> finish(WidgetTester tester) async {
     WidgetsApp.debugAllowBannerOverride = true;
     _closeBeat();
-    await _write(tester);
-    _writeJson(timelineFileName, {
-      'version': 1,
+    await _write(tester, tail: true);
+    // After the last write, which is what still needs it.
+    _stage?.dispose();
+    _stage = null;
+    _timeline = {
+      'version': 2,
       'scenario': scenario,
       if (settings.branches.isNotEmpty) 'branches': settings.branches,
       'fps': settings.fps,
       'scale': settings.scale,
       'width': _width ?? 0,
       'height': _height ?? 0,
+      // The app's own frame in logical pixels — what a stage places, and what
+      // every rect in a take is measured in. The output's size above is the
+      // stage's answer and may be nothing like it.
+      if (_screenSize case var screen?)
+        'screen': {'width': screen.width, 'height': screen.height},
       'format': 'rgba8888',
       'pointer': touch ? 'touch' : 'mouse',
-      'frames': _frames,
+      // The film's frames — what is on disk, and what a drain counts to. The
+      // same number as the pumped count for a plain film and for a dry pass
+      // (which writes none, and whose frames *are* the pumps); under a reel
+      // they part, and a drain reading the pumped count would stop early on
+      // a reel that holds and wait forever on one that cuts.
+      'frames': settings.pixels ? _written : _frames,
+      'durationMs': _millis(settings.pixels ? _written : _frames),
+      // How many frames the scenario really ran for — the source clock's.
+      'pumped': _frames,
+      if (!settings.pixels) 'dry': true,
       if (_dropped > 0) 'dropped': _dropped,
       'composeMs': _composing.elapsedMilliseconds,
       'writeMs': _writing.elapsedMilliseconds,
       'beats': _beats,
+      if (_said.isNotEmpty)
+        'cues': [
+          for (var (frame, cue) in _said)
+            {
+              'atMs': _millis(frame),
+              'type': cue.runtimeType.toString(),
+              'label': '$cue',
+              if (cue is ScenarioCueData) 'data': cue.toJson(),
+            },
+        ],
       'samples': _samples,
-    });
+    };
+    _writeJson(timelineFileName, _timeline!);
+    // A finished film is not the film in progress any more. Without this a
+    // second run in the same warm guest reuses the first one's object — and
+    // so its directory, its scale and its frame count — which is a film
+    // written where nobody asked for it and no error to say so.
+    if (identical(_filming, this)) _filming = null;
+    _finished = this;
   }
 
   /// The name of the timeline, beside the frames it describes. Written last:
@@ -553,9 +671,19 @@ class ScenarioFilm implements ScenarioFrameSink {
     return Offset(toward.dx, (size?.height ?? toward.dy) + 48);
   }
 
-  void _mark(String kind, {String? verb, String? target}) {
+  void _mark(String kind, {String? verb, String? target, ScenarioAim? aim}) {
     _closeBeat();
-    _beat = {'kind': kind, 'frame': _frames, 'verb': ?verb, 'target': ?target};
+    // A beat of the verb now running inherits what that verb named; a pause
+    // or a hold names nothing, and must not inherit the last verb's word.
+    var named = target ?? (verb == null ? null : _verbTarget);
+    _beat = {
+      'kind': kind,
+      'frame': _frames,
+      'atMs': _millis(_frames),
+      'verb': ?verb,
+      'target': ?named,
+      if (aim != null) 'aim': aim.toJson(),
+    };
   }
 
   void _closeBeat() {
@@ -564,10 +692,36 @@ class ScenarioFilm implements ScenarioFrameSink {
       // A beat that drew nothing is not in the film — the frames are what a
       // beat is, and an entry claiming none of them would put a caption on a
       // moment nobody can see.
-      if (length > 0) _beats.add({...beat, 'frames': length});
+      if (length > 0) {
+        _beats.add({...beat, 'frames': length, 'durationMs': _millis(length)});
+      }
     }
     _beat = null;
   }
+
+  /// Film time at [frames], in milliseconds.
+  ///
+  /// A pump advances the fake clock by exactly one frame, so the frame count
+  /// *is* the clock and nothing has to be read off it. Written beside the
+  /// frame index rather than instead of it, because an encoder counts frames
+  /// and an edit counts time.
+  int _millis(int frames) => (frames * 1000 / settings.fps).round();
+
+  /// What the scenario said, in its own words, at the moment it said it.
+  ///
+  /// The value is the author's own object and is kept as one: an edit runs in
+  /// this process and pattern-matches it. The timeline gets its type and its
+  /// `toString` so a person reading the file sees something, and a
+  /// [ScenarioCueData] gets its own fields written too.
+  void say(Object cue) => _said.add((_frames, cue));
+
+  final _said = <(int, Object)>[];
+
+  /// Everything [say] was handed, in order, with the film time of each.
+  List<(Duration, Object)> get said => [
+    for (var (frame, cue) in _said)
+      (Duration(milliseconds: _millis(frame)), cue),
+  ];
 
   /// Rasterises the bank, draws the cursor on it, and writes one file per
   /// frame.
@@ -575,46 +729,82 @@ class ScenarioFilm implements ScenarioFrameSink {
   /// Every frame is written to a `.part` name and renamed into place, because
   /// the host reads this directory while it is being written: a numbered file
   /// that exists is a whole frame, and there is no other agreement to keep.
-  Future<void> _write(WidgetTester tester) async {
-    if (_banked.isEmpty) return;
+  Future<void> _write(WidgetTester tester, {bool tail = false}) async {
+    if (_banked.isEmpty && !tail) return;
     var banked = List.of(_banked);
     _banked.clear();
     _writing.start();
     await tester.runAsync(() async {
       for (var frame in banked) {
-        _composing.start();
-        var image = _compose(frame);
-        _composing.stop();
-        var data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-        _width ??= image.width;
-        _height ??= image.height;
-        image.dispose();
-        if (data == null) {
-          // Fatal rather than skipped. The frames are numbered without gaps
-          // and an encoder drains them in order, so a missing one is not a
-          // frame lost — it is the rest of the film never arriving.
-          throw StateError(
-            'frame $_written of the film rasterised to nothing, and a film '
-            'with a hole in it cannot be encoded',
+        // Without a reel a pumped frame is an output frame, which is what a
+        // film is. With one, the reel says how many — none where it cut, one
+        // where it plays, and a run of them where it froze.
+        var plans =
+            _projector?.accept() ??
+            [_Plan(Duration(milliseconds: _millis(frame.frame)), false)];
+        for (var plan in plans) {
+          // A freeze holds the whole picture, cursor included. Handing it the
+          // frame that is *arriving* would draw the hand at where it has got
+          // to over a screen that stopped — a cursor sliding across a still.
+          await _writeOne(
+            plan.frozen ? _held : frame.image,
+            plan.frozen ? null : frame,
+            plan.at,
           );
         }
-        // The first frame is the first moment anything knows how big this
-        // film is, and an encoder has to be opened on a size before it can be
-        // fed. So the head goes out here rather than waiting for the timeline
-        // at the end — that is what lets the encode run *beside* the render
-        // instead of after it.
-        if (_written == 0) _writeHead();
-        var path = p.join(
-          settings.directory,
-          '${_written.toString().padLeft(6, '0')}.raw',
-        );
-        File('$path.part')
-          ..writeAsBytesSync(data.buffer.asUint8List())
-          ..renameSync(path);
-        _written++;
+        if (_projector != null) {
+          _held?.dispose();
+          _held = frame.image.clone();
+        }
+        frame.image.dispose();
+      }
+      if (tail) {
+        for (var plan in _projector?.flush() ?? const <_Plan>[]) {
+          await _writeOne(_held, null, plan.at);
+        }
+        _held?.dispose();
+        _held = null;
       }
     });
     _writing.stop();
+  }
+
+  /// Draws one output frame and puts it on disk.
+  ///
+  /// Every frame is written to a `.part` name and renamed into place, because
+  /// the host reads this directory while it is being written: a numbered file
+  /// that exists is a whole frame, and there is no other agreement to keep.
+  Future<void> _writeOne(ui.Image? screen, _Banked? source, Duration at) async {
+    _composing.start();
+    var image = _compose(screen, source, at);
+    _composing.stop();
+    var data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    _width ??= image.width;
+    _height ??= image.height;
+    image.dispose();
+    if (data == null) {
+      // Fatal rather than skipped. The frames are numbered without gaps and an
+      // encoder drains them in order, so a missing one is not a frame lost —
+      // it is the rest of the film never arriving.
+      throw StateError(
+        'frame $_written of the film rasterised to nothing, and a film '
+        'with a hole in it cannot be encoded',
+      );
+    }
+    // The first frame is the first moment anything knows how big this film
+    // is, and an encoder has to be opened on a size before it can be fed. So
+    // the head goes out here rather than waiting for the timeline at the end —
+    // that is what lets the encode run *beside* the render instead of after
+    // it.
+    if (_written == 0) _writeHead();
+    var path = p.join(
+      settings.directory,
+      '${_written.toString().padLeft(6, '0')}.raw',
+    );
+    File('$path.part')
+      ..writeAsBytesSync(data.buffer.asUint8List())
+      ..renameSync(path);
+    _written++;
   }
 
   var _written = 0;
@@ -654,41 +844,58 @@ class ScenarioFilm implements ScenarioFrameSink {
       File(p.join(settings.directory, name))
           .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(body));
 
-  /// The app's frame with the cursor over it.
+  /// The app's frame, drawn through the stage.
   ///
-  /// **Over**, never inside: the cursor is not in the widget tree, so it
-  /// cannot change a layout, trip a rebuild or land in a screenshot. The cost
-  /// is a second raster per frame, which is the price of that separation and
-  /// is measured in the design against appending a layer instead.
-  ui.Image _compose(_Banked frame) {
-    if (frame.pointer == null) return frame.image;
-    var recorder = ui.PictureRecorder();
-    var canvas = ui.Canvas(recorder);
-    canvas
-      ..drawImage(frame.image, Offset.zero, ui.Paint())
-      // Scaled once, so the cursor is drawn in the app's own logical points
-      // and a fingertip is a fingertip at every film scale.
-      ..save()
-      ..scale(settings.scale);
-    _cursor.paint(
-      canvas,
-      frame.pointer!,
-      down: frame.down,
-      sincePress: frame.sincePress,
+  /// **Through**, never inside: the stage is a tree of its own, mounted in its
+  /// own pipeline, and the app's frame reaches it as an image. So a caption is
+  /// not a widget a finder can match, a camera cannot change the app's layout,
+  /// and nothing the stage draws is in the screenshot lane's trees. The cost
+  /// is a second raster per frame, which is measured against the layer it
+  /// could have been appended to instead.
+  ui.Image _compose(ui.Image? screen, _Banked? source, Duration at) {
+    var mounted = _stage ??= MountedStage(
+      _stageInForce,
+      screenSize: _screenSize ?? Size.zero,
+      scale: settings.scale,
+      touch: touch,
     );
-    canvas.restore();
-    var picture = recorder.endRecording();
-    var composed = picture.toImageSync(frame.image.width, frame.image.height);
-    picture.dispose();
-    frame.image.dispose();
+    var composed = mounted.render(
+      StageFrame(
+        screen: screen,
+        screenSize: _screenSize ?? Size.zero,
+        at: at,
+        // A frozen frame keeps the finger where it was: the picture is not
+        // moving, so neither is the hand in it.
+        pointer: source?.pointer ?? _lastPointer,
+        down: source?.down ?? false,
+        sincePress: source?.sincePress,
+        touch: touch,
+        cues: reel?.cuesAt(at) ?? const [],
+      ),
+    );
+    if (source != null) _lastPointer = source.pointer;
+    // A stage that throws renders as Flutter's error box, which is a picture
+    // and would ship as one. Said once, with the first thing that went wrong.
+    if (mounted.errors.isNotEmpty) {
+      var first = mounted.errors.first;
+      throw StateError(
+        'the stage failed while drawing the frame at $at:\n'
+        '${first.exceptionAsString()}',
+      );
+    }
     return composed;
   }
+
+  Offset? _lastPointer;
 
   static double _round(double value) => (value * 10).roundToDouble() / 10;
 }
 
 class _Banked {
-  _Banked(this.image, this.pointer, this.down, this.sincePress);
+  _Banked(this.frame, this.image, this.pointer, this.down, this.sincePress);
+
+  /// Which frame of the film this is — what the stage is told the time is.
+  final int frame;
 
   final ui.Image image;
   final Offset? pointer;
@@ -709,13 +916,35 @@ ScenarioFilm? _filming;
 
 /// Forgets the film in progress, so a test file can render more than one.
 @visibleForTesting
-void resetFilms() => _filming = null;
+void resetFilms() {
+  _filming = null;
+  _finished = null;
+}
+
+/// The film that last finished, once — and then nobody's.
+///
+/// How the dry pass hands its take to whoever runs the film pass: the harness
+/// runs the body, the body films, the film finishes, and the harness collects
+/// it here before it runs the body again. Taken rather than read so that a
+/// take is never handed to the wrong second pass: a warm guest serves many
+/// requests, and the film that finished under the previous one is not a fact
+/// about this one.
+ScenarioFilm? takeFinishedFilm() {
+  var film = _finished;
+  _finished = null;
+  return film;
+}
+
+ScenarioFilm? _finished;
 
 ScenarioFilm startFilm(
   FilmSettings settings, {
   required String scenario,
   required bool touch,
   void Function()? beforePump,
+  Reel? reel,
+  ReelStage stage = const BareStage(),
+  ScenarioReelEdit? edit,
 }) {
   if (_filming case var already? when already.scenario != scenario) {
     throw ScenarioFilmRefusal(
@@ -728,5 +957,80 @@ ScenarioFilm startFilm(
     scenario: scenario,
     touch: touch,
     beforePump: beforePump,
+    reel: reel,
+    stage: stage,
+    edit: edit,
   );
+}
+
+/// One output frame, as the reel plans it.
+class _Plan {
+  _Plan(this.at, this.frozen);
+
+  final Duration at;
+  final bool frozen;
+}
+
+/// Turns pumped frames into output frames.
+///
+/// The reel is already decided, so this is a walk rather than a decision: each
+/// arriving source frame flushes whatever frozen output stands before it, then
+/// spends itself on one playing frame. A shot the source never reaches is
+/// dropped — a run that ended early is not a reel that keeps going.
+class _Projector {
+  _Projector(this.reel, {required this.fps})
+    : _left = [
+        for (var shot in reel.shots)
+          (
+            frames: (shot.duration.inMicroseconds * fps / 1000000).round(),
+            frozen: shot.frozen,
+          ),
+      ];
+
+  final Reel reel;
+  final int fps;
+  final List<({int frames, bool frozen})> _left;
+  var _shot = 0;
+  var _out = 0;
+
+  Duration _at(int index) =>
+      Duration(microseconds: (index * 1000000 / fps).round());
+
+  List<_Plan> accept() {
+    var plans = <_Plan>[];
+    while (_shot < _left.length) {
+      var shot = _left[_shot];
+      if (shot.frames <= 0) {
+        _shot++;
+        continue;
+      }
+      if (shot.frozen) {
+        for (var i = 0; i < shot.frames; i++) {
+          plans.add(_Plan(_at(_out++), true));
+        }
+        _left[_shot] = (frames: 0, frozen: true);
+        _shot++;
+        continue;
+      }
+      plans.add(_Plan(_at(_out++), false));
+      _left[_shot] = (frames: shot.frames - 1, frozen: false);
+      if (_left[_shot].frames == 0) _shot++;
+      break;
+    }
+    return plans;
+  }
+
+  /// The frozen shots left when the source runs out — the tail an edit put
+  /// after the last thing that happened.
+  List<_Plan> flush() {
+    var plans = <_Plan>[];
+    for (; _shot < _left.length; _shot++) {
+      var shot = _left[_shot];
+      if (!shot.frozen) continue;
+      for (var i = 0; i < shot.frames; i++) {
+        plans.add(_Plan(_at(_out++), true));
+      }
+    }
+    return plans;
+  }
 }
