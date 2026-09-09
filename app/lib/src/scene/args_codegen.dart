@@ -534,7 +534,7 @@ String _literal(Object value) => switch (value) {
   // A const context all the way down: the inner colour spells no `const`.
   SceneTextStyle s =>
     'const SceneTextStyle(${[for (var e in s.values.entries) '${e.key}: ${_styleField(e.key, e.value)}'].join(', ')})',
-  String s => "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'")}'",
+  String s => sceneStringLiteral(s),
   SceneColor c =>
     'const SceneColor(0x${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0')})',
   num n => n == n.roundToDouble() ? '${n.toInt()}.0' : '$n',

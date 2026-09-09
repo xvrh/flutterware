@@ -25,6 +25,7 @@ import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_example/model_view.dart' as v3d;
 import 'package:flutterware_example/scene3d_renderers.dart' as v3d;
 import 'package:flutterware_example/shop/shop_app.dart' as app;
+import 'package:flutterware_example/shot_image.dart' as shots;
 
 import 'brand.tokens.dart';
 
@@ -63,6 +64,14 @@ final scenes = SceneGroup(
         clip: a.text('clip') ?? 'Open',
         clipTime: a.number('clipTime') ?? 0,
       ),
+    ),
+    // The app's own pixels, by path. A store scene's screenshots arrive
+    // through this: `path` is bound to a scene parameter, so one scene
+    // renders every locale's export without the file knowing any of them.
+    ExternalWidget(
+      'Shot',
+      args: [const Arg<String>('path', '')],
+      build: (a) => shots.ShotImage(a.text('path') ?? ''),
     ),
     ExternalWidget(
       'OrderButton',

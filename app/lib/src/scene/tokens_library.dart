@@ -698,8 +698,7 @@ String _tokenLiteral(SceneTokenDecl t) {
 String _valueLiteral(Object value) => switch (value) {
   SceneColor c =>
     'SceneColor(0x${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0')})',
-  String s =>
-    "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'$')}'",
+  String s => sceneStringLiteral(s),
   double d => d == d.roundToDouble() && d.abs() < 1e15 ? '${d.round()}' : '$d',
   var v => '$v',
 };

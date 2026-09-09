@@ -322,7 +322,7 @@ String _imports(List<String> imports, {bool needsArgs = false}) {
 }
 
 String _paramDefault(SceneParamDecl p) => switch (p.kind) {
-  SceneParamKind.string => _str(p.defaultValue as String),
+  SceneParamKind.string => sceneStringLiteral(p.defaultValue as String),
   SceneParamKind.number => _num(p.defaultValue as double),
   SceneParamKind.color => 'const ${_color(p.defaultValue as SceneColor)}',
   SceneParamKind.bool => '${p.defaultValue}',
@@ -449,7 +449,7 @@ void _emitNode(
         case ScenePropKind.color:
           add(p.name, v, () => _color(v! as SceneColor));
         case ScenePropKind.string:
-          add(p.name, v, () => _str(v! as String));
+          add(p.name, v, () => sceneStringLiteral(v! as String));
         case ScenePropKind.boolean:
           add(p.name, v, () => '$v');
       }
@@ -485,7 +485,9 @@ void _emitNode(
       // text is one run by definition: a parameter fills the whole string.
       var rich = t.runs.length > 1 && ref('text') == null;
       props.add(
-        rich ? '[${t.runs.map(_run).join(', ')}]' : ref('text') ?? _str(t.text),
+        rich
+            ? '[${t.runs.map(_run).join(', ')}]'
+            : ref('text') ?? sceneStringLiteral(t.text),
       );
       // Every property of the TREATMENT is spelled inside the one style
       // argument, so the table skips the style subset here; align and
@@ -530,8 +532,8 @@ void _emitNode(
 /// — a stretch of the paragraph and what it differs by. A run with no delta
 /// is just its string, which is most of them.
 String _run(TextRun r) => r.style == null
-    ? 'TextRun(${_str(r.text)})'
-    : 'TextRun(${_str(r.text)}, style: ${sceneStyleLiteral(r.style!)})';
+    ? 'TextRun(${sceneStringLiteral(r.text)})'
+    : 'TextRun(${sceneStringLiteral(r.text)}, style: ${sceneStyleLiteral(r.style!)})';
 
 /// Every property a style sets, spelled by the table — so a property added
 /// to the style subset is written here without this function knowing its
@@ -610,7 +612,7 @@ String scenePropLiteral(SceneProp p, Object? v) => switch (p.kind) {
   ScenePropKind.axes => emitSceneAxes(v! as Map<String, double>),
   ScenePropKind.number => _num(v! as double),
   ScenePropKind.integer => '$v',
-  ScenePropKind.string => _str(v! as String),
+  ScenePropKind.string => sceneStringLiteral(v! as String),
   ScenePropKind.boolean => '$v',
   ScenePropKind.color => _color(v! as SceneColor),
   ScenePropKind.choice => '${p.choices!.typeName}.${p.choices!.nameOf(v!)}',
@@ -691,7 +693,16 @@ String _track(double? v) => v == null ? 'null' : _size(v);
 String _color(SceneColor c) =>
     'SceneColor(0x${c.argb.toRadixString(16).padLeft(8, '0').toUpperCase()})';
 
-String _str(String s) {
+/// A Dart single-quoted string literal for [s] — the one spelling, shared
+/// with the token library's emitter and with the args generator.
+///
+/// It escapes what makes a literal *wrong* rather than merely ugly: the
+/// backslash, the quote, the `$` that would otherwise start an interpolation,
+/// and the three whitespace controls that cannot sit inside single quotes at
+/// all. A partial copy of this — quote and backslash only —
+/// is how a headline reading "Your coffee,\nready before you are" emitted
+/// source with a raw newline in the middle of a literal.
+String sceneStringLiteral(String s) {
   var out = StringBuffer("'");
   for (var rune in s.runes) {
     switch (rune) {
@@ -717,11 +728,11 @@ String _str(String s) {
 
 String _argValue(Object? v) => switch (v) {
   num n => n is double ? _num(n) : '$n',
-  String s => _str(s),
+  String s => sceneStringLiteral(s),
   bool b => '$b',
   // A colour argument is what a nested scene's colour parameter takes.
   SceneColor c => _color(c),
-  _ => _str('$v'),
+  _ => sceneStringLiteral('$v'),
 };
 
 // ---------------------------------------------------------------------------

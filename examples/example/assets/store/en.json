@@ -3,5 +3,8 @@
   "menu": "Five drinks. No queue.",
   "cart": "Tap. Pay. Collect.",
   "order-placed": "It's waiting when you get there",
-  "empty-cart": "Start with a flat white"
+  "empty-cart": "Start with a flat white",
+  "banner-headline": "Your coffee,\nready before you are",
+  "banner-subtitle": "Order ahead, skip the queue, and collect it warm.",
+  "banner-cta": "Get the app"
 }

@@ -1668,14 +1668,15 @@ fw run scene list [--package=…]
 Renders a scene's motion to an mp4, drawn by the app itself — its theme, its group's widgets — one frame per moment on the harness lane, where a frame cannot be of a moment other than the one it was drawn for. Needs ffmpeg.
 
 ```sh
-fw run scene video [--package=…] --scene=<string> --fps=<string>
+fw run scene video [--package=…] --scene=<string> [--fps=…] [--args=…]
 ```
 
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `package` | string | no | — | Which declared package; the first when omitted. |
 | `scene` | string | yes | — | The scene file, by name or path. |
-| `fps` | string | yes | — | Default 30. |
+| `fps` | string | no | 30 | Between 1 and 120. |
+| `args` | string | no | — | A JSON object answering the scene's own parameters — {"headline": "Votre café", "shotFront": "…/01-welcome.png"}. One authored scene then renders every locale, and each setting is a file of its own rather than the same name written twice. A name the scene does not declare is refused, with the ones it does. |
 
 #### `newGroup` — New group
 
