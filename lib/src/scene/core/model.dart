@@ -1103,7 +1103,7 @@ class ExternalNode extends SceneNode {
     var out = Map.of(args);
     for (var entry in fx.entries) {
       var prop = entry.key.$2;
-      if (prop.startsWith('args.')) out[prop.substring(5)] = entry.value;
+      if (sceneArgName(prop) case var name?) out[name] = entry.value;
     }
     return out;
   }
@@ -1208,7 +1208,7 @@ class SceneRefNode extends SceneNode {
     var out = Map.of(args);
     for (var entry in fx.entries) {
       var prop = entry.key.$2;
-      if (prop.startsWith('args.')) out[prop.substring(5)] = entry.value;
+      if (sceneArgName(prop) case var name?) out[name] = entry.value;
     }
     return out;
   }

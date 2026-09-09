@@ -360,7 +360,7 @@ class _Lane {
   /// Where the group starts on the timeline.
   final Duration at;
 
-  String get label => prop.startsWith('args.') ? prop.substring(5) : prop;
+  String get label => sceneArgName(prop) ?? prop;
 }
 
 /// A placed group and the lanes under it.
@@ -556,9 +556,7 @@ class _GroupRowState extends State<_GroupRow> {
                             entries: [
                               for (var spec in offered)
                                 MenuItem(
-                                  spec.name.startsWith('args.')
-                                      ? spec.name.substring(5)
-                                      : spec.name,
+                                  sceneArgName(spec.name) ?? spec.name,
                                   onSelected: () => widget.onAddKey(spec.name),
                                 ),
                             ],
@@ -714,9 +712,7 @@ class _AnimateRow extends StatelessWidget {
                     entries: [
                       for (var spec in animatableProps(node))
                         MenuItem(
-                          spec.name.startsWith('args.')
-                              ? spec.name.substring(5)
-                              : spec.name,
+                          sceneArgName(spec.name) ?? spec.name,
                           onSelected: () => onPick(spec.name),
                         ),
                     ],

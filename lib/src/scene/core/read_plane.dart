@@ -141,21 +141,85 @@ void applyTokenMode(SceneDocument doc, {String? from}) {
   }
 }
 
-/// The quad row a key names ONE SIDE of, with which side — `paddingLeft` on
-/// the `padding` row, `cornerTopLeft` on `corner`.
+/// What a key names.
 ///
-/// A side is not a row of its own: the four names live on the row that owns
-/// them, in [SceneProp.sides]. The file grammar has always let one be bound
-/// (`FrameNode(paddingLeft: gutter)`, which the parser reads and the emitter
-/// writes back), and nothing here answered for it — so the read plane saw no
-/// property under the key, took that for "the property was cleared", and
-/// dropped the binding on the first reconcile. The next save wrote the
-/// literal. This is what answers for it.
-(SceneProp, int)? sceneSideNamed(SceneNode node, String key) {
+/// A key is what a [SceneNode.bindings] entry is filed under, what the read
+/// plane gets and sets by, and what a motion track is named. Four kinds of
+/// thing answer to one flat namespace of strings, and until this existed
+/// each kind was recognised by an ad-hoc test in whichever file needed it —
+/// seventeen `startsWith('args.')` across six files, `== styleBindingKey`
+/// across five, and for a side, nowhere at all. That last one is not a
+/// coincidence: the way to half-implement a kind is for there to be no list
+/// of them.
+sealed class SceneKey {
+  const SceneKey();
+}
+
+/// A row of the property table: `fill`, `fontSize`. The ordinary case.
+class ScenePropertyKey extends SceneKey {
+  const ScenePropertyKey(this.prop);
+
+  final SceneProp prop;
+}
+
+/// One side of a quad row — `paddingLeft` on `padding`, `cornerTopLeft` on
+/// `corner`. Not a row of its own: the four names live on the row that owns
+/// them, in [SceneProp.sides], and the value is one number inside a value
+/// that is four of them.
+class SceneSideKey extends SceneKey {
+  const SceneSideKey(this.prop, this.index);
+
+  final SceneProp prop;
+
+  /// Which of [SceneProp.sides], in the order the file names them.
+  final int index;
+}
+
+/// An argument of whatever the node stands for — a nested scene's parameter,
+/// an external widget's argument. The only kind whose set is not known here:
+/// it comes from the child's own declarations, so it cannot be a table row
+/// and the key carries a prefix instead.
+class SceneArgKey extends SceneKey {
+  const SceneArgKey(this.name);
+
+  static const prefix = 'args.';
+
+  /// The argument's own name, without the prefix.
+  final String name;
+}
+
+/// The argument's own name when [key] names one, else null.
+///
+/// The node-free half of [resolveSceneKey], for the places that only need
+/// the spelling: a motion track is filed under the same key space and its
+/// group keeps arguments in their own map, and a label drops the prefix.
+String? sceneArgName(String key) => key.startsWith(SceneArgKey.prefix)
+    ? key.substring(SceneArgKey.prefix.length)
+    : null;
+
+/// A text's shared style — one binding over many properties rather than a
+/// property of its own, which is why it is a reserved key and why no
+/// parameter can fill it.
+class SceneStyleKey extends SceneKey {
+  const SceneStyleKey();
+}
+
+/// Which of the four [SceneKey] kinds [key] is on [node], or null when it
+/// names nothing the node can hold.
+SceneKey? resolveSceneKey(SceneNode node, String key) {
+  if (key == styleBindingKey) {
+    return node is TextNode ? const SceneStyleKey() : null;
+  }
+  if (sceneArgName(key) case var name?) {
+    return node is SceneRefNode || node is ExternalNode
+        ? SceneArgKey(name)
+        : null;
+  }
   for (var p in sceneProps) {
     if (!p.appliesTo(node)) continue;
+    if (p.name == key) return ScenePropertyKey(p);
     var i = p.sides?.indexOf(key) ?? -1;
-    if (i >= 0) return (p, i);
+    if (i >= 0) return SceneSideKey(p, i);
   }
   return null;
 }
@@ -164,91 +228,92 @@ void applyTokenMode(SceneDocument doc, {String? from}) {
 /// cannot be bound — the table's kind, seen as a parameter's. A nested
 /// scene's argument reads a parameter of the kind the child declares it;
 /// a list is data and takes no binding.
-SceneParamKind? bindableKind(SceneNode node, String prop) {
-  if (prop.startsWith('args.')) {
-    return switch (node) {
-      SceneRefNode r => switch (r.instance?.paramNamed(prop.substring(5))) {
-        SceneParamDecl(kind: SceneParamKind.list) => null,
-        SceneParamDecl(:var kind) => kind,
-        null => null,
+SceneParamKind? bindableKind(SceneNode node, String prop) =>
+    switch (resolveSceneKey(node, prop)) {
+      ScenePropertyKey(:var prop) => prop.paramKind,
+      // Every side of every quad is a number.
+      SceneSideKey() => SceneParamKind.number,
+      SceneArgKey(:var name) => switch (node) {
+        SceneRefNode r => switch (r.instance?.paramNamed(name)) {
+          SceneParamDecl(kind: SceneParamKind.list) => null,
+          SceneParamDecl(:var kind) => kind,
+          null => null,
+        },
+        _ => null,
       },
-      _ => null,
+      // A style is several properties at once and no parameter kind holds
+      // one, so the only thing it can ever read is a style token.
+      SceneStyleKey() => null,
+      null => null,
     };
-  }
-  // Every side of every quad is a number.
-  if (sceneSideNamed(node, prop) != null) return SceneParamKind.number;
-  return scenePropNamed(node, prop)?.paramKind;
-}
 
 /// Read one authored property by the name a [SceneNode.bindings] entry keys
 /// it under — the table's reader, with the two shapes a binding sees
 /// differently: edges as their uniform value, a nested argument at its
 /// override else the child's default.
-Object? getSceneProperty(SceneNode node, String prop) {
-  if (prop.startsWith('args.')) {
-    var name = prop.substring(5);
-    return switch (node) {
-      SceneRefNode r =>
-        r.args[name] ?? r.instance?.paramNamed(name)?.defaultValue,
-      ExternalNode e => e.args[name],
-      _ => null,
+Object? getSceneProperty(SceneNode node, String prop) =>
+    switch (resolveSceneKey(node, prop)) {
+      ScenePropertyKey(:var prop) => switch (prop.kind) {
+        ScenePropKind.edges => (prop.read(node)! as SceneQuad).sides.first,
+        ScenePropKind.size => sizeToWire(prop.read(node) as double?),
+        _ => prop.read(node),
+      },
+      SceneSideKey(:var prop, :var index) =>
+        (prop.read(node)! as SceneQuad).sides[index],
+      SceneArgKey(:var name) => switch (node) {
+        SceneRefNode r =>
+          r.args[name] ?? r.instance?.paramNamed(name)?.defaultValue,
+        ExternalNode e => e.args[name],
+        _ => null,
+      },
+      // A style is not read as a value: `styleOf` resolves the token.
+      SceneStyleKey() => null,
+      null => null,
     };
-  }
-  if (sceneSideNamed(node, prop) case (var quad, var i)) {
-    return (quad.read(node)! as SceneQuad).sides[i];
-  }
-  var p = scenePropNamed(node, prop);
-  if (p == null) return null;
-  var v = p.read(node);
-  return switch (p.kind) {
-    ScenePropKind.edges => (v! as SceneQuad).sides.first,
-    ScenePropKind.size => sizeToWire(v as double?),
-    _ => v,
-  };
-}
 
 /// Write one authored property by the name a [SceneNode.bindings] entry
 /// keys it under. The one place that maps a property name to a slot, so an
 /// argument and a repeated item's field land the same way.
 void setSceneProperty(SceneNode node, String prop, Object? value) {
-  if (prop.startsWith('args.')) {
-    var name = prop.substring(5);
-    // Null is "not written": the argument leaves the map, so the file spells
-    // nothing and the widget's own fallback answers.
-    switch (node) {
-      case SceneRefNode r:
-        value == null ? r.args.remove(name) : r.args[name] = value;
-      case ExternalNode e:
-        value == null ? e.args.remove(name) : e.args[name] = value;
-      default:
-        break;
-    }
-    return;
+  switch (resolveSceneKey(node, prop)) {
+    case ScenePropertyKey(:var prop):
+      prop.write(node, switch (prop.kind) {
+        // A number filling a text slot is ordinary in a repeated row — a
+        // quantity is a number and reads as one, not as "12.0".
+        ScenePropKind.string => switch (value) {
+          // A nullable string property — a font family — takes "nothing
+          // set".
+          null => null,
+          double d when d == d.roundToDouble() && d.abs() < 1e15 =>
+            '${d.round()}',
+          _ => '$value',
+        },
+        ScenePropKind.number => (value! as num).toDouble(),
+        ScenePropKind.edges => prop.quad!(value),
+        ScenePropKind.size => sizeFromWire(value),
+        _ => value,
+      });
+    case SceneSideKey(:var prop, :var index):
+      // One side moves, the other three stay: a side is a number on a value
+      // that is four of them.
+      if (value == null) return;
+      var current = prop.read(node)! as SceneQuad;
+      prop.write(node, current.withSide(index, (value as num).toDouble()));
+    case SceneArgKey(:var name):
+      // Null is "not written": the argument leaves the map, so the file
+      // spells nothing and the widget's own fallback answers.
+      switch (node) {
+        case SceneRefNode r:
+          value == null ? r.args.remove(name) : r.args[name] = value;
+        case ExternalNode e:
+          value == null ? e.args.remove(name) : e.args[name] = value;
+        default:
+          break;
+      }
+    case SceneStyleKey():
+    case null:
+      break;
   }
-  if (sceneSideNamed(node, prop) case (var quad, var i)) {
-    // One side moves, the other three stay: a side is a number on a value
-    // that is four of them.
-    if (value == null) return;
-    var current = quad.read(node)! as SceneQuad;
-    quad.write(node, current.withSide(i, (value as num).toDouble()));
-    return;
-  }
-  var p = scenePropNamed(node, prop);
-  if (p == null) return;
-  p.write(node, switch (p.kind) {
-    // A number filling a text slot is ordinary in a repeated row — a
-    // quantity is a number and reads as one, not as "12.0".
-    ScenePropKind.string => switch (value) {
-      // A nullable string property — a font family — takes "nothing set".
-      null => null,
-      double d when d == d.roundToDouble() && d.abs() < 1e15 => '${d.round()}',
-      _ => '$value',
-    },
-    ScenePropKind.number => (value! as num).toDouble(),
-    ScenePropKind.edges => p.quad!(value),
-    ScenePropKind.size => sizeFromWire(value),
-    _ => value,
-  });
 }
 
 /// Fill in one item's fields across a repeated subtree: every property
@@ -346,7 +411,7 @@ List<String> reconcileBindings(SceneDocument doc) {
       // is never a detach here. Only a token that is gone, or no longer a
       // style, drops it — an export's style is one the editor cannot see
       // into, and it stays.
-      if (prop == styleBindingKey) {
+      if (resolveSceneKey(node, prop) is SceneStyleKey) {
         var name = switch (entry.value) {
           StyleRef(:var name) => name,
           _ => null,

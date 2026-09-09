@@ -918,7 +918,7 @@ class SceneEditor extends SceneListenable {
     }
     // An export on an external widget's argument: the argument carries the
     // NAME, whatever the export's type, and the widget takes the object.
-    if (decl.isExport && node is ExternalNode && prop.startsWith('args.')) {
+    if (decl.isExport && node is ExternalNode && sceneArgName(prop) != null) {
       perform('Bind $prop to tokens.$token', () {
         node.bindings[prop] = TokenRef(token);
         setSceneProperty(node, prop, tokenMarker(token));
@@ -926,7 +926,7 @@ class SceneEditor extends SceneListenable {
       return;
     }
     if (decl.isOpaque) {
-      if (node is! ExternalNode || !prop.startsWith('args.')) {
+      if (node is! ExternalNode || sceneArgName(prop) == null) {
         throw ArgumentError(
           '"$token" is a ${decl.typeName} — the app\'s own object, which '
           "only an external widget's argument can take",
@@ -1273,9 +1273,10 @@ class SceneEditor extends SceneListenable {
   MotionTrack? trackOf(String motion, String group, String prop) {
     var g = motions[motion]?.groupNamed(group);
     if (g == null) return null;
-    return prop.startsWith('args.')
-        ? g.args[prop.substring(5)]
-        : g.tracks[prop];
+    return switch (sceneArgName(prop)) {
+      var arg? => g.args[arg],
+      null => g.tracks[prop],
+    };
   }
 
   void selectKey(MotionKeyRef? ref, {bool toggle = false}) {
@@ -1380,8 +1381,8 @@ class SceneEditor extends SceneListenable {
         var track = existing;
         if (track == null) {
           track = MotionTrack([], kind: kind);
-          if (prop.startsWith('args.')) {
-            group.args[prop.substring(5)] = track;
+          if (sceneArgName(prop) case var arg?) {
+            group.args[arg] = track;
           } else {
             group.tracks[prop] = track;
           }
@@ -1428,8 +1429,7 @@ class SceneEditor extends SceneListenable {
   /// What a fresh track on [prop] starts from: the node's value as shown,
   /// or the property's identity when the node has no such slot.
   Object _currentValue(SceneNode node, String prop, TrackKind kind) {
-    if (prop.startsWith('args.')) {
-      var arg = prop.substring(5);
+    if (sceneArgName(prop) case var arg?) {
       var raw = switch (node) {
         ExternalNode e => e.args[arg],
         SceneRefNode r =>
@@ -1470,8 +1470,8 @@ class SceneEditor extends SceneListenable {
     var group = motions[motion]?.groupNamed(groupName);
     if (group == null) return;
     perform('Delete ${_propLabel(prop)}', () {
-      if (prop.startsWith('args.')) {
-        group.args.remove(prop.substring(5));
+      if (sceneArgName(prop) case var arg?) {
+        group.args.remove(arg);
       } else {
         group.tracks.remove(prop);
       }
@@ -1479,8 +1479,7 @@ class SceneEditor extends SceneListenable {
     clearKeySelection();
   }
 
-  static String _propLabel(String prop) =>
-      prop.startsWith('args.') ? prop.substring(5) : prop;
+  static String _propLabel(String prop) => sceneArgName(prop) ?? prop;
 
   /// [expr] with every placement of [name] gone, and any combinator left
   /// empty by that collapsed.

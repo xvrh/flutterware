@@ -685,7 +685,7 @@ void resolveExports(SceneNode node, Map<String, Object?> exports) {
   for (var e in node.bindings.entries) {
     var prop = e.key;
     switch (e.value) {
-      case TokenRef(:var name) when !prop.startsWith('args.'):
+      case TokenRef(:var name) when sceneArgName(prop) == null:
         if (!exports.containsKey(name)) continue;
         var value = switch (exports[name]) {
           Color c => c.scene,

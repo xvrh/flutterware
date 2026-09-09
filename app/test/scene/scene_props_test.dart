@@ -94,6 +94,33 @@ void main() {
     }
   });
 
+  test('every kind of key resolves, and an unknown one does not', () {
+    // Four kinds of thing answer to one flat namespace of strings. Each used
+    // to be recognised by an ad-hoc test in whichever file needed it, which
+    // is how a side came to be known to the grammar and unknown to the read
+    // plane. This is the list; a fifth kind that is not on it fails here.
+    var frame = FrameNode(name: 'f');
+    var text = TextNode('x', name: 't');
+    var ref = SceneRefNode.read('Card', name: 'r');
+    expect(resolveSceneKey(frame, 'fill'), isA<ScenePropertyKey>());
+    expect(
+      resolveSceneKey(frame, 'paddingLeft'),
+      isA<SceneSideKey>()
+          .having((k) => k.prop.name, 'row', 'padding')
+          .having((k) => k.index, 'side', 0),
+    );
+    expect(
+      resolveSceneKey(ref, 'args.headline'),
+      isA<SceneArgKey>().having((k) => k.name, 'name', 'headline'),
+    );
+    expect(resolveSceneKey(text, styleBindingKey), isA<SceneStyleKey>());
+    // And what each node kind cannot hold.
+    expect(resolveSceneKey(frame, styleBindingKey), isNull, reason: 'no type');
+    expect(resolveSceneKey(frame, 'args.headline'), isNull, reason: 'no args');
+    expect(resolveSceneKey(frame, 'fontSize'), isNull, reason: 'not a text');
+    expect(resolveSceneKey(frame, 'nonesuch'), isNull);
+  });
+
   for (var p in sceneProps) {
     test('${p.name} reads back what it writes, and starts at its default', () {
       var node = fresh(p);

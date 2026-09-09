@@ -398,7 +398,7 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
   if (json['exports'] case Map exports) {
     for (var e in exports.entries) {
       var prop = '${e.key}';
-      node.bindings[prop] = prop == styleBindingKey
+      node.bindings[prop] = resolveSceneKey(node, prop) is SceneStyleKey
           ? StyleRef('${e.value}')
           : TokenRef('${e.value}');
     }

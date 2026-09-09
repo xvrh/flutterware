@@ -1768,8 +1768,7 @@ class SceneInspector extends StatelessWidget {
 
   static double _half(double v) => (v * 2).round() / 2;
 
-  static String _propLabel(String prop) =>
-      prop.startsWith('args.') ? prop.substring(5) : prop;
+  static String _propLabel(String prop) => sceneArgName(prop) ?? prop;
 
   /// The child's declared parameters, each at its override or its default.
   /// A parameter the child does not declare cannot be set here — the args
