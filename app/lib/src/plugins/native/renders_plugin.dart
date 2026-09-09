@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware_render/client.dart';
+import 'package:flutterware/render_client.dart';
 
 import '../../ui/action_button.dart';
 import '../../ui/design/design.dart';

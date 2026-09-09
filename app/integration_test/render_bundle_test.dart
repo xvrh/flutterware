@@ -3,10 +3,10 @@ library;
 
 import 'dart:io';
 
+import 'package:flutterware/render_client.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/render_bundle/bundle_builder.dart';
 import 'package:flutterware_app/src/render_bundle/one_shot.dart';
-import 'package:flutterware_render/client.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 

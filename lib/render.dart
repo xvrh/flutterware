@@ -10,15 +10,15 @@
 /// does not carry exactly as the engine would have drawn it.
 ///
 /// The server-side story starts here too: render points are declared as
-/// typed values in a shared pure-Dart contract package
-/// (`package:flutterware_render/contract.dart`, re-exported below), and the
-/// app binds implementations to them in a function marked
+/// typed values in a contract the app and the server share (re-exported
+/// below, and by `package:flutterware/render_client.dart` for the server),
+/// and the app binds implementations to them in a function marked
 /// [RenderRegistry], receiving a [RenderHost].
 ///
 /// Design: docs/superpowers/specs/2026-08-31-widget-export-design.md.
 library;
 
-export 'package:flutterware_render/contract.dart'
+export 'render_contract.dart'
     show
         DocumentRender,
         PdfResult,

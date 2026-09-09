@@ -175,9 +175,16 @@ The scenario code sits in two places and only one of them is API:
 
 Design: `docs/superpowers/specs/2026-07-30-scenarios-design.md`.
 
-The same discipline covers `lib/src/render/` — the vector capture pipeline
-(`captureSvg`/`capturePdf`), re-exported through `lib/render.dart`. Design:
-`docs/superpowers/specs/2026-08-31-widget-export-design.md`.
+The same discipline covers `lib/src/render/`, which is published through
+three doors: `lib/render.dart` (the vector capture pipeline,
+`captureSvg`/`capturePdf`, Flutter-side), `lib/render_contract.dart` (the
+render-point descriptors, shared by the app and the server — no Flutter and
+no `dart:io`, so it still compiles for the web) and `lib/render_client.dart`
+(`RenderPool`, which a pure-Dart server drives a bundle with). The last two
+import no Flutter but live in a Flutter package on purpose: resolving them
+takes a Flutter SDK, the same bargain `lib/server.dart` already makes, and
+it stops at `pub get` — a deployed image needs only the bundle directory.
+Design: `docs/superpowers/specs/2026-08-31-widget-export-design.md`.
 
 ## Common commands
 
