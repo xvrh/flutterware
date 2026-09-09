@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutterware/plugins.dart' hide Dependencies;
 
 import '../../dependencies/model/package_origin.dart';
+import '../../dependencies/model/pub_deps_store.dart';
 import '../../dependencies/model/service.dart';
 import '../../utils/async_value.dart';
 import '../plugin_core.dart';
@@ -39,6 +40,14 @@ class DependenciesCore extends PluginCore {
   /// knows what it is for.
   final _services = <String, DependenciesService>{};
 
+  /// Shared by every service this core builds, and the reason `fw status` is
+  /// no longer dominated by this plugin. `pub deps` reports the whole
+  /// resolution wherever it runs, so the three declared packages of this repo
+  /// were three identical ~0.6s subprocesses; the store makes them one, and
+  /// caches it on disk against the lockfile so a cold `fw` pays nothing
+  /// either.
+  final _pubDeps = PubDepsStore();
+
   /// Declared packages, filtered to those the workspace knows about.
   late final List<String> packages = [
     for (var path in host.packagePaths)
@@ -47,7 +56,10 @@ class DependenciesCore extends PluginCore {
 
   DependenciesService serviceFor(String path) => _services.putIfAbsent(
     path,
-    () => DependenciesService(host.workspace.packageFor(path)),
+    () => DependenciesService(
+      host.workspace.packageFor(path),
+      pubDepsStore: _pubDeps,
+    ),
   );
 
   /// Whether [path]'s service has been built yet — the laziness rule, made

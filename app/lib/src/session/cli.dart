@@ -1142,9 +1142,7 @@ class FwCli {
         await core.computeAll();
         reports = [core.report];
       } else {
-        for (var core in session.cores) {
-          await core.computeAll();
-        }
+        await computeAllCores(session.cores);
         reports = session.reports;
       }
 

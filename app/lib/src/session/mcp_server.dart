@@ -303,9 +303,7 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
             ],
           });
         }
-        for (var core in session.cores) {
-          await core.computeAll();
-        }
+        await computeAllCores(session.cores);
         return _json({
           'root': session.root,
           'worktree': session.worktree.branch ?? session.worktree.path,

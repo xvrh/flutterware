@@ -75,6 +75,23 @@ class PubDeps {
     required String flutterExecutable,
     required String directory,
     RunProcess? runProcess,
+  }) async => PubDeps.parse(
+    await loadJson(
+      flutterExecutable: flutterExecutable,
+      directory: directory,
+      runProcess: runProcess,
+    ),
+  );
+
+  /// The same run, handing back what pub printed rather than what it means.
+  ///
+  /// Split out for [PubDepsStore], which caches the bytes: parsing and then
+  /// re-encoding them would make the cache a re-rendering of pub's answer
+  /// rather than pub's answer.
+  static Future<String> loadJson({
+    required String flutterExecutable,
+    required String directory,
+    RunProcess? runProcess,
   }) async {
     var run = runProcess ?? Process.run;
     var result = await run(flutterExecutable, const [
@@ -90,7 +107,7 @@ class PubDeps {
         stderr: '${result.stderr}'.trim(),
       );
     }
-    return PubDeps.parse('${result.stdout}');
+    return '${result.stdout}';
   }
 }
 
