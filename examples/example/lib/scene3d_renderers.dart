@@ -114,8 +114,20 @@ class _View3DState extends State<_View3D> {
   /// The window's sun, in the scene while `light` is above zero.
   fs.Node? _sun;
   fs.DirectionalLight? _sunLight;
-  final _placed = <String, _Placed>{};
-  final _loading = <String>{};
+  final _placed = <Object, _Placed>{};
+  final _loading = <Object>{};
+
+  /// What a placement is remembered by.
+  ///
+  /// The node's name where it has one, and the node OBJECT where it does not.
+  /// A document the editor pushed arrives as fresh objects every time, so
+  /// identity cannot survive a push and the name has to carry it; a scene the
+  /// app COMPILED has no names at all — `SceneNode.name` is only filled in by
+  /// the parser, from the field name — so keying on the name alone collapsed
+  /// every placement of a compiled scene into one, and a banner with two
+  /// phones on it drew one phone. Same rule the view already uses for its
+  /// GlobalKeys.
+  static Object _keyOf(KindNode n) => n.name.isNotEmpty ? n.name : n;
   Object? _error;
   var _started = false;
 
@@ -163,12 +175,12 @@ class _View3DState extends State<_View3D> {
       for (var c in widget.node.children)
         if (_isPlacement(c)) c as KindNode,
     ];
-    var names = {for (var n in placements) n.name};
-    for (var gone in _placed.keys.where((n) => !names.contains(n)).toList()) {
+    var keys = {for (var n in placements) _keyOf(n)};
+    for (var gone in _placed.keys.where((k) => !keys.contains(k)).toList()) {
       _drop(gone);
     }
     for (var node in placements) {
-      var placed = _placed[node.name];
+      var placed = _placed[_keyOf(node)];
       var asset = _text(node, 'asset');
       // A model with no asset is nothing to draw; a surface with none is a
       // quad. The quad is keyed by the empty asset like any other load.
@@ -176,12 +188,12 @@ class _View3DState extends State<_View3D> {
           (placed.asset != asset ||
               (node.kind == surfaceKind &&
                   placed.mesh != _text(node, 'mesh')))) {
-        _drop(node.name);
+        _drop(_keyOf(node));
         placed = null;
       }
       if (placed == null) {
         if ((asset.isNotEmpty || node.kind == surfaceKind) &&
-            _loading.add(node.name)) {
+            _loading.add(_keyOf(node))) {
           _load(bundle, node);
         }
         continue;
@@ -190,18 +202,18 @@ class _View3DState extends State<_View3D> {
     }
   }
 
-  void _drop(String name) {
-    var placed = _placed.remove(name);
+  void _drop(Object key) {
+    var placed = _placed.remove(key);
     if (placed == null) return;
     _unbind(placed);
     _scene.remove(placed.root);
   }
 
-  /// The placement called [name] as the node holds it NOW — a load that
-  /// was out while the editor pushed a new document lands on the new one.
-  KindNode? _current(String name) {
+  /// The placement [key] names as the node holds it NOW — a load that was
+  /// out while the editor pushed a new document lands on the new one.
+  KindNode? _current(Object key) {
     for (var c in widget.node.children) {
-      if (c.name == name && _isPlacement(c)) return c as KindNode;
+      if (_isPlacement(c) && _keyOf(c as KindNode) == key) return c;
     }
     return null;
   }
@@ -219,9 +231,9 @@ class _View3DState extends State<_View3D> {
         return fs.loadScene(asset, bundle: bundle);
       });
       if (!mounted) return;
-      _loading.remove(node.name);
+      _loading.remove(_keyOf(node));
       // The node may have moved on while the load was out.
-      var now = _current(node.name);
+      var now = _current(_keyOf(node));
       if (now == null ||
           _text(now, 'asset') != asset ||
           _text(now, 'mesh') != mesh) {
@@ -239,7 +251,7 @@ class _View3DState extends State<_View3D> {
           animation.endTime,
         );
       }
-      _placed[node.name] = placed;
+      _placed[_keyOf(now)] = placed;
       // The mesh gets its material BEFORE the root joins the scene, and the
       // capture component AFTER: a mesh swapped on a node the scene already
       // held was drawn with the old one in two runs out of three, and a
@@ -250,7 +262,7 @@ class _View3DState extends State<_View3D> {
       _apply(now, placed);
       setState(() {});
     } catch (e) {
-      _loading.remove(node.name);
+      _loading.remove(_keyOf(node));
       if (mounted) setState(() => _error = e);
     }
   }
