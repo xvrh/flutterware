@@ -95,6 +95,42 @@ precisely so a workflow can find its own comment and update it rather than
 stack a new one per push; the footer's `@<sha>` says which push the report
 still describes.
 
+## Several packages, one comment
+
+`fw compare` covers **every** package either half declares — previews in
+`app` and `packages/gallery`, scenarios in `app` and `packages/notes` — and
+writes one `index.json`, one `comment.md` and one page for all of them. There
+is nothing to configure and no reason to run it once per package; doing so
+would produce a comment each, and each run would overwrite the last one's
+artifact.
+
+`--package=` narrows, and it is repeatable:
+
+```sh
+dart run flutterware compare --package=app --package=packages/notes
+```
+
+Two things change in the output when a run covers more than one package, and
+nothing changes when it covers one:
+
+- **A row's id carries its package** — `packages/gallery/demo/card.dart#card`,
+  which is the file's path plus the name it was declared under. Without it two
+  packages that both declare `demo/card.dart#card` are one row.
+- **A row also carries a `package` field**, recorded whether or not the id was
+  qualified, so a script over `index.json` never has to take an id apart.
+
+A package whose catalog or harness will not compile against the base is one
+package's worth of silence, not the end of the run: the others still report,
+the half records a note naming the package and the compiler's output, and the
+comment leads with **no verdict** so the failure cannot read as a pass. `fw
+compare` still exits non-zero. When it is the *only* package, it is still the
+whole comparison — the command prints the diagnostics and exits 64.
+
+Packages are compared one at a time. Each is two `frontend_server`s and two
+guests, and a runner sized for one build will not hold four of those at once;
+since the scenario half stopped building harnesses it does not need, a package
+a branch did not touch costs milliseconds anyway.
+
 ## What to know before turning it on
 
 - **The shot cache is the whole performance story, and CI starts cold.**

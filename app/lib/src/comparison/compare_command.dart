@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutterware/comparison_report.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../plugins/native/previews_core.dart';
@@ -39,7 +40,7 @@ class CompareException implements Exception {
 class CompareOptions {
   const CompareOptions({
     this.baseRef,
-    this.package,
+    this.packages = const [],
     this.entries = const [],
     this.export = false,
     this.exportDir,
@@ -51,8 +52,15 @@ class CompareOptions {
   /// default branch.
   final String? baseRef;
 
-  /// Which previews package, worktree-relative. Null takes the first declared.
-  final String? package;
+  /// Which packages to compare, worktree-relative. Empty compares **every**
+  /// package each half declares.
+  ///
+  /// Empty used to mean "the first one declared", which is a default nobody
+  /// asked for: a repository with previews in two packages and scenarios in
+  /// two others had three quarters of itself silently uncompared, and the
+  /// scenario half did not read this option at all — so narrowing to the
+  /// second previews package compared it against the *first* scenarios one.
+  final List<String> packages;
 
   /// Narrow to these entry or scenario ids. Empty compares everything.
   final List<String> entries;
@@ -117,19 +125,33 @@ Future<CompareOutcome> runComparison({
   } on SessionException catch (e) {
     throw CompareException('$e');
   }
-  var packageInWorktree = options.package ?? core.packages.firstOrNull;
-  if (packageInWorktree == null) {
+  var previewsPackages = wantedPackages(core.packages, options.packages);
+  var scenariosCore = _scenariosCore(session);
+  var scenariosPackages = wantedPackages(
+    scenariosCore?.packages ?? const [],
+    options.packages,
+  );
+  if (previewsPackages.isEmpty && scenariosPackages.isEmpty) {
     throw CompareException(
-      'no package declares previews, so there is nothing to compare.',
+      options.packages.isEmpty
+          ? 'no package declares previews or scenarios, so there is nothing '
+                'to compare.'
+          : 'no package matching ${options.packages.join(', ')} declares '
+                'previews or scenarios.',
     );
   }
+  // Whether a row's id carries the package that declared it. Asked of the
+  // **whole comparison** rather than of one half, so that one artifact does
+  // not hold qualified previews ids beside bare scenario ones — see
+  // [comparedIdIn].
+  var qualify = {...previewsPackages, ...scenariosPackages}.length > 1;
 
   // The two sides are two *checkouts*, not two package directories: a base
-  // checkout mirrors the whole worktree, so the package has to be named
+  // checkout mirrors the whole worktree, so a package has to be named
   // relative to its top level. Running this from inside `examples/example`
   // reported every entry as added until it did.
   var top = await BaseRef.topLevelOf(session.worktree.path);
-  var package = p.relative(
+  String relative(String packageInWorktree) => p.relative(
     p.normalize(p.join(session.worktree.path, packageInWorktree)),
     from: top,
   );
@@ -176,37 +198,72 @@ Future<CompareOutcome> runComparison({
   );
 
   var shotCache = ShotCache(p.join(flutterwareDir(), 'shots'));
-  var runner = ComparisonRunner(
-    headRoot: top,
-    baseRoot: checkout.path,
-    baseSha: base.sha,
-    cache: shotCache,
-    only: options.entries.isEmpty ? null : options.entries,
-    side: PreviewsSide(
-      flutterSdkRoot: sdk.root,
-      packagePath: package,
-      root: core.rootFor(packageInWorktree),
-      previewAnnotations: core.previewAnnotationsFor(packageInWorktree),
-      canvases: core.canvasesFor(packageInWorktree),
-      projectClock: core.host.projectClock,
-    ),
-  );
 
-  ComparisonResult result;
-  try {
-    result = await runner.run();
-  } on ComparisonRefused catch (e) {
-    throw CompareException('$e');
+  // One package at a time, deliberately. Each is two `frontend_server`s and
+  // two guests, so a `Future.wait` over four packages is sixteen processes on
+  // a runner sized for one build — and since the scenario half stopped
+  // building a harness it does not need, a package a branch did not touch now
+  // costs milliseconds and there is nothing left to overlap on the runs that
+  // matter. A pool belongs with the lockfile narrowing, which is what makes
+  // every package expensive at once.
+  var watch = Stopwatch()..start();
+  var previews = <ComparisonResult>[];
+  var refusals = <String, String>{};
+  for (var packageInWorktree in previewsPackages) {
+    if (previewsPackages.length > 1) {
+      onProgress?.call('Previews in $packageInWorktree…');
+    }
+    var runner = ComparisonRunner(
+      headRoot: top,
+      baseRoot: checkout.path,
+      baseSha: base.sha,
+      cache: shotCache,
+      only: options.entries.isEmpty ? null : options.entries,
+      side: PreviewsSide(
+        flutterSdkRoot: sdk.root,
+        packagePath: relative(packageInWorktree),
+        root: core.rootFor(packageInWorktree),
+        previewAnnotations: core.previewAnnotationsFor(packageInWorktree),
+        canvases: core.canvasesFor(packageInWorktree),
+        projectClock: core.host.projectClock,
+      ),
+    );
+    try {
+      previews.add(
+        (await runner.run()).inPackage(packageInWorktree, qualify: qualify),
+      );
+    } on ComparisonRefused catch (e) {
+      // One package that will not compile is one package's worth of silence,
+      // not the end of the comparison — §11a's argument ("one decision in the
+      // source is one row") one level up. It still ends the comparison when
+      // it is the *only* package, below, which is what keeps `fw compare`'s
+      // exit 64 and its printed diagnostics for a single-package project.
+      refusals[packageInWorktree] = '$e';
+    }
   }
+  if (previews.isEmpty && refusals.isNotEmpty) {
+    throw CompareException(refusals.values.first);
+  }
+  var result = ComparisonResult.merged(
+    previews,
+    baseSha: base.sha,
+    headRoot: top,
+    elapsed: watch.elapsed,
+    refusals: refusals,
+  );
   onPreviews?.call(result);
 
   var scenarios = await _compareScenarios(
     session: session,
+    core: scenariosCore,
+    packages: scenariosPackages,
+    relative: relative,
     top: top,
     baseRoot: checkout.path,
     sdkRoot: sdk.root,
     only: options.entries,
     cache: shotCache,
+    qualify: qualify,
     onProgress: onProgress,
   );
   if (scenarios != null) onScenarios?.call(scenarios);
@@ -266,6 +323,33 @@ Future<CompareOutcome> runComparison({
 
 String abbreviatedSha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 
+/// Which of [declared] a run covers, given what it was asked for.
+///
+/// An empty [asked] is every package the half declares — the whole point of
+/// the option's default. A non-empty one is an intersection rather than a
+/// lookup, because the two halves declare different sets and `--package=notes`
+/// is a legitimate thing to say to a repository whose previews are elsewhere:
+/// it narrows the scenario half and empties the previews one, rather than
+/// refusing.
+@visibleForTesting
+List<String> wantedPackages(List<String> declared, List<String> asked) =>
+    asked.isEmpty
+    ? declared
+    : [
+        for (var package in declared)
+          if (asked.contains(package)) package,
+      ];
+
+ScenariosCore? _scenariosCore(Session session) {
+  try {
+    return session.requireCore(scenariosPluginId) as ScenariosCore;
+  } on SessionException {
+    // No scenarios plugin at all: the artifact says nothing about scenarios
+    // rather than saying there are none, which are different claims.
+    return null;
+  }
+}
+
 /// Why [artifact]'s verdict is incomplete, or null when it is whole — the
 /// exit-code question, asked of the writer's shape.
 ///
@@ -276,6 +360,7 @@ String abbreviatedSha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 /// local here is only pulling the note and the states out of the artifact.
 String? verdictGap(ComparisonArtifact artifact) => verdictGapOf(
   scenariosNote: artifact.scenarios?.note,
+  previewsNote: artifact.previews.note,
   scenarioStates:
       artifact.scenarios?.items.map((item) => item.state) ?? const [],
   previewStates: artifact.previews.items.map((item) => item.state),
@@ -306,7 +391,10 @@ Future<ComparisonCompareResult> runCompareAction({
     session: session,
     options: CompareOptions(
       baseRef: arguments['base'] as String?,
-      package: arguments['package'] as String?,
+      // One package narrows; nothing compares every package either half
+      // declares. A repeatable argument is `fw compare --package=`'s, and an
+      // action takes one value.
+      packages: [?arguments['package'] as String?],
       entries: [?entry],
       export: export == true || export == 'true',
       baseHref: baseHref,
@@ -467,31 +555,60 @@ String? _scenarioDelta(ScenarioComparison scenario) {
 /// question of a scenario's closure that it asks of an entry's.
 Future<ScenarioResults?> _compareScenarios({
   required Session session,
+  required ScenariosCore? core,
+  required List<String> packages,
+  required String Function(String packageInWorktree) relative,
   required String top,
   required String baseRoot,
   required String sdkRoot,
   required List<String> only,
   required ShotCache cache,
+  required bool qualify,
+  void Function(String line)? onProgress,
+}) async {
+  if (core == null || packages.isEmpty) return null;
+  var watch = Stopwatch()..start();
+  var halves = <({String package, ScenarioResults results})>[];
+  for (var package in packages) {
+    if (packages.length > 1) onProgress?.call('Scenarios in $package…');
+    halves.add((
+      package: package,
+      results: await _comparePackageScenarios(
+        session: session,
+        core: core,
+        package: package,
+        packagePath: relative(package),
+        top: top,
+        baseRoot: baseRoot,
+        sdkRoot: sdkRoot,
+        only: only,
+        cache: cache,
+        qualify: qualify,
+        onProgress: onProgress,
+      ),
+    ));
+  }
+  return ScenarioResults.merged(halves, elapsed: watch.elapsed);
+}
+
+/// One package's scenarios, on both sides.
+Future<ScenarioResults> _comparePackageScenarios({
+  required Session session,
+  required ScenariosCore core,
+  required String package,
+  required String packagePath,
+  required String top,
+  required String baseRoot,
+  required String sdkRoot,
+  required List<String> only,
+  required ShotCache cache,
+  required bool qualify,
   void Function(String line)? onProgress,
 }) async {
   var watch = Stopwatch()..start();
-  ScenariosCore core;
-  try {
-    core = session.requireCore(scenariosPluginId) as ScenariosCore;
-  } on SessionException {
-    // No scenarios plugin at all: the artifact says nothing about scenarios
-    // rather than saying there are none, which are different claims.
-    return null;
-  }
-  var package = core.packages.firstOrNull;
-  if (package == null) return null;
-
   var side = ScenariosSide(
     flutterSdkRoot: sdkRoot,
-    packagePath: p.relative(
-      p.normalize(p.join(session.worktree.path, package)),
-      from: top,
-    ),
+    packagePath: packagePath,
     directory: core.scanRootFor(package),
     projectClock: core.host.projectClock,
   );
@@ -502,22 +619,28 @@ Future<ScenarioResults?> _compareScenarios({
   );
   try {
     try {
-      return await ScenariosRunner(
-        headRoot: top,
-        baseRoot: baseRoot,
-        source: source,
-        cache: cache,
-        pixels: PixelInputs.of(
-          packagePath: side.packagePath,
-          roots: [top, baseRoot],
-        ),
-        only: only.isEmpty ? null : only,
-      ).run(
-        outDir: p.join(
-          comparisonDirFor(flutterwareDir(), session.worktree),
-          'scenarios',
-        ),
-      );
+      var results =
+          await ScenariosRunner(
+            headRoot: top,
+            baseRoot: baseRoot,
+            source: source,
+            cache: cache,
+            pixels: PixelInputs.of(
+              packagePath: side.packagePath,
+              roots: [top, baseRoot],
+            ),
+            only: only.isEmpty ? null : only,
+          ).run(
+            // Per package, because two packages' `test/scenarios/shop_test.dart`
+            // are two different files and one directory would have them writing
+            // each other's frames.
+            outDir: p.join(
+              comparisonDirFor(flutterwareDir(), session.worktree),
+              'scenarios',
+              packagePath,
+            ),
+          );
+      return results.inPackage(package, qualify: qualify);
     } on Object catch (error) {
       // A side whose harness will not build is a side, not a crash — the same
       // rule the previews half follows, and the same skew causes it. It goes

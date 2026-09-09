@@ -59,6 +59,7 @@ library;
 export 'src/comparison/channels.dart'
     show
         ChannelDelta,
+        comparedIdIn,
         ComparedItem,
         ComparedState,
         EventChannel,

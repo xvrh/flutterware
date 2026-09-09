@@ -42,6 +42,113 @@ void main() {
     items: items,
   );
 
+  // A half whose harness would not build leaves no rows, and until this the
+  // comment printed that silence as a pass — the one thing a pull-request gate
+  // must never do.
+  group('a half that produced no verdict', () {
+    test('says so instead of "nothing changed"', () {
+      var report = writePrReport(
+        artifact: ComparisonArtifact(
+          previews: previews(const []),
+          scenarios: ScenarioResults.of(
+            items: const [],
+            ran: 0,
+            skipped: 0,
+            elapsed: Duration.zero,
+            note: 'notes: the harness does not compile',
+          ),
+        ),
+        cache: cache,
+        against: 'origin/master',
+        directory: temp.path,
+      );
+      var comment = File(report.commentPath).readAsStringSync();
+
+      expect(comment, contains('no verdict'));
+      expect(comment, contains('the harness does not compile'));
+      expect(comment, isNot(contains('Nothing changed')));
+    });
+
+    test('says so above the findings when there are some', () {
+      var report = writePrReport(
+        artifact: ComparisonArtifact(
+          previews: ComparisonResult(
+            baseSha: 'abc',
+            headRoot: '/w',
+            elapsed: Duration.zero,
+            rendered: 1,
+            items: const [
+              ComparedItem(id: 'app/a#b', state: ComparedState.changed),
+            ],
+            packages: const ['app'],
+            note: 'ops: the catalog does not compile',
+          ),
+        ),
+        cache: cache,
+        against: 'origin/master',
+        directory: temp.path,
+      );
+      var comment = File(report.commentPath).readAsStringSync();
+
+      expect(comment, contains('**No verdict**'));
+      expect(
+        comment.indexOf('No verdict'),
+        lessThan(comment.indexOf('Open the full comparison')),
+      );
+    });
+  });
+
+  test('the receipt names how many packages were covered', () {
+    var report = writePrReport(
+      artifact: ComparisonArtifact(
+        previews: ComparisonResult(
+          baseSha: 'abc',
+          headRoot: '/w',
+          elapsed: Duration.zero,
+          rendered: 0,
+          items: const [ComparedItem(id: 'app/a#b', state: ComparedState.same)],
+          packages: const ['app', 'packages/ops'],
+        ),
+      ),
+      cache: cache,
+      against: 'origin/master',
+      directory: temp.path,
+    );
+
+    expect(
+      File(report.commentPath).readAsStringSync(),
+      contains('across 2 packages'),
+    );
+  });
+
+  // A newline inside a markdown table cell ends the row, so a compiler error
+  // dropped in whole breaks the table from there down — and a failing entry's
+  // note is exactly where the compiler's diagnostics live.
+  test('a multi-line note is one line in the table', () {
+    var report = writePrReport(
+      artifact: ComparisonArtifact(
+        previews: previews(const [
+          ComparedItem(
+            id: 'a#b',
+            state: ComparedState.failed,
+            note: 'lib/a.dart:13:28: Error: not found\nWidget a() => B();\n   ^^^',
+          ),
+        ]),
+      ),
+      cache: cache,
+      against: 'origin/master',
+      directory: temp.path,
+    );
+    var comment = File(report.commentPath).readAsStringSync();
+    var row = comment
+        .split('\n')
+        .firstWhere((line) => line.contains('a#b') && line.startsWith('|'));
+
+    expect(row, contains('Error: not found …'));
+    expect(row, isNot(contains('Widget a()')));
+    expect(row.trim(), endsWith('|'));
+  });
+
   test('a clean comparison is a short comment and no mosaic', () {
     var report = writePrReport(
       artifact: ComparisonArtifact(

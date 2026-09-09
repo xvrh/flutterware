@@ -3,6 +3,19 @@ import 'dart:convert';
 import 'pixel_diff.dart';
 import 'tree_diff.dart';
 
+/// How a row is addressed when a comparison spans several packages.
+///
+/// The package's own path, worktree-relative, in front of the id the row has
+/// inside that package — so the whole thing reads as the file's path plus the
+/// name it was declared under, and needs no separator nobody has seen before.
+///
+/// Applied only when a run touches more than one package. Qualifying
+/// unconditionally would rename every id in every single-package project to
+/// buy nothing, and ids travel: they are in deep links, in the pull-request
+/// comment's table, and in whatever a consumer's script filters on.
+String comparedIdIn(String package, String id) =>
+    package.isEmpty ? id : '$package/$id';
+
 /// One thing compared, on every channel that had something to say.
 ///
 /// Channels rather than "a picture plus some extras." Pixels have a
@@ -22,10 +35,21 @@ class ComparedItem {
     this.events,
     this.note,
     this.shots,
+    this.package,
   });
 
   /// What was compared: an entry id, or a step's path through its flow.
   final String id;
+
+  /// Which package declared it, worktree-relative — `app`,
+  /// `packages/gallery`. Null on a row from a comparison written before a
+  /// comparison could span several, and on a step, which takes its package
+  /// from the scenario holding it.
+  ///
+  /// Recorded even when the run touched one package and [id] was therefore
+  /// left unqualified, so a script never has to take an id apart to recover
+  /// the package — see [comparedIdIn].
+  final String? package;
 
   final ComparedState state;
 
@@ -50,9 +74,31 @@ class ComparedItem {
   /// a panel, an agent and a static page all address the same two files.
   final ({String base, String head})? shots;
 
+  /// The same row, addressed inside [package].
+  ///
+  /// [qualify] puts the package's path in front of the id, which is what a
+  /// comparison spanning several packages does: without it two packages each
+  /// declaring `demo/card.dart#card` are one row that overwrites itself. A
+  /// comparison of a single package leaves the id exactly as it was and still
+  /// records the package.
+  ComparedItem inPackage(String package, {required bool qualify}) =>
+      ComparedItem(
+        id: qualify ? comparedIdIn(package, id) : id,
+        state: state,
+        label: label,
+        pixels: pixels,
+        tree: tree,
+        texts: texts,
+        events: events,
+        note: note,
+        shots: shots,
+        package: package,
+      );
+
   Map<String, Object?> toJson() => {
     'id': id,
     'state': state.name,
+    'package': ?package,
     'label': ?label,
     'note': ?note,
     'shots': ?(shots == null
@@ -82,6 +128,7 @@ class ComparedItem {
       state:
           ComparedState.values.asNameMap()[json['state']] ??
           ComparedState.skipped,
+      package: json['package'] as String?,
       label: json['label'] as String?,
       note: json['note'] as String?,
       shots: base == null || head == null ? null : (base: base, head: head),

@@ -260,6 +260,27 @@ class SkipDecision {
 /// entries produce one line rather than ninety. That is also the shape of the
 /// failure this exists to name — a skip rule that answers nothing does it to
 /// every entry at once, for one cause.
+/// Several halves' folded reasons, folded again — the same shape, ordered the
+/// same way, with each package's count added to whatever the others said.
+///
+/// A comparison spanning four packages produces four `because` maps naming
+/// mostly the same paths, and a reader wants one list of causes rather than
+/// four to read in turn.
+Map<String, int> mergeBecause(Iterable<Map<String, int>> maps) {
+  var counts = <String, int>{};
+  for (var map in maps) {
+    map.forEach(
+      (reason, count) => counts[reason] = (counts[reason] ?? 0) + count,
+    );
+  }
+  return Map.fromEntries(
+    counts.entries.toList()..sort((a, b) {
+      var byCount = b.value.compareTo(a.value);
+      return byCount != 0 ? byCount : a.key.compareTo(b.key);
+    }),
+  );
+}
+
 Map<String, int> foldReasons(Iterable<String> reasons) {
   var counts = <String, int>{};
   for (var reason in reasons) {

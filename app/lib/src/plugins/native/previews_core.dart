@@ -1463,11 +1463,13 @@ class PreviewsCore extends PluginCore {
         description:
             'What this worktree did to the pictures: renders previews and '
             'replays scenarios on both sides of the branch and diffs them — '
-            'pixels, widget tree, visible texts. Nothing is blessed: both '
-            'sides are computed from git on demand, and the skip rule answers '
-            'entries whose closure nothing touched without rendering '
-            'anything. Returns the verdict; the artifact at `index` has every '
-            'row and channel.',
+            'pixels, widget tree, visible texts. Every package either half '
+            'declares, unless `package` narrows it; a row from a repository '
+            'with more than one carries the package in its id and in its '
+            '`package` field. Nothing is blessed: both sides are computed '
+            'from git on demand, and the skip rule answers entries whose '
+            'closure nothing touched without rendering anything. Returns the '
+            'verdict; the artifact at `index` has every row and channel.',
         parameters: [
           const ActionParameter(
             'base',
@@ -1484,7 +1486,10 @@ class PreviewsCore extends PluginCore {
             kind: ActionParameterKind.choice,
             required: false,
             description:
-                'Which declared previews package; the first when omitted',
+                'Narrow to one package. Omitting this compares **every** '
+                'package either half declares, which is the default: a '
+                'repository with previews in two packages and scenarios in '
+                'two others gets one verdict covering all four.',
             options: [
               for (var path in packages)
                 ActionOption(path, label: path == '.' ? 'root' : path),

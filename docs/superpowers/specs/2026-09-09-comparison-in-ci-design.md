@@ -163,7 +163,7 @@ of them 553 MB. `BaseCheckout.dispose` carries its own confession —
 the largest of the three by four times, and a base whose sha nothing has
 compared against in a fortnight is a base nobody wants.
 
-## 2. Several packages in one verdict
+## 2. ✅ Several packages in one verdict
 
 ### 2a. What is true today
 
@@ -223,6 +223,40 @@ is: four packages × two halves × two sides is sixteen `frontend_server` +
 `flutter_tester` pairs, and a `Future.wait` over them will take a runner down.
 A bounded pool sized from the host, defaulting low.
 
+**Reversed in the building (2026-09-09): serial, and the pool deferred.** §1b
+(a) landed first and took the premise away. A package a branch did not touch
+now costs milliseconds rather than a harness build, so on an ordinary pull
+request there is nothing left to overlap — the one package that changed is the
+only one doing work. The case the pool would still help is a lockfile touch,
+where every package is expensive at once, and that case belongs to §1b (d):
+narrowing the lockfile input is what stops it being expensive in the first
+place, and a pool would only make paying it faster. Building the pool now
+would be sixteen concurrent processes on a runner sized for one build, bought
+for a case the next lever removes.
+
+**Built.** `CompareOptions.packages` replaces `package`, `--package=` is
+repeatable, and both halves read it — the scenario half read nothing at all
+before. `ComparedItem`/`ScenarioComparison` gained `package` and `inPackage`,
+`comparedIdIn` is the published id rule, and `ComparisonResult.merged` /
+`ScenarioResults.merged` are the arithmetic. The GUI's environment loops the
+same way, deliberately: the panel and `fw compare` write the same
+`index.json`, so an id that means one thing in one and another in the other is
+a deep link that lands nowhere.
+
+Two things came out of the building that the section above did not anticipate:
+
+* **The comment printed a no-verdict half as a pass.** A half whose harness
+  would not build leaves no rows, no rows means no findings, and `comment.md`
+  answered *"Nothing changed"* — the one thing a pull-request gate must never
+  say. It has always been able to; a per-package refusal, which leaves rows
+  from the packages that worked *and* a note from the one that did not, is
+  what made it likely enough to find. The comment now leads with the
+  `verdictGapOf` sentence, above the viewer link.
+* **A multi-line note broke the findings table.** A newline inside a markdown
+  cell ends the row, so a failing entry's compiler diagnostics broke the table
+  from there down — and that is exactly the row whose note is a compiler's.
+  The cell is one line with an ellipsis now; the page has the whole message.
+
 ## 3. The exported page
 
 Read from a real export served over HTTP (run C: 236 rows, 11 findings, 63 MB).
@@ -253,13 +287,21 @@ Worst first.
    rows whose frames were left out. The CanvasKit third is a hosting question,
    not an export one — identical bytes across every pull request, which git
    deduplicates on the artifact branch and a clone still materialises.
-6. **The page carries no provenance.** No head sha, no wall clock, no way back
+6. **An added entry has no picture at all.** `ComparisonRunner.plan` settles
+   `added` and `removed` without rendering either side, so the row reaches the
+   page with no `shots` key and the stage says *"Neither side rendered"*. For
+   `removed` that is arguable; for `added` it is backwards — a preview this
+   branch introduced is the one a reviewer most wants to look at, and the head
+   side is sitting right there in the checkout. Found while verifying the
+   multi-package export, and pre-existing.
+7. **The page carries no provenance.** No head sha, no wall clock, no way back
    to the pull request. The receipt line was already on the open list from
    PR #302; a page reached from a comment is the case that needs it.
-7. **A multi-line note breaks the comment's table.** A compile failure's `Δ`
-   cell is written with the compiler's newlines intact, and a newline inside a
-   markdown table cell ends the row — so the table renders broken from that
-   row down. First line only in the cell, with the whole message on the page.
+8. ✅ **A multi-line note breaks the comment's table.** A compile failure's
+   `Δ` cell was written with the compiler's newlines intact, and a newline
+   inside a markdown table cell ends the row — so the table rendered broken
+   from that row down. Fixed alongside §2: one line and an ellipsis in the
+   cell, the whole message on the page.
 
 One more, unresolved: on a cold page load the first selection once showed
 *"Neither side rendered"* for an entry whose two PNGs had just been fetched
@@ -273,10 +315,11 @@ underlying cause turns out to be.
 1. ✅ **Lazy scenario harness** (§1b a). Largest measured win, smallest change,
    and it needed nothing else to land first. 60 491ms → 295ms on an all-skip
    run; the replay path unchanged.
-2. **Several packages** (§2), including the per-package refusal and the pool.
-   This is the blocking one for the consumer.
+2. ✅ **Several packages** (§2), including the per-package refusal. The pool
+   was reversed rather than built — see §2c.
 3. **`--export=changed` + the combined findings view** (§3.1, §3.5). Together
-   they are what a comment link opens onto.
+   they are what a comment link opens onto. §3.6 — rendering the head side of
+   an added entry — belongs in the same bite.
 4. **The lockfile narrowing** (§1b d). Its own piece — it touches the skip rule,
    which is the part of this feature least forgiving of a mistake.
 5. The cache-list documentation (§1b b), the base sweep (§1c) and the comment

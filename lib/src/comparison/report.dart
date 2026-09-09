@@ -128,10 +128,15 @@ class ComparedFinding {
     this.note,
     this.preview,
     this.scenario,
+    this.package,
   });
 
   /// The entry id, or the scenario id.
   final String id;
+
+  /// Which package it came from, worktree-relative, or null on a comparison
+  /// that recorded none — see [ComparedItem.package].
+  final String? package;
 
   final ComparedHalfKind half;
   final ComparedState state;
@@ -169,6 +174,7 @@ List<ComparedFinding> rankComparedFindings({
             half: ComparedHalfKind.previews,
             state: item.state,
             note: item.note,
+            package: item.package,
             preview: item,
           ),
       for (var scenario in scenarios)
@@ -177,6 +183,7 @@ List<ComparedFinding> rankComparedFindings({
             id: scenario.scenario,
             half: ComparedHalfKind.scenarios,
             state: scenario.state,
+            package: scenario.package,
             scenario: scenario,
           ),
     ]..sort(
@@ -229,12 +236,22 @@ List<ComparedFinding> rankComparedFindings({
 /// permanent gap no change on the branch can lift.
 String? verdictGapOf({
   String? scenariosNote,
+  String? previewsNote,
   Iterable<ComparedState> scenarioStates = const [],
   Iterable<ComparedState> previewStates = const [],
   bool narrowed = false,
 }) {
   if (scenariosNote case var note?) {
     return 'the scenario half produced no verdict — ${note.split('\n').first}';
+  }
+  // The previews half records one for the same reason the scenario half does,
+  // and only since a comparison could span several packages: a package whose
+  // catalog will not compile used to end the whole run, which is the right
+  // answer when it is the only package and the wrong one when three others
+  // compared cleanly. Its rows are simply absent, and absence is what a note
+  // exists to explain.
+  if (previewsNote case var note?) {
+    return 'the previews half produced no verdict — ${note.split('\n').first}';
   }
   if (narrowed) return null;
   return _uniformGap('scenario', 'scenarios', scenarioStates) ??
@@ -406,6 +423,7 @@ class ComparisonIndex {
   /// verdict about the branch.
   String? get verdictGap => verdictGapOf(
     scenariosNote: scenariosNote,
+    previewsNote: previewsHalf.note,
     scenarioStates: scenarios.map((scenario) => scenario.state),
     previewStates: previewItems.map((item) => item.state),
     narrowed: narrowed,

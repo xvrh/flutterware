@@ -87,7 +87,45 @@ class ComparisonResult {
     required this.elapsed,
     required this.rendered,
     this.because = const {},
+    this.packages = const [],
+    this.note,
   });
+
+  /// Several packages' halves as one.
+  ///
+  /// The rows concatenate and re-rank, the counters add, and the causes fold
+  /// together — but [elapsed] is measured by the caller around the whole loop
+  /// rather than summed, because summing would report a number no clock ever
+  /// showed.
+  ///
+  /// [note] joins whatever the packages could not do, each naming itself. One
+  /// package whose catalog will not compile is a sentence about that package;
+  /// it used to be the end of the comparison, which is the right answer when
+  /// it is the only package and the wrong one when three others compared
+  /// cleanly.
+  static ComparisonResult merged(
+    List<ComparisonResult> results, {
+    required String baseSha,
+    required String headRoot,
+    required Duration elapsed,
+    Map<String, String> refusals = const {},
+  }) => ComparisonResult(
+    items: [for (var result in results) ...result.items]
+      ..sort((a, b) {
+        var byState = a.state.index.compareTo(b.state.index);
+        return byState != 0 ? byState : a.id.compareTo(b.id);
+      }),
+    baseSha: baseSha,
+    headRoot: headRoot,
+    elapsed: elapsed,
+    rendered: results.fold(0, (sum, result) => sum + result.rendered),
+    because: mergeBecause(results.map((result) => result.because)),
+    packages: [for (var result in results) ...result.packages],
+    note: refusals.isEmpty
+        ? null
+        : [for (var entry in refusals.entries) '${entry.key}: ${entry.value}']
+              .join('\n'),
+  );
 
   /// Worst first — [ComparedState] is declared in that order, so ranking is a
   /// sort.
@@ -110,6 +148,36 @@ class ComparisonResult {
   /// on.
   final Map<String, int> because;
 
+  /// Which packages this half covered, worktree-relative and in the order
+  /// they were compared. What lets a page facet by package and a comment
+  /// group by it without walking every row.
+  final List<String> packages;
+
+  /// Why part of this half has nothing to say, when part of it has nothing to
+  /// say — a package whose catalog would not compile, naming itself.
+  ///
+  /// The twin of [ScenarioResults.note], and it arrived for the same reason:
+  /// the rows are simply absent, and absence is indistinguishable from a
+  /// package with no entries unless something says otherwise. `verdictGapOf`
+  /// reads it, so a run carrying one exits non-zero.
+  final String? note;
+
+  /// This half, with every row addressed inside [package] — the half-level
+  /// twin of [ComparedItem.inPackage], and the same [qualify] rule.
+  ComparisonResult inPackage(String package, {required bool qualify}) =>
+      ComparisonResult(
+        items: [
+          for (var item in items) item.inPackage(package, qualify: qualify),
+        ],
+        baseSha: baseSha,
+        headRoot: headRoot,
+        elapsed: elapsed,
+        rendered: rendered,
+        because: because,
+        packages: [package],
+        note: note,
+      );
+
   int countOf(ComparedState state) =>
       items.where((item) => item.state == state).length;
 
@@ -119,6 +187,8 @@ class ComparisonResult {
   Map<String, Object?> toJson() => {
     'rendered': rendered,
     'because': ?(because.isEmpty ? null : because),
+    'packages': ?(packages.isEmpty ? null : packages),
+    'note': ?note,
     'ms': elapsed.inMilliseconds,
     'counts': {
       for (var state in ComparedState.values)

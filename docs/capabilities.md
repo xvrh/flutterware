@@ -2538,7 +2538,7 @@ durationMs: int
 
 #### `compare` — Compare against the base
 
-What this worktree did to the pictures: renders previews and replays scenarios on both sides of the branch and diffs them — pixels, widget tree, visible texts. Nothing is blessed: both sides are computed from git on demand, and the skip rule answers entries whose closure nothing touched without rendering anything. Returns the verdict; the artifact at `index` has every row and channel.
+What this worktree did to the pictures: renders previews and replays scenarios on both sides of the branch and diffs them — pixels, widget tree, visible texts. Every package either half declares, unless `package` narrows it; a row from a repository with more than one carries the package in its id and in its `package` field. Nothing is blessed: both sides are computed from git on demand, and the skip rule answers entries whose closure nothing touched without rendering anything. Returns the verdict; the artifact at `index` has every row and channel.
 
 ```sh
 fw run previews compare [--base=…] [--package=…] [--entry=…] [--export=…] [--base-href=…] [--report=…]
@@ -2589,7 +2589,7 @@ verdictGap: String?   # Why the verdict is incomplete, when it is — the senten
 | parameter | kind | required | default | |
 |---|---|---|---|---|
 | `base` | string | no | — | Any ref git can name — `origin/main`, a sha. Defaults to the project's base, then the default branch, taken at the merge base either way. |
-| `package` | choice | no | — | Which declared previews package; the first when omitted |
+| `package` | choice | no | — | Narrow to one package. Omitting this compares **every** package either half declares, which is the default: a repository with previews in two packages and scenarios in two others gets one verdict covering all four. |
 | `entry` | string | no | — | Narrow to one entry or scenario id — as `entries` and the scenarios `list` action report them |
 | `export` | boolean | no | — | Write the comparison as a browsable page under `build/comparison/web` — the viewer, the index and a PNG per frame. Serve it over HTTP. |
 | `base-href` | string | no | — | Where the exported page is mounted. Defaults to `./`, which resolves against the page's own URL and so works at a bucket root and under a per-pull-request prefix alike. Give an absolute `/comparisons/42/` only for a host that serves a directory without redirecting to a trailing slash. |

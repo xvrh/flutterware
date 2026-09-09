@@ -256,6 +256,15 @@ const fwCommands = [
         "project's\nconfigured base, then the default branch. `--entry` "
         'narrows to named\nentries and may repeat.\n'
         '\n'
+        'Every package either half declares is compared, and the whole lot '
+        'lands\nin one `index.json`, one comment and one page. `--package` '
+        'narrows and\nmay repeat. Where a run covers more than one package a '
+        "row's id carries\nits package — "
+        '`packages/gallery/demo/card.dart#card` — and every row '
+        'carries\nthe package as a field either way. A package that will not '
+        "compile is\none package's worth of silence, named in the half's "
+        'note; the others\nstill report.\n'
+        '\n'
         '`--export` writes the comparison as a browsable page: a viewer, the\n'
         '`index.json`, and a PNG per frame. Serve the directory over HTTP — '
         'a\n`file://` page cannot fetch its own frames. The default directory '
@@ -597,7 +606,7 @@ class FwCli {
   /// flags, stream the halves as they land, print where things were written.
   Future<int> _compare(List<String> arguments, {required bool json}) async {
     String? baseRef;
-    String? packagePath;
+    var packagePaths = <String>[];
     var only = <String>[];
     var export = false;
     String? exportDir;
@@ -607,7 +616,9 @@ class FwCli {
       if (argument.startsWith('--base=')) {
         baseRef = argument.substring('--base='.length);
       } else if (argument.startsWith('--package=')) {
-        packagePath = argument.substring('--package='.length);
+        // Repeatable, like `--entry=`. Naming none compares every package
+        // either half declares.
+        packagePaths.add(argument.substring('--package='.length));
       } else if (argument.startsWith('--entry=')) {
         only.add(argument.substring('--entry='.length));
       } else if (argument == '--export') {
@@ -635,7 +646,7 @@ class FwCli {
           session: session,
           options: CompareOptions(
             baseRef: baseRef,
-            package: packagePath,
+            packages: packagePaths,
             entries: only,
             export: export,
             exportDir: exportDir,
