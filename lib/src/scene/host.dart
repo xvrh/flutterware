@@ -32,6 +32,7 @@ import 'view.dart';
 ///   libraries: [brandTokens],
 ///   widgets: [ExternalWidget('OrderButton', args: […], build: (a) => …)],
 ///   exports: [Token<Color>('shopBrand', AppColors.brand)],
+///   renderers: scene3dRenderers,
 ///   wrap: (child) => MaterialApp(theme: appTheme, home: child),
 /// );
 /// ```
@@ -40,6 +41,7 @@ class SceneGroup {
     this.libraries = const [],
     this.widgets = const [],
     this.exports = const [],
+    this.renderers = const {},
     this.wrap,
   });
 
@@ -54,6 +56,12 @@ class SceneGroup {
   /// The editor offers each where its type fits and never sees inside;
   /// the canvas — this process — resolves it.
   final List<Token<Object?>> exports;
+
+  /// How a registered node kind (a `SceneKind`) is drawn, by the kind's name
+  /// — a 3D view's engine, say — for every view this group mounts. The
+  /// door a renderer the core never imports comes through; a kind with no
+  /// renderer draws a named placeholder.
+  final Map<String, SceneKindRenderer> renderers;
 
   /// What the canvas is mounted under: the app's theme, its localizations,
   /// whatever the scenes' widgets expect above them. A bare [MaterialApp]
@@ -81,10 +89,22 @@ class SceneGroup {
 /// with a bound motion is what registers the playhead the harness drives,
 /// so every stop of the clip is `evaluate(t)` and nothing else.
 class ScenePlayerHost extends StatelessWidget {
-  const ScenePlayerHost(this.group, {super.key, required this.pairPath});
+  const ScenePlayerHost(
+    this.group, {
+    super.key,
+    required this.pairPath,
+    this.nested = const {},
+  });
 
   final SceneGroup group;
   final String pairPath;
+
+  /// The group's own scenes by class name, as their generated arguments
+  /// classes — what a nested scene in the pair is instantiated through.
+  /// The pair carries a `SceneRefNode` as its class name and arguments,
+  /// never the child's document; the generated entry hands this in, since
+  /// only generated code may name a generated class.
+  final Map<String, SceneRefArgs> nested;
 
   @override
   Widget build(BuildContext context) {
@@ -101,12 +121,20 @@ class ScenePlayerHost extends StatelessWidget {
     // and no generated class. This is what turns the label back into a
     // widget; a scene the app COMPILED needs none of it.
     bindExternals(pair.scene, group.widgets, tokens: group.tokens);
+    for (var (node, _) in pair.scene.walk()) {
+      if (node is! SceneRefNode) continue;
+      var args = nested[node.sceneClassName];
+      if (args == null) continue;
+      node.declared = args;
+      node.syncInstance();
+    }
     return group._wrapped(
       Align(
         alignment: Alignment.topLeft,
         child: SceneView.document(
           pair.scene,
           motion: motion == null ? null : BoundMotion.bind(motion, pair.scene),
+          renderers: group.renderers,
         ),
       ),
     );
@@ -146,14 +174,22 @@ class SceneCanvasHost extends StatefulWidget {
     super.key,
     this.externals = const [],
     this.tokens = const [],
+    this.renderers = const {},
     this.ground = const Color(0x00000000),
   });
 
   /// The canvas for one group, under the group's wrapper — what the
   /// generated entry mounts.
   static Widget of(SceneGroup group) => group._wrapped(
-    SceneCanvasHost(externals: group.widgets, tokens: group.tokens),
+    SceneCanvasHost(
+      externals: group.widgets,
+      tokens: group.tokens,
+      renderers: group.renderers,
+    ),
   );
+
+  /// Renderers for registered kinds, handed to every view this host mounts.
+  final Map<String, SceneKindRenderer> renderers;
 
   /// The widgets a scene may place, as the app declares them.
   ///
@@ -317,6 +353,7 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
                   child: SceneView.document(
                     scene,
                     selected: _selected,
+                    renderers: widget.renderers,
                     // Named here, at the edge the names exist on: the
                     // document arrived over the wire carrying them, and
                     // the editor asks for its rects the same way.

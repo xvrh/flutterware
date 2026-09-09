@@ -164,6 +164,24 @@ void emitMotionClass(
 }
 
 String _track(MotionTrack t, TrackKind kind, Map<String, SceneParamDecl> ps) {
+  if (t.clips.isNotEmpty) {
+    if (kind != TrackKind.number) {
+      throw ArgumentError('a clip block stands on a number track');
+    }
+    List<String> parts(MotionClip c) => [
+      if (c.clip.isNotEmpty) 'clip: ${_str(c.clip)}',
+      'at: ${_dur(c.at)}',
+      'length: ${_dur(c.length)}',
+      if (c.speed != 1) 'speed: ${_num(c.speed)}',
+      if (c.offset != Duration.zero) 'offset: ${_dur(c.offset)}',
+      if (c.reverse) 'reverse: true',
+    ];
+    if (t.clips.length == 1) {
+      return 'ClipTrack(${parts(t.clips.single).join(', ')})';
+    }
+    var blocks = t.clips.map((c) => 'ClipBlock(${parts(c).join(', ')})');
+    return 'ClipBlocks([${blocks.join(', ')}])';
+  }
   if (t.keys.isEmpty) {
     throw ArgumentError(
       'a track with no keys is not written — Save writes non-empty tracks '
@@ -814,6 +832,41 @@ class _Parser {
   }
 
   MotionTrack? _trackOf(Expression e, TrackKind kind) {
+    if (_invocation(e) case ('ClipTrack', var args)) {
+      if (kind != TrackKind.number) {
+        refuse(e.offset, 'clip block', 'a clip block stands on a number track');
+        return null;
+      }
+      var block = _clipBlockOf(e, args);
+      return block == null
+          ? null
+          : (MotionTrack([], kind: kind)..clips.add(block));
+    }
+    if (_invocation(e) case ('ClipBlocks', var args)
+        when args.arguments.length == 1 &&
+            args.arguments.single.argumentExpression is ListLiteral) {
+      if (kind != TrackKind.number) {
+        refuse(e.offset, 'clip block', 'a clip block stands on a number track');
+        return null;
+      }
+      var track = MotionTrack([], kind: kind);
+      var items = args.arguments.single.argumentExpression as ListLiteral;
+      for (var element in items.elements) {
+        var call = element is Expression ? _invocation(element) : null;
+        if (call == null || call.$1 != 'ClipBlock') {
+          refuse(element.offset, 'element', 'expected a ClipBlock(…)');
+          continue;
+        }
+        var block = _clipBlockOf(element as Expression, call.$2);
+        if (block != null) track.clips.add(block);
+      }
+      if (track.clips.isEmpty) {
+        refuse(e.offset, 'clip blocks', 'ClipBlocks lists at least one block');
+        return null;
+      }
+      track.sortClips();
+      return track;
+    }
     ListLiteral? list;
     if (_invocation(e) case ('MotionTrack', var args)
         when args.arguments.length == 1) {
@@ -866,6 +919,73 @@ class _Parser {
       track.keys.add(key);
     }
     return track.keys.isEmpty ? null : track;
+  }
+
+  /// `ClipTrack(clip: …, at: …, length: …, speed: …, offset: …, reverse:
+  /// …)`, or a `ClipBlock(…)` with the same arguments — one block; see
+  /// [MotionClip].
+  MotionClip? _clipBlockOf(Expression e, ArgumentList args) {
+    Duration? at;
+    Duration? length;
+    var clip = '';
+    var speed = 1.0;
+    var offset = Duration.zero;
+    var reverse = false;
+    for (var arg in args.arguments) {
+      if (arg is! NamedArgument) {
+        refuse(
+          arg.offset,
+          'positional argument',
+          'ClipTrack takes named arguments',
+        );
+        continue;
+      }
+      var v = arg.argumentExpression;
+      switch (arg.name.lexeme) {
+        case 'clip':
+          if (v is SimpleStringLiteral) {
+            clip = v.value;
+          } else {
+            refuse(v.offset, 'clip', 'clip is the name of a clip, as a string');
+          }
+        case 'at':
+          at = _durOf(v);
+        case 'length':
+          length = _durOf(v);
+        case 'offset':
+          offset = _durOf(v) ?? Duration.zero;
+        case 'speed':
+          if (_valueOf(v, TrackKind.number) case (double s, null)) {
+            speed = s;
+          } else {
+            refuse(v.offset, 'speed', 'speed is a number');
+          }
+        case 'reverse':
+          if (v is BooleanLiteral) {
+            reverse = v.value;
+          } else {
+            refuse(v.offset, 'reverse', 'reverse is true or false');
+          }
+        default:
+          refuse(
+            v.offset,
+            'unknown property',
+            'a clip block has no property "${arg.name.lexeme}"',
+          );
+      }
+    }
+    if (at == null || length == null) {
+      refuse(e.offset, 'clip block', 'a clip block needs `at:` and `length:`');
+      return null;
+    }
+    return MotionClip(
+      at: at,
+      length: length,
+      clip: clip,
+      speed: speed,
+      offset: offset,
+      reverse: reverse,
+    );
   }
 
   MotionKey? _keyOf(Expression e, TrackKind kind) {

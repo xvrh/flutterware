@@ -138,6 +138,63 @@ void main() {
     },
   );
 
+  testWidgets('a clip block is moved by its body and trimmed by its edge', (
+    tester,
+  ) async {
+    await pump(tester);
+    editor.addClip(
+      'BannerIntro',
+      'headlineIn',
+      'opacity',
+      at: const Duration(milliseconds: 200),
+      length: const Duration(milliseconds: 1000),
+    );
+    await tester.pump();
+    MotionClip clip() => track('headlineIn', 'opacity').clips.single;
+    var group = motion.placements['headlineIn']!;
+    const pxPerMs = stripWidth / totalMs;
+
+    // The end edge, dragged 300ms to the right: the block grows.
+    var end = Offset(xOf(group + clip().end), yOfLane(0));
+    var gesture = await tester.startGesture(end, kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await gesture.moveBy(const Offset(pxPerMs * 30, 0));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pump();
+    expect(clip().length.inMilliseconds, closeTo(1300, 3));
+    expect(clip().at.inMilliseconds, 200);
+    expect(editor.undoLabel, 'Trim clip block');
+
+    // The body, dragged 200ms to the left: the block moves whole.
+    var body = Offset(xOf(group + clip().at + clip().length ~/ 2), yOfLane(0));
+    gesture = await tester.startGesture(body, kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    for (var i = 0; i < 10; i++) {
+      await gesture.moveBy(const Offset(-pxPerMs * 20, 0));
+      await tester.pump();
+    }
+    await gesture.up();
+    await tester.pump();
+    expect(clip().at.inMilliseconds, closeTo(0, 3));
+    expect(clip().length.inMilliseconds, closeTo(1300, 3));
+    expect(editor.undoLabel, 'Move clip block');
+    expect(
+      editor.selectedClip?.clipId,
+      clip().id,
+      reason: 'a press on a block selects it',
+    );
+    editor.undo();
+    expect(
+      clip().at.inMilliseconds,
+      200,
+      reason: 'the whole drag was one entry',
+    );
+    await tester.pump(kDoubleTapTimeout);
+  });
+
   testWidgets('shift-tap adds to the selection and arrows nudge the set', (
     tester,
   ) async {

@@ -3,6 +3,8 @@
 /// reaches for nothing in Flutter or `flutter_test`.
 library;
 
+import 'dart:async';
+
 /// Work that finishes on the **real** event loop, announced so a scenario's
 /// next verb waits for it instead of guessing.
 ///
@@ -67,6 +69,35 @@ abstract final class RealWork {
       onError: (Object error, StackTrace stack) => done(null),
     );
     return work;
+  }
+
+  /// Runs [work] in the root zone and announces it, the way [track] does.
+  ///
+  /// The root zone is not a detail. A harness runs each screen in a zone of
+  /// its own, and a future a dependency memoizes — an engine's one-time
+  /// initialisation, an importer's shared tables — belongs to the zone that
+  /// first created it. An `await` on that future from a *later* screen's
+  /// zone never resumes: the continuation is queued to a zone whose queue
+  /// nobody drains any more. Measured 2026-09-05: the first mount of a 3D
+  /// probe loaded in two seconds, every mount after it waited out the whole
+  /// ceiling with the load still pending. Run from the root zone, the
+  /// continuations of [work] live on the real event loop, which every zone
+  /// shares, and the caller's own `await` on the returned future resumes in
+  /// the caller's zone as it should.
+  ///
+  /// This is the entry point for loading anything a dependency caches:
+  /// `await RealWork.run(() => loadModel(bundle), label: 'model')`.
+  ///
+  /// Its outcome — value or error — is handed back through a future that
+  /// belongs to the caller's zone, so an error is the caller's to catch and
+  /// never the root zone's to report as unhandled, which under a test binding
+  /// ends the process.
+  static Future<T> run<T>(Future<T> Function() work, {String? label}) {
+    var done = Completer<T>();
+    Zone.root.run(() {
+      work().then(done.complete, onError: done.completeError);
+    });
+    return track(done.future, label: label);
   }
 
   /// How many tracked futures have not completed.

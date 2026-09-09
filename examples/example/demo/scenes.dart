@@ -22,6 +22,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_example/model_view.dart' as v3d;
+import 'package:flutterware_example/scene3d_renderers.dart' as v3d;
 import 'package:flutterware_example/shop/shop_app.dart' as app;
 
 import 'brand.tokens.dart';
@@ -38,6 +40,29 @@ final scenes = SceneGroup(
       'Spinner',
       args: [const Arg<double>('size', 36)],
       build: (a) => app.Spinner(size: a.number('size') ?? 36),
+    ),
+    // A 3D view: one asset, an orbit camera and a clip, every knob a number
+    // the timeline can key. See lib/model_view.dart for what it cannot carry.
+    ExternalWidget(
+      'ModelView',
+      args: [
+        const Arg<String>('asset', 'assets/models/probe_rig.glb'),
+        const Arg<double>('yaw', 0),
+        const Arg<double>('pitch', 10),
+        const Arg<double>('distance', 5),
+        const Arg<double>('fov', 45),
+        const Arg<String>('clip', 'Open'),
+        const Arg<double>('clipTime', 0),
+      ],
+      build: (a) => v3d.ModelView(
+        asset: a.text('asset') ?? 'assets/models/probe_rig.glb',
+        yaw: a.number('yaw') ?? 0,
+        pitch: a.number('pitch') ?? 10,
+        distance: a.number('distance') ?? 5,
+        fov: a.number('fov') ?? 45,
+        clip: a.text('clip') ?? 'Open',
+        clipTime: a.number('clipTime') ?? 0,
+      ),
     ),
     ExternalWidget(
       'OrderButton',
@@ -74,6 +99,9 @@ final scenes = SceneGroup(
       ),
     ),
   ],
+  // How the 3D kinds are drawn: the engine lives in lib/scene3d_renderers.dart,
+  // and the core draws a named placeholder without it.
+  renderers: v3d.scene3dRenderers,
   // The app's own look — what the editor canvas inherits by construction.
   wrap: (child) => MaterialApp(
     debugShowCheckedModeBanner: false,

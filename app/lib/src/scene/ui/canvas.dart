@@ -77,6 +77,16 @@ class _SceneCanvasState extends State<SceneCanvas> {
   SceneEditor get editor => widget.editor;
   SceneDocument get doc => widget.editor.doc;
 
+  /// Whether the wheel belongs to a 3D window right now: the orbit tool is
+  /// on and the pointer is over one.
+  bool get _wheelDollies {
+    if (editor.tool != SceneTool.orbit) return false;
+    var hovered = editor.hover;
+    if (hovered == null) return false;
+    var node = doc.nodeNamed(hovered);
+    return node is KindNode && node.kind == view3dKind;
+  }
+
   /// What the artboard is drawn at when the scene does not say.
   ///
   /// A root that fills has no size of its own, which is the whole point of
@@ -149,11 +159,19 @@ class _SceneCanvasState extends State<SceneCanvas> {
                             Size(_artboardWidth, _artboardHeight),
                           ),
                         ),
-                      ZoomableCanvas(
-                        transformationController: _transform,
-                        boundaryMargin: const EdgeInsets.all(3000),
-                        minScale: 0.05,
-                        maxScale: 64,
+                      // Rebuilt on the editor's changes for one flag: the
+                      // wheel is the dolly while the orbit tool is over a
+                      // 3D window, and the viewer must not zoom on it.
+                      AnimatedBuilder(
+                        animation: editor.listenable,
+                        builder: (context, child) => ZoomableCanvas(
+                          transformationController: _transform,
+                          boundaryMargin: const EdgeInsets.all(3000),
+                          minScale: 0.05,
+                          maxScale: 64,
+                          scaleEnabled: !_wheelDollies,
+                          child: child!,
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(_margin),
                           child: _artboard(),
@@ -182,14 +200,15 @@ class _SceneCanvasState extends State<SceneCanvas> {
       ),
       // The tools, the zoom verbs and the readout are the bar; the artboard
       // size and the guest status are the first to go when the pane is
-      // narrower than all of it — measured 302px for the lot, and a docked
-      // canvas beside a tree and an inspector can be 230.
+      // narrower than all of it — measured 302px for the lot with four
+      // tools, 346 with six, and a docked canvas beside a tree and an
+      // inspector can be 230. The whole bar with the readout wants ~480.
       child: LayoutBuilder(
         builder: (context, constraints) => _toolbarRow(
           context,
           colors,
           muted,
-          roomy: constraints.maxWidth >= 360,
+          roomy: constraints.maxWidth >= 500,
         ),
       ),
     );
@@ -214,6 +233,8 @@ class _SceneCanvasState extends State<SceneCanvas> {
                 (SceneTool.frame, Icons.crop_square, 'Frame', 'F'),
                 (SceneTool.text, Icons.text_fields, 'Text', 'T'),
                 (SceneTool.shape, Icons.circle_outlined, 'Shape', 'S'),
+                (SceneTool.view3d, Icons.view_in_ar_outlined, '3D window', '3'),
+                (SceneTool.orbit, Icons.threed_rotation, 'Orbit', 'O'),
               ])
                 _Tool(
                   icon: icon,
@@ -436,7 +457,10 @@ class _HitLayerState extends State<_HitLayer> {
   SceneEditor get editor => widget.editor;
   SceneDocument get doc => widget.editor.doc;
 
-  bool get _drawing => editor.tool != SceneTool.select;
+  /// Whether a press draws a box. Orbit is neither drawing nor selecting:
+  /// the nodes stay under the pointer, and a 3D window takes the drag.
+  bool get _drawing =>
+      editor.tool != SceneTool.select && editor.tool != SceneTool.orbit;
 
   /// The drag rectangle: a marquee under the select tool, the box of the
   /// node being drawn under the others.
@@ -463,7 +487,11 @@ class _HitLayerState extends State<_HitLayer> {
           ..height = _half(box.height)
           ..fill = const SceneColor(0xFF888888),
       SceneTool.text => TextNode('Text', name: doc.uniqueName('text')),
-      SceneTool.select => null,
+      SceneTool.view3d =>
+        View3DNode(name: doc.uniqueName('view3d'))
+          ..width = _half(box.width)
+          ..height = _half(box.height),
+      SceneTool.select || SceneTool.orbit => null,
     };
     if (node == null) return;
     // A text is placed, not drawn: it hugs its words.
@@ -719,33 +747,89 @@ class _NodeTargetState extends State<_NodeTarget> {
     );
   }
 
+  /// Whether this node is a 3D window under the orbit tool — the one case
+  /// where a drag turns a camera instead of moving the node.
+  bool get _orbits =>
+      editor.tool == SceneTool.orbit &&
+      node is KindNode &&
+      (node as KindNode).kind == view3dKind;
+
+  /// A drag on the window turns the camera: half a degree of yaw per pixel
+  /// across, the same of pitch per pixel up, pitch held short of the poles
+  /// where an orbit camera flips. Written through the rows, so the
+  /// inspector's dials and the guest follow, and merged into one undo.
+  void _orbit(Offset delta) {
+    var k = node as KindNode;
+    var yaw = scenePropNamed(k, 'yaw')!;
+    var pitch = scenePropNamed(k, 'pitch')!;
+    editor.perform('Orbit ${node.name}', mergeKey: 'orbit', () {
+      var y = ((yaw.read(k)! as num).toDouble() + delta.dx * 0.5 + 180) % 360;
+      yaw.write(k, _half(y - 180));
+      var p = (pitch.read(k)! as num).toDouble() - delta.dy * 0.5;
+      pitch.write(k, _half(p.clamp(-89, 89)));
+    });
+  }
+
+  /// The wheel over the window moves the camera in or out: a tenth of the
+  /// distance per hundred pixels of scroll, so it feels the same close up
+  /// and far away.
+  void _dolly(double dy) {
+    var k = node as KindNode;
+    var distance = scenePropNamed(k, 'distance')!;
+    editor.perform('Dolly ${node.name}', mergeKey: 'dolly', () {
+      var d = (distance.read(k)! as num).toDouble() * (1 + dy / 1000);
+      distance.write(k, _half(d.clamp(0.1, 100000)));
+    });
+  }
+
+  static double _half(double v) => (v * 2).round() / 2;
+
   @override
   Widget build(BuildContext context) {
+    var orbits = _orbits;
     return MouseRegion(
+      cursor: orbits ? SystemMouseCursors.grab : MouseCursor.defer,
       onEnter: (_) => editor.hover = node.name,
       onExit: (_) {
         if (editor.hover == node.name) editor.hover = null;
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        supportedDevices: editingDevices,
-        onTapDown: (_) => editor.select(node, toggle: toggleModifier),
-        onDoubleTap: node is SceneRefNode && widget.onEnterNested != null
-            ? () => widget.onEnterNested!(node)
+      child: Listener(
+        onPointerSignal: orbits
+            ? (signal) {
+                if (signal is PointerScrollEvent) {
+                  GestureBinding.instance.pointerSignalResolver.register(
+                    signal,
+                    (_) => _dolly(signal.scrollDelta.dy),
+                  );
+                }
+              }
             : null,
-        onPanDown: (d) => _downLocal = d.localPosition,
-        onPanStart: (d) {
-          if (!editor.isSelected(node)) editor.select(node);
-          _apply(d.globalPosition, d.localPosition - _downLocal);
-        },
-        onPanUpdate: (d) => _apply(d.globalPosition, d.delta),
-        onPanEnd: (_) => _drop(),
-        onPanCancel: () {
-          editor
-            ..endMerge()
-            ..dropTarget = null
-            ..dropCandidates = const {};
-        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          supportedDevices: editingDevices,
+          onTapDown: (_) => editor.select(node, toggle: toggleModifier),
+          onDoubleTap: node is SceneRefNode && widget.onEnterNested != null
+              ? () => widget.onEnterNested!(node)
+              : null,
+          onPanDown: (d) => _downLocal = d.localPosition,
+          onPanStart: (d) {
+            if (!editor.isSelected(node)) editor.select(node);
+            if (orbits) {
+              _orbit(d.localPosition - _downLocal);
+              return;
+            }
+            _apply(d.globalPosition, d.localPosition - _downLocal);
+          },
+          onPanUpdate: (d) =>
+              orbits ? _orbit(d.delta) : _apply(d.globalPosition, d.delta),
+          onPanEnd: (_) => orbits ? editor.endMerge() : _drop(),
+          onPanCancel: () {
+            editor
+              ..endMerge()
+              ..dropTarget = null
+              ..dropCandidates = const {};
+          },
+        ),
       ),
     );
   }

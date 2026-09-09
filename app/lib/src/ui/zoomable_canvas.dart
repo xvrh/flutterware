@@ -29,6 +29,7 @@ class ZoomableCanvas extends StatefulWidget {
     required this.maxScale,
     required this.boundaryMargin,
     required this.child,
+    this.scaleEnabled = true,
   });
 
   /// Owned by the caller when the canvas has to survive the page, as the
@@ -39,6 +40,12 @@ class ZoomableCanvas extends StatefulWidget {
   final double maxScale;
   final EdgeInsets boundaryMargin;
   final Widget child;
+
+  /// Whether the wheel zooms. Off while something under the pointer takes
+  /// the wheel for itself — the viewer reads the wheel directly, not through
+  /// the pointer signal resolver, so a listener inside it cannot claim the
+  /// event away from it.
+  final bool scaleEnabled;
 
   @override
   State<ZoomableCanvas> createState() => _ZoomableCanvasState();
@@ -119,6 +126,7 @@ class _ZoomableCanvasState extends State<ZoomableCanvas> {
         minScale: widget.minScale,
         maxScale: widget.maxScale,
         panEnabled: !_zooming,
+        scaleEnabled: widget.scaleEnabled,
         constrained: false,
         boundaryMargin: widget.boundaryMargin,
         child: widget.child,

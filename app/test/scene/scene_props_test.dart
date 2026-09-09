@@ -44,17 +44,35 @@ Object? sample(SceneProp p) => switch (p.kind) {
   ),
 };
 
-SceneNode fresh(SceneProp p) => switch (p.owner) {
-  ScenePropOwner.frame || ScenePropOwner.any => FrameNode(name: 'n'),
-  ScenePropOwner.text => TextNode('', name: 'n'),
-  ScenePropOwner.shape => ShapeNode(name: 'n'),
-  ScenePropOwner.takesArgs => SceneRefNode.read('Card', name: 'n'),
+SceneNode fresh(SceneProp p) => switch (p.kindName) {
+  // A registered kind's row lives on that kind's node.
+  var kind? => KindNode(sceneKindNamed(kind)!, name: 'n'),
+  null => switch (p.owner) {
+    ScenePropOwner.frame || ScenePropOwner.any => FrameNode(name: 'n'),
+    ScenePropOwner.text => TextNode('', name: 'n'),
+    ScenePropOwner.shape => ShapeNode(name: 'n'),
+    ScenePropOwner.takesArgs => SceneRefNode.read('Card', name: 'n'),
+  },
 };
 
 void main() {
-  test('names are unique and every node kind has its common rows', () {
-    var names = sceneProps.map((p) => p.name).toList();
+  test('names are unique per kind and every node kind has its common rows', () {
+    // A row name is per kind — `scenePropNamed` reads the node's own rows —
+    // so two kinds may share one (the model and the surface share their
+    // placement), and the hand-written kinds' rows must not collide with
+    // the common ones or each other.
+    var handWritten = sceneProps.where((p) => p.kindName == null);
+    var names = handWritten.map((p) => p.name).toList();
     expect(names.toSet().length, names.length);
+    for (var kind in sceneKinds) {
+      var own = kind.props.map((p) => p.name).toList();
+      expect(own.toSet().length, own.length, reason: kind.name);
+      expect(
+        own.toSet().intersection(sceneCommonProps.map((p) => p.name).toSet()),
+        isEmpty,
+        reason: kind.name,
+      );
+    }
     for (var node in [FrameNode(), TextNode(''), ShapeNode()]) {
       expect(
         scenePropsOf(node).map((p) => p.name),
@@ -143,7 +161,8 @@ void main() {
     // rows. They are rows to be KEYS; `every kind of key resolves` is what
     // covers them.
     if (p.byHand && p.kind != ScenePropKind.string) continue;
-    test('${p.name} reads back what it writes, and starts at its default', () {
+    var label = p.kindName == null ? p.name : '${p.kindName}.${p.name}';
+    test('$label reads back what it writes, and starts at its default', () {
       var node = fresh(p);
       expect(isSceneDefault(p, p.read(node)), isTrue, reason: 'fresh node');
       var v = sample(p);
@@ -152,7 +171,7 @@ void main() {
       expect(p.fromWire(p.toWire(v)), v, reason: 'wire codec');
     });
 
-    test('${p.name} survives the authored JSON', () {
+    test('$label survives the authored JSON', () {
       var node = fresh(p);
       p.write(node, sample(p));
       var doc = SceneDocument(FrameNode(name: 'root')..children.add(node));
@@ -160,7 +179,7 @@ void main() {
       expect(p.read(back.root.children.single), sample(p));
     });
 
-    test('${p.name} is spelled and read by the file', () {
+    test('$label is spelled and read by the file', () {
       var node = fresh(p);
       p.write(node, sample(p));
       var doc = SceneDocument(

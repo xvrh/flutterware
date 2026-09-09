@@ -16,11 +16,68 @@ import 'model.dart';
 import 'motion_model.dart';
 import 'values.dart';
 
+/// What a placement plays at one moment: a clip and its time, a second
+/// clip and its time when two blocks overlap there, and how far across
+/// the overlap the moment is. Empty names mean the placement's own row.
+typedef ClipBlend = ({
+  String clip,
+  double time,
+  String clip2,
+  double time2,
+  double blend,
+});
+
+extension MotionTrackBlend on MotionTrack {
+  /// The blocks' answer at [t]. Inside one block, that block. Inside two,
+  /// the earlier leads and the later comes in, `blend` running 0 to 1 from
+  /// the later's start to the earlier's end. Between blocks the last one
+  /// to end holds its end; before the first, the first holds its start.
+  ClipBlend blendAt(Duration t) {
+    var active = [
+      for (var c in clips)
+        if (t >= c.at && t <= c.end) c,
+    ];
+    if (active.isEmpty) {
+      MotionClip? before;
+      for (var c in clips) {
+        if (c.end < t && (before == null || c.end > before.end)) before = c;
+      }
+      var hold = before ?? clips.first;
+      return (
+        clip: hold.clip,
+        time: hold.timeAt(before == null ? hold.at : hold.end),
+        clip2: '',
+        time2: 0,
+        blend: 0,
+      );
+    }
+    var a = active.first;
+    if (active.length == 1) {
+      return (clip: a.clip, time: a.timeAt(t), clip2: '', time2: 0, blend: 0);
+    }
+    var b = active[1];
+    var overlap = (a.end - b.at).inMicroseconds;
+    var blend = overlap <= 0
+        ? 1.0
+        : ((t - b.at).inMicroseconds / overlap).clamp(0.0, 1.0);
+    return (
+      clip: a.clip,
+      time: a.timeAt(t),
+      clip2: b.clip,
+      time2: b.timeAt(t),
+      blend: blend,
+    );
+  }
+}
+
 extension MotionTrackEvaluate on MotionTrack {
   /// The hold rule: before the first key its value, after the last the
   /// last, and between neighbours a lerp shaped by the ARRIVING key's
   /// curve. Pure in [t] — backwards seek needs no history.
   Object evaluate(Duration t) {
+    // Blocks: the leading clip's time at this moment, as seconds — the
+    // whole answer is [blendAt]; this is the one number a track reads as.
+    if (clips.isNotEmpty) return blendAt(t).time;
     if (keys.isEmpty) {
       throw StateError(
         'an empty track has no value — it contributes '
@@ -104,7 +161,27 @@ class BoundGroup extends Playable {
   @override
   void apply(Duration t) {
     for (var entry in group.tracks.entries) {
-      node.writeFx(this, entry.key, entry.value.evaluate(t));
+      var track = entry.value;
+      // A placement's blocks write the whole of what it plays: which clip,
+      // where in it, and the second clip with its weight over an overlap.
+      if (track.clips.isNotEmpty && entry.key == 'animationTime') {
+        var b = track.blendAt(t);
+        if (b.clip.isNotEmpty) node.writeFx(this, 'animation', b.clip);
+        node.writeFx(this, 'animationTime', b.time);
+        // The second clip only while there is one: a row written every
+        // frame with its own default is a notification for nothing.
+        if (b.clip2.isNotEmpty) {
+          node.writeFx(this, 'animation2', b.clip2);
+          node.writeFx(this, 'animationTime2', b.time2);
+          node.writeFx(this, 'blend', b.blend);
+        } else {
+          node.removeFx(this, 'animation2');
+          node.removeFx(this, 'animationTime2');
+          node.removeFx(this, 'blend');
+        }
+        continue;
+      }
+      node.writeFx(this, entry.key, track.evaluate(t));
     }
   }
 

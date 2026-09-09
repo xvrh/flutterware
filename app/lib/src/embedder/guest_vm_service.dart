@@ -258,6 +258,41 @@ class GuestVmService {
   /// The `streamListen` is per-connection rather than per-subscriber, and the
   /// VM answers a repeat with "already subscribed" — an error that means the
   /// thing the caller wanted is true, so it is swallowed rather than reported.
+  /// What the guest writes through `dart:developer`'s `log`, one line each.
+  ///
+  /// Nothing else carries it: `log` bypasses stdout, and a dependency that
+  /// reports its failure that way — a rendering engine whose shader bundle
+  /// did not load, say — is otherwise silent from the host's side, with only
+  /// its consequences on screen. Measured 2026-09-05: an hour spent on a
+  /// black frame whose cause was one such line.
+  ///
+  /// The stream subscription is per connection, like [extensionEvents].
+  Stream<String> developerLog() async* {
+    if (_gone) return;
+    try {
+      await service.streamListen(EventStreams.kLogging);
+    } on RPCError catch (e) {
+      // 103: already listening, which is the harmless one.
+      if (e.code != 103) rethrow;
+    }
+    yield* service.onLoggingEvent
+        .map((event) {
+          var record = event.logRecord;
+          if (record == null) return '';
+          var logger = record.loggerName?.valueAsString;
+          var message = record.message?.valueAsString ?? '';
+          var error = record.error?.valueAsString;
+          var stack = record.stackTrace?.valueAsString;
+          return [
+            if (logger != null && logger.isNotEmpty) '$logger: ',
+            message,
+            if (error != null && error != 'null') ' — $error',
+            if (stack != null && stack != 'null') '\n$stack',
+          ].join();
+        })
+        .where((line) => line.isNotEmpty);
+  }
+
   Stream<Map<String, Object?>> extensionEvents(String kind) async* {
     try {
       await service.streamListen(EventStreams.kExtension);

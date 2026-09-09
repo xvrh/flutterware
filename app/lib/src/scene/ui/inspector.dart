@@ -10,8 +10,10 @@
 // controls rather than stock Material.
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene_authoring.dart';
+import 'package:path/path.dart' as paths;
 
 import '../externals_file.dart';
+import '../model_assets.dart';
 
 import '../../ui/context_menu.dart';
 import '../../ui/disclosure.dart';
@@ -46,11 +48,17 @@ class SceneInspector extends StatelessWidget {
     super.key,
     this.externals = const [],
     this.axesFor,
+    this.packageRoot,
     this.onOpenParam,
     this.onEnterNested,
   });
 
   final SceneEditor editor;
+
+  /// The package the file belongs to — where a row that picks a model
+  /// file, or a mesh or clip in one, finds what there is to pick. Null in
+  /// a test that has no package; the pickers then say so.
+  final String? packageRoot;
 
   /// Opens a parameter below the canvas — where a bound property's row
   /// leads.
@@ -103,6 +111,7 @@ class SceneInspector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (editor.selectedClip case var block?) return _block(context, block);
     if (editor.selectedKeys.isNotEmpty) return _keys(context);
     var node = editor.primary ?? doc.root;
     var parent = node == doc.root ? null : doc.parentOf(node);
@@ -265,6 +274,7 @@ class SceneInspector extends StatelessWidget {
           ShapeNode s => _shapeProps(context, s),
           ExternalNode e => _extProps(context, e),
           SceneRefNode r => _sceneProps(context, r),
+          KindNode k => _kindProps(context, k),
         },
       ],
     );
@@ -765,6 +775,7 @@ class SceneInspector extends StatelessWidget {
     ShapeNode() => 'Shape',
     ExternalNode() => 'Widget',
     SceneRefNode() => 'Scene',
+    KindNode k => k.kind.constructor,
   };
 
   Widget _label(BuildContext context, String text) => Padding(
@@ -1606,6 +1617,167 @@ class SceneInspector extends StatelessWidget {
         ),
       );
 
+  /// A registered kind's rows, laid out from the table: a number scrubs
+  /// with the row's own unit, range and dial, a string types, a boolean
+  /// checks, a choice picks. The first table-driven section, and what the
+  /// next kind's inspector costs: nothing.
+  List<Widget> _kindProps(BuildContext context, KindNode k) => [
+    if (k.kind.help case var help?)
+      Padding(
+        padding: const EdgeInsets.only(bottom: FwSpacing.md),
+        child: Text(help, style: context.type.caption),
+      ),
+    for (var p in k.kind.props)
+      if (p.pick case var pick?)
+        _pickRow(context, k, p, pick)
+      else
+        switch (p.kind) {
+          ScenePropKind.number => _number(
+            p.name,
+            p.name,
+            _shown(k, p.name, (p.read(k) as num?)?.toDouble() ?? 0),
+            SceneNumberShape(
+              perPixel: p.angular
+                  ? 1
+                  : ((p.softMax ?? 100) - (p.softMin ?? 0)) / 200,
+              decimals: 2,
+              unit: p.unit ?? '',
+              angular: p.angular,
+              softMin: p.softMin,
+              softMax: p.softMax,
+            ),
+            apply: (v) => p.write(k, v),
+          ),
+          ScenePropKind.boolean => Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            child: _check(
+              context,
+              k,
+              p.name,
+              p.name,
+              p.read(k) == true,
+              () => _door(p.name, () => p.write(k, p.read(k) != true)),
+            ),
+          ),
+          ScenePropKind.choice => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _label(context, p.name),
+              FwPicker<Object>(
+                selected: p.read(k) ?? p.defaultValue!,
+                choices: [
+                  for (var v in p.choices!.values)
+                    FwChoice(value: v, label: p.choices!.nameOf(v)),
+                ],
+                onChanged: (v) => _door(p.name, () => p.write(k, v)),
+              ),
+              const SizedBox(height: FwSpacing.md),
+            ],
+          ),
+          _ => Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.md),
+            child: TextFormField(
+              key: ValueKey('${k.name}:${p.name}'),
+              initialValue: '${p.read(k) ?? ''}',
+              decoration: InputDecoration(labelText: p.name, isDense: true),
+              onChanged: (v) => _door(p.name, () => p.write(k, v)),
+            ),
+          ),
+        },
+  ];
+
+  /// A string row whose choices are in the project: the model files under
+  /// `assets/`, or the meshes or clips of the one the node's `asset` row
+  /// names. A value the project does not have stays pickable — it is what
+  /// the file says — and is flagged, with what the asset does carry.
+  Widget _pickRow(
+    BuildContext context,
+    KindNode k,
+    SceneProp p,
+    ScenePick pick,
+  ) {
+    var root = packageRoot;
+    var current = '${p.read(k) ?? ''}';
+    var choices = <FwChoice<String>>[];
+    var empty = 'No package to look in.';
+    String? missing;
+    if (root != null) {
+      switch (pick) {
+        case ScenePick.modelAsset:
+          choices = [
+            for (var a in ModelAssets.shared.assets(root))
+              FwChoice(value: a, label: paths.basename(a), detail: a),
+          ];
+          empty = 'No .glb or .gltf under assets/.';
+          missing = 'no such file under the package';
+        case ScenePick.modelMesh || ScenePick.modelClip:
+          var asset = '${scenePropNamed(k, 'asset')?.read(k) ?? ''}';
+          var info = asset.isEmpty
+              ? null
+              : ModelAssets.shared.info(root, asset);
+          if (asset.isEmpty) {
+            empty = 'Name an asset first.';
+          } else if (info == null) {
+            empty =
+                '${paths.basename(asset)} is not a model file this can read.';
+          } else if (pick == ScenePick.modelMesh) {
+            choices = [
+              const FwChoice(
+                value: '',
+                label: 'first mesh',
+                detail: 'whichever the file lists first',
+              ),
+              for (var m in info.meshes) FwChoice(value: m, label: m),
+            ];
+            missing =
+                'no mesh "$current" in ${paths.basename(asset)} — it has: '
+                '${info.meshes.join(', ')}';
+          } else {
+            choices = [
+              const FwChoice(value: '', label: 'none', detail: 'no clip'),
+              for (var c in info.clips)
+                FwChoice(
+                  value: c.name,
+                  label: c.name,
+                  detail: '${c.seconds.toStringAsFixed(2)} s',
+                ),
+            ];
+            missing =
+                'no clip "$current" in ${paths.basename(asset)} — it has: '
+                '${info.clips.map((c) => c.name).join(', ')}';
+          }
+      }
+    }
+    var known = current.isEmpty || choices.any((c) => c.value == current);
+    if (!known) {
+      choices = [
+        FwChoice(value: current, label: current, detail: 'not found'),
+        ...choices,
+      ];
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label(context, p.name),
+        FwPicker<String>(
+          selected: current,
+          choices: choices,
+          empty: empty,
+          onChanged: (v) => _door(p.name, () => p.write(k, v)),
+        ),
+        if (!known && missing != null)
+          Padding(
+            padding: const EdgeInsets.only(top: FwSpacing.xs),
+            child: Text(
+              missing,
+              style: context.type.caption.copyWith(color: context.colors.red),
+            ),
+          ),
+        const SizedBox(height: FwSpacing.md),
+      ],
+    );
+  }
+
   /// The widget's declared arguments, each at its override or its default —
   /// the same shape as a nested scene's parameters, because a declaration is
   /// the same promise a scene header makes.
@@ -1805,6 +1977,193 @@ class SceneInspector extends StatelessWidget {
             label: refs.length == 1 ? 'Delete' : 'Delete ${refs.length} keys',
             tooltip: 'Also Backspace, with the timeline focused',
             onPressed: () async => editor.deleteKeys(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The selected clip block: which clip, where it sits, how it plays.
+  /// Every fact of a block is a field here; the timeline's menu keeps only
+  /// the one-click verbs.
+  Widget _block(BuildContext context, MotionClipRef ref) {
+    var colors = context.colors;
+    var block = editor.clipOf(ref)!;
+    var group = editor.motions[ref.motion]!.groupNamed(ref.group)!;
+    var node = doc.nodeNamed(group.node.name);
+    var asset = node is KindNode
+        ? '${scenePropNamed(node, 'asset')?.read(node) ?? ''}'
+        : '';
+    var rowClip = node is KindNode
+        ? '${scenePropNamed(node, 'animation')?.read(node) ?? ''}'
+        : '';
+    var root = packageRoot;
+    var info = root == null || asset.isEmpty
+        ? null
+        : ModelAssets.shared.info(root, asset);
+    var clips = info?.clips ?? const [];
+    var known = block.clip.isEmpty || clips.any((c) => c.name == block.clip);
+    var choices = <FwChoice<String>>[
+      if (!known)
+        FwChoice(value: block.clip, label: block.clip, detail: 'not found'),
+      FwChoice(
+        value: '',
+        label: rowClip.isEmpty ? 'the animation row' : rowClip,
+        detail: 'whatever the animation row names',
+      ),
+      for (var c in clips)
+        FwChoice(
+          value: c.name,
+          label: c.name,
+          detail: '${c.seconds.toStringAsFixed(2)} s',
+        ),
+    ];
+    void set({
+      String? clip,
+      Duration? at,
+      Duration? length,
+      double? speed,
+      Duration? offset,
+      bool? reverse,
+      String? mergeKey,
+    }) => editor.setClip(
+      ref.motion,
+      ref.group,
+      ref.prop,
+      editor.clipIndexOf(ref)!,
+      clip: clip,
+      at: at,
+      length: length,
+      speed: speed,
+      offset: offset,
+      reverse: reverse,
+      mergeKey: mergeKey,
+    );
+    Widget ms(
+      String label,
+      Duration value,
+      void Function(Duration, {String? mergeKey}) apply,
+    ) => SceneNumberField(
+      label: label,
+      value: value.inMilliseconds.toDouble(),
+      shape: SceneNumberShape.milliseconds,
+      onChanged: (v) =>
+          apply(Duration(milliseconds: v.round()), mergeKey: 'block:$label'),
+      onCommit: (v) {
+        apply(Duration(milliseconds: v.round()));
+        editor.endMerge();
+      },
+    );
+    var clipSeconds = clips
+        .where((c) => c.name == (block.clip.isEmpty ? rowClip : block.clip))
+        .firstOrNull
+        ?.seconds;
+    return ListView(
+      key: ValueKey('block:$ref'),
+      padding: const EdgeInsets.all(FwSpacing.lg),
+      children: [
+        Text(
+          'Block · ${ref.group}.${_propLabel(ref.prop)}',
+          style: context.type.bodyStrong,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.xxs),
+          child: Text(
+            'on ${group.node.name}',
+            style: context.type.caption.copyWith(color: colors.mut2),
+          ),
+        ),
+        const SizedBox(height: FwSpacing.lg),
+        _label(context, 'Clip'),
+        FwPicker<String>(
+          selected: block.clip,
+          choices: choices,
+          empty: asset.isEmpty
+              ? 'The placement names no asset.'
+              : 'No clips read from ${paths.basename(asset)}.',
+          onChanged: (v) => set(clip: v),
+        ),
+        if (!known)
+          Padding(
+            padding: const EdgeInsets.only(top: FwSpacing.xs),
+            child: Text(
+              'no clip "${block.clip}" in ${paths.basename(asset)}',
+              style: context.type.caption.copyWith(color: colors.red),
+            ),
+          ),
+        const SizedBox(height: FwSpacing.md),
+        ms(
+          'Start',
+          block.at,
+          (v, {mergeKey}) => set(at: v, mergeKey: mergeKey),
+        ),
+        const SizedBox(height: FwSpacing.md),
+        ms(
+          'Length',
+          block.length,
+          (v, {mergeKey}) => set(length: v, mergeKey: mergeKey),
+        ),
+        if (clipSeconds != null)
+          Padding(
+            padding: const EdgeInsets.only(top: FwSpacing.xs),
+            child: Text(
+              'The clip is ${clipSeconds.toStringAsFixed(2)} s long; at this '
+              'speed the block plays '
+              '${(block.length.inMilliseconds / 1000 * block.speed).toStringAsFixed(2)} s '
+              'of it.',
+              style: context.type.caption.copyWith(color: colors.mut2),
+            ),
+          ),
+        const SizedBox(height: FwSpacing.md),
+        SceneNumberField(
+          label: 'Speed',
+          value: block.speed,
+          shape: const SceneNumberShape(
+            perPixel: 0.01,
+            decimals: 2,
+            unit: '×',
+            softMin: 0.1,
+            softMax: 4,
+            min: 0.01,
+          ),
+          onChanged: (v) => set(speed: v, mergeKey: 'block:speed'),
+          onCommit: (v) {
+            set(speed: v);
+            editor.endMerge();
+          },
+        ),
+        const SizedBox(height: FwSpacing.md),
+        ms(
+          'Skip the first',
+          block.offset,
+          (v, {mergeKey}) => set(offset: v, mergeKey: mergeKey),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          child: Text(
+            'Of the clip: the block starts that far into it.',
+            style: context.type.caption.copyWith(color: colors.mut2),
+          ),
+        ),
+        const SizedBox(height: FwSpacing.md),
+        Row(
+          children: [
+            _checkBox(
+              context,
+              block.reverse,
+              () => set(reverse: !block.reverse),
+            ),
+            const SizedBox(width: FwSpacing.sm),
+            Flexible(child: Text('Play backwards', style: context.type.body)),
+          ],
+        ),
+        const SizedBox(height: FwSpacing.xl),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FwActionButton(
+            label: 'Delete',
+            tooltip: 'Also Backspace, with the timeline focused',
+            onPressed: () async => editor.deleteSelected(),
           ),
         ),
       ],

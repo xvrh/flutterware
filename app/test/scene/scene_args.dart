@@ -165,6 +165,12 @@ Widget sceneCanvasHost() => SceneCanvasHost.of(scenes);
 /// export walks, with this group's widgets and wrapper.
 @Preview(name: 'Scene player', group: 'Scene guests')
 Widget scenePlayer() => Builder(
-  builder: (context) =>
-      ScenePlayerHost(scenes, pairPath: context.knobs.string('pair', '')),
+  builder: (context) => ScenePlayerHost(
+    scenes,
+    pairPath: context.knobs.string('pair', ''),
+    nested: const {
+      'SampleBadge': SampleBadgeArgs(),
+      'SampleScene': SampleSceneArgs(),
+    },
+  ),
 );

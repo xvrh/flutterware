@@ -181,6 +181,38 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
           icon: Icons.layers_outlined,
           onSelected: () => widget.onEnterNested!(node),
         ),
+      // A placement has no box on the artboard, so the canvas cannot draw
+      // one; the window's row is where a model or a screen is added.
+      if (node is KindNode && node.kind == view3dKind) ...[
+        MenuItem(
+          'Add a model',
+          icon: Icons.category_outlined,
+          onSelected: () =>
+              editor.addChild(node, ModelNode(name: doc.uniqueName('model'))),
+        ),
+        MenuItem(
+          'Add a screen',
+          icon: Icons.smartphone_outlined,
+          onSelected: () => editor.addChild(
+            node,
+            SurfaceNode(
+              name: doc.uniqueName('screen'),
+              size: 40,
+              children: [
+                // Something to see at once: a plain quad with a card on it,
+                // until the modeller's mesh and the scene's content replace
+                // both.
+                FrameNode(name: doc.uniqueName('content'))
+                  ..width = 320
+                  ..height = 200
+                  ..corner = 16
+                  ..fill = const SceneColor(0xFFFFD166),
+              ],
+            ),
+          ),
+        ),
+        const MenuDivider(),
+      ],
       if (node != doc.root)
         MenuItem(
           'Rename',
@@ -279,9 +311,7 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
       depth: depth,
       density: TreeRowDensity.roomy,
       selected: selected || drop == _Drop.into,
-      open: node is FrameNode && node.children.isNotEmpty
-          ? !_folded.contains(node.name)
-          : null,
+      open: node.children.isNotEmpty ? !_folded.contains(node.name) : null,
       onToggleFold: () => setState(() {
         if (!_folded.remove(node.name)) _folded.add(node.name);
       }),
@@ -528,6 +558,8 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
     ShapeNode() => Icons.circle_outlined,
     ExternalNode() => Icons.extension_outlined,
     SceneRefNode() => Icons.layers_outlined,
+    KindNode k =>
+      k.kind.children ? Icons.view_in_ar_outlined : Icons.category_outlined,
   };
 }
 

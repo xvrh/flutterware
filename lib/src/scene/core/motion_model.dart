@@ -5,6 +5,7 @@
 // `timeline`, and may keep unplaced groups as library assets fired on events.
 import 'curves.dart';
 import 'model.dart';
+import 'props.dart';
 import 'values.dart';
 
 /// What a track's values are. Mirrors the scene's parameter kinds minus
@@ -79,7 +80,21 @@ class MotionTrack {
   final TrackKind kind;
   final List<MotionKey> keys;
 
-  Duration get duration => keys.isEmpty ? Duration.zero : keys.last.at;
+  /// Blocks instead of keys — see [MotionClip], kept sorted by start. A
+  /// track has one or the other: a block's keys would be derived, so a key
+  /// added to a block track replaces the blocks, and a block put on a key
+  /// track replaces the keys. Two blocks that overlap crossfade over the
+  /// overlap. The timeline draws bars for them; the file spells
+  /// [ClipTrack] for one and [ClipBlocks] for several.
+  final clips = <MotionClip>[];
+
+  void sortClips() => clips.sort((a, b) => a.at.compareTo(b.at));
+
+  Duration get duration => clips.isNotEmpty
+      ? clips.map((c) => c.end).reduce((a, b) => a > b ? a : b)
+      : keys.isEmpty
+      ? Duration.zero
+      : keys.last.at;
 
   void insertKey(MotionKey k) {
     keys.add(k);
@@ -95,7 +110,121 @@ class MotionTrack {
 
   void _sort() => keys.sort((a, b) => a.at.compareTo(b.at));
 
-  MotionTrack copy() => MotionTrack([for (var k in keys) k.copy()], kind: kind);
+  MotionTrack copy() =>
+      MotionTrack([for (var k in keys) k.copy()], kind: kind)
+        ..clips.addAll([for (var c in clips) c.copy()]);
+}
+
+/// A run through a placement's clip, as one block on the timeline: from
+/// [at] for [length], the clip's own time advancing at [speed] from
+/// [offset] — backwards when [reverse]. It stands on a number track (a
+/// placement's `animationTime`) and lowers to a straight ramp: the value at
+/// a moment is where the clip's time has got to. Past the block's end the
+/// value holds, like a track past its last key; how a time past the clip's
+/// own end reads is the placement's `loop` row, which wraps it.
+///
+/// Which clip runs is [clip] — a name in the placement's asset — or, when
+/// that is empty, whatever the placement's `animation` row names. Two
+/// blocks on one track may overlap, and over the overlap the earlier fades
+/// into the later: the runtime hands the placement both clips, both times
+/// and a `blend` that runs 0 to 1 across the overlap.
+class MotionClip {
+  MotionClip({
+    required this.at,
+    required this.length,
+    this.clip = '',
+    this.speed = 1,
+    this.offset = Duration.zero,
+    this.reverse = false,
+  }) : id = _nextId++;
+
+  MotionClip._copy(
+    this.id,
+    this.at,
+    this.length,
+    this.clip,
+    this.speed,
+    this.offset,
+    this.reverse,
+  );
+
+  static var _nextId = 1;
+
+  /// Runtime identity, for the same reason a [MotionKey] has one: the
+  /// timeline holds a selected block while a drag re-sorts the list and
+  /// across an undo. Nothing on disk carries it.
+  final int id;
+
+  /// The clip's name in the asset, or empty for the placement's own row.
+  String clip;
+
+  /// Where the block starts, within its group.
+  Duration at;
+
+  /// How long it runs on the timeline.
+  Duration length;
+
+  /// Clip seconds per timeline second.
+  double speed;
+
+  /// Where in the clip the run starts.
+  Duration offset;
+
+  /// Whether the clip's time runs down instead of up.
+  bool reverse;
+
+  Duration get end => at + length;
+
+  /// The clip's own time at timeline moment [t], in seconds — held at the
+  /// block's ends.
+  double timeAt(Duration t) {
+    var into = t - at;
+    if (into < Duration.zero) into = Duration.zero;
+    if (into > length) into = length;
+    var run = reverse ? length - into : into;
+    return offset.inMicroseconds / 1e6 + run.inMicroseconds / 1e6 * speed;
+  }
+
+  MotionClip copy() =>
+      MotionClip._copy(id, at, length, clip, speed, offset, reverse);
+}
+
+/// The file's word for one block among several — see [ClipBlocks].
+typedef ClipBlock = MotionClip;
+
+/// What a motion file spells for a block: `animationTime: ClipTrack(at:
+/// 0.ms, length: 2400.ms)`. A [MotionTrack] with the block and no keys, so
+/// the typed `animate()` signatures take it where they take any track.
+class ClipTrack extends MotionTrack {
+  ClipTrack({
+    required Duration at,
+    required Duration length,
+    String clip = '',
+    double speed = 1,
+    Duration offset = Duration.zero,
+    bool reverse = false,
+  }) : super([], kind: TrackKind.number) {
+    clips.add(
+      MotionClip(
+        at: at,
+        length: length,
+        clip: clip,
+        speed: speed,
+        offset: offset,
+        reverse: reverse,
+      ),
+    );
+  }
+}
+
+/// Several blocks on one track — `animationTime: ClipBlocks([ClipBlock(clip:
+/// 'Walk', at: 0.ms, length: 1000.ms), ClipBlock(clip: 'Run', at: 700.ms,
+/// length: 1700.ms)])` — crossfading where they overlap.
+class ClipBlocks extends MotionTrack {
+  ClipBlocks(List<MotionClip> blocks) : super([], kind: TrackKind.number) {
+    clips.addAll(blocks);
+    sortClips();
+  }
 }
 
 /// One `late final <name> = scene.<node>.animate(…)` field.
@@ -293,6 +422,20 @@ List<ScenePropSpec> animatableProps(SceneNode node) => [
       ScenePropSpec('fill', TrackKind.color),
     ],
     ShapeNode() => const [ScenePropSpec('fill', TrackKind.color)],
+    // A registered kind's rows, with the hints the row carries.
+    KindNode k => [
+      for (var p in k.kind.props)
+        if (p.animatable)
+          ScenePropSpec(
+            p.name,
+            p.kind == ScenePropKind.color ? TrackKind.color : TrackKind.number,
+            identity: p.identity,
+            unit: p.unit,
+            softMin: p.softMin,
+            softMax: p.softMax,
+            angular: p.angular,
+          ),
+    ],
     ExternalNode() => const <ScenePropSpec>[],
     // The child's declared parameters, once somebody resolved it — a string
     // parameter has no in-between values and does not animate.
@@ -513,6 +656,11 @@ extension SceneRefNodeAnimate on SceneRefNode {
   }, args: args);
 }
 
+/// The door a registered kind's typed `animate()` goes through — the same
+/// one the hand-written kinds use, named so it can be called from outside.
+AnimateGroup animateNode(SceneNode node, Map<String, MotionTrack?> tracks) =>
+    _group(node, tracks);
+
 AnimateGroup _group(
   SceneNode node,
   Map<String, MotionTrack?> tracks, {
@@ -689,7 +837,8 @@ class MotionDocument {
     };
     into.clear();
     for (var entry in from.entries) {
-      var track = MotionTrack([], kind: entry.value.kind);
+      var track = MotionTrack([], kind: entry.value.kind)
+        ..clips.addAll([for (var c in entry.value.clips) c.copy()]);
       for (var snap in entry.value.keys) {
         var key = liveKeys[snap.id];
         if (key == null) {

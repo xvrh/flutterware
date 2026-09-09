@@ -18,10 +18,14 @@ import 'banner.scene.dart';
 import 'invoice.scene.dart';
 import 'ohoh.scene.dart';
 import 'onboarding.scene.dart';
+import 'phone_home.scene.dart';
 import 'promo_badge.scene.dart';
 import 'scenes.dart';
+import 'showcase.scene.dart';
+import 'showcase3d.scene.dart';
 import 'store_banner.scene.dart';
 import 'story_card.scene.dart';
+import 'surface_probe.scene.dart';
 
 class DrinkBadgeArgs extends SceneExtArgs {
   const DrinkBadgeArgs({this.size = 56});
@@ -77,6 +81,79 @@ class SpinnerTracks extends SceneExtTracks {
 
   @override
   Map<String, MotionTrack> toMap() => {'size': ?size};
+}
+
+class ModelViewArgs extends SceneExtArgs {
+  const ModelViewArgs({
+    this.asset = 'assets/models/probe_rig.glb',
+    this.yaw = 0,
+    this.pitch = 10,
+    this.distance = 5,
+    this.fov = 45,
+    this.clip = 'Open',
+    this.clipTime = 0,
+  });
+
+  final String asset;
+  final double yaw;
+  final double pitch;
+  final double distance;
+  final double fov;
+  final String clip;
+  final double clipTime;
+
+  @override
+  String get entry => 'ModelView';
+
+  @override
+  ModelViewArgs merge(SceneArgs fx) => ModelViewArgs(
+    asset: fx.text('asset') ?? asset,
+    yaw: fx.number('yaw') ?? yaw,
+    pitch: fx.number('pitch') ?? pitch,
+    distance: fx.number('distance') ?? distance,
+    fov: fx.number('fov') ?? fov,
+    clip: fx.text('clip') ?? clip,
+    clipTime: fx.number('clipTime') ?? clipTime,
+  );
+
+  @override
+  Map<String, Object?> toMap() => {
+    'asset': asset,
+    'yaw': yaw,
+    'pitch': pitch,
+    'distance': distance,
+    'fov': fov,
+    'clip': clip,
+    'clipTime': clipTime,
+  };
+
+  @override
+  Object build() => _external('ModelView').build(SceneArgs(toMap()));
+}
+
+class ModelViewTracks extends SceneExtTracks {
+  const ModelViewTracks({
+    this.yaw,
+    this.pitch,
+    this.distance,
+    this.fov,
+    this.clipTime,
+  });
+
+  final MotionTrack? yaw;
+  final MotionTrack? pitch;
+  final MotionTrack? distance;
+  final MotionTrack? fov;
+  final MotionTrack? clipTime;
+
+  @override
+  Map<String, MotionTrack> toMap() => {
+    'yaw': ?yaw,
+    'pitch': ?pitch,
+    'distance': ?distance,
+    'fov': ?fov,
+    'clipTime': ?clipTime,
+  };
 }
 
 class OrderButtonArgs extends SceneExtArgs {
@@ -288,6 +365,29 @@ class OnboardingTracks extends SceneExtTracks {
   Map<String, MotionTrack> toMap() => {'tint': ?tint};
 }
 
+class PhoneHomeArgs extends SceneRefArgs {
+  const PhoneHomeArgs();
+
+  @override
+  String get entry => 'PhoneHome';
+
+  @override
+  PhoneHomeArgs merge(SceneArgs fx) => PhoneHomeArgs();
+
+  @override
+  Map<String, Object?> toMap() => {};
+
+  @override
+  SceneDefinition build() => PhoneHome();
+}
+
+class PhoneHomeTracks extends SceneExtTracks {
+  const PhoneHomeTracks();
+
+  @override
+  Map<String, MotionTrack> toMap() => {};
+}
+
 class PromoBadgeArgs extends SceneRefArgs {
   const PromoBadgeArgs({
     this.label = 'New',
@@ -320,6 +420,52 @@ class PromoBadgeTracks extends SceneExtTracks {
 
   @override
   Map<String, MotionTrack> toMap() => {'tint': ?tint};
+}
+
+class Showcase3DArgs extends SceneRefArgs {
+  const Showcase3DArgs();
+
+  @override
+  String get entry => 'Showcase3D';
+
+  @override
+  Showcase3DArgs merge(SceneArgs fx) => Showcase3DArgs();
+
+  @override
+  Map<String, Object?> toMap() => {};
+
+  @override
+  SceneDefinition build() => Showcase3D();
+}
+
+class Showcase3DTracks extends SceneExtTracks {
+  const Showcase3DTracks();
+
+  @override
+  Map<String, MotionTrack> toMap() => {};
+}
+
+class ShowcaseSceneArgs extends SceneRefArgs {
+  const ShowcaseSceneArgs();
+
+  @override
+  String get entry => 'ShowcaseScene';
+
+  @override
+  ShowcaseSceneArgs merge(SceneArgs fx) => ShowcaseSceneArgs();
+
+  @override
+  Map<String, Object?> toMap() => {};
+
+  @override
+  SceneDefinition build() => ShowcaseScene();
+}
+
+class ShowcaseSceneTracks extends SceneExtTracks {
+  const ShowcaseSceneTracks();
+
+  @override
+  Map<String, MotionTrack> toMap() => {};
 }
 
 class StoreBannerArgs extends SceneRefArgs {
@@ -401,6 +547,29 @@ class StoryCardTracks extends SceneExtTracks {
   Map<String, MotionTrack> toMap() => {};
 }
 
+class SurfaceProbeArgs extends SceneRefArgs {
+  const SurfaceProbeArgs();
+
+  @override
+  String get entry => 'SurfaceProbe';
+
+  @override
+  SurfaceProbeArgs merge(SceneArgs fx) => SurfaceProbeArgs();
+
+  @override
+  Map<String, Object?> toMap() => {};
+
+  @override
+  SceneDefinition build() => SurfaceProbe();
+}
+
+class SurfaceProbeTracks extends SceneExtTracks {
+  const SurfaceProbeTracks();
+
+  @override
+  Map<String, MotionTrack> toMap() => {};
+}
+
 /// The tokens this group's libraries declare, typed. A scene
 /// reads them through its tokens formal — `fill: tokens.brand`;
 /// the bare constructor is the declared set.
@@ -466,6 +635,22 @@ Widget sceneCanvasHost() => SceneCanvasHost.of(scenes);
 /// export walks, with this group's widgets and wrapper.
 @Preview(name: 'Scene player', group: 'Scene guests')
 Widget scenePlayer() => Builder(
-  builder: (context) =>
-      ScenePlayerHost(scenes, pairPath: context.knobs.string('pair', '')),
+  builder: (context) => ScenePlayerHost(
+    scenes,
+    pairPath: context.knobs.string('pair', ''),
+    nested: const {
+      'ArcadePoster': ArcadePosterArgs(),
+      'BannerScene': BannerSceneArgs(),
+      'Invoice': InvoiceArgs(),
+      'Ohoh': OhohArgs(),
+      'Onboarding': OnboardingArgs(),
+      'PhoneHome': PhoneHomeArgs(),
+      'PromoBadge': PromoBadgeArgs(),
+      'Showcase3D': Showcase3DArgs(),
+      'ShowcaseScene': ShowcaseSceneArgs(),
+      'StoreBanner': StoreBannerArgs(),
+      'StoryCard': StoryCardArgs(),
+      'SurfaceProbe': SurfaceProbeArgs(),
+    },
+  ),
 );

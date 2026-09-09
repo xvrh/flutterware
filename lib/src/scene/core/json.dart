@@ -8,6 +8,7 @@
 // fed frames — an export walking a playhead in a tester, or an app mounting a
 // scene it was handed.
 import 'curves.dart';
+import 'kind.dart';
 import 'model.dart';
 import 'motion_model.dart';
 import 'props.dart';
@@ -100,6 +101,10 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
       'children': [for (var c in f.children) _nodeToJson(c)],
     },
     TextNode() || ShapeNode() => <String, Object?>{},
+    KindNode k => {
+      if (k.kind.children)
+        'children': [for (var c in k.children) _nodeToJson(c)],
+    },
     ExternalNode e => {
       'entry': e.entry,
       'args': {...e.args},
@@ -141,6 +146,12 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
       name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
     )..tokensArg = json['tokensArg'] as String?,
+    String kind when sceneKindNamed(kind) != null =>
+      KindNode(sceneKindNamed(kind)!, name: name)
+        ..children.addAll([
+          for (var c in (json['children'] as List? ?? const []))
+            _nodeFromJson((c as Map).cast<String, Object?>()),
+        ]),
     _ => throw ArgumentError('unknown node kind "${json['kind']}"'),
   };
   readSceneProps(node, json);
@@ -259,6 +270,18 @@ MotionDocument motionFromJson(
 
 Map<String, Object?> _trackToJson(MotionTrack t) => {
   'kind': t.kind.name,
+  if (t.clips.isNotEmpty)
+    'clips': [
+      for (var c in t.clips)
+        {
+          'clip': c.clip,
+          'at': c.at.inMicroseconds,
+          'length': c.length.inMicroseconds,
+          'speed': c.speed,
+          'offset': c.offset.inMicroseconds,
+          'reverse': c.reverse,
+        },
+    ],
   'keys': [
     for (var k in t.keys)
       {
@@ -272,6 +295,21 @@ Map<String, Object?> _trackToJson(MotionTrack t) => {
 
 MotionTrack _trackFromJson(Map<String, Object?> json) {
   var kind = TrackKind.values.byName(json['kind']! as String);
+  if (json['clips'] case List raw) {
+    return MotionTrack([], kind: kind)
+      ..clips.addAll([
+        for (var c in raw.cast<Map>())
+          MotionClip(
+            clip: (c['clip'] as String?) ?? '',
+            at: Duration(microseconds: (c['at']! as num).toInt()),
+            length: Duration(microseconds: (c['length']! as num).toInt()),
+            speed: (c['speed'] as num?)?.toDouble() ?? 1,
+            offset: Duration(microseconds: (c['offset'] as num?)?.toInt() ?? 0),
+            reverse: c['reverse'] == true,
+          ),
+      ])
+      ..sortClips();
+  }
   return MotionTrack([
     for (var raw in (json['keys'] as List? ?? const []))
       if ((raw as Map).cast<String, Object?>() case var k)
@@ -388,6 +426,12 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
       name: name,
       args: ((json['args'] as Map?) ?? const {}).cast<String, Object?>(),
     ),
+    String kind when sceneKindNamed(kind) != null =>
+      KindNode(sceneKindNamed(kind)!, name: name)
+        ..children.addAll([
+          for (var c in (json['children'] as List? ?? const []))
+            _nodeFromWire((c as Map).cast<String, Object?>()),
+        ]),
     _ =>
       FrameNode(name: name)
         ..children.addAll([

@@ -42,6 +42,21 @@ Map<String, SceneRect> namedRects(Map<SceneNode, SceneRect> rects) => {
     if (entry.key.name.isNotEmpty) entry.key.name: entry.value,
 };
 
+/// Draws one node of a registered kind. It reads the node's rows itself —
+/// composed through `fxRendered`, so a motion's track reaches it — and its
+/// children, which the view does not lay out for it. [child] draws one of
+/// them the way the view draws any node, for a kind that shows a child
+/// somewhere the view cannot reach — on a mesh, say. What it returns stays
+/// live: it redraws with the document, wherever it is mounted.
+typedef SceneKindRenderer = Widget Function(
+  BuildContext context,
+  KindNode node,
+  SceneChildRenderer child,
+);
+
+/// The view's own picture of one node, handed to a kind's renderer.
+typedef SceneChildRenderer = Widget Function(SceneNode child);
+
 class SceneView extends StatefulWidget {
   /// Draws a scene an app COMPILED — `SceneView(BannerScene())`, which is
   /// the whole of what mounting one takes.
@@ -57,6 +72,7 @@ class SceneView extends StatefulWidget {
     SceneMotion? motion,
     this.selected = const {},
     this.onMeasured,
+    this.renderers = const {},
   }) : scene = definition.scene,
        motion = motion?.playable;
 
@@ -69,7 +85,14 @@ class SceneView extends StatefulWidget {
     this.motion,
     this.selected = const {},
     this.onMeasured,
+    this.renderers = const {},
   });
+
+  /// How a registered kind ([SceneKind]) is drawn, by the kind's name — the
+  /// door a renderer the core never imports comes through, the way an
+  /// external widget's builder does. A kind with no renderer draws a named
+  /// placeholder, never a silent gap.
+  final Map<String, SceneKindRenderer> renderers;
 
   /// The live document. Edits and fx writes both notify it, and this widget
   /// redraws from the RENDERED plane — base composed with every fx writer —
@@ -94,13 +117,36 @@ class SceneView extends StatefulWidget {
 }
 
 class _SceneViewState extends State<SceneView> {
-  /// Keyed by the NODE, not by its name. A compiled scene has no names —
-  /// identity there is the object — and two nodes sharing one key is a
-  /// duplicate-GlobalKey crash rather than a wrong picture.
-  final _keys = <SceneNode, GlobalKey>{};
+  /// Keyed by the node's NAME where it has one, and by the node itself
+  /// where it does not. A document that arrived as data is a fresh set of
+  /// objects on every push from the editor, and a key that followed the
+  /// object remounted every subtree per push — a 3D view loaded its
+  /// assets again on each keystroke (measured 2026-09-07). The name is the
+  /// identity the editor keys on, so a key that follows it keeps a node's
+  /// state across pushes. A compiled scene may have no names — identity
+  /// there is the object — and two nodes sharing one key is a
+  /// duplicate-GlobalKey crash rather than a wrong picture, so an unnamed
+  /// node keys on itself. A nested instance's nodes carry their ref's
+  /// prefix, since two scenes both have a `root`.
+  final _keys = <Object, GlobalKey>{};
   final _artboard = GlobalKey();
 
-  GlobalKey _key(SceneNode node) => _keys.putIfAbsent(node, GlobalKey.new);
+  GlobalKey _key(SceneNode node, [String prefix = '']) =>
+      _keys.putIfAbsent(_identity(node, prefix), GlobalKey.new);
+
+  /// A second key, on the node's CONTENT rather than its box. The box's
+  /// wrappers come and go — a selection outline, an opacity below one, an
+  /// imposed transform — and each changes the structure between the box
+  /// and what it holds, which recreates the content's element unless a
+  /// global key lets Flutter move it. A 3D view lost its engine scene on
+  /// every selection change until this (measured 2026-09-07).
+  final _contentKeys = <Object, GlobalKey>{};
+
+  GlobalKey _contentKey(SceneNode node, String prefix) =>
+      _contentKeys.putIfAbsent(_identity(node, prefix), GlobalKey.new);
+
+  static Object _identity(SceneNode node, String prefix) =>
+      node.name.isEmpty ? node : '$prefix${node.name}';
 
   String? _playheadId;
 
@@ -159,17 +205,25 @@ class _SceneViewState extends State<SceneView> {
       if (root == null) return;
       var rects = <SceneNode, SceneRect>{};
       SceneRect? visit(SceneNode node) {
-        var box = _keys[node]?.currentContext?.findRenderObject() as RenderBox?;
+        var box =
+            _keys[_identity(node, '')]?.currentContext?.findRenderObject()
+                as RenderBox?;
         SceneRect? rect;
         if (box != null && box.hasSize) {
           rect =
               (box.localToGlobal(Offset.zero, ancestor: root) & box.size).scene;
         }
         SceneRect? spanned;
-        for (var child in node.children) {
-          var childRect = visit(child);
-          if (childRect == null) continue;
-          spanned = spanned == null ? childRect : _union(spanned, childRect);
+        // A registered kind draws its children itself, somewhere the
+        // artboard's plane does not reach — a mesh, a texture — so their
+        // boxes, where there are any, are not artboard boxes. The tree is
+        // their door, not the canvas.
+        if (node is! KindNode) {
+          for (var child in node.children) {
+            var childRect = visit(child);
+            if (childRect == null) continue;
+            spanned = spanned == null ? childRect : _union(spanned, childRect);
+          }
         }
         // A table row draws no box of its own — the table lays out the
         // cells and paints the row behind them — so the row IS what its
@@ -272,6 +326,14 @@ class _SceneViewState extends State<SceneView> {
         );
       case ShapeNode _:
         inner = null;
+      case KindNode k:
+        inner =
+            widget.renderers[k.kind.name]?.call(
+              context,
+              k,
+              (child) => _live(child, prefix),
+            ) ??
+            _MissingKind(k.kind.name);
       case ExternalNode e:
         // A compiled node reaches the app's declaration through its own
         // generated class, so nothing is passed in for it. A node that
@@ -376,7 +438,7 @@ class _SceneViewState extends State<SceneView> {
     // an unbounded-constraint error rather than a wide node.
     var stretched = _stretchedBy(n, parent);
     Widget result = Container(
-      key: _key(n),
+      key: _key(n, prefix),
       width: stretched.width ? null : n.width,
       height: stretched.height ? null : n.height,
       padding: padding.isZero ? null : padding.flutter,
@@ -403,7 +465,9 @@ class _SceneViewState extends State<SceneView> {
                   : n.corners.flutter,
             )
           : null,
-      child: inner,
+      child: inner == null
+          ? null
+          : KeyedSubtree(key: _contentKey(n, prefix), child: inner),
     );
     // A clipping frame cuts its children at its own corners; a bounded node
     // is held between its bounds whatever its parent hands it.
@@ -461,6 +525,15 @@ class _SceneViewState extends State<SceneView> {
     }
     return result;
   }
+
+  /// [child] drawn as the view draws it, rebuilt on every change of the
+  /// document — a renderer may mount it in a tree of its own (a widget
+  /// captured onto a texture is one), where this state's rebuild never
+  /// reaches, so the picture listens for itself.
+  Widget _live(SceneNode child, String prefix) => ListenableBuilder(
+    listenable: widget.scene.listenable,
+    builder: (context, _) => _node(context, child, prefix: prefix),
+  );
 
   /// A table: rows that agree on their columns.
   ///
@@ -601,6 +674,25 @@ class _MissingScene extends StatelessWidget {
       'no scene "$sceneClassName" here',
       textAlign: TextAlign.center,
       style: const TextStyle(fontSize: 10, color: Color(0xFFCC3333)),
+    ),
+  );
+}
+
+/// A registered kind nobody handed the view a renderer for — named, so a
+/// missing registration reads as one.
+class _MissingKind extends StatelessWidget {
+  const _MissingKind(this.kind);
+
+  final String kind;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0x33FF0000),
+    child: Center(
+      child: Text(
+        'no renderer for $kind',
+        style: const TextStyle(color: Color(0xFFB00020), fontSize: 12),
+      ),
     ),
   );
 }
