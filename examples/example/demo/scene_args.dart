@@ -24,6 +24,7 @@ import 'scenes.dart';
 import 'showcase.scene.dart';
 import 'showcase3d.scene.dart';
 import 'store_banner.scene.dart';
+import 'store_hero.scene.dart';
 import 'story_card.scene.dart';
 import 'surface_probe.scene.dart';
 
@@ -154,6 +155,31 @@ class ModelViewTracks extends SceneExtTracks {
     'fov': ?fov,
     'clipTime': ?clipTime,
   };
+}
+
+class ShotArgs extends SceneExtArgs {
+  const ShotArgs({this.path = ''});
+
+  final String path;
+
+  @override
+  String get entry => 'Shot';
+
+  @override
+  ShotArgs merge(SceneArgs fx) => ShotArgs(path: fx.text('path') ?? path);
+
+  @override
+  Map<String, Object?> toMap() => {'path': path};
+
+  @override
+  Object build() => _external('Shot').build(SceneArgs(toMap()));
+}
+
+class ShotTracks extends SceneExtTracks {
+  const ShotTracks();
+
+  @override
+  Map<String, MotionTrack> toMap() => {};
 }
 
 class OrderButtonArgs extends SceneExtArgs {
@@ -522,6 +548,63 @@ class StoreBannerTracks extends SceneExtTracks {
   Map<String, MotionTrack> toMap() => {'tint': ?tint};
 }
 
+class StoreHeroArgs extends SceneRefArgs {
+  const StoreHeroArgs({
+    this.headline = 'Your coffee,\nready before you are',
+    this.subtitle = 'Order ahead. Skip the line. Earn rewards.',
+    this.cta = 'Get the app',
+    this.shotFront = 'build/flutterware/store/flutterware_example/unframed/app-store/iphone-6-9/en-US/01-welcome.png',
+    this.shotBack = 'build/flutterware/store/flutterware_example/unframed/app-store/iphone-6-9/en-US/02-menu.png',
+    this.tokens = const SceneTokens(),
+  });
+
+  final String headline;
+  final String subtitle;
+  final String cta;
+  final String shotFront;
+  final String shotBack;
+  final SceneTokens tokens;
+
+  @override
+  String get entry => 'StoreHero';
+
+  @override
+  StoreHeroArgs merge(SceneArgs fx) => StoreHeroArgs(
+    headline: fx.text('headline') ?? headline,
+    subtitle: fx.text('subtitle') ?? subtitle,
+    cta: fx.text('cta') ?? cta,
+    shotFront: fx.text('shotFront') ?? shotFront,
+    shotBack: fx.text('shotBack') ?? shotBack,
+    tokens: tokens,
+  );
+
+  @override
+  Map<String, Object?> toMap() => {
+    'headline': headline,
+    'subtitle': subtitle,
+    'cta': cta,
+    'shotFront': shotFront,
+    'shotBack': shotBack,
+  };
+
+  @override
+  SceneDefinition build() => StoreHero(
+    headline: headline,
+    subtitle: subtitle,
+    cta: cta,
+    shotFront: shotFront,
+    shotBack: shotBack,
+    tokens: tokens,
+  );
+}
+
+class StoreHeroTracks extends SceneExtTracks {
+  const StoreHeroTracks();
+
+  @override
+  Map<String, MotionTrack> toMap() => {};
+}
+
 class StoryCardArgs extends SceneRefArgs {
   const StoryCardArgs({this.tokens = const SceneTokens()});
 
@@ -649,6 +732,7 @@ Widget scenePlayer() => Builder(
       'Showcase3D': Showcase3DArgs(),
       'ShowcaseScene': ShowcaseSceneArgs(),
       'StoreBanner': StoreBannerArgs(),
+      'StoreHero': StoreHeroArgs(),
       'StoryCard': StoryCardArgs(),
       'SurfaceProbe': SurfaceProbeArgs(),
     },
