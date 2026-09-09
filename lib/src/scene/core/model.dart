@@ -1420,8 +1420,9 @@ class SceneDocument extends SceneListenable {
       // The picture: every table property off its default, the composed
       // value where a writer moves it — a motion's opacity, a fill it tints.
       for (var p in scenePropsOf(n))
-        if (_pictureValue(n, p) case var v when !isSceneDefault(p, v))
-          p.key: p.toWire(v),
+        if (p.onWire)
+          if (_pictureValue(n, p) case var v when !isSceneDefault(p, v))
+            p.key: p.toWire(v),
       // The imposed transforms have no authored slots — identity is the
       // base — so they ride the wire only when a writer moves them.
       // [translateX, translateY, scale, rotate°], applied about the center.

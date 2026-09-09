@@ -395,6 +395,7 @@ void _emitNode(
   /// a repeat are structure, not values.
   void table({Set<String> skip = const {}}) {
     for (var p in scenePropsOf(n)) {
+      if (p.byHand) continue;
       if (skip.contains(p.name)) continue;
       var v = p.read(n);
       var bound =
@@ -405,6 +406,11 @@ void _emitNode(
           : isSceneDefault(p, v);
       if (inherited && !bound) continue;
       switch (p.kind) {
+        // Never reached: a byHand row is skipped above. Named so the switch
+        // stays exhaustive and a new kind has to be thought about here.
+        case ScenePropKind.style:
+        case ScenePropKind.args:
+          break;
         case ScenePropKind.edges:
           // One number while one number says it, four names when it does
           // not. A frame that only ever wanted `padding: 16` keeps writing
@@ -567,6 +573,8 @@ String? _styleArg(TextNode t, _Scope scope, String? Function(String prop) ref) {
 /// take; a quad or a list of sizes is spelled where it is written, because
 /// it has more than one spelling.
 String scenePropLiteral(SceneProp p, Object? v) => switch (p.kind) {
+  // Spelled by hand, never through here.
+  ScenePropKind.style || ScenePropKind.args => '$v',
   ScenePropKind.number => _num(v! as double),
   ScenePropKind.integer => '$v',
   ScenePropKind.string => _str(v! as String),
@@ -1533,9 +1541,15 @@ class _Parser {
     Set<String>? only,
   }) {
     for (var p in scenePropsOf(n)) {
+      // The file spells `text`, `style` and `args` itself.
+      if (p.byHand) continue;
       if (skip.contains(p.name)) continue;
       if (only != null && !only.contains(p.name)) continue;
       switch (p.kind) {
+        // Never reached: a byHand row is skipped above.
+        case ScenePropKind.style:
+        case ScenePropKind.args:
+          break;
         case ScenePropKind.number:
           _take(named, p.name, (e) {
             var v = _doubleV(e, n, p.name);

@@ -528,6 +528,7 @@ SceneTextStyle? _style(
 /// table names.
 Object? _styleField(SceneProp p, Expression v, Refuse refuse) =>
     switch (p.kind) {
+      ScenePropKind.style || ScenePropKind.args => null,
       ScenePropKind.number => _value(v, SceneParamKind.number),
       ScenePropKind.integer => switch (_value(v, SceneParamKind.number)) {
         double d => d.round(),

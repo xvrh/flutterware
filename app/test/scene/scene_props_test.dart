@@ -7,6 +7,9 @@ import 'package:flutterware_app/src/scene/scene_file.dart';
 
 /// A value off the default for every kind, so a write is visible.
 Object? sample(SceneProp p) => switch (p.kind) {
+  // The two the file and the wire spell themselves: their value is the
+  // node's other rows, so there is nothing of their own to sample.
+  ScenePropKind.style || ScenePropKind.args => null,
   ScenePropKind.number => 7.5,
   ScenePropKind.integer => 3,
   ScenePropKind.string => 'Hello',
@@ -44,6 +47,7 @@ SceneNode fresh(SceneProp p) => switch (p.owner) {
   ScenePropOwner.frame || ScenePropOwner.any => FrameNode(name: 'n'),
   ScenePropOwner.text => TextNode('', name: 'n'),
   ScenePropOwner.shape => ShapeNode(name: 'n'),
+  ScenePropOwner.takesArgs => SceneRefNode.read('Card', name: 'n'),
 };
 
 void main() {
@@ -66,7 +70,12 @@ void main() {
     );
     // The rest of a text's rows are its own — the positional text, and the
     // two the paragraph decides rather than the type.
-    expect(sceneTextOwnProps.map((p) => p.name), ['text', 'align', 'maxLines']);
+    expect(sceneTextOwnProps.map((p) => p.name), [
+      'text',
+      'style',
+      'align',
+      'maxLines',
+    ]);
   });
 
   test('a style round-trips through its own values, and copyWith deltas', () {
@@ -105,15 +114,21 @@ void main() {
     expect(resolveSceneKey(frame, 'fill'), isA<ScenePropertyKey>());
     expect(
       resolveSceneKey(frame, 'paddingLeft'),
-      isA<SceneSideKey>()
+      isA<ScenePartKey>()
           .having((k) => k.prop.name, 'row', 'padding')
-          .having((k) => k.index, 'side', 0),
+          .having((k) => k.part, 'side', 'paddingLeft'),
     );
     expect(
       resolveSceneKey(ref, 'args.headline'),
-      isA<SceneArgKey>().having((k) => k.name, 'name', 'headline'),
+      isA<ScenePartKey>()
+          .having((k) => k.prop.name, 'row', 'args')
+          .having((k) => k.part, 'name', 'headline'),
     );
-    expect(resolveSceneKey(text, styleBindingKey), isA<SceneStyleKey>());
+    expect(
+      resolveSceneKey(text, styleBindingKey),
+      isA<ScenePropertyKey>().having((k) => k.prop.name, 'row', 'style'),
+      reason: 'a style is a property whose type is a style',
+    );
     // And what each node kind cannot hold.
     expect(resolveSceneKey(frame, styleBindingKey), isNull, reason: 'no type');
     expect(resolveSceneKey(frame, 'args.headline'), isNull, reason: 'no args');
@@ -122,6 +137,11 @@ void main() {
   });
 
   for (var p in sceneProps) {
+    // The two rows the file and the wire spell themselves have no value of
+    // their own to sample, spell or encode — their value IS the node's other
+    // rows. They are rows to be KEYS; `every kind of key resolves` is what
+    // covers them.
+    if (p.byHand && p.kind != ScenePropKind.string) continue;
     test('${p.name} reads back what it writes, and starts at its default', () {
       var node = fresh(p);
       expect(isSceneDefault(p, p.read(node)), isTrue, reason: 'fresh node');

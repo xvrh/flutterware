@@ -355,7 +355,7 @@ class SceneInspector extends StatelessWidget {
     // What the chip says the property currently is. A style has no single
     // value to show, so it says what it decides instead — which is the one
     // thing a reader wants from a name like `tokens.title`.
-    var isStyle = resolveSceneKey(node, prop) is SceneStyleKey;
+    var isStyle = resolveSceneKey(node, prop)?.prop.kind == ScenePropKind.style;
     var value = origin == PropertyOrigin.appValue || isStyle
         ? null
         : getSceneProperty(node, prop);
@@ -498,7 +498,7 @@ class SceneInspector extends StatelessWidget {
   /// A style is applied — every property it sets lands on the node and stays
   /// the node's to override — where an ordinary token is bound.
   void _bindToken(SceneNode node, String prop, SceneTokenDecl t) =>
-      resolveSceneKey(node, prop) is SceneStyleKey
+      resolveSceneKey(node, prop)?.prop.kind == ScenePropKind.style
       ? editor.applyStyle(node, t.name)
       : editor.bindToken(node, prop, t.name);
 

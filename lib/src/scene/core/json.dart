@@ -87,7 +87,8 @@ Map<String, Object?> _nodeToJson(SceneNode n) => {
   'name': n.name,
   'kind': n.typeName,
   for (var p in scenePropsOf(n))
-    if (p.read(n) case var v when !isSceneDefault(p, v)) p.key: p.toWire(v),
+    if (p.onWire)
+      if (p.read(n) case var v when !isSceneDefault(p, v)) p.key: p.toWire(v),
   if (n.bindings.isNotEmpty)
     'bindings': {for (var e in n.bindings.entries) e.key: e.value.toWire()},
   ...switch (n) {
@@ -156,6 +157,7 @@ SceneNode _nodeFromJson(Map<String, Object?> json) {
 /// the same way and differ only in what else they carry.
 void readSceneProps(SceneNode node, Map<String, Object?> json) {
   for (var p in scenePropsOf(node)) {
+    if (!p.onWire) continue;
     // A legacy payload packed the border as [argb, width].
     if (p.name == 'borderColor' && json['border'] is List) {
       var l = json['border']! as List;
@@ -398,7 +400,8 @@ SceneNode _nodeFromWire(Map<String, Object?> json) {
   if (json['exports'] case Map exports) {
     for (var e in exports.entries) {
       var prop = '${e.key}';
-      node.bindings[prop] = resolveSceneKey(node, prop) is SceneStyleKey
+      node.bindings[prop] =
+          resolveSceneKey(node, prop)?.prop.kind == ScenePropKind.style
           ? StyleRef('${e.value}')
           : TokenRef('${e.value}');
     }

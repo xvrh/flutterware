@@ -53,6 +53,16 @@ enum ScenePropKind {
 
   /// One of a fixed set — an enum, spelled `Type.member`.
   choice,
+
+  /// A [SceneTextStyle] — a text's whole typographic treatment, which is a
+  /// value like any other even though the node stores it as its resolved
+  /// fields rather than as an object.
+  style,
+
+  /// The arguments of whatever the node stands for, as a map. The only
+  /// property whose PARTS are not known here: their names come from the
+  /// child scene's parameters or the widget's declaration.
+  args,
 }
 
 /// The members a [ScenePropKind.choice] property can take and how the file
@@ -83,13 +93,17 @@ enum ScenePropOwner {
   any,
   frame,
   text,
-  shape;
+  shape,
+
+  /// The two node kinds that stand for something else and pass it arguments.
+  takesArgs;
 
   bool has(SceneNode node) => switch (this) {
     any => true,
     frame => node is FrameNode,
     text => node is TextNode,
     shape => node is ShapeNode,
+    takesArgs => node is SceneRefNode || node is ExternalNode,
   };
 }
 
@@ -107,11 +121,24 @@ class SceneProp {
     this.choices,
     this.sides,
     this.quad,
+    this.byHand = false,
   });
 
   /// The file's named argument, the read plane's key, the motion's track
   /// name when it animates.
   final String name;
+
+  /// The file and the wire spell this one themselves, so the walks that
+  /// emit, parse and encode by the table skip it.
+  ///
+  /// A row is here to be a KEY — something a binding files under, the read
+  /// plane gets and sets, and the editor offers. Whether the file happens to
+  /// spell it positionally (`text`), as a whole sublanguage (`style`) or by
+  /// its parts (`args`) is a separate question, and this is the answer to
+  /// it. Without the distinction those three could not be rows at all, and
+  /// each got an ad-hoc key of its own instead — which is how a key space
+  /// grew four kinds of thing in it.
+  final bool byHand;
   final ScenePropKind kind;
 
   /// What a node holds when the file says nothing. A property at its
@@ -152,11 +179,23 @@ class SceneProp {
     ScenePropKind.string => SceneParamKind.string,
     ScenePropKind.boolean => SceneParamKind.bool,
     ScenePropKind.color => SceneParamKind.color,
+    // No parameter can hold one of these. That is not the same as "nothing
+    // can": a token holds a text style, and `sceneBindSources` is where the
+    // two questions are asked apart.
     ScenePropKind.integer ||
     ScenePropKind.sizes ||
     ScenePropKind.layers ||
-    ScenePropKind.choice => null,
+    ScenePropKind.choice ||
+    ScenePropKind.style ||
+    ScenePropKind.args => null,
   };
+
+  /// Whether the wire and the authored JSON carry this row.
+  ///
+  /// A style and an args map do not: the wire already carries a style as its
+  /// own fields and a node's arguments as their own map, and neither has a
+  /// JSON spelling of its own. They are rows to be KEYS, not to be encoded.
+  bool get onWire => kind != ScenePropKind.style && kind != ScenePropKind.args;
 
   /// The value as the wire and the authored JSON carry it.
   Object? toWire(Object? value) => switch (kind) {
@@ -174,7 +213,12 @@ class SceneProp {
   };
 
   /// The inverse of [toWire]; a missing or unreadable value is the default.
+  ///
+  /// A [byHand] row never reaches either direction — the wire carries a
+  /// style as its own fields and a node's arguments as their own map — so
+  /// both switches leave those two kinds alone.
   Object? fromWire(Object? raw) => switch (kind) {
+    ScenePropKind.style || ScenePropKind.args => raw,
     ScenePropKind.number => (raw as num?)?.toDouble() ?? defaultValue,
     ScenePropKind.integer => (raw as num?)?.toInt(),
     ScenePropKind.string => raw is String ? raw : defaultValue,
@@ -452,8 +496,20 @@ const sceneTextOwnProps = <SceneProp>[
     ScenePropKind.string,
     owner: ScenePropOwner.text,
     defaultValue: '',
+    byHand: true,
     read: _text,
     write: _setText,
+  ),
+  // The treatment, whole. A node stores it as its resolved fields rather
+  // than as an object, which is what `read` and `write` are for; as a key it
+  // is an ordinary property whose type happens to be a text style.
+  SceneProp(
+    'style',
+    ScenePropKind.style,
+    owner: ScenePropOwner.text,
+    byHand: true,
+    read: _style,
+    write: _setStyle,
   ),
   SceneProp(
     'align',
@@ -605,6 +661,20 @@ const sceneStyleProps = <SceneProp>[
 /// Every property a text carries, its own and its style's.
 const sceneTextProps = <SceneProp>[...sceneTextOwnProps, ...sceneStyleProps];
 
+/// What a node that stands for something else passes it. One row, whose
+/// PARTS are the child's own parameter names — the only property whose parts
+/// this table cannot list, which is why they carry a prefix.
+const sceneArgsProps = <SceneProp>[
+  SceneProp(
+    'args',
+    ScenePropKind.args,
+    owner: ScenePropOwner.takesArgs,
+    byHand: true,
+    read: _args,
+    write: _setArgs,
+  ),
+];
+
 const sceneShapeProps = <SceneProp>[
   SceneProp(
     'circle',
@@ -621,6 +691,7 @@ const sceneProps = <SceneProp>[
   ...sceneCommonProps,
   ...sceneFrameProps,
   ...sceneTextProps,
+  ...sceneArgsProps,
   ...sceneShapeProps,
 ];
 
@@ -765,3 +836,38 @@ void _setMaxLines(SceneNode n, Object? v) =>
 
 Object? _circle(SceneNode n) => (n as ShapeNode).circle;
 void _setCircle(SceneNode n, Object? v) => (n as ShapeNode).circle = v! as bool;
+
+/// A text's whole style, built from the rows that make one. The node keeps
+/// the resolved fields, not the object, so this is where the object is.
+Object? _style(SceneNode n) => SceneTextStyle.fromValues({
+  for (var p in sceneStyleProps) p.name: p.read(n),
+});
+
+void _setStyle(SceneNode n, Object? v) {
+  if (v is! SceneTextStyle) return;
+  for (var e in v.values.entries) {
+    scenePropNamed(n, e.key)?.write(n, e.value);
+  }
+}
+
+Object? _args(SceneNode n) => switch (n) {
+  SceneRefNode r => r.args,
+  ExternalNode e => e.args,
+  _ => null,
+};
+
+void _setArgs(SceneNode n, Object? v) {
+  if (v is! Map<String, Object?>) return;
+  switch (n) {
+    case SceneRefNode r:
+      r.args
+        ..clear()
+        ..addAll(v);
+    case ExternalNode e:
+      e.args
+        ..clear()
+        ..addAll(v);
+    default:
+      break;
+  }
+}
