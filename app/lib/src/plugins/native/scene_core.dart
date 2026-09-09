@@ -575,6 +575,7 @@ class SceneCore extends PluginCore {
         ActionParameter(
           'args',
           'Arguments',
+          required: false,
           description:
               "A JSON object answering the scene's own parameters — "
               '{"headline": "Votre café", "shotFront": "…/01-welcome.png"}. '
