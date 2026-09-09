@@ -321,7 +321,7 @@ class TargetResolver {
         messages.multiple(count, verb, described, _whereEachIs(finder)),
       );
     }
-    await _ensureReachable(finder, described, verb);
+    await _ensureReachable(finder, described, verb, pointOf(target));
     return finder;
   }
 
@@ -556,8 +556,9 @@ class TargetResolver {
     Finder finder,
     String described,
     String verb,
+    Offset? point,
   ) async {
-    if (_reaches(finder)) return;
+    if (_reaches(finder, point)) return;
     // On a target with no scrollable ancestor `Scrollable.ensureVisible` is a
     // no-op, so the recheck decides — no case to distinguish here.
     await controller.ensureVisible(finder);
@@ -578,7 +579,7 @@ class TargetResolver {
         ),
       );
     }
-    if (_reaches(finder)) return;
+    if (_reaches(finder, point)) return;
     var render = finder.evaluate().single.renderObject! as RenderBox;
     var center = render.localToGlobal(render.size.center(Offset.zero));
     var view = _viewOf(render);
@@ -687,9 +688,19 @@ class TargetResolver {
     return null;
   }
 
-  /// Whether a pointer event at the target's center would reach it — the
-  /// check `flutter_test`'s `warnIfMissed` makes, as a boolean.
-  bool _reaches(Finder finder) {
+  /// Whether a pointer event where the verb will put it down would reach the
+  /// target — the check `flutter_test`'s `warnIfMissed` makes, as a boolean.
+  ///
+  /// [point] is where that is, when the target named a coordinate; the
+  /// centre of what it resolved to otherwise. Asking about the centre of a
+  /// point target would be asking the wrong question and answering it wrong:
+  /// a canvas half under a sheet is reachable at every point still showing,
+  /// and its centre — the only place the old check looked — is not.
+  ///
+  /// For a point this is close to true by construction, since the point
+  /// resolved *through* a hit test in the first place. Close to, not equal:
+  /// the tree can have rebuilt since, and this is the check that notices.
+  bool _reaches(Finder finder, Offset? point) {
     var render = finder.evaluate().single.renderObject;
     // No box to aim at: leave it to the underlying verb, whose own errors
     // name the shape problem better than a reachability check can.
@@ -697,12 +708,12 @@ class TargetResolver {
     // Nor is an unattached target something a hit test can answer about.
     var view = _viewOf(render);
     if (view == null) return true;
-    var center = render.localToGlobal(render.size.center(Offset.zero));
+    var at = point ?? render.localToGlobal(render.size.center(Offset.zero));
     // The viewId is passed explicitly: `hitTestOnBinding`'s default comes
     // from the controller's test-typed `view` getter, which throws on a live
     // binding (measured — see 2026-08-11-run-drive-spike-findings.md).
     var result = controller.hitTestOnBinding(
-      center,
+      at,
       viewId: view.flutterView.viewId,
     );
     return result.path.any(

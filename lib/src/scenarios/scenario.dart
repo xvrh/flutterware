@@ -1168,17 +1168,53 @@ class ScenarioTester {
   Future<void> tap(dynamic target, {Shot? shot, Settle? settle}) => _step(
     shot,
     settle,
-    // `warnIfMissed: false` on the underlying verbs because `_resolve` has
-    // already decided reachability — and loudly, where the SDK's warning is a
-    // console line the flow sails past.
+    // The `At` forms of the SDK's verbs, never the finder forms: `_resolve`
+    // has already decided reachability — and loudly, where the SDK's
+    // `warnIfMissed` is a console line the flow sails past — and where the
+    // finger lands is [_aimFor]'s answer rather than a centre the SDK would
+    // take for itself.
     () async {
       var finder = await _resolve(target, 'tap');
-      _aimAt(finder);
+      var at = _aimFor(target, finder);
       await _approach('tap');
-      await tester.tap(finder, warnIfMissed: false);
+      await tester.tapAt(at);
     },
     verb: 'tap',
     target: describeTarget(target),
+  );
+
+  /// Taps a point rather than a widget — the same press as [tap], aimed where
+  /// no finder can reach.
+  ///
+  /// The zones of an SVG, a chart or a map are painted rather than built, so
+  /// they share one widget and one box, and [tap] on that box presses its
+  /// centre. Only a coordinate says which zone was meant, and before this the
+  /// nearest way to say one was `dragFrom(at, Offset.zero)` — the right
+  /// gesture arrived at sideways, and a step that reads `dragFrom` in the
+  /// report for what the author meant as a tap.
+  ///
+  /// `tap(Target.at(x, y))` is the same press by another name — see
+  /// [_aimFor], which is the one rule both go through. What this spelling has
+  /// is that it needs no widget to resolve, and that the step it writes says
+  /// what the author meant.
+  ///
+  /// The coordinates are the ones every box in a report is in: the view's
+  /// logical pixels, top-left origin — what a step's aim rectangle reads back
+  /// in, so a point can be lifted straight off one.
+  ///
+  /// It makes the same trade [dragFrom] makes: there is no target to prove
+  /// reachable, so it goes where it is told, and a point over nothing taps
+  /// nothing silently where every finder verb would have refused.
+  Future<void> tapAt(Offset at, {Shot? shot, Settle? settle}) => _step(
+    shot,
+    settle,
+    () async {
+      _aimAtPoint(at);
+      await _approach('tapAt');
+      await tester.tapAt(at);
+    },
+    verb: 'tapAt',
+    target: '${at.dx.round()},${at.dy.round()}',
   );
 
   Future<void> longPress(dynamic target, {Shot? shot, Settle? settle}) => _step(
@@ -1186,9 +1222,9 @@ class ScenarioTester {
     settle,
     () async {
       var finder = await _resolve(target, 'longPress');
-      _aimAt(finder);
+      var at = _aimFor(target, finder);
       await _approach('longPress');
-      await tester.longPress(finder, warnIfMissed: false);
+      await tester.longPressAt(at);
     },
     verb: 'longPress',
     target: describeTarget(target),
@@ -1263,14 +1299,14 @@ class ScenarioTester {
     settle,
     () async {
       var finder = await _resolve(target, 'drag');
-      _aimAt(finder, by: by);
+      var at = _aimFor(target, finder, by: by);
       await _approach('drag');
       if (_film case var film?) {
         await film.dragBy(tester, by, over: duration);
       } else if (duration == null) {
-        await tester.drag(finder, by, warnIfMissed: false);
+        await tester.dragFrom(at, by);
       } else {
-        await tester.timedDrag(finder, by, duration, warnIfMissed: false);
+        await tester.timedDragFrom(at, by, duration);
       }
     },
     verb: 'drag',
@@ -1756,6 +1792,36 @@ class ScenarioTester {
   /// verb that aims at nothing never inherits the last one's box.
   ScenarioAim? _aim;
 
+  /// Marks what the verb is about to touch, and hands back **where** it will
+  /// touch it.
+  ///
+  /// One rule for both spellings of a point. `Target.at` names a coordinate,
+  /// and a coordinate is where the finger goes down — not the centre of
+  /// whatever widget the hit test found under it, which on the surfaces this
+  /// form exists for (an SVG map, a chart, a signature pad, anything whose
+  /// regions are painted rather than laid out) is the middle of the canvas
+  /// and a different region every time. So `tap(Target.at(x, y))` and
+  /// [tapAt] are the same press, and `drag(Target.at(…), by)` and [dragFrom]
+  /// the same drag; the pair with the coordinate in the verb is the one that
+  /// says so in the report.
+  ///
+  /// The mark follows the contact, which is why this returns the point rather
+  /// than leaving the caller to ask twice. A point target marks itself the
+  /// way [tapAt] does — the point, and a box of no size — because the box it
+  /// resolved would be the whole canvas, and a ring drawn at that box's
+  /// centre would be a picture of a press that did not happen.
+  ///
+  /// Everything else is unchanged: a target that says *what* has only one
+  /// place it can mean, and that is the middle of what it found.
+  Offset _aimFor(dynamic target, Finder finder, {Offset? by}) {
+    if (pointOf(target) case var point?) {
+      _aimAtPoint(point, by: by);
+      return point;
+    }
+    _aimAt(finder, by: by);
+    return tester.getCenter(finder);
+  }
+
   /// Records the box [finder] resolved to, in the same space every other rect
   /// in a report is in.
   ///
@@ -1805,7 +1871,8 @@ class ScenarioTester {
     }
   }
 
-  /// The mark for a verb aimed at a bare point — [dragFrom].
+  /// The mark for a verb aimed at a point — [tapAt] and [dragFrom], and any
+  /// verb whose target named one; see [_aimFor].
   ///
   /// A box of no size, which is the honest shape of what the author said: a
   /// point verb names a coordinate and not a widget, and inventing a box

@@ -1914,7 +1914,9 @@ class RunCore extends PluginCore {
           'which. It is also the only way to reach a control with no words at '
           'all, and there are usually a handful. Resolved to the centre of '
           "that item's box and then through the ordinary ladder, so covered "
-          'or gone is refused rather than tapped blind. Numbers are per '
+          'or gone is refused rather than tapped blind — and it is that '
+          'coordinate the finger lands on, so the box you were shown is the '
+          'box that gets pressed. Numbers are per '
           'observation: a screen that changed renumbers, and the refusal says '
           'how many items the last one had.',
     ),

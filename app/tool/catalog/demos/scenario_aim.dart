@@ -59,14 +59,23 @@ Widget scenarioAimNoFinger() => const _NoFingerSheet();
 )
 Widget scenarioAimNoFingerDark() => const _NoFingerSheet();
 
-/// The three verbs v1 draws, at the size the step page draws them and at one
-/// big enough to see what is actually being painted.
+/// The verbs that put a finger down, at the size the step page draws them and
+/// at one big enough to see what is actually being painted.
 class _Sheet extends StatelessWidget {
   const _Sheet();
 
   /// The label inside the second row — what a text target resolves to, and
   /// four times smaller than the row that handles the tap.
   static const _label = ScenarioAim(x: 112, y: 318, width: 82, height: 22);
+
+  /// What a point verb leaves behind: the coordinate, and a box of no size.
+  ///
+  /// The last column is here so the ring can be checked for company. An
+  /// empty rect is not nothing to `drawRect` — a 2pt stroke on one paints a
+  /// dot at the point, which was measured here and reads as a mark somebody
+  /// chose rather than as an accident — so the painter drops the outline
+  /// for an empty box, and this column is what says it still does.
+  static const _point = ScenarioAim(x: 153, y: 329, width: 0, height: 0);
 
   @override
   Widget build(BuildContext context) => Container(
@@ -89,6 +98,7 @@ class _Sheet extends StatelessWidget {
               dy: -190,
             ),
           ),
+          ('tapAt', _point),
         ]) ...[
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,8 +106,12 @@ class _Sheet extends StatelessWidget {
               Text(verb, style: context.type.sectionLabel),
               const SizedBox(height: 8),
               // The big one to see what is painted, the small one because
-              // that is the size it is actually seen at.
-              _Phone(width: 260, verb: verb, aim: aim, picture: _menu),
+              // that is the size it is actually seen at. 189 rather than the
+              // 260 three columns allowed: each column carries a trailing
+              // 24pt gap, so four of them have to fit the 852 left inside the
+              // 900 the studio stages a desktop subtree at — and an overflow
+              // here is only ever a red box in a picture nobody lays out.
+              _Phone(width: 189, verb: verb, aim: aim, picture: _menu),
               const SizedBox(height: 12),
               _Phone(width: 110, verb: verb, aim: aim, picture: _menu),
             ],

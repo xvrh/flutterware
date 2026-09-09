@@ -7,6 +7,9 @@ import 'package:flutterware/src/scenarios/run_listener.dart';
 /// **Where the finger goes down**, when the thing to grab is painted rather
 /// than built — a canvas, a chart, a map, a signature pad. Naming the widget
 /// grabs its centre, which on a full-bleed canvas is somewhere else entirely.
+/// (`drag(Target.at(…), by)` says it too, and lands in the same place; what
+/// `dragFrom` adds is a gesture that needs no widget to resolve, and a step
+/// that reads as the point verb it is.)
 ///
 /// **How fast it travels**, when the velocity is the point. A flick and a
 /// slow pull cover identical distance and a list keeps scrolling after only
@@ -28,13 +31,14 @@ void main() {
       expect(canvas.start, const Offset(200, 500));
       expect(canvas.travelled?.dy, lessThan(-300));
 
-      // The distinction this verb exists for. `Target.at` resolves the widget
-      // *under* the point and the drag still starts from that widget's
-      // centre — right for a button, useless for the canvas that fills the
-      // screen behind it.
+      // `Target.at` is the same gesture said the other way round: a
+      // coordinate is where the finger goes down, whichever spelling names
+      // it. The pair is not redundant — this one resolves the widget under
+      // the point and refuses what it cannot reach, and the step it writes
+      // says `drag` where the other says `dragFrom`.
       canvas.reset();
       await s.drag(const Target.at(200, 500), const Offset(0, -400));
-      expect(canvas.start, isNot(const Offset(200, 500)));
+      expect(canvas.start, const Offset(200, 500));
     });
     tearDown(() {
       // The mark is the point itself: a box of no size, which is the honest

@@ -883,11 +883,12 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'A reply text ending in … was truncated — target it with '
               '{"containing": <prefix>}, not the truncated string. {"at"} is '
               'a hit test at that point, in the same logical pixels every box '
-              'in this reply uses, and it takes the innermost widget under it '
-              '— which is how a canvas is driven at all: an SVG map, a chart, '
-              'a signature pad, anything whose zones are painted rather than '
-              'laid out, where every widget shares one box and `item` can '
-              'only ever reach its centre. On layer: native the same grammar '
+              'in this reply uses: it takes the innermost widget under it and '
+              'then puts the finger down on the point itself rather than on '
+              "that widget's centre — which is how a canvas is driven at all: "
+              'an SVG map, a chart, a signature pad, anything whose zones are '
+              'painted rather than laid out, where every zone shares one '
+              'widget and one box. On layer: native the same grammar '
               'minus key/tooltip/within, plus {"role": …}, and there {"at"} '
               'is a screen coordinate — divide a point read off that '
               "screenshot by the reply's screenshotScale first.",
@@ -965,7 +966,9 @@ base class FlutterwareMcpServer extends MCPServer with ToolsSupport {
               'instead of naming a target. The way past "2 widgets match", '
               'and the only way to reach a control with no words. Resolved to '
               "that item's box centre and then through the usual ladder, so "
-              'covered or gone is still refused. Numbers are per observation.',
+              'covered or gone is still refused — and the finger lands on '
+              'that coordinate, so it is the box you were shown that gets '
+              'pressed. Numbers are per observation.',
         ),
         'screen': Schema.bool(
           description:

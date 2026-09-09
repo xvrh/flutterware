@@ -138,7 +138,7 @@ class Drive {
       'tap',
       target,
       settle,
-      (finder) => controller.tap(finder, warnIfMissed: false),
+      (finder) => controller.tapAt(_contact(target, finder)),
     );
   }
 
@@ -163,7 +163,7 @@ class Drive {
       // Resolved once and reused: the second tap has to land inside
       // `kDoubleTapSlop` of the first, and re-reading the centre would follow
       // a widget that the first tap moved.
-      var at = controller.getCenter(finder);
+      var at = _contact(target, finder);
       await controller.tapAt(at);
       await Future<void>.delayed(gap ?? doubleTapGap);
       await controller.tapAt(at);
@@ -175,7 +175,7 @@ class Drive {
       'longPress',
       target,
       settle,
-      (finder) => controller.longPress(finder, warnIfMissed: false),
+      (finder) => controller.longPressAt(_contact(target, finder)),
     );
   }
 
@@ -189,7 +189,7 @@ class Drive {
   /// what ends that.
   Future<DriveStep> secondaryTap(dynamic target, {Duration? settle}) {
     return _act('secondaryTap', target, settle, (finder) async {
-      var at = controller.getCenter(finder);
+      var at = _contact(target, finder);
       await controller.sendEventToBinding(_mouse.hover(at));
       _hovering = describeTarget(target);
       try {
@@ -233,7 +233,7 @@ class Drive {
   Future<DriveStep> hover(dynamic target, {Duration? hold, Duration? settle}) {
     return _act('hover', target, settle, (finder) async {
       await controller.sendEventToBinding(
-        _mouse.hover(controller.getCenter(finder)),
+        _mouse.hover(_contact(target, finder)),
       );
       _hovering = describeTarget(target);
       await _holdForHover(hold ?? hoverHold);
@@ -288,7 +288,7 @@ class Drive {
   Future<DriveStep> scroll(dynamic target, Offset by, {Duration? settle}) {
     return _act('scroll', target, settle, (finder) async {
       await controller.sendEventToBinding(
-        _mouse.hover(controller.getCenter(finder)),
+        _mouse.hover(_contact(target, finder)),
       );
       _hovering = describeTarget(target);
       await controller.sendEventToBinding(_mouse.scroll(by));
@@ -360,7 +360,7 @@ class Drive {
       'drag',
       target,
       settle,
-      (finder) => controller.drag(finder, by, warnIfMissed: false),
+      (finder) => controller.dragFrom(_contact(target, finder), by),
     );
   }
 
@@ -826,6 +826,31 @@ class Drive {
   }
 
   List<String> visibleTexts() => visibleTextsOf(controller);
+
+  /// Where a verb with a finger puts it down: the point the target *named*,
+  /// or the centre of whatever it resolved to.
+  ///
+  /// The two are the same for every target that says *what* — a string, a
+  /// key, a type — because the only place such a target can mean is the
+  /// middle of what it found. They come apart for `{"at": {x, y}}`, which
+  /// says *where*: the hit test picks the innermost widget under the point,
+  /// and on the surfaces this form exists for — an SVG map, a chart, a
+  /// signature pad, anything whose regions are painted rather than laid out —
+  /// that widget is the whole canvas, whose centre is a different region
+  /// altogether. Pressing the point is the only reading of `{"at"}` that is
+  /// ever what was asked for.
+  ///
+  /// `{"item": n}` is this same form — the host turns an item's box into its
+  /// centre — and it gains the same fidelity: the coordinate the reply
+  /// published is the coordinate pressed, rather than the middle of whichever
+  /// descendant happened to be under it.
+  ///
+  /// The target is still *resolved*, and that is not ceremony: covered,
+  /// offscreen, gone and ambiguous stay refusals, and a point over nothing
+  /// resolves to nothing and is refused like any other miss. Only the last
+  /// step — where the finger lands on what was resolved — is the point's.
+  Offset _contact(dynamic target, Finder finder) =>
+      pointOf(target) ?? controller.getCenter(finder);
 
   Future<DriveStep> _act(
     String verb,

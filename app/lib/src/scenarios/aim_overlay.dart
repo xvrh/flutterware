@@ -37,10 +37,12 @@ class ScenarioAimOverlay extends StatelessWidget {
 
   final ScenarioAim aim;
 
-  /// What the verb was — `tap`, `longPress`, `drag`, `enterText`, `scrollTo`,
-  /// `keyboard`. A held press is drawn as a held press and a scroll as a
-  /// scroll, because the picture is the only place a reader would learn the
-  /// difference without reading the code.
+  /// What the verb was — `tap`, `tapAt`, `longPress`, `drag`, `dragFrom`,
+  /// `enterText`, `scrollTo`, `keyboard`. A held press is drawn as a held
+  /// press and a scroll as a scroll, because the picture is the only place a
+  /// reader would learn the difference without reading the code. The point
+  /// verbs need no case of their own: their box is empty by construction, and
+  /// the finger drops the outline for one, leaving the ring alone.
   final String? verb;
 
   @override
@@ -93,7 +95,12 @@ class ScenarioAimPainter extends CustomPainter {
     // The resolved box, faintly. It is the *finder's* box — `tap('Cappuccino')`
     // resolves the word, not the card around it — so it is drawn as context
     // for the point rather than as the thing that was hit.
-    _outline(canvas, box);
+    //
+    // A point verb has no box and says so with an empty rect, and an empty
+    // rect is not nothing to `drawRect`: a 2pt stroke on it paints a dot,
+    // dead centre inside the ring, that reads as a mark somebody chose. The
+    // ring is the whole of what `tapAt` and `dragFrom` can honestly claim.
+    if (!box.isEmpty) _outline(canvas, box);
 
     if ((aim.dx, aim.dy) case (var dx?, var dy?)) {
       _arrow(canvas, point, point + Offset(dx, dy));

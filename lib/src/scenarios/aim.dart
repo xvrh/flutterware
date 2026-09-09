@@ -17,7 +17,9 @@
 /// space the screenshot is laid out in, so drawing it needs no transform.
 ///
 /// The rect does not always mean "the thing that was touched". For a
-/// pointer verb it is the box the finder resolved. For `scrollTo` it is the
+/// pointer verb it is the box the finder resolved — or a box of no size at
+/// the point, when the target named a coordinate rather than a widget. For
+/// `scrollTo` it is the
 /// scrollable's viewport and [toward] is where the target is; for `keyboard`
 /// it is the band the stage is about to take or give back. The verb on the
 /// step says which, and it is the verb a viewer switches on.
@@ -74,10 +76,17 @@ class ScenarioAim {
   /// this pair says.
   final String? toward;
 
-  /// The point the pointer went down on. Every pointer verb taps the centre of
-  /// the box it resolved, so this is derived rather than recorded — a second
-  /// pair of numbers saying what the first pair already says would be a
-  /// schema that can disagree with itself.
+  /// The point the pointer went down on — derived rather than recorded, so
+  /// the schema cannot disagree with itself the way a second pair of numbers
+  /// beside the first pair could.
+  ///
+  /// That holds because a verb marks the shape of what it aimed at. A verb
+  /// aimed at a *widget* presses the centre of the box it resolved, and the
+  /// centre of the rect is that. A verb aimed at a *point* — `tapAt`,
+  /// `dragFrom`, or any verb whose target named a coordinate — records a box
+  /// of no size at the point, and the centre of that is the point. One
+  /// derivation, honest for both, and no rect here is ever a box the finger
+  /// did not go down in the middle of.
   (double, double) get point => (x + width / 2, y + height / 2);
 
   Map<String, Object?> toJson() => {
