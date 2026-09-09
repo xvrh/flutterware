@@ -41,6 +41,8 @@ class SceneNumberShape {
     this.softMin,
     this.softMax,
     this.min,
+    this.max,
+    this.slider = false,
   });
 
   /// A duration in milliseconds: whole numbers, one per pixel, never negative.
@@ -98,11 +100,19 @@ class SceneNumberShape {
   /// A hard floor, where one exists. A duration below zero is not a duration —
   /// unlike a soft bound, which is a hint about where to start.
   final double? min;
+  final double? max;
+
+  /// The bounds are the value's OWN, not a guess at a comfortable range —
+  /// a variable font's axis runs exactly from its minimum to its maximum —
+  /// so a slider means something however wide it is, and [_sliderRange] does
+  /// not apply.
+  final bool slider;
 
   SceneEditorShape get editor {
     if (angular) return SceneEditorShape.dial;
     var (low, high) = (softMin, softMax);
     if (low == null || high == null) return SceneEditorShape.scrub;
+    if (slider) return SceneEditorShape.slider;
     return high - low <= _sliderRange
         ? SceneEditorShape.slider
         : SceneEditorShape.scrub;
@@ -115,8 +125,12 @@ class SceneNumberShape {
   (double, double) get range => (softMin ?? 0, softMax ?? 1);
 
   /// [value], held to whatever floor this shape has.
-  double clamped(double value) =>
-      min == null ? value : (value < min! ? min! : value);
+  double clamped(double value) {
+    var v = value;
+    if (min case var low? when v < low) v = low;
+    if (max case var high? when v > high) v = high;
+    return v;
+  }
 }
 
 /// The shape for one property of one node.

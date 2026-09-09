@@ -5,6 +5,7 @@ import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
 import '../editor.dart';
+import '../../assets/model/font_axes.dart';
 import '../externals_file.dart';
 import '../playback.dart';
 import 'canvas.dart';
@@ -45,6 +46,7 @@ class SceneWorkspaceView extends StatefulWidget {
     this.canvasTrailing = const [],
     this.pane,
     this.externals = const [],
+    this.axesFor,
     this.tokens,
   });
 
@@ -56,6 +58,9 @@ class SceneWorkspaceView extends StatefulWidget {
 
   /// The widgets the app declares — see [SceneInspector.externals].
   final List<ExternalWidgetDecl> externals;
+
+  /// What a family's variable axes are — see [SceneInspector.axesFor].
+  final List<FontAxis> Function(String family)? axesFor;
 
   /// The renderer, sized to the artboard — see [SceneCanvas.content].
   final Widget? content;
@@ -271,6 +276,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
             builder: (context, _) => SceneInspector(
               editor,
               externals: widget.externals,
+              axesFor: widget.axesFor,
               onOpenParam: _openParam,
               onEnterNested: widget.onEnterNested,
             ),

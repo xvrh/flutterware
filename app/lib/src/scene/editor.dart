@@ -1273,10 +1273,7 @@ class SceneEditor extends SceneListenable {
   MotionTrack? trackOf(String motion, String group, String prop) {
     var g = motions[motion]?.groupNamed(group);
     if (g == null) return null;
-    return switch (sceneArgName(prop)) {
-      var arg? => g.args[arg],
-      null => g.tracks[prop],
-    };
+    return g.tracks[prop];
   }
 
   void selectKey(MotionKeyRef? ref, {bool toggle = false}) {
@@ -1381,11 +1378,7 @@ class SceneEditor extends SceneListenable {
         var track = existing;
         if (track == null) {
           track = MotionTrack([], kind: kind);
-          if (sceneArgName(prop) case var arg?) {
-            group.args[arg] = track;
-          } else {
-            group.tracks[prop] = track;
-          }
+          group.tracks[prop] = track;
         }
         var near = track.keys.where(
           (k) => (k.at - at).inMilliseconds.abs() < 1,
@@ -1470,11 +1463,7 @@ class SceneEditor extends SceneListenable {
     var group = motions[motion]?.groupNamed(groupName);
     if (group == null) return;
     perform('Delete ${_propLabel(prop)}', () {
-      if (sceneArgName(prop) case var arg?) {
-        group.args.remove(arg);
-      } else {
-        group.tracks.remove(prop);
-      }
+      group.tracks.remove(prop);
     });
     clearKeySelection();
   }

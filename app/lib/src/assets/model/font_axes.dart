@@ -10,7 +10,11 @@
 // font-parsing dependency for four numbers per axis would be a poor trade.
 // Named instances and the `STAT` table are not read: an axis with a range is
 // the whole of what the panel draws.
+import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 /// One axis a face declares.
 class FontAxis {
@@ -89,3 +93,50 @@ FontAxis? _axisAt(ByteData b, int at) {
 
 String _tagAt(ByteData b, int at) =>
     String.fromCharCodes([for (var i = 0; i < 4; i++) b.getUint8(at + i)]);
+
+/// The variable axes of every family a package declares, by family name.
+///
+/// The package's OWN `flutter: fonts:` and nothing else: a scene author sets
+/// a family their own pubspec names, and the full asset resolution — package
+/// dependencies, manifest order, key prefixes — answers a much larger
+/// question than "which file is this family, so I can open it".
+///
+/// A family with several files is read from the first that declares axes: a
+/// variable family is normally one file, and a family that mixes a variable
+/// face with static ones is described by the variable one.
+Map<String, List<FontAxis>> readPackageFontAxes(String packageRoot) {
+  var pubspec = File(p.join(packageRoot, 'pubspec.yaml'));
+  if (!pubspec.existsSync()) return const {};
+  Object? doc;
+  try {
+    doc = loadYaml(pubspec.readAsStringSync());
+  } on YamlException {
+    return const {};
+  }
+  var families = switch (doc) {
+    Map d => switch (d['flutter']) {
+      Map f => f['fonts'],
+      _ => null,
+    },
+    _ => null,
+  };
+  if (families is! List) return const {};
+  var out = <String, List<FontAxis>>{};
+  for (var family in families) {
+    if (family is! Map) continue;
+    var name = family['family'];
+    var fonts = family['fonts'];
+    if (name is! String || fonts is! List) continue;
+    for (var font in fonts) {
+      if (font is! Map || font['asset'] is! String) continue;
+      var file = File(p.join(packageRoot, font['asset'] as String));
+      if (!file.existsSync()) continue;
+      var axes = readFontAxes(file.readAsBytesSync());
+      if (axes.isNotEmpty) {
+        out[name] = axes;
+        break;
+      }
+    }
+  }
+  return out;
+}

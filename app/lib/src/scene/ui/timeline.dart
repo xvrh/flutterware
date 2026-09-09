@@ -171,8 +171,6 @@ class _SceneTimelineState extends State<SceneTimeline> {
         _GroupLanes(group, at, [
           for (var MapEntry(key: prop, value: track) in group.tracks.entries)
             _Lane(group, prop, track, at),
-          for (var MapEntry(key: arg, value: track) in group.args.entries)
-            _Lane(group, 'args.$arg', track, at),
         ]),
       );
     }
@@ -467,10 +465,7 @@ class _GroupRowState extends State<_GroupRow> {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var node = editor.doc.nodeNamed(group.node.name);
-    var tracked = {
-      ...group.tracks.keys,
-      ...group.args.keys.map((a) => 'args.$a'),
-    };
+    var tracked = group.tracks.keys.toSet();
     var offered = node == null
         ? const <ScenePropSpec>[]
         : animatableProps(node).where((p) => !tracked.contains(p.name));

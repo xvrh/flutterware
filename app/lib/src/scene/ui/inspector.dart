@@ -15,6 +15,7 @@ import '../externals_file.dart';
 
 import '../../ui/context_menu.dart';
 import '../../ui/disclosure.dart';
+import '../../assets/model/font_axes.dart';
 import '../../ui/design/design.dart';
 import '../../ui/action_button.dart';
 import '../../ui/menu.dart';
@@ -43,6 +44,7 @@ class SceneInspector extends StatelessWidget {
     this.editor, {
     super.key,
     this.externals = const [],
+    this.axesFor,
     this.onOpenParam,
     this.onEnterNested,
   });
@@ -62,6 +64,18 @@ class SceneInspector extends StatelessWidget {
   /// types and their defaults rather than guessed from whatever value the
   /// scene happens to carry.
   final List<ExternalWidgetDecl> externals;
+
+  /// The variable axes of a family the package declares, read out of the
+  /// font file itself. Null where nothing has scanned — the panel then draws
+  /// the discrete weights, which is what a static family gets anyway.
+  final List<FontAxis> Function(String family)? axesFor;
+
+  /// The axes of whatever face [t] is set in, or none when it names no
+  /// family, the family is static, or nobody scanned.
+  List<FontAxis> _axesOf(TextNode t) => switch ((axesFor, t.fontFamily)) {
+    (var f?, var family?) => f(family),
+    _ => const [],
+  };
 
   SceneDocument get doc => editor.doc;
 
@@ -312,6 +326,54 @@ class SceneInspector extends StatelessWidget {
       editor.endMerge();
     },
   );
+
+  /// One axis of the face, over the range the font itself declares.
+  ///
+  /// A key of its own — `axes.wght` — so it binds to a parameter and takes a
+  /// motion track like any other number. That is the whole point of the axis
+  /// over the enum: a discrete weight cannot morph.
+  Widget _axisField(BuildContext context, TextNode t, FontAxis axis) {
+    var prop = '$sceneAxesPrefix${axis.tag}';
+    return _prop(
+      context,
+      t,
+      prop,
+      axis.label,
+      SceneNumberField(
+        // An axis the node has not set sits where the FONT puts it, which
+        // is not always 400 — Archivo's weight rests at 600 — and is a
+        // number only the file knows.
+        value: _shown(t, prop, t.axes[axis.tag] ?? axis.def),
+        shape: SceneNumberShape(
+          // The whole range under a few hundred pixels of drag, whatever it
+          // is: `wght` runs 800 wide and `slnt` maybe 15.
+          perPixel: (axis.max - axis.min) / 300,
+          decimals: axis.max - axis.min > 10 ? 0 : 1,
+          softMin: axis.min,
+          softMax: axis.max,
+          min: axis.min,
+          max: axis.max,
+          slider: true,
+        ),
+        onChanged: (v) => _set(prop, v, () => _writeAxis(t, axis.tag, v)),
+        onCommit: (v) {
+          _set(prop, v, () => _writeAxis(t, axis.tag, v));
+          editor.endMerge();
+        },
+      ),
+    );
+  }
+
+  void _writeAxis(TextNode t, String tag, double v) =>
+      setSceneProperty(t, '$sceneAxesPrefix$tag', v);
+
+  /// The face's axis with this tag, when it has one.
+  FontAxis? _axisNamed(TextNode t, String tag) {
+    for (var a in _axesOf(t)) {
+      if (a.tag == tag) return a;
+    }
+    return null;
+  }
 
   /// A property whose value is one of a fixed set — the picker, in a row
   /// that says where the value comes from like any other.
@@ -790,6 +852,9 @@ class SceneInspector extends StatelessWidget {
         ),
       ),
     ),
+    // A variable face's own weight axis replaces the five named weights: one
+    // control means one thing, and where the font runs 100 to 900 continuously
+    // a picker with five stops is a worse instrument, not a simpler one.
     _row([
       _number(
         'fontSize',
@@ -798,14 +863,22 @@ class SceneInspector extends StatelessWidget {
         SceneNumberShape.of(propSpecFor(t, 'fontSize')),
         apply: (v) => t.fontSize = v,
       ),
-      _choice(t, 'weight', 'Weight', t.weight, const [
-        FwChoice(value: SceneFontWeight.w400, label: 'Regular'),
-        FwChoice(value: SceneFontWeight.w500, label: 'Medium'),
-        FwChoice(value: SceneFontWeight.w600, label: 'Semibold'),
-        FwChoice(value: SceneFontWeight.w700, label: 'Bold'),
-        FwChoice(value: SceneFontWeight.w900, label: 'Black'),
-      ], (v) => _door('weight', () => t.weight = v)),
+      if (_axisNamed(t, 'wght') case var axis?)
+        _axisField(context, t, axis)
+      else
+        _choice(t, 'weight', 'Weight', t.weight, const [
+          FwChoice(value: SceneFontWeight.w400, label: 'Regular'),
+          FwChoice(value: SceneFontWeight.w500, label: 'Medium'),
+          FwChoice(value: SceneFontWeight.w600, label: 'Semibold'),
+          FwChoice(value: SceneFontWeight.w700, label: 'Bold'),
+          FwChoice(value: SceneFontWeight.w900, label: 'Black'),
+        ], (v) => _door('weight', () => t.weight = v)),
     ]),
+    // The rest of the face's dials, each with the font's own range. Nothing
+    // is drawn for a static family, which is every family until one says
+    // otherwise.
+    for (var axis in _axesOf(t))
+      if (axis.tag != 'wght') _axisField(context, t, axis),
     // Slant is a face, so it sits with the face; Case transforms the words,
     // and the pair is what a display line is set with.
     _row([

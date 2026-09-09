@@ -119,19 +119,34 @@ void emitMotionClass(
       if (track == null) continue;
       out.write('$prop: ${_track(track, kind, params)}, ');
     }
-    if (g.args.isNotEmpty) {
+    // The two kinds of track a named argument cannot spell, each in a map
+    // of its own: an argument's name comes from the widget's declaration, an
+    // axis's tag from the font, and neither is an identifier this file may
+    // invent.
+    var args = _partsOf(g, sceneArgsPrefix);
+    if (args.isNotEmpty) {
       // The generated tracks class of whatever this animates: one slot per
       // animatable argument, so the name is checked by the compiler as
       // well as here.
-      var keys = g.args.keys.toList()..sort();
       out.write('args: ${_entryOf(target)}Tracks(');
-      for (var key in keys) {
+      for (var key in args.keys.toList()..sort()) {
         if (!isValidNodeName(key)) {
           throw ArgumentError('"$key" is not an argument name');
         }
-        out.write('$key: ${_track(g.args[key]!, TrackKind.number, params)}, ');
+        out.write('$key: ${_track(args[key]!, TrackKind.number, params)}, ');
       }
       out.write('), ');
+    }
+    var axes = _partsOf(g, sceneAxesPrefix);
+    if (axes.isNotEmpty) {
+      out.write('axes: {');
+      for (var tag in axes.keys.toList()..sort()) {
+        if (tag.length != 4) {
+          throw ArgumentError('"$tag" is not a four-letter axis tag');
+        }
+        out.write("'$tag': ${_track(axes[tag]!, TrackKind.number, params)}, ");
+      }
+      out.write('}, ');
     }
     out.writeln(');');
   }
@@ -699,6 +714,19 @@ class _Parser {
         _extArgs(group, value, _entryOf(target));
         continue;
       }
+      if (prop == 'axes') {
+        if (target is! TextNode) {
+          refuse(
+            value.offset,
+            'axes',
+            'only a text has a face to move — '
+                '"$targetName" is a ${target.typeName}',
+          );
+          continue;
+        }
+        _axisTracks(group, value);
+        continue;
+      }
       var kind = allowed[prop];
       if (kind == null) {
         refuse(
@@ -744,7 +772,44 @@ class _Parser {
         continue;
       }
       var track = _trackOf(arg.argumentExpression, TrackKind.number);
-      if (track != null) group.args[arg.name.lexeme] = track;
+      if (track != null) {
+        group.tracks['$sceneArgsPrefix${arg.name.lexeme}'] = track;
+      }
+    }
+  }
+
+  /// `axes: {'wght': MotionTrack([…])}` — a map because the tags come from
+  /// the font rather than from the table, so no named argument could name
+  /// one. Every axis is a number; a tag that is not four letters is refused
+  /// rather than animated into nothing.
+  void _axisTracks(AnimateGroup group, Expression e) {
+    if (e is! SetOrMapLiteral) {
+      refuse(
+        e.offset,
+        'axes',
+        'axes takes a map of tags to tracks — '
+            "axes: {'wght': MotionTrack([…])}",
+      );
+      return;
+    }
+    for (var entry in e.elements) {
+      if (entry is! MapLiteralEntry) {
+        refuse(entry.offset, 'axes', 'a tag and a track');
+        continue;
+      }
+      var key = entry.key;
+      if (key is! SimpleStringLiteral || key.value.length != 4) {
+        refuse(
+          key.offset,
+          'axis tag',
+          "a four-letter tag in quotes, like 'wght'",
+        );
+        continue;
+      }
+      var track = _trackOf(entry.value, TrackKind.number);
+      if (track != null) {
+        group.tracks['$sceneAxesPrefix${key.value}'] = track;
+      }
     }
   }
 
@@ -1073,3 +1138,9 @@ class _Parser {
     _ => e.runtimeType.toString(),
   };
 }
+
+/// The group's tracks filed under [prefix], by the part's own name.
+Map<String, MotionTrack> _partsOf(AnimateGroup g, String prefix) => {
+  for (var e in g.tracks.entries)
+    if (e.key.startsWith(prefix)) e.key.substring(prefix.length): e.value,
+};

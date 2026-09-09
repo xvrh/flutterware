@@ -128,7 +128,7 @@ MotionDocument coffeeIntroDraft([SceneDocument? of]) {
   // An external widget's own argument, animated. `size` and not `progress`:
   // the widget declares one and not the other, and a fixture that animated a
   // parameter nothing has is the hole this design closed.
-  badgePop.args['size'] = MotionTrack([
+  badgePop.tracks['args.size'] = MotionTrack([
     MotionKey(at: Duration.zero, value: 110.0),
     MotionKey(at: const Duration(milliseconds: 300), value: 140.0),
   ], kind: TrackKind.number);

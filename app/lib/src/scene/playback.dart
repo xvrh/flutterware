@@ -27,8 +27,7 @@ class ScenePlayback extends ChangeNotifier {
   String _shapeOf() {
     var m = motion;
     return [
-      for (var g in m.groups)
-        '${g.name}:${g.tracks.keys.join(',')}/${g.args.keys.join(',')}',
+      for (var g in m.groups) '${g.name}:${g.tracks.keys.join(',')}',
       _exprShape(m.timeline),
     ].join('|');
   }

@@ -119,22 +119,25 @@ class AnimateGroup extends TimelineExpr {
   /// The node this group animates.
   SceneNode node;
 
-  /// Property → track, non-empty only: Save writes no empty tracks (an
+  /// Key → track, non-empty only: Save writes no empty tracks (an
   /// always-present empty track is a *runtime* affordance, not a file one).
+  ///
+  /// Keyed by the SCENE'S OWN key space, so a part of a property is a track
+  /// like any other: `args.headline` for a widget's argument, `axes.wght`
+  /// for a face's weight. The FILE spells those two differently — a dotted
+  /// name cannot be a Dart named argument, so each rides a map of its own —
+  /// but that is the grammar's problem, and one map here is what lets a
+  /// track be looked up, written and reconciled without asking which sort
+  /// it is.
   final tracks = <String, MotionTrack>{};
 
-  /// External-arg tracks — the one stringly boundary of the grammar: an
-  /// external widget's args are discovered by scan, not declared here.
-  final args = <String, MotionTrack>{};
+  Duration get duration =>
+      [for (var t in tracks.values) t.duration]
+          .fold(Duration.zero, (m, d) => d > m ? d : m);
 
-  Duration get duration => [
-    for (var t in tracks.values) t.duration,
-    for (var t in args.values) t.duration,
-  ].fold(Duration.zero, (m, d) => d > m ? d : m);
-
-  AnimateGroup copy() => AnimateGroup(node, name: name)
-    ..tracks.addAll({for (var e in tracks.entries) e.key: e.value.copy()})
-    ..args.addAll({for (var e in args.entries) e.key: e.value.copy()});
+  AnimateGroup copy() =>
+      AnimateGroup(node, name: name)
+        ..tracks.addAll({for (var e in tracks.entries) e.key: e.value.copy()});
 }
 
 /// What an editor needs to know about an animatable property without a
@@ -405,6 +408,12 @@ extension TextNodeAnimate on TextNode {
     MotionTrack? lineHeight,
     MotionTrack? decorationThickness,
     MotionTrack? color,
+
+    /// The face's variable axes, by tag — `{'wght': MotionTrack([…])}`. A
+    /// map rather than named arguments because the tags come from the font,
+    /// not from this table, which is the same reason an external widget's
+    /// arguments arrive as one.
+    Map<String, MotionTrack>? axes,
   }) => _group(this, {
     'opacity': opacity,
     'translateX': translateX,
@@ -417,7 +426,7 @@ extension TextNodeAnimate on TextNode {
     'lineHeight': lineHeight,
     'decorationThickness': decorationThickness,
     'color': color,
-  });
+  }, axes: axes);
 }
 
 extension FrameNodeAnimate on FrameNode {
@@ -508,6 +517,7 @@ AnimateGroup _group(
   SceneNode node,
   Map<String, MotionTrack?> tracks, {
   SceneExtTracks? args,
+  Map<String, MotionTrack>? axes,
 }) {
   var group = AnimateGroup(node);
   for (var entry in tracks.entries) {
@@ -515,7 +525,15 @@ AnimateGroup _group(
     // a property nobody animated is a property the group does not carry.
     if (entry.value case var track?) group.tracks[entry.key] = track;
   }
-  if (args != null) group.args.addAll(args.toMap());
+  // The two that arrive as maps take the key they are filed under: a part
+  // of a property is a track like any other once it is in.
+  for (var e
+      in args?.toMap().entries ?? const <MapEntry<String, MotionTrack>>[]) {
+    group.tracks['$sceneArgsPrefix${e.key}'] = e.value;
+  }
+  for (var e in axes?.entries ?? const <MapEntry<String, MotionTrack>>[]) {
+    group.tracks['$sceneAxesPrefix${e.key}'] = e.value;
+  }
   return group;
 }
 
@@ -543,7 +561,7 @@ class MotionDocument {
   /// Every key reading [param] — what a rename follows and a delete names.
   List<MotionKey> keysReading(String param) => [
     for (var g in groups)
-      for (var t in [...g.tracks.values, ...g.args.values])
+      for (var t in g.tracks.values)
         for (var k in t.keys)
           if (k.paramRef == param) k,
   ];
@@ -640,7 +658,6 @@ class MotionDocument {
         continue;
       }
       _restoreTracks(into.tracks, snap.tracks);
-      _restoreTracks(into.args, snap.args);
       revived.add(into);
     }
     if (scene != null) {
@@ -781,7 +798,7 @@ extension MotionTimelineLayout on MotionDocument {
 List<String> reconcileMotionBindings(MotionDocument motion) {
   var dropped = <String>[];
   for (var g in motion.groups) {
-    for (var e in [...g.tracks.entries, ...g.args.entries]) {
+    for (var e in g.tracks.entries) {
       for (var k in e.value.keys) {
         var name = k.paramRef;
         if (name == null) continue;
