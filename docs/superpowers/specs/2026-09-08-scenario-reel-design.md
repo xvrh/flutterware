@@ -490,10 +490,18 @@ runtime.
    pause, a push-in released just after the press so the screen a tap opens
    arrives at its own size, a typing zoom, a **frozen** cart under a price
    tag, and a receipt close. Rendered through the video action in 6.6 s.
-   Two things it taught: a caption is one line or it is a paragraph, so the
-   edit truncates and the author shortens; and a push-in that lasts the
-   whole beat magnifies the page transition after it, which is why it
-   releases at the press.
+   Three things it taught. A caption is one line or it is a paragraph, so
+   the edit truncates and the author shortens. A push-in is unreadable
+   unless **nothing moves while something else does**: the first cut pushed
+   in under the flying finger and pulled out under the page transition, and
+   Xavier called it unreadable on sight. The shot that reads has four beats
+   — the screen about to be touched is *held* while the camera moves in
+   (600 ms), the finger travels and presses in a frame at rest, the reaction
+   lingers (450 ms), the camera moves out (600 ms) — and one push never
+   starts under another's pull-out. That is the `shot` closure in the edit,
+   and probably what the stock edit should do too. And the zoomed picture
+   is sharp enough at film scale 2 and zoom 1.5; oversampling the app's
+   raster for the zoom is not needed yet.
 
 4. **Many sources.** Pool above one: dissolve, grid, replay.
 5. **The desk.** A frame-cache scrub, provenance from a rendered frame back

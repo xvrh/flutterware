@@ -42,7 +42,16 @@ class BrewlineReel extends ScenarioReelEdit {
   static const _margin = 40.0;
   static const _header = 120.0;
   static const _zoom = 1.5;
-  static const _pushIn = Duration(milliseconds: 420);
+
+  /// A shot's four beats: the camera moves in over a screen held still, the
+  /// finger travels and presses in a frame at rest, the reaction lingers,
+  /// the camera moves out. Nothing moves while something else does — a
+  /// camera that pushes in under a flying finger and pulls out under a page
+  /// transition is a picture nobody can read.
+  static const _pushIn = Duration(milliseconds: 600);
+  static const _pullOut = Duration(milliseconds: 600);
+  static const _settle = Duration(milliseconds: 500);
+  static const _linger = Duration(milliseconds: 450);
   static const _titleFor = Duration(milliseconds: 2000);
 
   @override
@@ -141,6 +150,42 @@ class BrewlineReel extends ScenarioReelEdit {
       );
     }
 
+    // When the camera is next at rest, in reel time: one push-in never
+    // starts under another's pull-out.
+    var cameraFreeAt = Duration.zero;
+
+    /// One tap or one typing beat as a shot — see [_pushIn].
+    void shot(
+      int i,
+      Beat beat,
+      Offset toward, {
+      required PhaseKind releaseAfter,
+      required String name,
+      double zoom = _zoom,
+    }) {
+      // The screen about to be touched is held still while the camera moves
+      // in on it. A hold, not a freeze: the app keeps running.
+      var prev = beats.take(i).where((x) => x is! Said).lastOrNull;
+      var start = b.reel > cameraFreeAt ? b.reel : cameraFreeAt;
+      if (prev != null) b.hold(_settle, after: prev);
+      var done = beat.phase(releaseAfter) ?? beat.phases.last;
+      var release = b.reel + (done.end - beat.at) + _linger;
+      if (release < start + _pushIn) release = start + _pushIn;
+      at(
+        start,
+        _push(
+          camera,
+          screen,
+          toward,
+          release: release - start,
+          name: name,
+          zoom: zoom,
+        ),
+      );
+      cameraFreeAt = release + _pullOut;
+      b.playBeat(beat);
+    }
+
     var captions = 0;
     var callouts = 0;
     Receipt? receipt;
@@ -227,12 +272,15 @@ class BrewlineReel extends ScenarioReelEdit {
           var prev = beats.take(i).whereType<Tapped>().lastOrNull;
           var dwell = prev?.phase(PhaseKind.dwell);
           if (prev != null) {
-            b.hold(const Duration(milliseconds: 600), after: prev);
+            b.hold(const Duration(milliseconds: 400), after: prev);
           }
           var shown = (dwell == null ? null : b.reelTimeOf(dwell.at)) ?? b.reel;
           var press = next.phase(PhaseKind.press) ?? next.phases.first;
+          // Plus the settle the tap's own shot will hold before it travels.
           var until =
-              (press.at - next.at) + _timeAfterPlaying(b, beats, i, next);
+              (press.at - next.at) +
+              _timeAfterPlaying(b, beats, i, next) +
+              _settle;
           var over = until - shown;
           if (over <= Duration.zero) over = const Duration(milliseconds: 600);
           for (var node in [pill, label]) {
@@ -257,27 +305,13 @@ class BrewlineReel extends ScenarioReelEdit {
           receipt = r;
 
         case Tapped(:var target?):
-          // In before the press, out just after it: the screen a tap opens
-          // should arrive at its own size, not magnified around a button
-          // that is no longer there.
-          var press = beat.phase(PhaseKind.press) ?? beat.phases.first;
-          var start = b.reel + (press.at - beat.at) - _pushIn;
-          if (start < Duration.zero) start = Duration.zero;
-          at(
-            start,
-            _push(
-              camera,
-              screen,
-              target.center,
-              release:
-                  (press.end - beat.at) +
-                  b.reel -
-                  start +
-                  const Duration(milliseconds: 150),
-              name: 'push$i',
-            ),
+          shot(
+            i,
+            beat,
+            target.center,
+            releaseAfter: PhaseKind.press,
+            name: 'push$i',
           );
-          b.playBeat(beat);
           // The cart, frozen: the picture stops — cursor and all — while the
           // price is read.
           if (beat.label?.contains('addToCart') ?? false) {
@@ -289,18 +323,14 @@ class BrewlineReel extends ScenarioReelEdit {
           }
 
         case Typed(:var field?):
-          at(
-            b.reel,
-            _push(
-              camera,
-              screen,
-              field.center,
-              release: beat.duration - _pushIn,
-              name: 'typing',
-              zoom: 1.35,
-            ),
+          shot(
+            i,
+            beat,
+            field.center,
+            releaseAfter: PhaseKind.type,
+            name: 'typing',
+            zoom: 1.35,
           );
-          b.playBeat(beat);
 
         case _:
           b.playBeat(beat);
@@ -402,13 +432,9 @@ class BrewlineReel extends ScenarioReelEdit {
   }) {
     var off = cameraOffset(screen: screen, toward: toward, zoom: zoom);
     var back = release < _pushIn ? _pushIn : release;
-    var over = back + _pushIn;
+    var over = back + _pullOut;
     List<MotionKey> keys(double rest, double moved) => [
-      MotionKey(
-        at: Duration.zero,
-        value: rest,
-        curve: SceneCurves.easeOutCubic,
-      ),
+      MotionKey(at: Duration.zero, value: rest, curve: SceneCurves.easeInOut),
       MotionKey(at: _pushIn, value: moved),
       MotionKey(at: back, value: moved, curve: SceneCurves.easeInOut),
       MotionKey(at: over, value: rest),
