@@ -133,6 +133,10 @@ class _EditorShortcutsState extends State<EditorShortcuts> {
             editor.tool = SceneTool.text,
         const SingleActivator(LogicalKeyboardKey.keyS): () =>
             editor.tool = SceneTool.shape,
+        const SingleActivator(LogicalKeyboardKey.digit3): () =>
+            editor.tool = SceneTool.view3d,
+        const SingleActivator(LogicalKeyboardKey.keyO): () =>
+            editor.tool = SceneTool.orbit,
         ...arrows,
       },
       child: widget.child,

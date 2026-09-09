@@ -238,6 +238,15 @@ String emitSceneArgs({
       ..writeln('  builder: (context) => ScenePlayerHost(')
       ..writeln('    $sceneGroupSymbol,')
       ..writeln("    pairPath: context.knobs.string('pair', ''),")
+      // A nested scene in the pair names its class; this is how the player
+      // instantiates one — the compiled constructor, through the generated
+      // arguments class, the way a compiled parent does.
+      ..writeln('    nested: const {')
+      ..writeln(
+        [for (var s in scenes) "      '${s.className}': ${s.className}Args(),"]
+            .join('\n'),
+      )
+      ..writeln('    },')
       ..writeln('  ),')
       ..writeln(');');
   }

@@ -65,7 +65,10 @@ class MotionKeyRef {
 
 /// What a press on the canvas does: pick, or draw one of the node kinds.
 /// Drawing returns to [select] once the node exists.
-enum SceneTool { select, frame, text, shape }
+/// The canvas tools. The drawing ones draw a box and place a node in it;
+/// [orbit] draws nothing — it turns the camera of the 3D window under the
+/// pointer, since a plain drag on the canvas moves a node.
+enum SceneTool { select, frame, text, shape, view3d, orbit }
 
 /// A thing the file declares that is not a node — a parameter, a motion —
 /// named by the tree's outline and OPEN in the drawer under the canvas: a
@@ -110,6 +113,30 @@ class LibraryAside extends SceneAside {
   const LibraryAside(super.name);
 
   String get path => name;
+}
+
+/// Where a clip block lives, held by [MotionClip.id] the way a key is.
+class MotionClipRef {
+  const MotionClipRef(this.motion, this.group, this.prop, this.clipId);
+
+  final String motion;
+  final String group;
+  final String prop;
+  final int clipId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MotionClipRef &&
+      other.motion == motion &&
+      other.group == group &&
+      other.prop == prop &&
+      other.clipId == clipId;
+
+  @override
+  int get hashCode => Object.hash(motion, group, prop, clipId);
+
+  @override
+  String toString() => '$group.$prop#$clipId';
 }
 
 class SceneEditor extends SceneListenable {
@@ -580,6 +607,7 @@ class SceneEditor extends SceneListenable {
         ..add(node.name);
     }
     _keySelection.clear();
+    _selectedClip = null;
     notifyListeners();
   }
 
@@ -597,7 +625,10 @@ class SceneEditor extends SceneListenable {
     _selection
       ..clear()
       ..addAll(names);
-    if (_selection.isNotEmpty) _keySelection.clear();
+    if (_selection.isNotEmpty) {
+      _keySelection.clear();
+      _selectedClip = null;
+    }
     notifyListeners();
   }
 
@@ -1172,6 +1203,14 @@ class SceneEditor extends SceneListenable {
     tool = SceneTool.select;
   }
 
+  /// Puts [child] under [parent] — a model or a screen under a 3D window,
+  /// which the canvas cannot draw since a placement has no box on the
+  /// artboard. Selected afterwards.
+  void addChild(SceneNode parent, SceneNode child) {
+    perform('Add ${child.name}', () => parent.children.add(child));
+    select(child);
+  }
+
   static double _half(double v) => (v * 2).round() / 2;
 
   /// The frame a drop would move the dragged node into — drawn on the
@@ -1289,6 +1328,7 @@ class SceneEditor extends SceneListenable {
         ..add(ref);
     }
     _selection.clear();
+    _selectedClip = null;
     notifyListeners();
   }
 
@@ -1296,14 +1336,69 @@ class SceneEditor extends SceneListenable {
     _keySelection
       ..clear()
       ..addAll(refs);
-    if (_keySelection.isNotEmpty) _selection.clear();
+    if (_keySelection.isNotEmpty) {
+      _selection.clear();
+      _selectedClip = null;
+    }
     notifyListeners();
   }
 
+  /// Clears the timeline's selection — keys and block both, since they are
+  /// one domain: a thing on a lane.
   void clearKeySelection() {
-    if (_keySelection.isEmpty) return;
+    if (_keySelection.isEmpty && _selectedClip == null) return;
     _keySelection.clear();
+    _selectedClip = null;
     notifyListeners();
+  }
+
+  MotionClipRef? _selectedClip;
+
+  /// The selected clip block, if it still exists. One at a time: a block
+  /// is edited in the inspector, and two blocks have nothing to share.
+  MotionClipRef? get selectedClip =>
+      _selectedClip != null && clipOf(_selectedClip!) != null
+      ? _selectedClip
+      : null;
+
+  bool isClipSelected(MotionClipRef ref) => selectedClip == ref;
+
+  MotionClip? clipOf(MotionClipRef ref) {
+    var index = clipIndexOf(ref);
+    return index == null
+        ? null
+        : trackOf(ref.motion, ref.group, ref.prop)!.clips[index];
+  }
+
+  /// The block's place in its track right now — good until the next move,
+  /// which is why the doors below take it fresh each time.
+  int? clipIndexOf(MotionClipRef ref) {
+    var track = trackOf(ref.motion, ref.group, ref.prop);
+    if (track == null) return null;
+    for (var (i, c) in track.clips.indexed) {
+      if (c.id == ref.clipId) return i;
+    }
+    return null;
+  }
+
+  void selectClip(MotionClipRef? ref) {
+    if (ref == null) {
+      clearKeySelection();
+      return;
+    }
+    _keySelection.clear();
+    _selectedClip = ref;
+    _selection.clear();
+    notifyListeners();
+  }
+
+  /// Backspace on the timeline: whichever is selected, keys or the block.
+  void deleteSelected() {
+    if (selectedClip case var ref?) {
+      deleteClip(ref.motion, ref.group, ref.prop, clipIndexOf(ref)!);
+      return;
+    }
+    deleteKeys();
   }
 
   /// Move every selected key in time, through the track's sorting door so a
@@ -1380,6 +1475,9 @@ class SceneEditor extends SceneListenable {
           track = MotionTrack([], kind: kind);
           group.tracks[prop] = track;
         }
+        // A key on a block track replaces the block: a track has one or
+        // the other, and a key is the more particular ask.
+        track.clips.clear();
         var near = track.keys.where(
           (k) => (k.at - at).inMilliseconds.abs() < 1,
         );
@@ -1459,6 +1557,122 @@ class SceneEditor extends SceneListenable {
 
   /// Removes one track of a group; the group stays, even empty, since it is
   /// the node's place on the timeline.
+  /// Adds a clip block on [prop] of [group] — see [MotionClip]. [at] is
+  /// the time within the group; [clip] names the clip, or is empty for the
+  /// placement's own row. Keys on the track go: a track has keys or
+  /// blocks. Blocks may overlap; the overlap is a crossfade.
+  void addClip(
+    String motion,
+    String groupName,
+    String prop, {
+    required Duration at,
+    required Duration length,
+    String clip = '',
+  }) {
+    var group = motions[motion]!.groupNamed(groupName)!;
+    MotionClip? born;
+    perform('Clip block on ${_propLabel(prop)}', () {
+      var track = trackOf(motion, groupName, prop);
+      if (track == null) {
+        track = MotionTrack([], kind: TrackKind.number);
+        group.tracks[prop] = track;
+      }
+      track.keys.clear();
+      var block = MotionClip(at: at, length: length, clip: clip);
+      track.clips.add(block);
+      track.sortClips();
+      born = block;
+    });
+    selectClip(MotionClipRef(motion, groupName, prop, born!.id));
+  }
+
+  /// Moves the block at [index] by [by], or one of its edges when [edge] is
+  /// `start` or `end` — a trim. A block keeps at least 50ms and never
+  /// starts before its group. The blocks stay sorted, so an index is only
+  /// good until the next move.
+  void nudgeClip(
+    String motion,
+    String groupName,
+    String prop,
+    int index,
+    Duration by, {
+    String edge = 'move',
+    String? mergeKey,
+  }) {
+    var track = trackOf(motion, groupName, prop);
+    if (track == null || index < 0 || index >= track.clips.length) return;
+    var clip = track.clips[index];
+    const least = Duration(milliseconds: 50);
+    perform(
+      edge == 'move' ? 'Move clip block' : 'Trim clip block',
+      mergeKey: mergeKey,
+      () {
+        switch (edge) {
+          case 'start':
+            var start = clip.at + by;
+            if (start < Duration.zero) start = Duration.zero;
+            if (clip.end - start < least) start = clip.end - least;
+            clip.length = clip.end - start;
+            clip.at = start;
+          case 'end':
+            var length = clip.length + by;
+            clip.length = length < least ? least : length;
+          default:
+            var start = clip.at + by;
+            clip.at = start < Duration.zero ? Duration.zero : start;
+        }
+        track.sortClips();
+      },
+    );
+  }
+
+  /// The block's clip, start, length, speed, offset or direction — the
+  /// inspector's fields. A start before the group's, a length under 50ms,
+  /// a speed at or below zero and a negative offset are all held at their
+  /// limit rather than refused: a field being typed into passes through
+  /// them on the way to a number.
+  void setClip(
+    String motion,
+    String groupName,
+    String prop,
+    int index, {
+    String? clip,
+    Duration? at,
+    Duration? length,
+    double? speed,
+    Duration? offset,
+    bool? reverse,
+    String? mergeKey,
+  }) {
+    var track = trackOf(motion, groupName, prop);
+    if (track == null || index < 0 || index >= track.clips.length) return;
+    var block = track.clips[index];
+    const least = Duration(milliseconds: 50);
+    perform('Clip block', mergeKey: mergeKey, () {
+      if (clip != null) block.clip = clip;
+      if (at != null) block.at = at < Duration.zero ? Duration.zero : at;
+      if (length != null) block.length = length < least ? least : length;
+      if (speed != null) block.speed = speed <= 0 ? 0.01 : speed;
+      if (offset != null) {
+        block.offset = offset < Duration.zero ? Duration.zero : offset;
+      }
+      if (reverse != null) block.reverse = reverse;
+      track.sortClips();
+    });
+  }
+
+  /// Removes one block; the last one takes the track with it.
+  void deleteClip(String motion, String groupName, String prop, int index) {
+    var track = trackOf(motion, groupName, prop);
+    if (track == null || index < 0 || index >= track.clips.length) return;
+    if (track.clips.length == 1) {
+      deleteTrack(motion, groupName, prop);
+      return;
+    }
+    perform('Delete clip block', () => track.clips.removeAt(index));
+    clearKeySelection();
+  }
+
   void deleteTrack(String motion, String groupName, String prop) {
     var group = motions[motion]?.groupNamed(groupName);
     if (group == null) return;

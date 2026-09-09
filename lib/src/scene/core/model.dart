@@ -2,6 +2,7 @@
 // same styling bag (fill, corner, opacity) and the same geometry slots.
 // Graduated from the canvas-toy spike 2026-09-01; pure Dart by decision
 // (2026-09-01-scene-graduation-plan.md) so the headless surface can hold it.
+import 'kind.dart';
 import 'listenable.dart';
 import 'props.dart';
 import 'values.dart';
@@ -968,6 +969,48 @@ class ShapeNode extends SceneNode {
   String get typeName => 'Shape';
 }
 
+/// A node of a registered kind ([SceneKind]): its rows live in [values],
+/// read and written by the table, and its children exist when the kind
+/// says so. A thin subclass per kind gives the file its constructor and
+/// the motion its typed `animate()`; everything else — the wire, the JSON,
+/// the file's arguments, copy, undo, the inspector — reads the descriptor.
+class KindNode extends SceneNode {
+  KindNode(
+    this.kind, {
+    super.name,
+    super.x,
+    super.y,
+    super.width,
+    super.height,
+    super.fill,
+    super.borderColor,
+    super.borderWidth,
+    super.corner,
+    super.cornerTopLeft,
+    super.cornerTopRight,
+    super.cornerBottomRight,
+    super.cornerBottomLeft,
+    super.opacity,
+    super.minWidth,
+    super.maxWidth,
+    super.minHeight,
+    super.maxHeight,
+    super.visible,
+    Map<String, Object?> values = const {},
+  }) : values = Map.of(values);
+
+  final SceneKind kind;
+
+  /// The kind's rows, by name. A missing entry reads as the row's default.
+  final Map<String, Object?> values;
+
+  @override
+  final List<SceneNode> children = [];
+
+  @override
+  String get typeName => kind.name;
+}
+
 /// What an [ExternalNode] builds, given the args of the moment.
 ///
 /// The return is `Object` and not `Widget` because this half of the scene
@@ -1521,6 +1564,10 @@ class SceneDocument extends SceneListenable {
         },
         TextNode() => {'kind': 'text'},
         ShapeNode() => {'kind': 'shape'},
+        KindNode k => {
+          'kind': k.kind.name,
+          if (k.kind.children) 'children': [for (var c in k.children) _json(c)],
+        },
         ExternalNode e => {
           'kind': 'ext',
           'entry': e.entry,
@@ -1696,6 +1743,7 @@ class SceneDocument extends SceneListenable {
         var into = live[snap.name];
         if (into == null ||
             into.runtimeType != snap.runtimeType ||
+            (into is KindNode && into.kind != (snap as KindNode).kind) ||
             (into is ExternalNode &&
                 into.entry != (snap as ExternalNode).entry) ||
             (into is SceneRefNode &&
@@ -1720,6 +1768,10 @@ class SceneDocument extends SceneListenable {
               ..tokensArg = s.tokensArg
               ..args.clear();
             i.args.addAll(s.args);
+          case (KindNode i, KindNode s):
+            i.children
+              ..clear()
+              ..addAll([for (var c in s.children) revive(c)]);
           case (TextNode(), TextNode()) || (ShapeNode(), ShapeNode()):
             break;
           default:
@@ -1771,6 +1823,11 @@ SceneNode deepCopyNode(SceneNode node, {String Function(String)? rename}) {
         ]),
     TextNode() => TextNode('', name: name),
     ShapeNode() => ShapeNode(name: name),
+    KindNode k =>
+      KindNode(k.kind, name: name)
+        ..children.addAll([
+          for (var c in k.children) deepCopyNode(c, rename: rename),
+        ]),
     ExternalNode e =>
       ExternalNode.read(e.entry, name: name, args: Map.of(e.args))
         ..declared = e.declared

@@ -1152,6 +1152,7 @@ class _ScenePanelState extends State<_ScenePanel>
           child: SceneWorkspaceView(
             key: ValueKey(workspace.active.path),
             editor,
+            packageRoot: _core.rootFor(_package!),
             externals: _externals(),
             axesFor: _fontAxes,
             tokens: _tokensHost(workspace),

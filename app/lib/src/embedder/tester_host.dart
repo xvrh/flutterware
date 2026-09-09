@@ -493,6 +493,14 @@ class TesterHost {
       await vmServiceUri.future,
       describeGuest: () => printed.join('\n'),
     );
+    // `dart:developer` logs beside stdout, marked, so a dependency's own
+    // failure report reaches the same line stream the guest's prints do.
+    unawaited(
+      vm
+          .developerLog()
+          .forEach((line) => onLog?.call('[tester] log: $line'))
+          .catchError((Object _) {}),
+    );
     if (program.eventStream case var stream?) {
       _events = vm
           .extensionEvents(stream)

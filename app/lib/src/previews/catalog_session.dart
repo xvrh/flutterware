@@ -1663,6 +1663,14 @@ class CatalogSession extends ChangeNotifier {
         return;
       }
       _vmService = vmService;
+      // `dart:developer` logs from the guest, which its stdout never carries;
+      // the studio's own output is where every other host line already goes.
+      unawaited(
+        vmService
+            .developerLog()
+            .forEach((line) => debugPrint('[guest log] $line'))
+            .catchError((Object _) {}),
+      );
       _inspect = InspectClient(
         vmService,
         patience: InspectPatience.live,

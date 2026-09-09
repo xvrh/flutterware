@@ -50,10 +50,12 @@ dependencies:
   # Drop the constraint when Flutter's own `compileSdkVersion` reaches 37 —
   # `packages/flutter_tools/lib/src/android/gradle_utils.dart` is where it is
   # written. Measured 2026-08-24.
+  flutter_scene: ^0.23.0
   flutter_secure_storage: ^10.0.0
   flutterware:
     path: ../..
   # For lib/network_spike.dart — the http-profile spike's traffic generator.
+  hooks: ^2.2.0
   http:
   logging:
   os_detect:
@@ -69,6 +71,7 @@ dependencies:
   sqlite3_flutter_libs:
   sqlite_async:
   vector_graphics: ^1.2.3
+  vector_math: ^2.4.2
 
 dev_dependencies:
   flutter_lints:
@@ -119,6 +122,10 @@ flutter:
       transformers:
         - package: vector_graphics_compiler
     - assets/animations/
+    # The 3D probes' fixture — see tool/make_probe_rig_glb.dart.
+    - assets/models/
+    # What hook/build.dart converts it into. Managed by the hook; ignored.
+    - flutter_scene_generated/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

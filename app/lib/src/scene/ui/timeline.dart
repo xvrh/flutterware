@@ -11,8 +11,9 @@ import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
-import '../type_axes.dart';
+import '../model_assets.dart';
 import '../playback.dart';
+import '../type_axes.dart';
 import 'inline_name.dart';
 import 'modifiers.dart';
 import 'pointer.dart';
@@ -58,11 +59,16 @@ class SceneTimeline extends StatefulWidget {
     this.gutterWidth = 240,
     this.transport = true,
     this.axesFor,
+    this.packageRoot,
   });
 
   final SceneEditor editor;
   final ScenePlayback playback;
   final double gutterWidth;
+
+  /// The package the file belongs to — where a clip block reads the length
+  /// of the clip it runs, to be born the right size.
+  final String? packageRoot;
 
   /// Whether the transport sits in the ruler's gutter. Off where the
   /// arrangement puts it on a toolbar instead.
@@ -345,6 +351,7 @@ class _SceneTimelineState extends State<SceneTimeline> {
                                       playback: playback,
                                       scale: scale,
                                       gutterWidth: widget.gutterWidth,
+                                      packageRoot: widget.packageRoot,
                                     ),
                                 ],
                                 if (selected != null && !selectedHasGroup)
@@ -773,6 +780,7 @@ class _LaneRow extends StatelessWidget {
     required this.playback,
     required this.scale,
     required this.gutterWidth,
+    this.packageRoot,
   });
 
   final _Lane lane;
@@ -780,6 +788,7 @@ class _LaneRow extends StatelessWidget {
   final ScenePlayback playback;
   final TimeScale scale;
   final double gutterWidth;
+  final String? packageRoot;
 
   static const height = 26.0;
 
@@ -828,6 +837,7 @@ class _LaneRow extends StatelessWidget {
               editor: editor,
               playback: playback,
               scale: scale,
+              packageRoot: packageRoot,
             ),
           ),
         ],
@@ -836,19 +846,21 @@ class _LaneRow extends StatelessWidget {
   }
 }
 
-/// One lane's keys, hit and dragged in milliseconds.
+/// One lane's keys — or its clip blocks — hit and dragged in milliseconds.
 class _KeyStrip extends StatefulWidget {
   const _KeyStrip({
     required this.lane,
     required this.editor,
     required this.playback,
     required this.scale,
+    this.packageRoot,
   });
 
   final _Lane lane;
   final SceneEditor editor;
   final ScenePlayback playback;
   final TimeScale scale;
+  final String? packageRoot;
 
   @override
   State<_KeyStrip> createState() => _KeyStripState();
@@ -860,15 +872,65 @@ class _KeyStripState extends State<_KeyStrip> {
   var _carried = 0.0;
   var _dragging = false;
 
+  /// The block a drag holds, and what it does to it: `move`, or
+  /// `start`/`end` for a trim.
+  int? _clipIndex;
+  String? _clipEdge;
+
   _Lane get lane => widget.lane;
   SceneEditor get editor => widget.editor;
+  List<MotionClip> get _clips => lane.track.clips;
+  String get _motion => widget.playback.motionName;
 
-  MotionKeyRef _ref(MotionKey key) => MotionKeyRef(
-    widget.playback.motionName,
-    lane.group.name,
-    lane.prop,
-    key.id,
+  /// The block's ends on the strip.
+  (double, double) _clipSpan(MotionClip c) => (
+    widget.scale.xOf((lane.at + c.at).inMilliseconds),
+    widget.scale.xOf((lane.at + c.end).inMilliseconds),
   );
+
+  /// The placement this lane belongs to, when the lane is its time.
+  KindNode? _placement() {
+    if (lane.prop != 'animationTime') return null;
+    var node = editor.doc.nodeNamed(lane.group.node.name);
+    return node is KindNode ? node : null;
+  }
+
+  /// The clips the placement's asset carries, with their lengths — what a
+  /// block is born from. Empty where nothing is known.
+  List<ModelClip> _assetClips() {
+    var node = _placement();
+    var root = widget.packageRoot;
+    if (node == null || root == null) return const [];
+    var asset = '${scenePropNamed(node, 'asset')?.read(node) ?? ''}';
+    if (asset.isEmpty) return const [];
+    return ModelAssets.shared.info(root, asset)?.clips ?? const [];
+  }
+
+  /// What the placement's own `animation` row names.
+  String _rowClip() {
+    var node = _placement();
+    if (node == null) return '';
+    return '${scenePropNamed(node, 'animation')?.read(node) ?? ''}';
+  }
+
+  String _clipLabel(MotionClip c) {
+    var name = c.clip.isNotEmpty ? c.clip : _rowClip();
+    var parts = [
+      if (name.isNotEmpty) name else 'clip',
+      '${(c.length.inMilliseconds / 1000).toStringAsFixed(2)}s',
+      if (c.speed != 1) '×${c.speed.toStringAsFixed(c.speed % 1 == 0 ? 0 : 2)}',
+      if (c.offset != Duration.zero)
+        'from ${(c.offset.inMilliseconds / 1000).toStringAsFixed(2)}s',
+      if (c.reverse) '⟵',
+    ];
+    return parts.join(' · ');
+  }
+
+  MotionKeyRef _ref(MotionKey key) =>
+      MotionKeyRef(_motion, lane.group.name, lane.prop, key.id);
+
+  MotionClipRef _clipRef(MotionClip c) =>
+      MotionClipRef(_motion, lane.group.name, lane.prop, c.id);
 
   double _x(MotionKey key, double width) =>
       widget.scale.xOf((lane.at + key.at).inMilliseconds);
@@ -886,7 +948,41 @@ class _KeyStripState extends State<_KeyStrip> {
     return best;
   }
 
+  /// The block under [local] and which part of it: an edge within six
+  /// pixels first, then a body — the later block where two overlap, since
+  /// it is drawn on top.
+  (int, String)? _hitClip(Offset local) {
+    for (var i = _clips.length - 1; i >= 0; i--) {
+      var (start, end) = _clipSpan(_clips[i]);
+      if ((local.dx - start).abs() <= 6) return (i, 'start');
+      if ((local.dx - end).abs() <= 6) return (i, 'end');
+    }
+    for (var i = _clips.length - 1; i >= 0; i--) {
+      var (start, end) = _clipSpan(_clips[i]);
+      if (local.dx > start && local.dx < end) return (i, 'move');
+    }
+    return null;
+  }
+
   void _down(Offset local, double width) {
+    if (_clips.isNotEmpty) {
+      editor.clearKeySelection();
+      var hit = _hitClip(local);
+      if (hit == null) {
+        widget.playback.seek(
+          Duration(milliseconds: widget.scale.msAt(local.dx).round()),
+        );
+        return;
+      }
+      var (index, edge) = hit;
+      var ref = _clipRef(_clips[index]);
+      if (!editor.isClipSelected(ref)) editor.selectClip(ref);
+      _clipIndex = index;
+      _clipEdge = edge;
+      _dragging = true;
+      _carried = 0;
+      return;
+    }
     var key = _hit(local, width);
     if (key == null) {
       editor.clearKeySelection();
@@ -911,13 +1007,49 @@ class _KeyStripState extends State<_KeyStrip> {
     var whole = _carried.truncate();
     if (whole == 0) return;
     _carried -= whole;
+    if (_clipIndex case var index?) {
+      var block = _clips[index];
+      editor.nudgeClip(
+        _motion,
+        lane.group.name,
+        lane.prop,
+        index,
+        Duration(milliseconds: whole),
+        edge: _clipEdge ?? 'move',
+        mergeKey: 'clipdrag',
+      );
+      // A move may re-sort the blocks; the drag keeps holding the same one.
+      _clipIndex = _clips.indexOf(block);
+      return;
+    }
     editor.nudgeKeys(Duration(milliseconds: whole), mergeKey: 'keydrag');
   }
 
   void _end() {
     if (!_dragging) return;
     _dragging = false;
+    _clipIndex = null;
+    _clipEdge = null;
     editor.endMerge();
+  }
+
+  /// A block on this lane for [clip], born at [at] within the group and
+  /// as long as the clip — or a second, when the asset does not say.
+  void _addClipAt(Duration at, String clip) {
+    var seconds = _assetClips()
+        .where((c) => c.name == (clip.isEmpty ? _rowClip() : clip))
+        .firstOrNull
+        ?.seconds;
+    editor.addClip(
+      _motion,
+      lane.group.name,
+      lane.prop,
+      at: at < Duration.zero ? Duration.zero : at,
+      length: seconds == null || seconds <= 0
+          ? const Duration(seconds: 1)
+          : Duration(milliseconds: (seconds * 1000).round()),
+      clip: clip,
+    );
   }
 
   /// Where the second tap of a double-tap landed: the recognizer reports the
@@ -927,27 +1059,86 @@ class _KeyStripState extends State<_KeyStrip> {
   void _addKeyAt(double width) {
     var local = _doubleTapAt;
     if (local == null) return;
+    // A block lane takes no keys by double-click: the blocks are the track.
+    if (_clips.isNotEmpty) return;
     var t =
         Duration(milliseconds: widget.scale.msAt(local.dx).round()) - lane.at;
     editor.addKey(
-      widget.playback.motionName,
+      _motion,
       lane.group.name,
       lane.prop,
       t < Duration.zero ? Duration.zero : t,
     );
   }
 
-  /// Right-click: on a key, the key's verbs; anywhere on the lane, the
-  /// track's and the group's.
+  /// Right-click: on a key, the key's verbs; on a block, the block's;
+  /// anywhere on the lane, the track's and the group's.
   void _contextMenu(BuildContext context, TapUpDetails d, double width) {
+    var motion = _motion;
+    var group = lane.group.name;
+    var prop = lane.prop;
+    var here =
+        Duration(milliseconds: widget.scale.msAt(d.localPosition.dx).round()) -
+        lane.at;
+    var assetClips = _assetClips();
+    var rowClip = _rowClip();
+    // What a new block may run: the asset's clips, or the row's one when
+    // the asset is not readable here.
+    var births = [
+      for (var c in assetClips) c.name,
+      if (assetClips.isEmpty && rowClip.isNotEmpty) '',
+    ];
+    var hit = _clips.isEmpty ? null : _hitClip(d.localPosition);
+    // A block's facts — clip, start, length, speed, offset — are fields in
+    // the inspector, where a right-click selects it. The menu keeps the
+    // verbs that are one click: the direction, a new block, delete.
+    if (hit case (var index, _)) {
+      var c = _clips[index];
+      editor.selectClip(_clipRef(c));
+      showContextMenu(context, d.globalPosition, [
+        MenuItem(
+          c.reverse ? 'Play forwards' : 'Play backwards',
+          icon: c.reverse ? Icons.arrow_forward : Icons.arrow_back,
+          onSelected: () =>
+              editor.setClip(motion, group, prop, index, reverse: !c.reverse),
+        ),
+        const MenuDivider(),
+        for (var name in births)
+          MenuItem(
+            'Add ${name.isEmpty ? rowClip : name} block here',
+            icon: Icons.view_timeline_outlined,
+            onSelected: () => _addClipAt(here, name),
+          ),
+        const MenuDivider(),
+        MenuItem(
+          'Delete this block',
+          shortcut: '⌫',
+          danger: true,
+          onSelected: () => editor.deleteClip(motion, group, prop, index),
+        ),
+        MenuItem(
+          'Delete ${lane.group.name}',
+          danger: true,
+          onSelected: () => editor.deleteGroup(motion, group),
+        ),
+      ]);
+      return;
+    }
     var key = _hit(d.localPosition, width);
-    var motion = widget.playback.motionName;
     if (key != null) {
       var ref = _ref(key);
       if (!editor.isKeySelected(ref)) editor.selectKey(ref);
     }
     var selected = editor.selectedKeys.length;
     showContextMenu(context, d.globalPosition, [
+      // A placement's time can be blocks instead of keys: a clip the asset
+      // carries, as one bar to move, trim and reverse.
+      for (var name in births)
+        MenuItem(
+          'Add ${name.isEmpty ? rowClip : name} block here',
+          icon: Icons.view_timeline_outlined,
+          onSelected: () => _addClipAt(here, name),
+        ),
       if (key != null) ...[
         MenuItem(
           selected > 1 ? 'Delete $selected keys' : 'Delete key',
@@ -958,14 +1149,15 @@ class _KeyStripState extends State<_KeyStrip> {
         ),
         const MenuDivider(),
       ],
-      MenuItem(
-        'Add key here',
-        icon: Icons.add,
-        onSelected: () {
-          _doubleTapAt = d.localPosition;
-          _addKeyAt(width);
-        },
-      ),
+      if (_clips.isEmpty)
+        MenuItem(
+          'Add key here',
+          icon: Icons.add,
+          onSelected: () {
+            _doubleTapAt = d.localPosition;
+            _addKeyAt(width);
+          },
+        ),
       MenuItem(
         'Delete ${lane.label} track',
         danger: true,
@@ -1011,6 +1203,18 @@ class _KeyStripState extends State<_KeyStrip> {
                 selected: [
                   for (var k in lane.track.keys) editor.isKeySelected(_ref(k)),
                 ],
+                clips: [
+                  for (var c in _clips)
+                    (
+                      _clipSpan(c).$1,
+                      _clipSpan(c).$2,
+                      _clipLabel(c),
+                      editor.isClipSelected(_clipRef(c)),
+                    ),
+                ],
+                labelStyle: context.type.caption.copyWith(
+                  color: colors.accentDark,
+                ),
                 spanStart: widget.scale.xOf(lane.at.inMilliseconds),
                 spanEnd: widget.scale.xOf(
                   (lane.at + lane.track.duration).inMilliseconds,
@@ -1042,10 +1246,18 @@ class _KeyPainter extends CustomPainter {
     required this.key,
     required this.accent,
     required this.playheadColor,
+    this.clips = const [],
+    this.labelStyle,
   });
 
   final List<double> xs;
   final List<bool> selected;
+
+  /// Each block's ends, label and whether it is selected, drawn instead
+  /// of keys. Where two overlap, the overlap is shaded again: that is the
+  /// crossfade.
+  final List<(double, double, String, bool)> clips;
+  final TextStyle? labelStyle;
   final double spanStart;
   final double spanEnd;
   final double playhead;
@@ -1062,6 +1274,32 @@ class _KeyPainter extends CustomPainter {
       Offset(size.width, size.height - 0.5),
       Paint()..color = line,
     );
+    for (var (start, end, label, on) in clips) {
+      var rect = RRect.fromRectAndRadius(
+        Rect.fromLTRB(start, 4, math.max(end, start + 2), size.height - 5),
+        const Radius.circular(4),
+      );
+      canvas.drawRRect(
+        rect,
+        Paint()..color = accent.withValues(alpha: on ? 0.32 : 0.18),
+      );
+      canvas.drawRRect(
+        rect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = on ? 2 : 1
+          ..color = accent.withValues(alpha: on ? 1 : 0.7),
+      );
+      var text = TextPainter(
+        text: TextSpan(text: label, style: labelStyle),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: math.max(0, end - start - 12));
+      if (end - start > 24) {
+        text.paint(canvas, Offset(start + 6, mid - text.height / 2));
+      }
+    }
     // Between the first and the last key, where the value moves. Before the
     // first key the track holds that key's value — drawn from the group's
     // start, that read as a track that "starts without a key".
@@ -1259,8 +1497,9 @@ class _TimelineShortcuts extends StatelessWidget {
       const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): editor.undo,
       const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true):
           editor.redo,
-      const SingleActivator(LogicalKeyboardKey.backspace): editor.deleteKeys,
-      const SingleActivator(LogicalKeyboardKey.delete): editor.deleteKeys,
+      const SingleActivator(LogicalKeyboardKey.backspace):
+          editor.deleteSelected,
+      const SingleActivator(LogicalKeyboardKey.delete): editor.deleteSelected,
       const SingleActivator(LogicalKeyboardKey.escape):
           editor.clearKeySelection,
       const SingleActivator(LogicalKeyboardKey.space): playback.toggle,

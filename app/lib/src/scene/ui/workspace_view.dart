@@ -47,10 +47,15 @@ class SceneWorkspaceView extends StatefulWidget {
     this.pane,
     this.externals = const [],
     this.axesFor,
+    this.packageRoot,
     this.tokens,
   });
 
   final SceneEditor editor;
+
+  /// The package the open file belongs to — where the inspector finds the
+  /// project's model files for a row that picks one.
+  final String? packageRoot;
 
   /// The group's libraries and the doors past this file — see
   /// [SceneOutlineSections.tokens].
@@ -234,6 +239,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                                     editor,
                                     widget.playbackFor(name),
                                     axesFor: widget.axesFor,
+                                    packageRoot: widget.packageRoot,
                                   ),
                                   ParamAside(:var name) =>
                                     editor.doc.paramNamed(name)?.kind ==
@@ -278,6 +284,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
               editor,
               externals: widget.externals,
               axesFor: widget.axesFor,
+              packageRoot: widget.packageRoot,
               onOpenParam: _openParam,
               onEnterNested: widget.onEnterNested,
             ),

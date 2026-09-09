@@ -165,6 +165,12 @@ jobs:
       # broken example entry — or a tester that cannot come up — fails the job.
       - run: dart run flutterware_app:fw run previews audit
         working-directory: examples/example
+      # The 3D lane, walked: a scene with a model, two screens and a
+      # crossfade, rendered frame by frame through flutter_scene on the
+      # tester. The audit above renders the 3D probes as stills; this is the
+      # motion, and the one place the export path runs off macOS.
+      - run: flutter test test/previews/showcase_export_test.dart test/previews/phone_rig_probe_test.dart
+        working-directory: app
 
   previews_audit_windows:
     name: Previews audit on Windows
@@ -199,3 +205,6 @@ jobs:
       # either is usually a break in both — but only this one spawns a run.
       - run: dart run flutterware_app:fw run scenarios run --steps=none
         working-directory: examples/example
+      # The 3D lane on Windows, as on Linux.
+      - run: flutter test test/previews/showcase_export_test.dart test/previews/phone_rig_probe_test.dart
+        working-directory: app

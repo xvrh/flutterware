@@ -17,6 +17,7 @@
 // pinned to `sceneTextStyleFields` in both directions, so a row added there
 // without a field here would be authorable and unshareable. A text's other
 // rows are its own, spelled beside the style (master plan §4.5).
+import 'kind.dart';
 import 'model.dart';
 import 'values.dart';
 
@@ -69,6 +70,20 @@ enum ScenePropKind {
   /// property whose PARTS are not known here: their names come from the
   /// child scene's parameters or the widget's declaration.
   args,
+}
+
+/// Where the editor finds the choices for a string row — see
+/// [SceneProp.pick]. Each names something in the project, and the two that
+/// depend on a model read the same node's `asset` row for which one.
+enum ScenePick {
+  /// A model file under the package's `assets/` — a `.glb` or `.gltf`.
+  modelAsset,
+
+  /// A mesh in the node's `asset`, by the name the modeller gave it.
+  modelMesh,
+
+  /// A clip in the node's `asset`, by name.
+  modelClip,
 }
 
 /// The members a [ScenePropKind.choice] property can take and how the file
@@ -128,7 +143,50 @@ class SceneProp {
     this.sides,
     this.quad,
     this.byHand = false,
+    this.kindName,
+    this.unit,
+    this.softMin,
+    this.softMax,
+    this.angular = false,
+    this.identity,
+    this.pick,
   });
+
+  /// A row of a registered kind ([SceneKind]), backed by the [KindNode]'s
+  /// value map rather than a field: the one place a name meets a key.
+  ///
+  /// The editing hints — [unit], the soft range, [angular] — are what the
+  /// motion side's spec carried for the hand-written kinds; here they ride
+  /// the row, so the timeline and the inspector read one table.
+  factory SceneProp.value(
+    String name,
+    ScenePropKind kind, {
+    required String of,
+    Object? defaultValue,
+    bool animatable = false,
+    SceneChoices? choices,
+    String? unit,
+    double? softMin,
+    double? softMax,
+    bool angular = false,
+    double? identity,
+    ScenePick? pick,
+  }) => SceneProp(
+    name,
+    kind,
+    kindName: of,
+    defaultValue: defaultValue,
+    animatable: animatable,
+    choices: choices,
+    unit: unit,
+    softMin: softMin,
+    softMax: softMax,
+    angular: angular,
+    identity: identity,
+    pick: pick,
+    read: (n) => (n as KindNode).values[name] ?? defaultValue,
+    write: (n, v) => (n as KindNode).values[name] = v,
+  );
 
   /// The file's named argument, the read plane's key, the motion's track
   /// name when it animates.
@@ -172,9 +230,30 @@ class SceneProp {
   final Object? Function(SceneNode node) read;
   final void Function(SceneNode node, Object? value) write;
 
+  /// For a row of a registered kind: the kind's name. Null for the rows
+  /// the hand-written kinds carry, which [owner] places.
+  final String? kindName;
+
+  /// Editing hints, when the row animates or is scrubbed: shown beside the
+  /// number, where a slider should sit, whether it is a dial, and where a
+  /// track should land.
+  final String? unit;
+  final double? softMin;
+  final double? softMax;
+  final bool angular;
+  final double? identity;
+
+  /// What the editor offers for a string row that names something in the
+  /// project — a model file, a mesh in it, a clip in it. The row's value
+  /// stays a plain string; this says where the choices come from.
+  final ScenePick? pick;
+
   String get key => wireKey ?? name;
 
-  bool appliesTo(SceneNode node) => owner.has(node);
+  bool appliesTo(SceneNode node) => switch (kindName) {
+    var k? => node is KindNode && node.kind.name == k,
+    null => owner.has(node),
+  };
 
   /// The parameter kind a binding to this property must have, or null when
   /// no parameter can fill it — a choice, a list of sizes.
@@ -716,26 +795,36 @@ const sceneShapeProps = <SceneProp>[
   ),
 ];
 
-/// The table, whole.
-const sceneProps = <SceneProp>[
+/// The table, whole — the hand-written kinds' rows, plus every registered
+/// kind's.
+List<SceneProp> get sceneProps => [
   ...sceneCommonProps,
   ...sceneFrameProps,
   ...sceneTextProps,
   ...sceneArgsProps,
   ...sceneShapeProps,
+  for (var k in sceneKinds) ...k.props,
 ];
 
 /// The properties [node] carries, in file order: its kind's own after the
 /// common ones.
 List<SceneProp> scenePropsOf(SceneNode node) => [
-  for (var p in sceneProps)
+  for (var p in sceneCommonProps)
     if (p.appliesTo(node)) p,
+  ...switch (node) {
+    KindNode k => k.kind.props,
+    _ => [
+      for (var p in sceneProps)
+        if (p.kindName == null && p.owner != ScenePropOwner.any)
+          if (p.appliesTo(node)) p,
+    ],
+  },
 ];
 
 /// One property by name, when [node] carries it.
 SceneProp? scenePropNamed(SceneNode node, String name) {
-  for (var p in sceneProps) {
-    if (p.name == name && p.appliesTo(node)) return p;
+  for (var p in scenePropsOf(node)) {
+    if (p.name == name) return p;
   }
   return null;
 }

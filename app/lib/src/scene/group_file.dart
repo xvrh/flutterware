@@ -202,7 +202,9 @@ GroupParse parseGroupFile(
     var name = arg.name.lexeme;
     var value = arg.argumentExpression;
     switch (name) {
-      case 'wrap':
+      // Both are the app's own code — a closure, a map of renderers — and
+      // the editor never sees inside either.
+      case 'wrap' || 'renderers':
         continue;
       case 'widgets':
         if (value is ListLiteral) {
@@ -241,7 +243,7 @@ GroupParse parseGroupFile(
         refuse(
           arg.offset,
           'unknown property',
-          'a SceneGroup takes widgets:, exports:, libraries: and wrap:',
+          'a SceneGroup takes widgets:, exports:, libraries:, renderers: and wrap:',
         );
     }
   }

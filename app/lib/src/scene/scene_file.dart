@@ -496,6 +496,12 @@ void _emitNode(
     case ShapeNode _:
       table();
       out.write('ShapeNode(${props.join(', ')})');
+    case KindNode k:
+      table();
+      if (k.kind.children && k.children.isNotEmpty) {
+        props.add('children: [${k.children.map((c) => c.name).join(', ')}]');
+      }
+      out.write('${k.kind.constructor}(${props.join(', ')})');
     case ExternalNode e:
       props.add(
         _argsLiteral(e.entry, e.args, 'a registration entry name', ref: ref),
@@ -970,7 +976,9 @@ class _Parser {
           );
           continue;
         }
-        if (frame is FrameNode) frame.children.add(child);
+        if (frame is FrameNode || frame is KindNode) {
+          frame!.children.add(child);
+        }
       }
     }
     var reachable = <SceneNode>{};
@@ -1307,52 +1315,7 @@ class _Parser {
       case 'FrameNode':
         var node = FrameNode(name: name);
         _applyProps(node, named);
-        _take(named, 'children', (e) {
-          if (e is! ListLiteral) {
-            refuse(e.offset, 'children', 'children takes a list literal');
-            return;
-          }
-          // Inside a repeat's closure a cell IS written here: it has no one
-          // row to be a field of. Everywhere else a child is placed by name.
-          if (_itemScope != null) {
-            node.children.addAll(_inlineCells(e, childRefs));
-            return;
-          }
-          var refs = childRefs.putIfAbsent(name, () => []);
-          for (var element in e.elements) {
-            switch (element) {
-              case SimpleIdentifier id when _params.containsKey(id.name):
-                refuse(
-                  id.offset,
-                  'parameter as child',
-                  '"${id.name}" is a parameter — children list nodes',
-                );
-              case SimpleIdentifier id:
-                refs.add((id.name, id.offset));
-              case Expression x when _invocation(x) != null:
-                refuse(
-                  element.offset,
-                  'inline node',
-                  'a node is declared as its own field and placed here by '
-                      'name — `children: [headline]`, with '
-                      '`late final headline = …` beside it',
-                );
-              case Expression x:
-                refuse(
-                  x.offset,
-                  _kind(x),
-                  'children lists nodes by their field names',
-                );
-              default:
-                refuse(
-                  element.offset,
-                  _elementKind(element),
-                  'a scene lists its children one by one — the editor cannot '
-                  'read a computed list',
-                );
-            }
-          }
-        });
+        _readChildren(name, node, childRefs: childRefs, named: named);
         _refuseRest('FrameNode', named);
         _checkPositionals(positional, 0);
         return node;
@@ -1419,14 +1382,83 @@ class _Parser {
         _checkPositionals(positional, 1);
         return node;
       default:
+        // A registered kind: its rows through the table, its children by
+        // name like a frame's, its constructor's name from the descriptor.
+        if (sceneKindByConstructor(kind) case var described?) {
+          var node = KindNode(described, name: name);
+          _applyProps(node, named);
+          if (described.children) {
+            _readChildren(name, node, childRefs: childRefs, named: named);
+          }
+          _refuseRest(described.constructor, named);
+          _checkPositionals(positional, 0);
+          return node;
+        }
         refuse(
           expr.offset,
           'unknown node',
           '"$kind" is not a scene node — FrameNode, TextNode, ShapeNode, '
-              'ExternalNode or SceneRefNode',
+              'ExternalNode, SceneRefNode'
+              '${[for (var k in sceneKinds) ', ${k.constructor}'].join()}',
         );
         return null;
     }
+  }
+
+  /// `children: [a, b]` — nodes placed by their field names, resolved once
+  /// every field has been read. A frame's and a registered kind's alike.
+  void _readChildren(
+    String name,
+    SceneNode node, {
+    required Map<String, Expression> named,
+    required Map<String, List<(String, int)>> childRefs,
+  }) {
+    _take(named, 'children', (e) {
+      if (e is! ListLiteral) {
+        refuse(e.offset, 'children', 'children takes a list literal');
+        return;
+      }
+      // Inside a repeat's closure a cell IS written here: it has no one
+      // row to be a field of. Everywhere else a child is placed by name.
+      if (_itemScope != null) {
+        node.children.addAll(_inlineCells(e, childRefs));
+        return;
+      }
+      var refs = childRefs.putIfAbsent(name, () => []);
+      for (var element in e.elements) {
+        switch (element) {
+          case SimpleIdentifier id when _params.containsKey(id.name):
+            refuse(
+              id.offset,
+              'parameter as child',
+              '"${id.name}" is a parameter — children list nodes',
+            );
+          case SimpleIdentifier id:
+            refs.add((id.name, id.offset));
+          case Expression x when _invocation(x) != null:
+            refuse(
+              element.offset,
+              'inline node',
+              'a node is declared as its own field and placed here by '
+                  'name — `children: [headline]`, with '
+                  '`late final headline = …` beside it',
+            );
+          case Expression x:
+            refuse(
+              x.offset,
+              _kind(x),
+              'children lists nodes by their field names',
+            );
+          default:
+            refuse(
+              element.offset,
+              _elementKind(element),
+              'a scene lists its children one by one — the editor cannot '
+              'read a computed list',
+            );
+        }
+      }
+    });
   }
 
   /// `FrameNode.repeating(over: lines, row: (line) => [ … ], …)`.

@@ -15,6 +15,7 @@ library;
 
 export 'src/scene/core/curves.dart';
 export 'src/scene/core/json.dart';
+export 'src/scene/core/kind.dart';
 export 'src/scene/core/listenable.dart';
 export 'src/scene/core/model.dart';
 export 'src/scene/core/motion_model.dart';
@@ -22,3 +23,4 @@ export 'src/scene/core/motion_runtime.dart';
 export 'src/scene/core/props.dart';
 export 'src/scene/core/stops.dart';
 export 'src/scene/core/values.dart';
+export 'src/scene/core/view3d.dart';
