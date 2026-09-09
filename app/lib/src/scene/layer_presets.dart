@@ -38,22 +38,29 @@ class LayerPreset {
 
 TextLayer _scaled(TextLayer l, double k) => switch (l) {
   StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width * k,
+    width: _round(width * k),
     join: join,
     paint: l.paint,
-    blur: l.blur * k,
-    dx: l.dx * k,
-    dy: l.dy * k,
+    blur: _round(l.blur * k),
+    dx: _round(l.dx * k),
+    dy: _round(l.dy * k),
     opacity: l.opacity,
   ),
   FillLayer() => FillLayer(
     paint: l.paint,
-    blur: l.blur * k,
-    dx: l.dx * k,
-    dy: l.dy * k,
+    blur: _round(l.blur * k),
+    dx: _round(l.dx * k),
+    dy: _round(l.dy * k),
     opacity: l.opacity,
   ),
 };
+
+/// A preset authored at one size, retold at another: a stroke of 3 on a
+/// 21-point face becomes `21.9486607142857` at 54 unless somebody says
+/// otherwise. Nobody chose those digits, and they end up in the library
+/// file and in the generated class, so the arithmetic rounds where the
+/// fields that edit it round.
+double _round(double v) => (v * 100).roundToDouble() / 100;
 
 const _ink = SceneColor(0xFF141018);
 const _paper = SceneColor(0xFFFFFFFF);

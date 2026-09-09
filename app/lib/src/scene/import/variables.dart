@@ -12,6 +12,10 @@
 // a token is REFUSED, by name and with the reason, never approximated. What
 // is refused is the list of what to build next.
 //
+// A library is a design system, so only COLOR and FLOAT variables become
+// tokens. A STRING is copy and a BOOLEAN is a flag; both are refused by
+// name, saying where they belong instead.
+//
 // The shape read (the variables endpoint's `meta`):
 //
 //   variableCollections: { id: { name, modes: [{modeId, name}],
@@ -21,21 +25,29 @@
 //                      deletedButReferenced?, hiddenFromPublishing? } }
 //
 // A value is `{r, g, b, a}` in 0..1, a number, a string, a bool, or an
-// alias `{type: 'VARIABLE_ALIAS', id}` to another variable — resolved in the
-// same-named mode of the other variable's collection, else its default.
+// alias `{type: 'VARIABLE_ALIAS', id}` to another variable — resolved in
+// that variable's collection's default mode.
+//
+// ONE MODE IS READ: the collection's default. A library holds one value per
+// token, so a collection's other modes have nowhere to land — and a design
+// tool's `dark` is a whole second set, which the app builds as another
+// `SceneTokens` and hands to a scene. Each one is refused by name rather
+// than flattened into the default, so what was left behind is on the
+// report.
 import 'dart:convert';
 
 import 'package:flutterware/scene_authoring.dart';
 
+import '../tokens_file.dart';
+
 /// One variable that became a token: the identifier it got, where it came
-/// from, its kind, its default value and the value in every mode.
+/// from, its kind and its value in the collection's default mode.
 class ImportedToken {
   ImportedToken({
     required this.name,
     required this.source,
     required this.kind,
     required this.value,
-    required this.modes,
   });
 
   /// The Dart identifier — `brandPrimary` from `Brand/Primary`.
@@ -47,11 +59,7 @@ class ImportedToken {
   final SceneParamKind kind;
   final Object value;
 
-  /// Mode name (an identifier) to value, every mode of the collection —
-  /// the default mode included, so a set can be asked for by its name.
-  final Map<String, Object> modes;
-
-  SceneTokenDecl get decl => SceneTokenDecl(name, kind, value, modes: modes);
+  SceneTokenDecl get decl => SceneTokenDecl(name, kind, value);
 }
 
 /// A variable that was not imported, and why.
@@ -69,13 +77,10 @@ class ImportRefusal {
 /// What a read of the variables produced: the tokens, in the design file's
 /// order, and every refusal.
 class VariablesImport {
-  VariablesImport(this.tokens, this.refusals, this.modeNames);
+  VariablesImport(this.tokens, this.refusals);
 
   final List<ImportedToken> tokens;
   final List<ImportRefusal> refusals;
-
-  /// Every mode name across the collections, in first-seen order.
-  final List<String> modeNames;
 }
 
 /// Reads the variables JSON — the endpoint's whole response or its `meta`.
@@ -86,12 +91,12 @@ VariablesImport importVariables(String json) {
   } on FormatException catch (e) {
     return VariablesImport(const [], [
       ImportRefusal('the file', 'not JSON: ${e.message}'),
-    ], const []);
+    ]);
   }
   if (decoded is! Map) {
     return VariablesImport(const [], [
       ImportRefusal('the file', 'not a JSON object'),
-    ], const []);
+    ]);
   }
   var meta = switch (decoded['meta']) {
     Map m => m,
@@ -106,7 +111,7 @@ VariablesImport importVariables(String json) {
         'no variableCollections and variables — this is not the variables '
             "endpoint's answer",
       ),
-    ], const []);
+    ]);
   }
   return _Importer(
     collections.cast<String, Object?>(),
@@ -121,33 +126,23 @@ class _Importer {
   final Map<String, Object?> variables;
   final refusals = <ImportRefusal>[];
 
-  /// modeId → identifier, across every collection; same-named modes in two
-  /// collections share the identifier, which is what makes `dark` one set.
-  final _modeName = <String, String>{};
-  final _modeNames = <String>[];
-
   VariablesImport run() {
+    // The other modes, said once each: a whole second set the library has
+    // no room for, named so it is clear what was not taken.
     for (var c in collections.values) {
       var collection = c! as Map;
+      var defaultId = '${collection['defaultModeId']}';
       for (var m in (collection['modes'] as List?) ?? const []) {
         var mode = m as Map;
-        // A mode is a whole set, so a name that is a keyword — "Default" is
-        // the design tool's own default — gets a suffix rather than taking
-        // every variable of the collection down with it.
-        var name =
-            _identifier('${mode['name']}') ??
-            _identifier('${mode['name']} mode');
-        if (name == null) {
-          refusals.add(
-            ImportRefusal(
-              'mode "${mode['name']}" of ${collection['name']}',
-              'its name makes no identifier',
-            ),
-          );
-          continue;
-        }
-        _modeName['${mode['modeId']}'] = name;
-        if (!_modeNames.contains(name)) _modeNames.add(name);
+        if ('${mode['modeId']}' == defaultId) continue;
+        refusals.add(
+          ImportRefusal(
+            '${collection['name']} · ${mode['name']}',
+            'only the default mode is imported — a library holds one value '
+                'per token; build the other set in your app as '
+                'SceneTokens(…) and pass it to the scene',
+          ),
+        );
       }
     }
 
@@ -156,6 +151,7 @@ class _Importer {
     // The file's own order, by collection then by the collection's list.
     for (var c in collections.values) {
       var collection = c! as Map;
+      var modeId = '${collection['defaultModeId']}';
       for (var id in (collection['variableIds'] as List?) ?? const []) {
         var raw = variables['$id'];
         if (raw is! Map) continue;
@@ -168,6 +164,14 @@ class _Importer {
               source,
               'a ${raw['resolvedType']} is not a token kind',
             ),
+          );
+          continue;
+        }
+        // A design tool's variables carry copy and flags beside the design;
+        // a library holds the design. Refused by name, with where it goes.
+        if (!libraryTokenKinds.contains(kind)) {
+          refusals.add(
+            ImportRefusal(source, notADesignValue(paramKindTypeName(kind))),
           );
           continue;
         }
@@ -186,45 +190,24 @@ class _Importer {
           );
           continue;
         }
-        var modes = <String, Object>{};
-        var failed = false;
-        for (var m in (collection['modes'] as List?) ?? const []) {
-          var modeId = '${(m as Map)['modeId']}';
-          var modeName = _modeName[modeId];
-          if (modeName == null) continue;
-          var value = _resolve(raw, modeId, kind, const {});
-          if (value == null) {
-            refusals.add(
-              ImportRefusal(
-                source,
-                'its value in mode "${m['name']}" could not be read',
-              ),
-            );
-            failed = true;
-            break;
-          }
-          modes[modeName] = value;
-        }
-        if (failed) continue;
-        var defaultMode = _modeName['${collection['defaultModeId']}'];
-        var value = modes[defaultMode] ?? modes.values.firstOrNull;
+        var value = _resolve(raw, modeId, kind, const {});
         if (value == null) {
-          refusals.add(ImportRefusal(source, 'it has a value in no mode'));
+          refusals.add(
+            ImportRefusal(
+              source,
+              'its value in the default mode could not '
+              'be read',
+            ),
+          );
           continue;
         }
         taken[name] = source;
         tokens.add(
-          ImportedToken(
-            name: name,
-            source: source,
-            kind: kind,
-            value: value,
-            modes: modes,
-          ),
+          ImportedToken(name: name, source: source, kind: kind, value: value),
         );
       }
     }
-    return VariablesImport(tokens, refusals, _modeNames);
+    return VariablesImport(tokens, refusals);
   }
 
   static SceneParamKind? _kind(String resolvedType) => switch (resolvedType) {
@@ -236,8 +219,8 @@ class _Importer {
   };
 
   /// The value of [variable] in [modeId], following aliases. An alias into
-  /// another collection is read in that collection's same-named mode when
-  /// it has one, else in its default mode — the design tool's own rule.
+  /// another collection is read in that collection's default mode, which is
+  /// the only mode this import reads.
   Object? _resolve(
     Map variable,
     String modeId,
@@ -251,12 +234,7 @@ class _Importer {
       if (target is! Map || seen.contains('${raw['id']}')) return null;
       var collection = collections['${target['variableCollectionId']}'];
       if (collection is! Map) return null;
-      var wanted = _modeName[modeId];
       var targetMode = '${collection['defaultModeId']}';
-      for (var m in (collection['modes'] as List?) ?? const []) {
-        var id = '${(m as Map)['modeId']}';
-        if (_modeName[id] == wanted) targetMode = id;
-      }
       return _resolve(target, targetMode, kind, {...seen, '${raw['id']}'});
     }
     return switch ((kind, raw)) {

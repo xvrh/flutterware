@@ -128,6 +128,73 @@ class ScenePackageScan {
   /// The library symbol a path declares, or null when it is not one — the
   /// resolver a group parse takes.
   String? librarySymbolAt(String path) => libraryAt(path)?.symbol;
+
+  /// The libraries [group] reads: the ones in its own folder, and the ones
+  /// in any folder above it.
+  ///
+  /// Outermost first, so a palette shared by several groups is named before
+  /// the one that folder keeps to itself — the general before the specific,
+  /// which is also the order the union is spelled in.
+  List<SceneLibraryEntry> librariesFor(SceneGroupEntry group) {
+    var found = [
+      for (var library in libraries)
+        if (readsLibrary(group.directory, library.path)) library,
+    ];
+    found.sort((a, b) {
+      var depth = p
+          .split(p.dirname(a.path))
+          .length
+          .compareTo(p.split(p.dirname(b.path)).length);
+      return depth != 0 ? depth : a.path.compareTo(b.path);
+    });
+    return found;
+  }
+
+  /// The groups that read the library at [libraryPath]: the one whose folder
+  /// holds it, and every group below that folder.
+  List<SceneGroupEntry> groupsReading(String libraryPath) => [
+    for (var group in groups)
+      if (readsLibrary(group.directory, libraryPath)) group,
+  ];
+}
+
+/// The gap between what a group's declaration lists and what its folder says
+/// it reads.
+///
+/// Both halves matter and neither is simply wrong: [missing] is a library the
+/// scenes below cannot name yet, and [stray] is one they name but that no
+/// longer sits above them — a file somebody moved. The listing shows the gap
+/// and offers to close it; nothing closes it on its own.
+class SceneLibraryDrift {
+  SceneLibraryDrift({required this.missing, required this.stray});
+
+  /// Below the folder, not in `libraries:`.
+  final List<SceneLibraryEntry> missing;
+
+  /// In `libraries:`, not below the folder.
+  final List<SceneLibraryEntry> stray;
+
+  bool get isEmpty => missing.isEmpty && stray.isEmpty;
+
+  bool get isNotEmpty => !isEmpty;
+}
+
+/// Whether a group whose folder is [groupDirectory] reads the library at
+/// [libraryPath].
+///
+/// This is the scene's own rule, run the other way. A scene belongs to the
+/// nearest group above it; a library is read by every group at or below it.
+/// Before this, a scene's home was decided by the walk and a library's by a
+/// hand-maintained `libraries:` list — two rules answering one question, and
+/// only one of them visible in the folders. The cost of the old arrangement
+/// was a file the tool would happily make and then let you never use.
+///
+/// A library beside a group rather than above it is read by nobody, and the
+/// listing says so rather than pretending.
+bool readsLibrary(String groupDirectory, String libraryPath) {
+  var from = p.canonicalize(p.dirname(libraryPath));
+  var to = p.canonicalize(groupDirectory);
+  return from == to || p.isWithin(from, to);
 }
 
 /// Everything under [scope]: groups, their scenes, and libraries. Listed

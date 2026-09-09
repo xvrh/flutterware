@@ -130,8 +130,7 @@ String tokenValueLabel(SceneTokenDecl t) {
   if (t.isExport) return t.type;
   if (t.style case var s?) {
     return [
-      if (s.fontSize case var v?)
-        v == v.roundToDouble() ? '${v.round()}' : '$v',
+      if (s.fontSize case var v?) shortNumber(v),
       if (s.weight case var w?) 'w${w.value}',
       if (s.color != null) 'colour',
     ].join(' · ');
@@ -139,11 +138,23 @@ String tokenValueLabel(SceneTokenDecl t) {
   return switch (t.value) {
     SceneColor c =>
       '#${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0').substring(2)}',
-    double d => d == d.roundToDouble() ? '${d.round()}' : '$d',
+    double d => shortNumber(d),
     String s => s.length > 14 ? "'${s.substring(0, 13)}…'" : "'$s'",
     bool b => b ? 'on' : 'off',
     var v => '$v',
   };
+}
+
+/// A number as a label: whole when it is whole, two decimals at most, and
+/// no trailing zeros. A value the editor wrote is rounded already; one a
+/// hand-written file carries may not be, and a caption is not the place to
+/// print seventeen digits of it.
+String shortNumber(double v) {
+  if (v == v.roundToDouble() && v.abs() < 1e15) return '${v.round()}';
+  return v
+      .toStringAsFixed(2)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
 }
 
 IconData tokenIcon(SceneTokenDecl t) {

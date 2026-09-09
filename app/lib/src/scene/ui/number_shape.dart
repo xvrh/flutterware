@@ -9,6 +9,8 @@
 // A shape rather than free functions taking a spec, because not every number
 // in a scene panel is a tuned property: a key's time is milliseconds, wants
 // the same drag, and has no entry in the vocabulary. One type describes both.
+import 'dart:math' as math;
+
 import 'package:flutterware/scene_authoring.dart';
 
 /// The control a number gets under it.
@@ -130,6 +132,23 @@ class SceneNumberShape {
     if (min case var low? when v < low) v = low;
     if (max case var high? when v > high) v = high;
     return v;
+  }
+
+  /// [value] as this shape would WRITE it: clamped, and rounded to the
+  /// precision the field prints.
+  ///
+  /// A drag accumulates in display units and lands on whatever the
+  /// arithmetic produces, so a field showing `19.96` was storing
+  /// `19.959895833333427` — and a token's value is not a private number: it
+  /// goes into the library file, into the generated class and into every
+  /// scene that reads it, where a design decision no one made becomes
+  /// seventeen digits of noise in the diff. What the field shows is what it
+  /// means, so what it shows is what it stores.
+  double settled(double value) {
+    var v = clamped(value);
+    if (!v.isFinite) return v;
+    var scale = math.pow(10, decimals).toDouble();
+    return (v * scale).roundToDouble() / scale;
   }
 }
 

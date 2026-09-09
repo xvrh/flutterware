@@ -33,10 +33,54 @@ import 'scene_file.dart';
 /// default for a source parsed without a file name (a test, a demo).
 const sceneTokensSymbol = 'sceneTokens';
 
-/// The symbol beside a library's list naming its modes: `brandTokens` →
-/// `brandTokensModes`. Declared so a mode exists before any token differs
-/// in it.
+/// The symbol a library once declared its modes with — `brandTokens` →
+/// `brandTokensModes`. Modes are gone; the name is kept so a file that
+/// still carries one is refused by name rather than read as a stray
+/// declaration.
 String modesSymbolFor(String symbol) => '${symbol}Modes';
+
+/// The kinds a LIBRARY may declare. A library is a design system — the
+/// colours, the sizes and the type styles a package's scenes share — and
+/// decided 2026-09-09, that is the whole of it.
+///
+/// A `String` or a `bool` is not a design decision. Shared copy is content:
+/// a scene parameter when one scene uses it, the app's when several do. A
+/// flag is configuration. Both were only ever here because a token reused
+/// the *parameter* kinds, and because a design tool's variables have STRING
+/// and BOOLEAN types — neither of which is a reason.
+///
+/// An EXPORT is unaffected: it is the app's own value of any type at all,
+/// and the editor never draws it.
+const libraryTokenKinds = {SceneParamKind.color, SceneParamKind.number};
+
+/// Those two in the order the library's page lays them out and its file is
+/// written in: the palette first, then the scale, then — outside this list,
+/// because a style is not a kind — the type.
+const libraryTokenOrder = [SceneParamKind.color, SceneParamKind.number];
+
+/// The type a declaration spells for [kind], for a refusal that names it.
+String paramKindTypeName(SceneParamKind kind) => switch (kind) {
+  SceneParamKind.string => 'String',
+  SceneParamKind.number => 'double',
+  SceneParamKind.color => 'SceneColor',
+  SceneParamKind.bool => 'bool',
+  SceneParamKind.list => 'List',
+};
+
+/// What a library carrying a value it may not hold is told.
+String notADesignValue(String typeName) =>
+    'a library holds a design system — a colour, a number or a text style. '
+    "A $typeName is content or configuration: make it this scene's "
+    "parameter, or export it from the group's $sceneGroupFileName as the "
+    "app's own.";
+
+/// What a file carrying a removed mode declaration is told. A set that
+/// differs is a `SceneTokens` the app constructs and passes to a scene's
+/// tokens formal — the editor no longer holds one.
+const modesRemovedReason =
+    'modes are gone from a library — build the other set in your app as '
+    'SceneTokens(…) and pass it to the scene, which the generated class '
+    'already takes';
 
 /// What a library file ends with: `brand.tokens.dart`.
 const sceneTokensFileSuffix = '.tokens.dart';
@@ -93,19 +137,10 @@ const sceneTokensClassName = 'SceneTokens';
 
 /// What a read of a declaration file produced.
 class TokensParse {
-  TokensParse(
-    this.tokens,
-    this.refusals, [
-    this.imports = const [],
-    this.modes = const [],
-  ]);
+  TokensParse(this.tokens, this.refusals, [this.imports = const []]);
 
   final List<SceneTokenDecl> tokens;
   final List<SceneRefusal> refusals;
-
-  /// The modes the file declares by name — `const brandTokensModes =
-  /// ['dark']` — including ones no token differs in yet.
-  final List<String> modes;
 
   /// The file's imports other than the authoring one, verbatim — what an
   /// opaque token's type is spelled with, so the generated class imports the
@@ -122,21 +157,16 @@ List<SceneTokenDecl> describeTokens(List<Token<Object>> tokens) => [
     if (t.value case SceneTextStyle style)
       SceneTokenDecl.style(t.name, style)
     else
-      SceneTokenDecl(
-        t.name,
-        switch (t.value) {
-          String() => SceneParamKind.string,
-          bool() => SceneParamKind.bool,
-          SceneColor() => SceneParamKind.color,
-          num() => SceneParamKind.number,
-          var v => throw ArgumentError(
-            'a token is a String, double, bool or SceneColor — '
-            '"${t.name}" is a ${v.runtimeType}',
-          ),
-        },
-        _number(t.value),
-        modes: {for (var e in t.modes.entries) e.key: _number(e.value)},
-      ),
+      SceneTokenDecl(t.name, switch (t.value) {
+        String() => SceneParamKind.string,
+        bool() => SceneParamKind.bool,
+        SceneColor() => SceneParamKind.color,
+        num() => SceneParamKind.number,
+        var v => throw ArgumentError(
+          'a token is a String, double, bool or SceneColor — '
+          '"${t.name}" is a ${v.runtimeType}',
+        ),
+      }, _number(t.value)),
 ];
 
 Object _number(Object v) => v is num ? v.toDouble() : v;
@@ -182,27 +212,11 @@ TokensParse parseTokensFile(
   var imports = declarationImports(result.unit, source);
 
   ListLiteral? list;
-  var modes = <String>[];
   for (var decl in result.unit.declarations) {
     if (decl is! TopLevelVariableDeclaration) continue;
     for (var v in decl.variables.variables) {
       if (v.name.lexeme == modesSymbolFor(sceneTokensSymbol)) {
-        if (v.initializer case ListLiteral l) {
-          for (var e in l.elements) {
-            if (e is SimpleStringLiteral && isValidNodeName(e.value)) {
-              if (!modes.contains(e.value)) modes.add(e.value);
-            } else {
-              refuse(e.offset, 'mode name', 'a mode name is an identifier');
-            }
-          }
-        } else {
-          refuse(
-            v.offset,
-            'declaration',
-            '${modesSymbolFor(sceneTokensSymbol)} is a list of names — '
-                "['dark']",
-          );
-        }
+        refuse(v.offset, 'declaration', modesRemovedReason);
         continue;
       }
       if (v.name.lexeme != sceneTokensSymbol) continue;
@@ -229,12 +243,7 @@ TokensParse parseTokensFile(
     return TokensParse(const [], refusals);
   }
 
-  return TokensParse(
-    parseTokenElements(list, refuse),
-    refusals,
-    imports,
-    modes,
-  );
+  return TokensParse(parseTokenElements(list, refuse), refusals, imports);
 }
 
 /// The `Token<…>(…)` elements of one list literal — a library's list, or,
@@ -323,12 +332,21 @@ SceneTokenDecl? _token(
     for (var a in args.arguments)
       if (a is NamedArgument) a,
   ];
-  if (positional.length != 2 || named.any((a) => a.name.lexeme != 'modes')) {
+  if (positional.length != 2) {
     refuse(
       e.offset,
       'arguments',
-      "a token is Token<double>('radius', 16) — a name and its value, "
-          "then modes: {'dark': …} if it differs by mode",
+      "a token is Token<double>('radius', 16) — a name and its value",
+    );
+    return null;
+  }
+  if (named.isNotEmpty) {
+    refuse(
+      named.first.offset,
+      named.first.name.lexeme == 'modes' ? 'modes' : 'arguments',
+      named.first.name.lexeme == 'modes'
+          ? modesRemovedReason
+          : "a token is Token<double>('radius', 16) — a name and its value",
     );
     return null;
   }
@@ -337,48 +355,13 @@ SceneTokenDecl? _token(
     refuse(nameArg.offset, 'token name', 'a token name is an identifier');
     return null;
   }
-  if (exports) {
-    // The app's own: the expression is its business, and a mode would be
-    // a value the editor cannot see either.
-    if (named.isNotEmpty) {
-      refuse(
-        named.first.offset,
-        'modes',
-        "an export is the app's own value and has no modes here — the app "
-            'picks one where it builds it',
-      );
-      return null;
-    }
-    return SceneTokenDecl.export(nameArg.value, typeName);
-  }
+  if (exports) return SceneTokenDecl.export(nameArg.value, typeName);
   var kind = _tokenKinds[typeName];
   // A text style: a bundle the editor renders, applied whole to a text.
   if (typeName == 'SceneTextStyle') {
     var style = _style(positional[1].argumentExpression, refuse);
     if (style == null) return null;
-    var modes = <String, Object>{};
-    for (var arg in named) {
-      var map = arg.argumentExpression;
-      if (map is! SetOrMapLiteral) {
-        refuse(map.offset, 'modes', "modes is a map — modes: {'dark': …}");
-        return null;
-      }
-      for (var entry in map.elements) {
-        if (entry is! MapLiteralEntry) {
-          refuse(entry.offset, 'modes', "modes is a map — modes: {'dark': …}");
-          return null;
-        }
-        var key = entry.key;
-        if (key is! SimpleStringLiteral || !isValidNodeName(key.value)) {
-          refuse(key.offset, 'mode name', 'a mode name is an identifier');
-          return null;
-        }
-        var v = _style(entry.value, refuse);
-        if (v == null) return null;
-        modes[key.value] = v;
-      }
-    }
-    return SceneTokenDecl.style(nameArg.value, style, modes: modes);
+    return SceneTokenDecl.style(nameArg.value, style);
   }
   // Not a value type: the app's own object, which a library cannot hold —
   // the editor writes a library, and it cannot write what it cannot see.
@@ -391,6 +374,11 @@ SceneTokenDecl? _token(
     );
     return null;
   }
+  // A value type the editor draws, but not a design one.
+  if (!libraryTokenKinds.contains(kind)) {
+    refuse(e.offset, 'token type', notADesignValue(typeName));
+    return null;
+  }
   var value = _value(positional[1].argumentExpression, kind);
   if (value == null) {
     refuse(
@@ -400,36 +388,7 @@ SceneTokenDecl? _token(
     );
     return null;
   }
-  var modes = <String, Object>{};
-  for (var arg in named) {
-    var map = arg.argumentExpression;
-    if (map is! SetOrMapLiteral) {
-      refuse(map.offset, 'modes', "modes is a map — modes: {'dark': …}");
-      return null;
-    }
-    for (var entry in map.elements) {
-      if (entry is! MapLiteralEntry) {
-        refuse(entry.offset, 'modes', "modes is a map — modes: {'dark': …}");
-        return null;
-      }
-      var key = entry.key;
-      if (key is! SimpleStringLiteral || !isValidNodeName(key.value)) {
-        refuse(key.offset, 'mode name', 'a mode name is an identifier');
-        return null;
-      }
-      var v = _value(entry.value, kind);
-      if (v == null) {
-        refuse(
-          entry.value.offset,
-          'mode value',
-          "a $typeName token's value is a $typeName literal in every mode",
-        );
-        return null;
-      }
-      modes[key.value] = v;
-    }
-  }
-  return SceneTokenDecl(nameArg.value, kind, value, modes: modes);
+  return SceneTokenDecl(nameArg.value, kind, value);
 }
 
 Object? _value(Expression e, SceneParamKind kind) {

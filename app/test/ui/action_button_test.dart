@@ -13,14 +13,19 @@ import 'package:flutterware_app/src/ui/theme.dart';
 void main() {
   Future<void> mount(
     WidgetTester tester,
-    Future<void> Function()? onPressed,
-  ) async {
+    Future<void> Function()? onPressed, {
+    bool acknowledges = true,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: appTheme,
         home: Scaffold(
           body: Center(
-            child: FwActionButton(label: 'Reload', onPressed: onPressed),
+            child: FwActionButton(
+              label: 'Reload',
+              onPressed: onPressed,
+              acknowledges: acknowledges,
+            ),
           ),
         ),
       ),
@@ -105,6 +110,47 @@ void main() {
     completer.complete();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 1500));
+  });
+
+  group('a button that opens rather than does', () {
+    // Three buttons on the scene index — New scene, New group, New library —
+    // are popover anchors whose whole callback is `controller.open()`. That
+    // completes in the frame it is pressed, so every one of them answered a
+    // press to open a form by announcing "Done", before anything had been
+    // typed into the form it had just opened. The acknowledgement is for work
+    // you cannot otherwise see; a form on the screen is its own receipt.
+    testWidgets('says nothing at all when the work succeeds', (tester) async {
+      var opens = 0;
+      await mount(tester, () async => opens++, acknowledges: false);
+
+      await tester.tap(find.byType(FwActionButton));
+      await tester.pump();
+      expect(opens, 1);
+      expect(find.text('Reload'), findsOneWidget);
+      expect(find.text('Reload…'), findsNothing);
+
+      // Not later, either: no tick arrives after the floor the other states
+      // are held for.
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Done'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 1500));
+      expect(find.text('Reload'), findsOneWidget);
+    });
+
+    testWidgets('still reports a failure, which is worth knowing', (
+      tester,
+    ) async {
+      await mount(
+        tester,
+        () async => throw StateError('no folder'),
+        acknowledges: false,
+      );
+
+      await tester.tap(find.byType(FwActionButton));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Failed'), findsOneWidget);
+    });
   });
 
   testWidgets('a null callback is the disabled state', (tester) async {

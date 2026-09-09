@@ -125,11 +125,9 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
   TokensLibrary({
     required this.path,
     List<SceneTokenDecl> tokens = const [],
-    List<String> modes = const [],
     String? source,
     this.importNote,
   }) : tokens = [...tokens],
-       declaredModes = [...modes],
        _disk = source;
 
   /// The last import into this file, or null — see [ImportNote].
@@ -144,18 +142,12 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
       TokensLibrary(
         path: path,
         tokens: parsed.tokens,
-        modes: parsed.modes,
         source: source,
         importNote: ImportNote.parse(source),
       ),
       const [],
     );
   }
-
-  /// The modes this library declares by name, in the file's order — a mode
-  /// exists here before any token differs in it, which is how one is added
-  /// from the panel.
-  final List<String> declaredModes;
 
   /// Where it lives — the identity a workspace dedupes on.
   @override
@@ -193,12 +185,6 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
     return null;
   }
 
-  /// Every mode this library knows — declared by name, or named by a
-  /// token — sorted. The file written declares all of them.
-  List<String> get modes =>
-      {...declaredModes, for (var t in tokens) ...t.modes.keys}.toList()
-        ..sort();
-
   /// Why [wanted] cannot be a token's name here, or null when it can.
   /// [taken] names what the group's other libraries and exports already
   /// use — a scene reads one `tokens.name`, whichever file declares it.
@@ -231,8 +217,8 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
   // --- Journal -------------------------------------------------------------
 
   static const _journalCap = 100;
-  final _undo = <(String, List<SceneTokenDecl>, List<String>, ImportNote?)>[];
-  final _redo = <(String, List<SceneTokenDecl>, List<String>, ImportNote?)>[];
+  final _undo = <(String, List<SceneTokenDecl>, ImportNote?)>[];
+  final _redo = <(String, List<SceneTokenDecl>, ImportNote?)>[];
   String? _openMerge;
 
   bool get canUndo => _undo.isNotEmpty;
@@ -249,7 +235,7 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
         _openMerge == mergeKey;
     _openMerge = mergeKey;
     if (!merge) {
-      _undo.add((label, List.of(tokens), List.of(declaredModes), importNote));
+      _undo.add((label, List.of(tokens), importNote));
       if (_undo.length > _journalCap) _undo.removeAt(0);
       _redo.clear();
     }
@@ -262,14 +248,11 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   void undo() {
     if (_undo.isEmpty) return;
-    var (label, before, modes, note) = _undo.removeLast();
-    _redo.add((label, List.of(tokens), List.of(declaredModes), importNote));
+    var (label, before, note) = _undo.removeLast();
+    _redo.add((label, List.of(tokens), importNote));
     tokens
       ..clear()
       ..addAll(before);
-    declaredModes
-      ..clear()
-      ..addAll(modes);
     importNote = note;
     _openMerge = null;
     _revision++;
@@ -278,95 +261,28 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   void redo() {
     if (_redo.isEmpty) return;
-    var (label, after, modes, note) = _redo.removeLast();
-    _undo.add((label, List.of(tokens), List.of(declaredModes), importNote));
+    var (label, after, note) = _redo.removeLast();
+    _undo.add((label, List.of(tokens), importNote));
     tokens
       ..clear()
       ..addAll(after);
-    declaredModes
-      ..clear()
-      ..addAll(modes);
     importNote = note;
     _revision++;
     notifyListeners();
   }
 
-  // --- Modes ---------------------------------------------------------------
-
-  /// Declares a mode. Nothing differs in it yet: every token shows its
-  /// default there until one is set.
-  void addMode(String name) {
-    name = name.trim();
-    if (!isValidNodeName(name) || name == 'default') {
-      throw ArgumentError('"$name" is not a mode name — an identifier');
-    }
-    if (modes.contains(name)) throw ArgumentError('there is a "$name" mode');
-    perform('Add mode $name', () => declaredModes.add(name));
-  }
-
-  /// Renames a mode; every token's value in it follows.
-  void renameMode(String name, String wanted) {
-    wanted = wanted.trim();
-    if (wanted == name) return;
-    if (!modes.contains(name)) throw ArgumentError('no mode "$name"');
-    if (!isValidNodeName(wanted) || wanted == 'default') {
-      throw ArgumentError('"$wanted" is not a mode name — an identifier');
-    }
-    if (modes.contains(wanted)) {
-      throw ArgumentError('there is a "$wanted" mode');
-    }
-    perform('Rename mode $name', () {
-      var i = declaredModes.indexOf(name);
-      if (i >= 0) {
-        declaredModes[i] = wanted;
-      } else {
-        declaredModes.add(wanted);
-      }
-      for (var (j, t) in tokens.indexed) {
-        if (!t.modes.containsKey(name)) continue;
-        tokens[j] = _withModes(t, {
-          for (var e in t.modes.entries)
-            if (e.key == name) wanted: e.value else e.key: e.value,
-        });
-      }
-    });
-  }
-
-  /// Deletes a mode; every value a token held in it goes with it.
-  void deleteMode(String name) {
-    if (!modes.contains(name)) throw ArgumentError('no mode "$name"');
-    perform('Delete mode $name', () {
-      declaredModes.remove(name);
-      for (var (j, t) in tokens.indexed) {
-        if (!t.modes.containsKey(name)) continue;
-        tokens[j] = _withModes(t, {
-          for (var e in t.modes.entries)
-            if (e.key != name) e.key: e.value,
-        });
-      }
-    });
-  }
-
-  /// How many tokens differ in [mode].
-  int differingIn(String mode) =>
-      tokens.where((t) => t.modes.containsKey(mode)).length;
-
-  static SceneTokenDecl _withModes(SceneTokenDecl t, Map<String, Object> m) =>
-      t.style != null
-      ? SceneTokenDecl.style(t.name, t.style!, modes: m)
-      : SceneTokenDecl(t.name, t.kind!, t.value!, modes: m);
-
   // --- Doors ---------------------------------------------------------------
 
-  /// Declares a value token. With no [value] the kind's zero.
+  /// Declares a value token — a colour or a number, the two a design system
+  /// holds beside its styles. With no [value] the kind's zero.
   void add(
     String name,
     SceneParamKind kind, {
     Object? value,
     Set<String> taken = const {},
   }) {
-    if (kind == SceneParamKind.list) {
-      throw ArgumentError('a token is not a list');
+    if (!libraryTokenKinds.contains(kind)) {
+      throw ArgumentError(notADesignValue(paramKindTypeName(kind)));
     }
     if (nameProblem(name, taken: taken) case var problem?) {
       throw ArgumentError(problem);
@@ -409,9 +325,8 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
     });
   }
 
-  /// Sets a value token's value — the default, or in [mode]. A mode value
-  /// equal to the default is the default: the mode entry goes.
-  void setValue(String name, Object value, {String? mode, String? mergeKey}) {
+  /// Sets a value token's value.
+  void setValue(String name, Object value, {String? mergeKey}) {
     var i = tokens.indexWhere((t) => t.name == name);
     if (i < 0) throw ArgumentError('no token "$name"');
     var t = tokens[i];
@@ -423,39 +338,12 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
       throw ArgumentError('"$name" is a ${t.typeName} — a $value is not one');
     }
     perform('Edit token $name', mergeKey: mergeKey, () {
-      if (mode == null) {
-        tokens[i] = SceneTokenDecl(
-          name,
-          kind,
-          value,
-          modes: {
-            for (var e in t.modes.entries)
-              if (e.value != value) e.key: e.value,
-          },
-        );
-      } else {
-        tokens[i] = SceneTokenDecl(
-          name,
-          kind,
-          t.value!,
-          modes: {
-            for (var e in t.modes.entries)
-              if (e.key != mode) e.key: e.value,
-            if (value != t.value) mode: value,
-          },
-        );
-      }
+      tokens[i] = SceneTokenDecl(name, kind, value);
     });
   }
 
-  /// Replaces a style token's fields — the default's, or [mode]'s. A mode
-  /// style equal to the default is the default: the mode entry goes.
-  void setStyle(
-    String name,
-    SceneTextStyle style, {
-    String? mode,
-    String? mergeKey,
-  }) {
+  /// Replaces a style token's fields.
+  void setStyle(String name, SceneTextStyle style, {String? mergeKey}) {
     var i = tokens.indexWhere((t) => t.name == name);
     if (i < 0) throw ArgumentError('no token "$name"');
     var t = tokens[i];
@@ -463,26 +351,7 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
       throw ArgumentError('"$name" is not a style');
     }
     perform('Edit style $name', mergeKey: mergeKey, () {
-      if (mode == null) {
-        tokens[i] = SceneTokenDecl.style(
-          name,
-          style,
-          modes: {
-            for (var e in t.modes.entries)
-              if (e.value != style) e.key: e.value,
-          },
-        );
-      } else {
-        tokens[i] = SceneTokenDecl.style(
-          name,
-          t.style!,
-          modes: {
-            for (var e in t.modes.entries)
-              if (e.key != mode) e.key: e.value,
-            if (style != t.style) mode: style,
-          },
-        );
-      }
+      tokens[i] = SceneTokenDecl.style(name, style);
     });
   }
 
@@ -498,12 +367,11 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   /// Merges a design file's variables in, by name, as one undoable step —
   /// the library is the user's, the design file a source it draws from. A
-  /// token the file knows takes the file's value and modes (a mode only
-  /// this library names stays); one it does not know is added; one the
-  /// file does not have is kept and listed. A name the library holds as
-  /// another kind — a style, a string where the file has a colour — is
-  /// refused by name rather than replaced. Modes are unioned. The report
-  /// is also written into the file as the [importNote].
+  /// token the file knows takes the file's value; one it does not know is
+  /// added; one the file does not have is kept and listed. A name the
+  /// library holds as another kind — a style, a string where the file has a
+  /// colour — is refused by name rather than replaced. The report is also
+  /// written into the file as the [importNote].
   ImportNote merge(VariablesImport import, {required String from}) {
     var when = clock.now();
     String two(int n) => n.toString().padLeft(2, '0');
@@ -531,16 +399,10 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
         );
         continue;
       }
-      var merged = SceneTokenDecl(
-        t.name,
-        t.kind,
-        t.value,
-        modes: {...have.modes, ...t.modes},
-      );
-      if (merged.value == have.value && _sameModes(merged.modes, have.modes)) {
+      if (t.value == have.value) {
         unchanged++;
       } else {
-        next[i] = merged;
+        next[i] = t.decl;
         updated++;
       }
     }
@@ -561,22 +423,14 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
       tokens
         ..clear()
         ..addAll(next);
-      for (var m in import.modeNames) {
-        if (!modes.contains(m)) declaredModes.add(m);
-      }
       importNote = note;
     });
     return note;
   }
 
-  static bool _sameModes(Map<String, Object> a, Map<String, Object> b) =>
-      a.length == b.length &&
-      a.entries.every((e) => b.containsKey(e.key) && b[e.key] == e.value);
-
   // --- File ----------------------------------------------------------------
 
-  String emit() =>
-      emitTokensLibrary(tokens, symbol: symbol, modes: modes, note: importNote);
+  String emit() => emitTokensLibrary(tokens, symbol: symbol, note: importNote);
 
   /// Emit, refuse to write anything the parser would reject, and hand the
   /// text to [write]. Returns the refusals — empty on success.
@@ -601,9 +455,6 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
       tokens
         ..clear()
         ..addAll(parsed.tokens);
-      declaredModes
-        ..clear()
-        ..addAll(parsed.modes);
       importNote = ImportNote.parse(source);
     });
     _disk = source;
@@ -613,8 +464,8 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
   static SceneTokenDecl _renamed(SceneTokenDecl t, String name) =>
       t.style != null
-      ? SceneTokenDecl.style(name, t.style!, modes: t.modes)
-      : SceneTokenDecl(name, t.kind!, t.value!, modes: t.modes);
+      ? SceneTokenDecl.style(name, t.style!)
+      : SceneTokenDecl(name, t.kind!, t.value!);
 
   static Object _zeroOf(SceneParamKind kind) => switch (kind) {
     SceneParamKind.string => '',
@@ -635,15 +486,33 @@ class TokensLibrary extends SceneListenable implements SceneSavable {
 
 /// The header every library file carries: the marker, then what the file
 /// is — for the reader who opens it in an IDE rather than in the editor.
-const tokensLibraryHeader =
-    '''
-$sceneTokensFileMarker
-// Owned by the flutterware scene editor, which reads and writes this whole
-// file. A token is `Token<T>('name', value, modes: {…})`; every scene of a
-// group that lists this library reads it as `tokens.name`. Hand edits are
-// welcome inside the grammar; anything outside it is refused with a line
-// number rather than silently dropped.
-''';
+/// The marker, and nothing else.
+///
+/// A one-token library used to be five lines of explanation over one line of
+/// content. The explanation belongs where somebody who has not opened the
+/// file can read it; what stays is the line discovery needs.
+const tokensLibraryHeader = '$sceneTokensFileMarker\n';
+
+/// The order a library is written and drawn in: the value kinds as the
+/// sheet lays them out, then the styles, and within a kind the order the
+/// file had.
+///
+/// Decided 2026-09-09, with the library's page: a library reads as a design
+/// system when its colours are together and its type ramp is together, and
+/// a page that groups over a file that does not would be two orders to keep
+/// in your head. So the file takes the page's. The cost is a one-time
+/// reordering diff the first time an old library is written.
+List<SceneTokenDecl> tokensByKind(List<SceneTokenDecl> tokens) => [
+  for (var kind in libraryTokenOrder)
+    for (var t in tokens)
+      if (!t.isStyle && t.kind == kind) t,
+  for (var t in tokens)
+    if (t.isStyle) t,
+  // Nothing a library holds lands here — a token is a value or a style.
+  // Total anyway, because an order that drops a declaration is a shredder.
+  for (var t in tokens)
+    if (!t.isStyle && t.kind == null) t,
+];
 
 /// A library's whole text: the header, the authoring import, and one
 /// `Token<…>` per declaration under [symbol]. What [parseTokensFile] reads
@@ -651,25 +520,14 @@ $sceneTokensFileMarker
 String emitTokensLibrary(
   List<SceneTokenDecl> tokens, {
   required String symbol,
-  List<String> modes = const [],
   ImportNote? note,
 }) {
+  tokens = tokensByKind(tokens);
   var out = StringBuffer(tokensLibraryHeader);
-  if (note != null) {
-    out
-      ..writeln('//')
-      ..write(note.emit());
-  }
+  if (note != null) out.write(note.emit());
   out
     ..writeln("import 'package:flutterware/scene_authoring.dart';")
     ..writeln();
-  if (modes.isNotEmpty) {
-    out
-      ..writeln(
-        'const ${modesSymbolFor(symbol)} = [${modes.map((m) => "'$m'").join(', ')}];',
-      )
-      ..writeln();
-  }
   if (tokens.isEmpty) {
     out.writeln('final $symbol = <Token<Object>>[];');
   } else {
@@ -684,15 +542,11 @@ String emitTokensLibrary(
 
 String _tokenLiteral(SceneTokenDecl t) {
   if (t.style case var style?) {
-    var modes = t.modes.isEmpty
-        ? ''
-        : ', modes: {${[for (var e in t.modes.entries) "'${e.key}': ${sceneStyleLiteral(e.value as SceneTextStyle)}"].join(', ')}}';
-    return "const Token<SceneTextStyle>('${t.name}', ${sceneStyleLiteral(style)}$modes)";
+    return "const Token<SceneTextStyle>('${t.name}', "
+        '${sceneStyleLiteral(style)})';
   }
-  var modes = t.modes.isEmpty
-      ? ''
-      : ', modes: {${[for (var e in t.modes.entries) "'${e.key}': ${_valueLiteral(e.value)}"].join(', ')}}';
-  return "const Token<${t.typeName}>('${t.name}', ${_valueLiteral(t.value!)}$modes)";
+  return "const Token<${t.typeName}>('${t.name}', "
+      '${_valueLiteral(t.value!)})';
 }
 
 String _valueLiteral(Object value) => switch (value) {

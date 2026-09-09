@@ -29,17 +29,18 @@ import '../../scene/scene_file.dart';
 import '../../scene/playback.dart';
 import '../../scene/tokens_file.dart';
 import '../../scene/tokens_library.dart';
+import '../../scene/ui/library_view.dart';
+import '../../scene/ui/listing_words.dart';
 import '../../scene/ui/tokens_host.dart';
 import '../../scene/ui/workspace_view.dart';
 import '../../scene/watch.dart';
 import '../../scene/workspace.dart';
 import '../../ui/action_button.dart';
+import '../../ui/choice_list.dart';
 import '../../ui/count_badge.dart';
 import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
 import '../../ui/loading_state.dart';
-import '../../ui/context_menu.dart';
-import '../../ui/menu.dart';
 import '../../ui/panel_header.dart';
 import '../../ui/picker.dart';
 import '../../ui/popover.dart';
@@ -177,11 +178,11 @@ class _ScenePanelState extends State<_ScenePanel>
       libraries: workspace.libraries,
       onNewLibrary: () async {
         try {
+          // In the group's own folder, which is what makes it this group's.
           var path = await _core.createLibrary(
             package,
             _core.groupPathFor(package, group),
             group.name,
-            attachTo: group,
           );
           if (_libraryAt(path) case var library?) {
             workspace.addLibrary(library);
@@ -402,7 +403,6 @@ class _ScenePanelState extends State<_ScenePanel>
       File(entry.path).readAsStringSync(),
       declaredArgs: _declaredArgs(),
       tokens: _liveTokens(libraries),
-      modes: {for (var l in libraries) ...l.modes}.toList()..sort(),
     );
     if (!opened.ok) {
       setState(() {
@@ -454,17 +454,17 @@ class _ScenePanelState extends State<_ScenePanel>
     // every surface reading it on "Looking for scenes" for good.
     if (package != null) unawaited(_core.reload(package));
     var workspace = _workspace;
-    if (workspace == null) {
-      setState(() {});
-      return;
-    }
     var adopted = <String>[];
     var refused = <String>[];
     var held = <String>[];
+    // Every library open here, which is not the same set as the workspace's:
+    // the library page opens one with no scene in the editor at all, and
+    // that one has to follow the disk like any other.
+    var libraries = {...?workspace?.libraries, ?_openLibrary};
     // A library that moved on disk: our own write comes back as an event,
     // an edit somebody else made is adopted when this editor has nothing
     // to lose, and held otherwise — the scene files' rule.
-    for (var library in workspace.libraries.toList()) {
+    for (var library in libraries) {
       if (!paths.contains(p.canonicalize(library.path))) continue;
       String source;
       try {
@@ -492,7 +492,7 @@ class _ScenePanelState extends State<_ScenePanel>
         refused.add('${library.fileName}: ${refusals.first}');
       }
     }
-    for (var file in workspace.openFiles.toList()) {
+    for (var file in workspace?.openFiles.toList() ?? const <SceneFile>[]) {
       if (!paths.contains(p.canonicalize(file.path))) continue;
       String source;
       try {
@@ -527,7 +527,9 @@ class _ScenePanelState extends State<_ScenePanel>
         refused.add('${p.basename(file.path)}: ${refusals.first}');
       }
     }
-    if (adopted.isNotEmpty) workspace.resolveInstances(workspace.active);
+    if (adopted.isNotEmpty && workspace != null) {
+      workspace.resolveInstances(workspace.active);
+    }
     setState(() {
       _note = refused.isNotEmpty
           ? 'on disk and unreadable — ${refused.join('; ')}'
@@ -543,34 +545,31 @@ class _ScenePanelState extends State<_ScenePanel>
   /// `<snake_name>.scene.dart` in [group]'s folder, and opens it. The
   /// emitter writes it, so a file made here is canonical from its first
   /// byte.
-  void _createScene(
+  /// A scene, through the core's own door — the same one the `newScene`
+  /// action goes through, so the panel and an agent cannot drift apart on
+  /// what making a scene means.
+  Future<void> _createScene(
     String package,
-    SceneGroupEntry group,
+    String folder,
     String className,
     double width,
     double height,
-  ) {
-    var root = FrameNode(name: 'root')
-      ..width = width
-      ..height = height
-      ..fill = const SceneColor(0xFFFFFFFF);
-    var source = emitSceneFile(SceneDocument(root), className: className);
-    var dir = group.directory;
-    var path = p.join(dir, '${_snake(className)}.scene.dart');
-    if (File(path).existsSync()) {
-      setState(() => _note = '${p.basename(path)} already exists');
-      return;
+  ) async {
+    try {
+      var path = await _core.createScene(
+        package,
+        folder,
+        className,
+        width: width,
+        height: height,
+      );
+      _core.track(package);
+      setState(() => _note = '');
+      _open(SceneEntry(path: path, className: className, age: DateTime.now()));
+    } on Object catch (e) {
+      setState(() => _note = '$e');
     }
-    Directory(dir).createSync(recursive: true);
-    File(path).writeAsStringSync(source);
-    _core.rescan(package);
-    _core.track(package);
-    _open(SceneEntry(path: path, className: className, age: DateTime.now()));
   }
-
-  static String _snake(String className) => className
-      .replaceAllMapped(RegExp('([a-z0-9])([A-Z])'), (m) => '${m[1]}_${m[2]}')
-      .toLowerCase();
 
   /// What the open file's group declares — the widgets an inspector reads
   /// a type and a default from, the tokens a parse checks `tokens.x`
@@ -621,7 +620,6 @@ class _ScenePanelState extends State<_ScenePanel>
         File(entry.path).readAsStringSync(),
         declaredArgs: _declaredArgs(),
         tokens: _tokens(),
-        modes: _workspace?.modeNames ?? const [],
       );
       if (!opened.ok) {
         setState(() {
@@ -691,15 +689,165 @@ class _ScenePanelState extends State<_ScenePanel>
     // moved, and doing them here is also what carries them through a hot
     // reload: the panel's state object outlives one, its fields do not.
     _core.track(package);
-    _autosave.bind(_workspace);
+    // A library open by itself has no workspace to be written with — the
+    // desk is what the autosave watches then.
+    _autosave.bind(_workspace ?? _desk);
     _watchDirectory(package);
     return AnimatedBuilder(
       animation: widget.plugin,
       builder: (context, _) {
+        if (_openLibrary case var library?) {
+          return _libraryPage(package, library);
+        }
         var workspace = _workspace;
         if (workspace == null) return _listing(package);
         return _editor(workspace);
       },
+    );
+  }
+
+  /// The library open on its own page, or null — a destination beside the
+  /// scenes, not a state of one, because a library is the package's and the
+  /// scene workspace is one file's. The workspace under it is kept, so back
+  /// goes to the scene that was open.
+  TokensLibrary? _openLibrary;
+
+  /// The token the page opens on — a row clicked in a scene's tree.
+  String? _openLibraryToken;
+  SceneLibraryDesk? _desk;
+
+  void _openLibraryPage(String? path, {String? token}) {
+    var library = path == null ? null : _libraryAt(path);
+    if (library == null) {
+      setState(() => _note = 'No library to open — + starts one');
+      return;
+    }
+    setState(() {
+      _openLibrary = library;
+      _openLibraryToken = token;
+      // Only when there is no workspace: one already lists its group's
+      // libraries, and two sources writing one document is two timers.
+      if (_workspace == null) {
+        _desk?.dispose();
+        _desk = SceneLibraryDesk(library);
+      }
+    });
+  }
+
+  void _closeLibraryPage() {
+    _autosave.flush();
+    setState(() {
+      _openLibrary = null;
+      _openLibraryToken = null;
+      _desk?.dispose();
+      _desk = null;
+    });
+  }
+
+  /// The library page: the library's own header — back, the scenes that
+  /// read it, the file, the save state — over the three columns.
+  Widget _libraryPage(String package, TokensLibrary library) {
+    Set<String> openPaths() => {
+      for (var f in _workspace?.openFiles ?? const <SceneFile>[]) f.path,
+    };
+    var groups = _core.groupsReading(package, library.path);
+    // What a new or renamed token may not collide with: every name the
+    // groups reading this file can already spell.
+    var taken = <String>{
+      for (var group in groups)
+        for (var t in _core.vocabularyFor(package, group).tokens) t.name,
+    };
+    var exports = <SceneTokenDecl>[
+      for (var group in groups)
+        for (var t in _core.vocabularyFor(package, group).exports) t,
+    ];
+    List<String> readers(String name) => [
+      for (var file in _workspace?.openFiles ?? const <SceneFile>[])
+        for (var (node, prop) in file.editor.readersOfToken(name))
+          '${file.className} · ${node.name}.$prop',
+      for (var r in _core.tokenReaders(
+        package,
+        library.path,
+        name,
+        except: openPaths(),
+      ))
+        '$r',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _LibraryHeader(
+          library: library,
+          listedBy: [for (var g in groups) g.name],
+          note: _autosave.note.isNotEmpty ? _autosave.note : _note,
+          saveState: _autosave.state,
+          backLabel: _workspace == null
+              ? 'Back to the scenes'
+              : 'Back to ${_workspace!.active.className}',
+          onBack: _closeLibraryPage,
+        ),
+        Container(height: 1, color: context.colors.line),
+        Expanded(
+          child: SceneLibraryView(
+            key: ValueKey(library.path),
+            library,
+            initialSelection: _openLibraryToken,
+            exports: exports,
+            taken: taken,
+            readersOf: readers,
+            deleteProblem: (name) {
+              var others = readers(name);
+              return others.isEmpty ? null : 'read by ${others.join(', ')}';
+            },
+            onDelete: library.delete,
+            onRename: (name, wanted) {
+              if (library.nameProblem(
+                    wanted,
+                    renaming: name,
+                    taken: taken..remove(name),
+                  )
+                  case var problem?) {
+                throw ArgumentError(problem);
+              }
+              // Readers first, the library after — the open editors hold an
+              // alias through the gap, exactly as the scene surfaces do.
+              for (var file in _workspace?.openFiles ?? const <SceneFile>[]) {
+                file.editor.renameTokenRefs(name, wanted);
+              }
+              library.rename(name, wanted, taken: taken);
+              var touched = _core.renameTokenInFiles(
+                package,
+                library.path,
+                name,
+                wanted,
+                except: openPaths(),
+              );
+              if (touched.isNotEmpty) {
+                setState(() {
+                  _note =
+                      'renamed in ${touched.map(p.basename).join(', ')} too';
+                });
+              }
+            },
+            onImport: () async {
+              var json = await _pickVariables();
+              if (json == null) return;
+              try {
+                var note = library.merge(
+                  importVariables(json.readAsStringSync()),
+                  from: p.basename(json.path),
+                );
+                setState(
+                  () => _note = 'Imported ${note.from}: ${note.summary}',
+                );
+              } on Object catch (e) {
+                setState(() => _note = '$e');
+              }
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -710,14 +858,6 @@ class _ScenePanelState extends State<_ScenePanel>
     var type = context.type;
     var scope = _core.directoryFor(package);
     var libraries = scan.libraries;
-    // Which groups list which library — from the vocabularies, so an
-    // unlisted library is visibly unused rather than lost.
-    var listedBy = <String, List<SceneGroupEntry>>{};
-    for (var group in scan.groups) {
-      for (var l in _core.vocabularyFor(package, group).libraries) {
-        (listedBy[p.canonicalize(l.entry.path)] ??= []).add(group);
-      }
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -730,14 +870,33 @@ class _ScenePanelState extends State<_ScenePanel>
             children: [
               _NewLibraryButton(
                 groups: scan.groups,
-                defaultFolder: 'lib',
+                defaultFolder: scan.groups.isEmpty
+                    ? 'lib'
+                    : _core.groupPathFor(package, scan.groups.first),
                 folderOf: (group) => _core.groupPathFor(package, group),
-                onCreate: (name, folder, group) =>
-                    _createLibrary(package, folder, name, attachTo: group),
+                readersOf: (folder) => [
+                  for (var group in scan.groups)
+                    if (readsLibrary(
+                      group.directory,
+                      p.join(
+                        p.normalize(
+                          p.join(_core.projectRootFor(package), folder),
+                        ),
+                        'x$sceneTokensFileSuffix',
+                      ),
+                    ))
+                      group.name,
+                ],
+                onCreate: (name, folder) =>
+                    _createLibrary(package, folder, name),
               ),
-              _NewGroupButton(
-                taken: {for (var g in scan.groups) g.name},
-                onCreate: (folder) => _createGroup(package, folder),
+              _NewSceneButton(
+                homes: _homes(package, scan),
+                takenIn: (folder) => _takenIn(package, scan, folder),
+                defaultNewFolder: 'lib/scenes',
+                onCreate: (className, folder, width, height) => unawaited(
+                  _createScene(package, folder, className, width, height),
+                ),
               ),
             ],
           ),
@@ -754,12 +913,11 @@ class _ScenePanelState extends State<_ScenePanel>
           Expanded(
             child: EmptyState(
               icon: Icons.movie_filter_outlined,
-              title: 'No scene groups',
+              title: 'No scenes yet',
               message:
-                  'A scene group is a folder with a $sceneGroupFileName in '
-                  'it; its scenes are the .scene.dart files below. None '
-                  'under ${scope == '.' ? 'this package' : '$scope/'} yet — '
-                  'New group writes one.',
+                  'A scene is a file you draw in, kept in a folder of its '
+                  'own under ${scope == '.' ? 'this package' : '$scope/'}. '
+                  'New scene makes both.',
             ),
           )
         else
@@ -772,17 +930,13 @@ class _ScenePanelState extends State<_ScenePanel>
                 if (libraries.isNotEmpty || scan.groups.isNotEmpty)
                   _sectionTitle(
                     'Libraries',
-                    libraries.isEmpty
-                        ? 'none yet — a library is a *$sceneTokensFileSuffix '
-                              'the editor owns'
-                        : null,
+                    libraries.isEmpty ? 'none yet' : null,
                   ),
                 for (var library in libraries)
                   _libraryRow(
                     package,
                     library,
-                    listedBy[p.canonicalize(library.path)] ?? const [],
-                    scan.groups,
+                    scan.groupsReading(library.path),
                   ),
                 if (scan.strayScenes > 0)
                   Padding(
@@ -793,9 +947,9 @@ class _ScenePanelState extends State<_ScenePanel>
                       FwSpacing.sm,
                     ),
                     child: Text(
-                      '${scan.strayScenes} scene file'
-                      '${scan.strayScenes == 1 ? '' : 's'} outside any group '
-                      '— not scenes the tool knows',
+                      '${countOf(scan.strayScenes, '.scene.dart file')} '
+                      'the tool does not read — nothing above them says '
+                      'they are scenes',
                       style: type.caption.copyWith(color: colors.mut2),
                     ),
                   ),
@@ -842,11 +996,7 @@ class _ScenePanelState extends State<_ScenePanel>
     var type = context.type;
     var vocabulary = _core.vocabularyFor(package, group);
     var refusals = _core.argsResultFor(package, group)?.refusals ?? const [];
-    var sees = [
-      _count(vocabulary.libraries.length, 'library', 'libraries'),
-      _count(vocabulary.widgets.length, 'widget', 'widgets'),
-      _count(vocabulary.exports.length, 'export', 'exports'),
-    ].join(' · ');
+    var sees = groupSummary(group, vocabulary);
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(
@@ -882,9 +1032,13 @@ class _ScenePanelState extends State<_ScenePanel>
               ),
             ),
             _NewSceneButton(
-              taken: {for (var s in group.scenes) s.className},
-              onCreate: (className, width, height) =>
-                  _createScene(package, group, className, width, height),
+              homes: [_homeOf(package, group)],
+              takenIn: (folder) => {for (var s in group.scenes) s.className},
+              defaultNewFolder: '',
+              allowNewFolder: false,
+              onCreate: (className, folder, width, height) => unawaited(
+                _createScene(package, folder, className, width, height),
+              ),
             ),
           ],
         ),
@@ -902,6 +1056,31 @@ class _ScenePanelState extends State<_ScenePanel>
             style: type.caption.copyWith(color: colors.red),
           ),
         ),
+      if (_core.driftFor(package, group) case var drift when drift.isNotEmpty)
+        Padding(
+          key: ValueKey('group:drift:${group.name}'),
+          padding: const EdgeInsets.fromLTRB(
+            FwSpacing.xl + FwIconSize.md + FwSpacing.md,
+            0,
+            FwSpacing.xl,
+            FwSpacing.xs,
+          ),
+          child: Row(
+            spacing: FwSpacing.md,
+            children: [
+              Expanded(
+                child: Text(
+                  driftWords(drift, sceneGroupFileName),
+                  style: type.caption.copyWith(color: colors.warningText),
+                ),
+              ),
+              FwActionButton(
+                label: 'Fix $sceneGroupFileName',
+                onPressed: () => _reconcile(package, group),
+              ),
+            ],
+          ),
+        ),
       if (group.scenes.isEmpty)
         Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -911,7 +1090,7 @@ class _ScenePanelState extends State<_ScenePanel>
             FwSpacing.sm,
           ),
           child: Text(
-            'No scenes in this folder yet.',
+            'Nothing in this folder yet.',
             style: type.caption.copyWith(color: colors.mut2),
           ),
         ),
@@ -955,20 +1134,15 @@ class _ScenePanelState extends State<_ScenePanel>
     ];
   }
 
-  static String _count(int n, String one, String many) =>
-      '$n ${n == 1 ? one : many}';
-
-  /// One library: its symbol, its file, who lists it, and a menu to attach
-  /// it to a group or detach it.
+  /// One library: its symbol, its file, and the scenes that read it —
+  /// which is a fact of where it sits, not a list anybody keeps.
   Widget _libraryRow(
     String package,
     SceneLibraryEntry library,
-    List<SceneGroupEntry> listedBy,
-    List<SceneGroupEntry> groups,
+    List<SceneGroupEntry> readers,
   ) {
     var colors = context.colors;
     var type = context.type;
-    var listing = {for (var g in listedBy) p.canonicalize(g.directory)};
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         FwSpacing.xl,
@@ -981,60 +1155,35 @@ class _ScenePanelState extends State<_ScenePanel>
         children: [
           Icon(Icons.style_outlined, size: FwIconSize.md, color: colors.mut),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(library.symbol, style: type.body),
-                Text(
-                  '${p.relative(library.path, from: widget.plugin.host.worktree.path)}'
-                  ' · ${listedBy.isEmpty ? 'listed by no group' : 'listed by ${listedBy.map((g) => g.name).join(', ')}'}',
-                  style: type.caption.copyWith(
-                    color: listedBy.isEmpty ? colors.warningText : colors.mut2,
+            child: Tappable(
+              key: ValueKey('library:open:${library.symbol}'),
+              onTap: () => _openLibraryPage(library.path),
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(library.symbol, style: type.body),
+                  Text(
+                    '${p.relative(library.path, from: widget.plugin.host.worktree.path)}'
+                    ' · ${readBy(readers.map((g) => g.name))}',
+                    style: type.caption.copyWith(
+                      color: readers.isEmpty ? colors.warningText : colors.mut2,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           Tooltip(
-            message: 'Attach to a group, or detach',
+            message: 'Import variables',
             child: Builder(
               builder: (context) => Tappable(
-                onTap: () {
-                  var box = context.findRenderObject()! as RenderBox;
-                  var at = box.localToGlobal(Offset(0, box.size.height));
-                  showContextMenu(context, at, [
-                    const MenuHeader('Groups'),
-                    for (var group in groups)
-                      if (listing.contains(p.canonicalize(group.directory)))
-                        MenuItem(
-                          'Detach from ${group.name}',
-                          icon: Icons.link_off,
-                          onSelected: () =>
-                              _detachLibrary(package, group, library),
-                        )
-                      else
-                        MenuItem(
-                          'Attach to ${group.name}',
-                          icon: Icons.link,
-                          onSelected: () =>
-                              _attachLibrary(package, group, library),
-                        ),
-                    if (groups.isEmpty)
-                      const MenuItem('No groups to attach to'),
-                    const MenuDivider(),
-                    MenuItem(
-                      'Import variables…',
-                      icon: Icons.download_outlined,
-                      shortcut: "a design file's JSON",
-                      onSelected: () => _importInto(package, library.path),
-                    ),
-                  ]);
-                },
+                onTap: () => _importInto(package, library.path),
                 borderRadius: BorderRadius.circular(context.radii.radiusSmall),
                 child: Padding(
                   padding: const EdgeInsets.all(FwSpacing.xs),
                   child: Icon(
-                    Icons.more_horiz,
+                    Icons.download_outlined,
                     size: FwIconSize.md,
                     color: colors.ink,
                   ),
@@ -1070,49 +1219,49 @@ class _ScenePanelState extends State<_ScenePanel>
     }
   }
 
-  Future<void> _createGroup(String package, String folder) async {
-    try {
-      await _core.createGroup(package, folder);
-      setState(() => _note = '');
-    } on Object catch (e) {
-      setState(() => _note = '$e');
+  /// Every folder a scene can go in today, newest-looking first — the
+  /// where-list's rows.
+  List<_SceneHome> _homes(String package, ScenePackageScan scan) => [
+    for (var group in scan.groups) _homeOf(package, group),
+  ];
+
+  _SceneHome _homeOf(String package, SceneGroupEntry group) => (
+    name: group.name,
+    folder: _core.groupPathFor(package, group),
+    scenes: group.scenes.length,
+  );
+
+  /// The class names one folder already holds. A collision is per folder, so
+  /// the form has to ask again whenever the where changes.
+  Set<String> _takenIn(String package, ScenePackageScan scan, String folder) {
+    var wanted = p.canonicalize(
+      p.normalize(p.join(_core.projectRootFor(package), folder)),
+    );
+    for (var group in scan.groups) {
+      if (p.canonicalize(group.directory) != wanted) continue;
+      return {for (var scene in group.scenes) scene.className};
     }
+    return const {};
   }
 
   Future<void> _createLibrary(
     String package,
     String folder,
-    String name, {
-    SceneGroupEntry? attachTo,
-  }) async {
+    String name,
+  ) async {
     try {
-      await _core.createLibrary(package, folder, name, attachTo: attachTo);
+      await _core.createLibrary(package, folder, name);
       setState(() => _note = '');
     } on Object catch (e) {
       setState(() => _note = '$e');
     }
   }
 
-  Future<void> _attachLibrary(
-    String package,
-    SceneGroupEntry group,
-    SceneLibraryEntry library,
-  ) async {
+  /// Writes one group's `libraries:` to say what its folder says — the fix
+  /// offered beside a drift the tool did not cause.
+  Future<void> _reconcile(String package, SceneGroupEntry group) async {
     try {
-      await _core.attachLibrary(package, group, library.path);
-      setState(() => _note = '');
-    } on Object catch (e) {
-      setState(() => _note = '$e');
-    }
-  }
-
-  Future<void> _detachLibrary(
-    String package,
-    SceneGroupEntry group,
-    SceneLibraryEntry library,
-  ) async {
-    try {
-      await _core.detachLibrary(package, group, library.path);
+      await _core.reconcileLibraries(package, group);
       setState(() => _note = '');
     } on Object catch (e) {
       setState(() => _note = '$e');
@@ -1359,46 +1508,54 @@ class _Header extends StatelessWidget {
               onPressed: () async => onSave(),
             )
           else
-            Tooltip(
-              message: saveState == SceneSaveState.refused
-                  ? 'Nothing was written. The work is still here.'
-                  : 'Saved as you work (⌘S writes now)',
-              child: Text(
-                switch (saveState) {
-                  SceneSaveState.pending => 'Saving…',
-                  SceneSaveState.refused => 'Not saved',
-                  _ => 'Saved',
-                },
-                style: type.caption.copyWith(
-                  color: saveState == SceneSaveState.refused
-                      ? colors.red
-                      : colors.mut2,
-                ),
-              ),
-            ),
-          Expanded(
-            child: Text(
-              note,
-              style: type.caption.copyWith(
-                color: saveState == SceneSaveState.refused
-                    ? colors.red
-                    : colors.mut2,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+            _SaveWord(saveState),
+          Expanded(child: _SaveNote(saveState, note)),
         ],
       ),
     );
   }
 }
 
-/// "New scene": a name and an artboard size, in a popover off the header.
-class _NewSceneButton extends StatefulWidget {
-  const _NewSceneButton({required this.taken, required this.onCreate});
+/// Where a scene can go, as the form offers it: a folder that is already a
+/// group, or a new one.
+typedef _SceneHome = ({String name, String folder, int scenes});
 
-  final Set<String> taken;
-  final void Function(String className, double width, double height) onCreate;
+/// The last row of the where-list: a folder that does not exist yet.
+const _newFolder = '';
+
+/// "New scene": a name, an artboard size, and where it goes — the one
+/// creation verb, in a popover off the header.
+///
+/// It replaced three sibling buttons that had no order between them while the
+/// model had a strict one: a scene needs a folder, and the button that made a
+/// folder produced nothing you could look at. The order is now inside the
+/// form, where a where-list either recognises the folder you meant or takes a
+/// new one, and the paths that will be written are printed before Create so
+/// the declaration written on the way is named rather than sprung.
+class _NewSceneButton extends StatefulWidget {
+  const _NewSceneButton({
+    required this.homes,
+    required this.takenIn,
+    required this.defaultNewFolder,
+    required this.onCreate,
+    this.allowNewFolder = true,
+  });
+
+  /// The folders that are already groups. Empty is the first-run case, and
+  /// then the new-folder row is the only row.
+  final List<_SceneHome> homes;
+
+  /// The class names a folder already holds — a collision is per folder,
+  /// which is why this is a question and not a set.
+  final Set<String> Function(String folder) takenIn;
+
+  final String defaultNewFolder;
+
+  /// False on a group's own row, where the folder is the row.
+  final bool allowNewFolder;
+
+  final void Function(String className, String folder, double w, double h)
+  onCreate;
 
   @override
   State<_NewSceneButton> createState() => _NewSceneButtonState();
@@ -1406,6 +1563,10 @@ class _NewSceneButton extends StatefulWidget {
 
 class _NewSceneButtonState extends State<_NewSceneButton> {
   final _name = TextEditingController();
+  late final _folder = TextEditingController(text: widget.defaultNewFolder);
+  late String _where = widget.homes.isEmpty
+      ? _newFolder
+      : widget.homes.first.folder;
   var _size = _sizes.first;
 
   static const _sizes = [
@@ -1418,16 +1579,35 @@ class _NewSceneButtonState extends State<_NewSceneButton> {
   @override
   void dispose() {
     _name.dispose();
+    _folder.dispose();
     super.dispose();
   }
 
+  /// The folder the form is actually pointing at.
+  String get _target => _where == _newFolder
+      ? _folder.text.trim().replaceAll(RegExp(r'/+$'), '')
+      : _where;
+
+  /// Whether the target has a declaration already — which decides whether
+  /// this write is one file or two.
+  bool get _isNew => !widget.homes.any((h) => h.folder == _target);
+
   String? get _refusal {
     var name = _name.text.trim();
-    if (name.isEmpty) return null;
-    if (!RegExp(r'^[A-Z][A-Za-z0-9]*$').hasMatch(name)) {
-      return 'A class name: capital first, letters and digits';
+    if (name.isNotEmpty) {
+      if (!RegExp(r'^[A-Z][A-Za-z0-9]*$').hasMatch(name)) {
+        return 'A class name: capital first, letters and digits';
+      }
+      if (widget.takenIn(_target).contains(name)) {
+        return 'There is a $name in $_target already';
+      }
     }
-    if (widget.taken.contains(name)) return 'There is a $name already';
+    if (_where != _newFolder) return null;
+    var folder = _folder.text.trim();
+    if (folder.isEmpty) return null;
+    if (folder.startsWith('/') || folder.contains('..')) {
+      return 'A folder inside the package';
+    }
     return null;
   }
 
@@ -1436,6 +1616,8 @@ class _NewSceneButtonState extends State<_NewSceneButton> {
     anchor: (context, controller) => FwActionButton(
       label: 'New scene',
       tooltip: 'A scene file with an empty artboard',
+      primary: widget.allowNewFolder,
+      acknowledges: false,
       onPressed: () async => controller.open(),
     ),
     side: PopoverSide.bottom,
@@ -1445,8 +1627,9 @@ class _NewSceneButtonState extends State<_NewSceneButton> {
 
   Widget _form(BuildContext context, PopoverController controller) {
     var colors = context.colors;
+    var type = context.type;
     return Container(
-      width: 280,
+      width: 320,
       padding: const EdgeInsets.all(FwSpacing.lg),
       decoration: BoxDecoration(
         color: colors.panel,
@@ -1458,151 +1641,105 @@ class _NewSceneButtonState extends State<_NewSceneButton> {
         builder: (context, rebuild) {
           var refusal = _refusal;
           var name = _name.text.trim();
-          void create() {
-            if (name.isEmpty || refusal != null) return;
-            controller.close();
-            widget.onCreate(name, _size.width, _size.height);
-            _name.clear();
-          }
-
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: FwSpacing.md,
-            children: [
-              Text('New scene', style: context.type.bodyStrong),
-              TextField(
-                controller: _name,
-                autofocus: true,
-                decoration: const InputDecoration(hintText: 'PromoBadge'),
-                onChanged: (_) => rebuild(() {}),
-                onSubmitted: (_) => create(),
-              ),
-              if (refusal != null)
-                Text(
-                  refusal,
-                  style: context.type.caption.copyWith(color: colors.red),
-                ),
-              FwPicker<int>(
-                choices: [
-                  for (var (i, size) in _sizes.indexed)
-                    FwChoice(value: i, label: size.label),
-                ],
-                selected: _sizes.indexOf(_size),
-                onChanged: (i) => rebuild(() => _size = _sizes[i]),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FwActionButton(
-                  label: 'Create',
-                  primary: true,
-                  onPressed: name.isEmpty || refusal != null
-                      ? null
-                      : () async => create(),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// "New group": a folder, in a popover off the header. The folder gets a
-/// `scenes.dart` skeleton and is a group from then on.
-class _NewGroupButton extends StatefulWidget {
-  const _NewGroupButton({required this.taken, required this.onCreate});
-
-  final Set<String> taken;
-  final void Function(String folder) onCreate;
-
-  @override
-  State<_NewGroupButton> createState() => _NewGroupButtonState();
-}
-
-class _NewGroupButtonState extends State<_NewGroupButton> {
-  final _folder = TextEditingController(text: 'lib/scenes/');
-
-  @override
-  void dispose() {
-    _folder.dispose();
-    super.dispose();
-  }
-
-  String? get _refusal {
-    var folder = _folder.text.trim();
-    if (folder.isEmpty || folder == 'lib/scenes/') return null;
-    if (folder.startsWith('/') || folder.contains('..')) {
-      return 'A folder inside the package';
-    }
-    if (widget.taken.contains(p.basename(folder))) {
-      return 'There is a ${p.basename(folder)} group already';
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) => Popover(
-    anchor: (context, controller) => FwActionButton(
-      label: 'New group',
-      tooltip: 'A folder for scenes, with its $sceneGroupFileName',
-      onPressed: () async => controller.open(),
-    ),
-    side: PopoverSide.bottom,
-    align: PopoverAlign.end,
-    content: (context, controller) => _form(context, controller),
-  );
-
-  Widget _form(BuildContext context, PopoverController controller) {
-    var colors = context.colors;
-    return Container(
-      width: 300,
-      padding: const EdgeInsets.all(FwSpacing.lg),
-      decoration: BoxDecoration(
-        color: colors.panel,
-        border: Border.all(color: colors.line),
-        borderRadius: BorderRadius.circular(context.radii.radius),
-        boxShadow: context.elevation.sm,
-      ),
-      child: StatefulBuilder(
-        builder: (context, rebuild) {
-          var refusal = _refusal;
-          var folder = _folder.text.trim();
-          var ready =
-              folder.isNotEmpty && folder != 'lib/scenes/' && refusal == null;
+          var target = _target;
+          var ready = name.isNotEmpty && target.isNotEmpty && refusal == null;
           void create() {
             if (!ready) return;
             controller.close();
-            widget.onCreate(folder.replaceAll(RegExp(r'/+$'), ''));
-            _folder.text = 'lib/scenes/';
+            widget.onCreate(name, target, _size.width, _size.height);
+            _name.clear();
           }
 
+          var showWhere = widget.homes.length > 1 || widget.allowNewFolder;
           return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: FwSpacing.md,
             children: [
-              Text('New group', style: context.type.bodyStrong),
-              Text(
-                'A folder, relative to the package. Its name is the '
-                "group's; its scenes are the files below it.",
-                style: context.type.caption.copyWith(color: colors.mut2),
-              ),
-              TextField(
-                controller: _folder,
-                autofocus: true,
-                style: context.type.mono,
-                decoration: const InputDecoration(
-                  hintText: 'lib/scenes/marketing',
+              Text('New scene', style: type.bodyStrong),
+              _labelled(
+                context,
+                'Name',
+                TextField(
+                  controller: _name,
+                  autofocus: true,
+                  decoration: const InputDecoration(hintText: 'PromoBadge'),
+                  onChanged: (_) => rebuild(() {}),
+                  onSubmitted: (_) => create(),
                 ),
-                onChanged: (_) => rebuild(() {}),
-                onSubmitted: (_) => create(),
               ),
+              _labelled(
+                context,
+                'Size',
+                FwPicker<int>(
+                  choices: [
+                    for (var (i, size) in _sizes.indexed)
+                      FwChoice(value: i, label: size.label),
+                  ],
+                  selected: _sizes.indexOf(_size),
+                  onChanged: (i) => rebuild(() => _size = _sizes[i]),
+                ),
+              ),
+              if (showWhere)
+                _labelled(
+                  context,
+                  'Where',
+                  FwChoiceList<String>(
+                    choices: [
+                      for (var home in widget.homes)
+                        FwChoiceRow(
+                          value: home.folder,
+                          label: home.name,
+                          detail:
+                              '${home.folder} · '
+                              '${countOf(home.scenes, 'scene')}',
+                        ),
+                      if (widget.allowNewFolder)
+                        const FwChoiceRow(
+                          value: _newFolder,
+                          label: 'A new folder…',
+                        ),
+                    ],
+                    selected: _where,
+                    onChanged: (value) => rebuild(() => _where = value),
+                    below: (context, value) => value != _newFolder
+                        ? const SizedBox.shrink()
+                        : TextField(
+                            controller: _folder,
+                            style: type.mono,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              hintText: 'lib/scenes/marketing',
+                            ),
+                            onChanged: (_) => rebuild(() {}),
+                            onSubmitted: (_) => create(),
+                          ),
+                  ),
+                ),
               if (refusal != null)
-                Text(
-                  refusal,
-                  style: context.type.caption.copyWith(color: colors.red),
+                Text(refusal, style: type.caption.copyWith(color: colors.red)),
+              // What Create will do, before it does it. A folder that is not
+              // a group yet gets its declaration on the way, and that second
+              // file is named here rather than discovered afterwards.
+              if (name.isNotEmpty && target.isNotEmpty && refusal == null)
+                _labelled(
+                  context,
+                  'Writes',
+                  Column(
+                    key: const ValueKey('scene:new:writes'),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_isNew)
+                        Text(
+                          '$target/$sceneGroupFileName',
+                          style: type.caption.copyWith(color: colors.mut2),
+                        ),
+                      Text(
+                        '$target/${sceneFileNameFor(name)}',
+                        style: type.caption.copyWith(color: colors.mut2),
+                      ),
+                    ],
+                  ),
                 ),
               Align(
                 alignment: Alignment.centerRight,
@@ -1618,15 +1755,36 @@ class _NewGroupButtonState extends State<_NewGroupButton> {
       ),
     );
   }
+
+  /// A field under its name. The old forms were three hints in a column with
+  /// no labels at all, which is readable only if you already know the answer.
+  static Widget _labelled(BuildContext context, String label, Widget child) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.xxs),
+            child: Text(
+              label,
+              style: context.type.fieldLabel.copyWith(
+                color: context.colors.mut,
+              ),
+            ),
+          ),
+          child,
+        ],
+      );
 }
 
-/// "New library": a name, a folder, and optionally the group to list it
-/// in. The file is the editor's own from its first byte.
+/// "New library": a name and a folder. The file is the editor's own from its
+/// first byte, and its folder is the whole of who reads it — so the form
+/// says who that is, live, under the field that decides it.
 class _NewLibraryButton extends StatefulWidget {
   const _NewLibraryButton({
     required this.groups,
     required this.defaultFolder,
     required this.folderOf,
+    required this.readersOf,
     required this.onCreate,
   });
 
@@ -1636,8 +1794,11 @@ class _NewLibraryButton extends StatefulWidget {
   /// A group's folder relative to the package — what the folder field
   /// takes when a group is picked.
   final String Function(SceneGroupEntry group) folderOf;
-  final void Function(String name, String folder, SceneGroupEntry? attachTo)
-  onCreate;
+
+  /// The groups that would read a library written into this folder.
+  final List<String> Function(String folder) readersOf;
+
+  final void Function(String name, String folder) onCreate;
 
   @override
   State<_NewLibraryButton> createState() => _NewLibraryButtonState();
@@ -1646,7 +1807,11 @@ class _NewLibraryButton extends StatefulWidget {
 class _NewLibraryButtonState extends State<_NewLibraryButton> {
   final _name = TextEditingController();
   late final _folder = TextEditingController(text: widget.defaultFolder);
-  int? _group;
+
+  /// The first group, when there is one — a library made from here is nearly
+  /// always for the folder you are looking at, and the form should open on
+  /// the answer rather than on "somewhere else".
+  late int? _group = widget.groups.isEmpty ? null : 0;
 
   @override
   void dispose() {
@@ -1672,7 +1837,8 @@ class _NewLibraryButtonState extends State<_NewLibraryButton> {
   Widget build(BuildContext context) => Popover(
     anchor: (context, controller) => FwActionButton(
       label: 'New library',
-      tooltip: 'A token library the editor owns',
+      tooltip: 'Colours, numbers and text styles the scenes share',
+      acknowledges: false,
       onPressed: () async => controller.open(),
     ),
     side: PopoverSide.bottom,
@@ -1696,19 +1862,16 @@ class _NewLibraryButtonState extends State<_NewLibraryButton> {
           var refusal = _refusal;
           var name = _name.text.trim();
           var ready = name.isNotEmpty && refusal == null;
+          var folder = _folder.text.trim().isEmpty ? '.' : _folder.text.trim();
           void create() {
             if (!ready) return;
             controller.close();
-            var group = _group == null ? null : widget.groups[_group!];
-            widget.onCreate(
-              name,
-              _folder.text.trim().isEmpty ? '.' : _folder.text.trim(),
-              group,
-            );
+            widget.onCreate(name, folder);
             _name.clear();
           }
 
           var file = name.isEmpty ? '' : tokensFileNameFor(name);
+          var readers = widget.readersOf(folder);
           return Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1729,17 +1892,12 @@ class _NewLibraryButtonState extends State<_NewLibraryButton> {
                 onChanged: (_) => rebuild(() {}),
                 onSubmitted: (_) => create(),
               ),
-              if (file.isNotEmpty)
-                Text(
-                  '${_folder.text.trim()}/$file · ${tokensSymbolFor(file)}',
-                  style: context.type.caption.copyWith(color: colors.mut2),
-                ),
               if (widget.groups.isNotEmpty)
                 FwPicker<int>(
                   choices: [
-                    const FwChoice(value: -1, label: 'Listed by no group yet'),
                     for (var (i, g) in widget.groups.indexed)
-                      FwChoice(value: i, label: 'List in ${g.name}'),
+                      FwChoice(value: i, label: "In ${g.name}'s folder"),
+                    const FwChoice(value: -1, label: 'Somewhere else…'),
                   ],
                   selected: _group ?? -1,
                   onChanged: (i) => rebuild(() {
@@ -1749,6 +1907,21 @@ class _NewLibraryButtonState extends State<_NewLibraryButton> {
                     }
                   }),
                 ),
+              if (file.isNotEmpty)
+                Text(
+                  '$folder/$file · ${tokensSymbolFor(file)}',
+                  style: context.type.caption.copyWith(color: colors.mut2),
+                ),
+              // Where it lands is who reads it, so the form says who, before
+              // Create rather than after — this is the one fact about a
+              // library that the old form let you get wrong in silence.
+              Text(
+                key: const ValueKey('library:new:readers'),
+                readBy(readers),
+                style: context.type.caption.copyWith(
+                  color: readers.isEmpty ? colors.warningText : colors.mut2,
+                ),
+              ),
               if (refusal != null)
                 Text(
                   refusal,
@@ -1768,4 +1941,117 @@ class _NewLibraryButtonState extends State<_NewLibraryButton> {
       ),
     );
   }
+}
+
+/// The library page's header: back to where you came from, the file and who
+/// lists it, and the same save word the editor's header carries — one clock
+/// for both, because it is one autosave.
+class _LibraryHeader extends StatelessWidget {
+  const _LibraryHeader({
+    required this.library,
+    required this.listedBy,
+    required this.note,
+    required this.saveState,
+    required this.backLabel,
+    required this.onBack,
+  });
+
+  final TokensLibrary library;
+  final List<String> listedBy;
+  final String note;
+  final SceneSaveState saveState;
+  final String backLabel;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    var colors = context.colors;
+    var type = context.type;
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
+      child: Row(
+        spacing: FwSpacing.sm,
+        children: [
+          Tooltip(
+            message: backLabel,
+            child: Tappable(
+              key: const ValueKey('library:back'),
+              onTap: onBack,
+              borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+              child: Padding(
+                padding: const EdgeInsets.all(FwSpacing.xs),
+                child: Icon(
+                  Icons.arrow_back,
+                  size: FwIconSize.md,
+                  color: colors.ink,
+                ),
+              ),
+            ),
+          ),
+          Icon(Icons.style_outlined, size: FwIconSize.md, color: colors.mut),
+          Text(library.symbol, style: type.bodyStrong),
+          Flexible(
+            child: Text(
+              '${library.fileName} · ${readBy(listedBy)}',
+              overflow: TextOverflow.ellipsis,
+              style: type.caption.copyWith(
+                color: listedBy.isEmpty ? colors.warningText : colors.mut2,
+              ),
+            ),
+          ),
+          const Spacer(),
+          _SaveWord(saveState),
+          Flexible(child: _SaveNote(saveState, note)),
+        ],
+      ),
+    );
+  }
+}
+
+/// What happened to the file, in one word. There is no save button — the
+/// autosave writes when the editor goes quiet — so the header carries the
+/// state instead of a thing to press.
+class _SaveWord extends StatelessWidget {
+  const _SaveWord(this.state);
+
+  final SceneSaveState state;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: state == SceneSaveState.refused
+        ? 'Nothing was written. The work is still here.'
+        : 'Saved as you work (⌘S writes now)',
+    child: Text(
+      switch (state) {
+        SceneSaveState.pending => 'Saving…',
+        SceneSaveState.refused => 'Not saved',
+        _ => 'Saved',
+      },
+      style: context.type.caption.copyWith(
+        color: state == SceneSaveState.refused
+            ? context.colors.red
+            : context.colors.mut2,
+      ),
+    ),
+  );
+}
+
+/// Whatever the last write, import or rename had to say.
+class _SaveNote extends StatelessWidget {
+  const _SaveNote(this.state, this.note);
+
+  final SceneSaveState state;
+  final String note;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    note,
+    overflow: TextOverflow.ellipsis,
+    style: context.type.caption.copyWith(
+      color: state == SceneSaveState.refused
+          ? context.colors.red
+          : context.colors.mut2,
+    ),
+  );
 }

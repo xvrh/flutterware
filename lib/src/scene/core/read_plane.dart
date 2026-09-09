@@ -62,7 +62,6 @@ SceneDocument instantiateScene(
   var doc = SceneDocument(deepCopyNode(template.root) as FrameNode)
     ..params.addAll(template.params)
     ..tokens.addAll(template.tokens)
-    ..tokenModeNames.addAll(template.tokenModeNames)
     ..tokensFormal = template.tokensFormal;
   doc.applyArgs(args);
   return doc;
@@ -71,7 +70,7 @@ SceneDocument instantiateScene(
 /// The shared style [node] takes, when it is bound to one that exists.
 SceneTextStyle? styleOf(SceneDocument doc, SceneNode node) =>
     switch (node.bindings[styleBindingKey]) {
-      StyleRef(:var name) => doc.tokenNamed(name)?.styleIn(doc.tokenMode),
+      StyleRef(:var name) => doc.tokenNamed(name)?.style,
       _ => null,
     };
 
@@ -90,54 +89,6 @@ bool inheritsFromStyle(SceneDocument doc, SceneNode node, String prop) {
 void writeStyle(SceneNode node, SceneTextStyle style) {
   for (var e in style.values.entries) {
     setSceneProperty(node, e.key, e.value);
-  }
-}
-
-/// Puts the document's [SceneDocument.tokenMode] onto every token-bound
-/// property: the mode's value where the token names it, the default
-/// elsewhere. Reaches into every nested instance that receives the set
-/// ([SceneRefNode.tokensArg]); one that does not shows its own default.
-///
-/// The canvas's mode switch and the editor's undo both end here — undo
-/// restores the values a snapshot held, which may have been another mode's,
-/// and the mode is view state that outlives the snapshot.
-void applyTokenMode(SceneDocument doc, {String? from}) {
-  for (var (node, _) in doc.walk()) {
-    for (var entry in node.bindings.entries) {
-      switch (entry.value) {
-        case TokenRef(:var name):
-          var decl = doc.tokenNamed(name);
-          if (decl == null || !decl.hasValue || decl.isStyle) continue;
-          setSceneProperty(node, entry.key, decl.valueIn(doc.tokenMode));
-        case StyleRef(:var name):
-          // A style differs by mode too: every property that was
-          // inherited from the style in the mode we came from takes the
-          // style's value in this one; an override stays.
-          var decl = doc.tokenNamed(name);
-          var was = decl?.styleIn(from);
-          var now = decl?.styleIn(doc.tokenMode);
-          if (now == null) continue;
-          for (var f in now.values.entries) {
-            // A property bound on its own follows its binding.
-            if (node.bindings.containsKey(f.key)) continue;
-            if (was == null ||
-                !was.sets(f.key) ||
-                sceneValuesEqual(
-                  getSceneProperty(node, f.key),
-                  was.values[f.key],
-                )) {
-              setSceneProperty(node, f.key, f.value);
-            }
-          }
-        default:
-          break;
-      }
-    }
-    if (node case SceneRefNode(instance: var inst?, :var tokensArg)) {
-      var before = inst.tokenMode;
-      inst.tokenMode = tokensArg == null ? null : doc.tokenMode;
-      applyTokenMode(inst, from: before);
-    }
   }
 }
 
@@ -560,7 +511,7 @@ List<String> reconcileBindings(SceneDocument doc) {
             if (tokenMarkerName(current) != null) {
               setSceneProperty(node, prop, null);
             }
-          } else if (decl.hasValue && decl.valueIn(doc.tokenMode) != current) {
+          } else if (decl.hasValue && decl.value != current) {
             node.bindings.remove(prop);
             dropped.add('${node.name}.$prop');
           }

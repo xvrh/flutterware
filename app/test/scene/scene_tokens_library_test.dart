@@ -20,7 +20,7 @@ const _library = '''
 import 'package:flutterware/scene_authoring.dart';
 
 final brandTokens = [
-  const Token<SceneColor>('brand', SceneColor(0xFFE8632B), modes: {'dark': SceneColor(0xFFFF8A5C)}),
+  const Token<SceneColor>('brand', SceneColor(0xFFE8632B)),
   const Token<double>('radius', 28),
   const Token<SceneTextStyle>('title', SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700)),
 ];
@@ -60,16 +60,12 @@ void main() {
       var library = _open();
       expect(library.symbol, 'brandTokens');
       expect(library.tokens.map((t) => t.name), ['brand', 'radius', 'title']);
-      expect(library.modes, ['dark']);
       var out = library.emit();
       expect(out, startsWith(sceneTokensFileMarker));
       expect(out, contains('final brandTokens = ['));
       expect(
         out.replaceAll(RegExp(r'\s+'), ' '),
-        contains(
-          "const Token<SceneColor>( 'brand', SceneColor(0xFFE8632B), "
-          "modes: {'dark': SceneColor(0xFFFF8A5C)}, )",
-        ),
+        contains("const Token<SceneColor>('brand', SceneColor(0xFFE8632B))"),
       );
       var again = TokensLibrary.open(library.path, out).library!;
       expect(again.emit(), out, reason: 'canonical from the first write');
@@ -93,14 +89,7 @@ void main() {
       expect(library.named('gap'), isNull);
       expect(library.named('gutter')!.value, 8.0);
       library.setValue('gutter', 12.0);
-      library.setValue('gutter', 4.0, mode: 'dense');
-      expect(library.named('gutter')!.valueIn('dense'), 4.0);
-      library.setValue('gutter', 12.0, mode: 'dense');
-      expect(
-        library.named('gutter')!.modes,
-        isEmpty,
-        reason: 'same as the default is the default',
-      );
+      expect(library.named('gutter')!.value, 12.0);
       library.setStyle('title', const SceneTextStyle(fontSize: 60));
       expect(library.named('title')!.style!.weight, isNull);
       library.delete('gutter');
@@ -114,73 +103,23 @@ void main() {
       expect(library.freeName('brand'), 'brand2');
     });
 
-    test('declares a mode by name, renames it, deletes it — each undo', () {
+    test('refuses a mode, in a token and on its own line', () {
       var library = _open();
-      expect(library.declaredModes, isEmpty, reason: 'the file lists none');
-      library.addMode('dense');
-      expect(library.modes, ['dark', 'dense']);
-      expect(library.differingIn('dense'), 0);
-      expect(library.differingIn('dark'), 1);
-      expect(() => library.addMode('dark'), throwsArgumentError);
-      expect(() => library.addMode('default'), throwsArgumentError);
-      expect(() => library.addMode('no way'), throwsArgumentError);
-      var out = library.emit();
-      expect(out, contains("const brandTokensModes = ['dark', 'dense'];"));
-      var again = TokensLibrary.open(library.path, out).library!;
-      expect(again.declaredModes, ['dark', 'dense']);
-      library.renameMode('dark', 'night');
-      expect(library.named('brand')!.modes.keys, ['night']);
-      expect(library.modes, ['dense', 'night']);
-      expect(() => library.renameMode('night', 'dense'), throwsArgumentError);
-      library.deleteMode('night');
-      expect(library.named('brand')!.modes, isEmpty);
-      expect(library.modes, ['dense']);
-      library.undo();
-      expect(library.named('brand')!.modes.keys, ['night']);
-      library.undo();
-      expect(library.modes, ['dark', 'dense']);
-      library.undo();
-      expect(library.modes, ['dark']);
-    });
+      var opened = TokensLibrary.open(library.path, '''
+$sceneTokensFileMarker
+import 'package:flutterware/scene_authoring.dart';
 
-    test('a style has a value per mode, whole, equal-is-default', () {
-      var library = _open();
-      const dark = SceneTextStyle(fontSize: 40, color: SceneColor(0xFFFFFFFF));
-      library.setStyle('title', dark, mode: 'dark');
-      expect(library.named('title')!.styleIn('dark'), dark);
-      expect(library.named('title')!.style!.fontSize, 54, reason: 'default');
-      expect(library.differingIn('dark'), 2);
-      library.rename('title', 'headline');
-      expect(library.named('headline')!.styleIn('dark'), dark);
-      library.setStyle(
-        'headline',
-        library.named('headline')!.style!,
-        mode: 'dark',
-      );
-      expect(
-        library.named('headline')!.modes,
-        isEmpty,
-        reason: 'same as default',
-      );
-      library.setStyle('headline', dark, mode: 'dark');
-      library.setStyle('headline', dark);
-      expect(
-        library.named('headline')!.modes,
-        isEmpty,
-        reason: 'default caught up',
-      );
-      var out = library.emit();
-      library.setStyle(
-        'headline',
-        const SceneTextStyle(fontSize: 12),
-        mode: 'dark',
-      );
-      out = library.emit();
-      expect(
-        out.replaceAll(RegExp(r'\s+'), ' '),
-        contains("modes: {'dark': SceneTextStyle(fontSize: 12)}"),
-      );
-      expect(TokensLibrary.open(library.path, out).library!.emit(), out);
+const brandTokensModes = ['dark'];
+
+final brandTokens = [
+  const Token<SceneColor>('brand', SceneColor(0xFFE8632B), modes: {'dark': SceneColor(0xFFFF8A5C)}),
+];
+''');
+      expect(opened.library, isNull);
+      expect(opened.refusals.map((r) => r.construct), ['declaration', 'modes']);
+      for (var r in opened.refusals) {
+        expect(r.message, contains('SceneTokens(…)'));
+      }
     });
 
     test('merges a design file in by name, and says what it did', () {
@@ -188,13 +127,10 @@ void main() {
 $sceneTokensFileMarker
 import 'package:flutterware/scene_authoring.dart';
 
-const brandTokensModes = ['dense'];
-
 final brandTokens = [
-  const Token<SceneColor>('brandPrimary', SceneColor(0xFF000000), modes: {'dense': SceneColor(0xFF000001)}),
-  const Token<double>('radiusCard', 28, modes: {'defaultMode': 28}),
-  const Token<SceneTextStyle>('copyCTA', SceneTextStyle(fontSize: 12)),
-  const Token<bool>('showBadge', false),
+  const Token<SceneColor>('brandPrimary', SceneColor(0xFF000000)),
+  const Token<double>('radiusCard', 28),
+  const Token<SceneTextStyle>('brandSurface', SceneTextStyle(fontSize: 12)),
   const Token<double>('espresso', 3),
 ];
 ''').library!;
@@ -206,26 +142,23 @@ final brandTokens = [
         () => library.merge(import, from: 'variables.json'),
       );
       expect(note.when, '2026-09-07 14:02');
-      expect(note.updated, 2, reason: 'brandPrimary, showBadge');
+      expect(note.updated, 1, reason: 'brandPrimary');
       expect(note.unchanged, 1, reason: 'radiusCard is 28 there too');
-      expect(note.added, import.tokens.length - 4);
+      expect(
+        note.added,
+        import.tokens.length - 3,
+        reason: 'the three the library already names',
+      );
       expect(note.kept, ['espresso']);
       expect(note.notImported, hasLength(import.refusals.length + 1));
       expect(
         note.notImported.last,
-        contains('"copyCTA" is a style here, the file has a string'),
+        contains('"brandSurface" is a style here, the file has a color'),
       );
       var primary = library.named('brandPrimary')!;
       expect(primary.value, const SceneColor(0xFFE8632B), reason: 'theirs');
-      expect(
-        primary.modes['dense'],
-        const SceneColor(0xFF000001),
-        reason: 'a mode only this library names stays',
-      );
-      expect(primary.modes['darkMode'], const SceneColor(0xFFFF804D));
-      expect(library.named('copyCTA')!.isStyle, isTrue, reason: 'kept');
+      expect(library.named('brandSurface')!.isStyle, isTrue, reason: 'kept');
       expect(library.named('espresso')!.value, 3.0);
-      expect(library.modes, containsAll(['dense', 'light', 'darkMode']));
       expect(library.importNote, same(note));
       var out = library.emit();
       expect(
@@ -318,10 +251,6 @@ final brandTokens = [
       expect(file.isDirty, isFalse);
       library.setValue('radius', 4.0);
       expect(doc.nodeNamed('box')!.corner, 4.0);
-      // In dark mode the dark value lands.
-      file.editor.tokenMode = 'dark';
-      library.setValue('brand', const SceneColor(0xFF000001), mode: 'dark');
-      expect(doc.root.fill, const SceneColor(0xFF000001));
     });
 
     test("moves a style's inherited properties and leaves overrides", () {
@@ -392,53 +321,17 @@ final brandTokens = [
 
     test('MAKE LOCAL: a token becomes a parameter of this scene', () {
       var editor = file.editor;
-      editor.tokenMode = 'dark';
       editor.localizeToken('brand');
       var param = file.scene.paramNamed('brand')!;
       expect(param.kind, SceneParamKind.color);
-      expect(
-        param.defaultValue,
-        const SceneColor(0xFFFF8A5C),
-        reason: "the mode's value; modes do not come along",
-      );
+      expect(param.defaultValue, const SceneColor(0xFFE8632B));
       expect(file.scene.root.bindings['fill'], const ParamRef('brand'));
       expect(library.named('brand'), isNotNull, reason: 'stays for the others');
       expect(
         file.emit(),
-        contains('final SceneColor brand = const SceneColor(0xFFFF8A5C)'),
+        contains('final SceneColor brand = const SceneColor(0xFFE8632B)'),
       );
       expect(() => editor.localizeToken('title'), throwsArgumentError);
-    });
-
-    test('a declared mode reaches the canvas picker, and leaves it', () {
-      var editor = file.editor;
-      expect(editor.tokenModes, ['dark']);
-      library.addMode('dense');
-      expect(editor.tokenModes, ['dark', 'dense']);
-      editor.tokenMode = 'dense';
-      expect(
-        file.scene.root.fill,
-        const SceneColor(0xFFE8632B),
-        reason: 'default',
-      );
-      library.deleteMode('dense');
-      expect(editor.tokenModes, ['dark']);
-      expect(editor.tokenMode, isNull, reason: 'the mode on show is gone');
-      // A style's mode moves the readers in that mode.
-      editor.tokenMode = 'dark';
-      library.setStyle(
-        'title',
-        const SceneTextStyle(fontSize: 40),
-        mode: 'dark',
-      );
-      expect((file.scene.nodeNamed('headline')! as TextNode).fontSize, 40);
-      expect(
-        (file.scene.nodeNamed('sub')! as TextNode).fontSize,
-        20,
-        reason: 'override',
-      );
-      editor.tokenMode = null;
-      expect((file.scene.nodeNamed('headline')! as TextNode).fontSize, 54);
     });
 
     test('a library added later counts', () {

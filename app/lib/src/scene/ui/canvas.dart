@@ -6,8 +6,6 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
-import '../../ui/menu.dart';
-import '../../ui/context_menu.dart';
 import '../../ui/stage.dart';
 import '../../ui/tappable.dart';
 import '../../ui/zoomable_canvas.dart';
@@ -276,45 +274,9 @@ class _SceneCanvasState extends State<SceneCanvas> {
             style: context.type.mono.copyWith(color: colors.mut2),
           ),
         ),
-        // The token mode, when the declaration names any: the artboard in
-        // light or dark, which is one set of values behind the same
-        // references — nothing in the file changes.
-        AnimatedBuilder(
-          animation: editor.listenable,
-          builder: (context, _) {
-            var modes = editor.tokenModes;
-            if (modes.isEmpty) return const SizedBox.shrink();
-            return Tooltip(
-              message: 'Token mode — the set the artboard shows',
-              child: _Verb(
-                'mode · ${editor.tokenMode ?? 'default'} ▾',
-                () => showContextMenu(context, _modeAnchor(context), [
-                  MenuItem(
-                    'default',
-                    icon: editor.tokenMode == null ? Icons.check : null,
-                    onSelected: () => editor.tokenMode = null,
-                  ),
-                  for (var m in modes)
-                    MenuItem(
-                      m,
-                      icon: editor.tokenMode == m ? Icons.check : null,
-                      onSelected: () => editor.tokenMode = m,
-                    ),
-                ]),
-              ),
-            );
-          },
-        ),
         ...widget.trailing,
       ],
     );
-  }
-
-  /// Where the mode menu drops from: under the bar, at the pointer's last
-  /// known column is not available here, so the bar's right end.
-  Offset _modeAnchor(BuildContext context) {
-    var box = context.findRenderObject()! as RenderBox;
-    return box.localToGlobal(Offset(0, box.size.height));
   }
 
   void _fit() {

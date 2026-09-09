@@ -35,8 +35,8 @@ class SceneNumberField extends StatelessWidget {
   final ValueChanged<double> onCommit;
   final String? label;
 
-  void _changed(double next) => onChanged(shape.clamped(next));
-  void _committed(double next) => onCommit(shape.clamped(next));
+  void _changed(double next) => onChanged(shape.settled(next));
+  void _committed(double next) => onCommit(shape.settled(next));
 
   @override
   Widget build(BuildContext context) {

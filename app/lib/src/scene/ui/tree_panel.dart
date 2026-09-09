@@ -31,16 +31,8 @@ class SceneTreePanel extends StatefulWidget {
     this.sceneClassName,
     this.onOpenMotion,
     this.onOpenParam,
-    this.onOpenToken,
-    this.onOpenLibrary,
     this.tokens,
   });
-
-  /// See [SceneOutlineSections.onOpenToken].
-  final ValueChanged<String>? onOpenToken;
-
-  /// See [SceneOutlineSections.onOpenLibrary].
-  final ValueChanged<String>? onOpenLibrary;
 
   /// See [SceneOutlineSections.tokens].
   final SceneTokensHost? tokens;
@@ -278,8 +270,6 @@ class _SceneTreePanelState extends State<SceneTreePanel> {
                 child: SceneOutlineSections(
                   editor,
                   sceneClassName: widget.sceneClassName,
-                  onOpenToken: widget.onOpenToken,
-                  onOpenLibrary: widget.onOpenLibrary,
                   tokens: widget.tokens,
                   onOpenMotion: widget.onOpenMotion,
                   onOpenParam: widget.onOpenParam,

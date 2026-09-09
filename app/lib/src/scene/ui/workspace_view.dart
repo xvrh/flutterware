@@ -15,8 +15,6 @@ import 'list_table.dart';
 import 'param_pane.dart';
 import 'shortcuts.dart';
 import 'timeline.dart';
-import 'library_pane.dart';
-import 'token_pane.dart';
 import 'tokens_host.dart';
 import 'tree_panel.dart';
 
@@ -120,20 +118,8 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
     editor.openParam = name;
   }
 
-  void _openToken(String name) {
-    _closeMotion();
-    editor.openToken = name;
-  }
-
-  void _openLibrary(String path) {
-    _closeMotion();
-    editor.openLibrary = path;
-  }
-
   void _openMotion(String name) {
     editor.openParam = null;
-    editor.openToken = null;
-    editor.openLibrary = null;
     editor.activeMotion = name;
     // A motion that was closed comes back on the picture; one already open
     // is unchanged.
@@ -143,8 +129,6 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
   void _closeDrawer() {
     _closeMotion();
     editor.openParam = null;
-    editor.openToken = null;
-    editor.openLibrary = null;
   }
 
   /// How tall the drawer is, dragged by hand. Null until dragged: two fifths
@@ -173,8 +157,6 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                     sceneClassName: widget.sceneClassName,
                     onOpenMotion: _openMotion,
                     onOpenParam: _openParam,
-                    onOpenToken: _openToken,
-                    onOpenLibrary: _openLibrary,
                     tokens: widget.tokens,
                   ),
                 ),
@@ -210,8 +192,6 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                               onPick: (pick) => switch (pick) {
                                 MotionAside(:var name) => _openMotion(name),
                                 ParamAside(:var name) => _openParam(name),
-                                TokenAside(:var name) => _openToken(name),
-                                LibraryAside(:var path) => _openLibrary(path),
                               },
                             ),
                             if (shown) ...[
@@ -246,17 +226,6 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                                             SceneParamKind.list
                                         ? SceneListTable(editor, name)
                                         : SceneParamPane(editor, name),
-                                  TokenAside(:var name) => SceneTokenPane(
-                                    editor,
-                                    name,
-                                    host: widget.tokens,
-                                  ),
-                                  LibraryAside(:var path) => SceneLibraryPane(
-                                    editor,
-                                    path,
-                                    host: widget.tokens,
-                                    onOpenToken: _openToken,
-                                  ),
                                 },
                               ),
                             ],
