@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutterware_render/client.dart';
+import 'package:flutterware/render_client.dart';
 import 'package:path/path.dart' as p;
 
 import '../embedder/flutter_cache.dart';

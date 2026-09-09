@@ -4,9 +4,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutterware/plugins.dart';
+import 'package:flutterware/render_client.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/render/bundle_entrypoint.dart';
-import 'package:flutterware_render/client.dart';
 import 'package:path/path.dart' as p;
 
 import '../../embedder/flutter_cache.dart';

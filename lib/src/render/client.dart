@@ -1,12 +1,5 @@
-/// The pure-Dart side of the render story: a [RenderPool] spawns resident
-/// guests from a directory produced by `fw render bundle` and invokes the
-/// app's render points fully typed.
-///
-/// ```dart
-/// var renders = await RenderPool.start(bundle: '/opt/acme/render', warm: 2);
-/// var svg = await renders.svg(monthlyChart, ChartRequest(...),
-///     size: const RenderSize(412, 230));
-/// ```
+/// The implementation behind `package:flutterware/render_client.dart` — the
+/// door a pure-Dart server comes in by. Nothing in this file imports Flutter.
 library;
 
 import 'dart:async';
@@ -18,9 +11,6 @@ import 'package:path/path.dart' as p;
 
 import 'contract.dart';
 import 'protocol.dart';
-
-export 'contract.dart';
-export 'protocol.dart' show RenderPointInfo, RenderPointKind;
 
 /// A pool of resident render guests over one bundle directory.
 ///
@@ -52,7 +42,7 @@ class RenderPool {
       throw StateError(
         'this client speaks render protocol $renderProtocolVersion but the '
         'bundle was built for ${manifest.protocol}; rebuild the bundle or '
-        'upgrade flutterware_render',
+        'upgrade flutterware',
       );
     }
     var pool = RenderPool._(bundleDir, manifest, warm, onGuestLog);

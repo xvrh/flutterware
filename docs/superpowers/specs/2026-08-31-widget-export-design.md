@@ -108,17 +108,29 @@ name plus codecs plus phantom types — declared in a pure-Dart package both
 sides import. No code generation is required; the descriptor is the
 contract.
 
-A new workspace member carries the API: **`flutterware_render`**, pure Dart
-(the `flutterware` package depends on the Flutter SDK, which a `dart`
-server cannot resolve — so the contract and client cannot live there).
-It ships three things: the descriptor types, the wire-safe options, and the
-`RenderPool` client.
+The contract and the client ship **inside `flutterware`**, as two libraries
+that import no Flutter: `package:flutterware/render_contract.dart` (the
+descriptor types and the wire-safe options — no `dart:io` either, so a
+package importing it still compiles for the web) and
+`package:flutterware/render_client.dart` (the same, plus `RenderPool`).
+
+**Amended 2026-09-09.** This shipped first as a separate pure-Dart workspace
+member, `flutterware_render`, on the reasoning that a `dart` server cannot
+resolve a package depending on the Flutter SDK. True, and folded anyway: the
+repo had already taken that bargain for `package:flutterware/server.dart`,
+which a shelf server imports directly and which is equally Flutter-free
+inside. Paying a second published package, a third version to keep in
+lockstep and a second entry in the release workflow to dodge a cost the tool
+already charges elsewhere is not worth it — and the cost stops at
+resolution: the deployed image still needs nothing but the bundle directory,
+which carries its own `flutter_tester`. Nothing was published under the old
+name.
 
 ### 1. The app team's contract package (pure Dart, shared)
 
 ```dart
 // package:acme_contract/renders.dart
-import 'package:flutterware_render/contract.dart';
+import 'package:flutterware/render_contract.dart';
 
 class ChartRequest {
   ChartRequest({required this.title, required this.series});
@@ -198,7 +210,7 @@ is impossible, not documented.
 
 ```dart
 import 'package:acme_contract/renders.dart';
-import 'package:flutterware_render/client.dart';
+import 'package:flutterware/render_client.dart';
 import 'package:shelf/shelf.dart';
 
 late final RenderPool renders;
@@ -279,9 +291,9 @@ in-process, may use the full callback API directly.
 | Kernel compile, seed-kernel warm start, build isolation | **Exists** (`TesterHost`, scenarios/previews lanes) |
 | Spawn/drive `flutter_tester`, guest harness, real fonts | **Exists** (embedder + previews harness) |
 | Entry discovery, typed parameters | **Exists as precedent** (previews discovery, run knobs) — needs the render flavor |
-| `WidgetRender`/`DocumentRender` contract + `flutterware_render` package | **Built** — workspace member `render/`; registrar (`@RenderRegistry` on a function receiving `RenderHost`) settled over per-entry annotations; `RenderContext.captureSvg` mounts widgets offscreen, so both entry kinds execute in-process |
+| `WidgetRender`/`DocumentRender` contract | **Built** — `package:flutterware/render_contract.dart`; registrar (`@RenderRegistry` on a function receiving `RenderHost`) settled over per-entry annotations; `RenderContext.captureSvg` mounts widgets offscreen, so both entry kinds execute in-process |
 | `fw render bundle` | **Built** — registrar scan, generated driver main, kernel via the embedder compiler, asset bundle with symlinks materialized, engine artifacts local or fetched per `--platform`, versions bound in `manifest.json` |
-| `RenderPool` + driver protocol | **Built** — `flutterware_render/client.dart` over marker-prefixed line JSON on the guest's stdio; guest mounts offscreen per request (no frame pacing), covered end to end by `app/integration_test/render_bundle_test.dart` |
+| `RenderPool` + driver protocol | **Built** — `package:flutterware/render_client.dart` over marker-prefixed line JSON on the guest's stdio; guest mounts offscreen per request (no frame pacing), covered end to end by `app/integration_test/render_bundle_test.dart` |
 | Studio panel: render entries live, knobs for args, document viewer | **Built (v1)** — `flutterware.render` plugin: point list from the warm guest, JSON args + size + policies, instant PNG preview, Save SVG/PNG/PDF, warnings shown. Typed knobs for args and an in-studio PDF page viewer are the follow-ups |
 | `fw render <entry>` one-shot CLI | **Built** — plus the same render as a plugin action for `fw run`/MCP, returning an `Artifact` |
 | Regression diffs of rendered documents | **Deferred, deliberately** — `ComparisonSide` is a real seam (a `RendersSide` is a genuine third implementation, ~250 lines), but its currency is raw RGBA frames and its skip rule keys on source files: all points share one registrar file, so per-point attribution needs a decision before the hookup is honest |

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware/plugins.dart';
-import 'package:flutterware_render/client.dart';
+import 'package:flutterware/render_client.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
@@ -368,8 +368,8 @@ const fwCommands = [
         'into\nits image: flutter_tester, the compiled registrar, the asset '
         'bundle\nwith its fonts, and a manifest binding the versions '
         'together. Drive it\nwith `RenderPool` from '
-        'package:flutterware_render. `--platform`\ncrosses, fetching engine '
-        "artifacts from Flutter's own storage.\n\n"
+        'package:flutterware/render_client.dart.\n`--platform` crosses, '
+        "fetching engine artifacts from Flutter's own\nstorage.\n\n"
         'Design: docs/superpowers/specs/2026-08-31-widget-export-design.md.',
   ),
   FwCommand(

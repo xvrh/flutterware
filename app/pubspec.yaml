@@ -58,8 +58,6 @@ dependencies:
   flutter_web_plugins:
     sdk: flutter
   flutterware:
-  flutterware_render:
-    path: ../
   github:
   glob:
   # Pinned, and to the version `flutter_tools` pins at the SDK in `.fvmrc` —
