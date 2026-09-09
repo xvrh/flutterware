@@ -36,19 +36,24 @@ class FontAxis {
   /// What the panel calls it. The registered tags have names everyone knows;
   /// a custom one is shown as its tag, which is what a type designer calls it
   /// anyway.
-  String get label => switch (tag) {
-    'wght' => 'Weight',
-    'wdth' => 'Width',
-    'slnt' => 'Slant',
-    'ital' => 'Italic',
-    'opsz' => 'Optical size',
-    'GRAD' => 'Grade',
-    _ => tag,
-  };
+  String get label => fontAxisLabel(tag);
 
   @override
   String toString() => 'FontAxis($tag, $min..$max, default $def)';
 }
+
+/// What an axis is called where there is room for a word. The registered
+/// tags have names everyone knows; a custom one is shown as its tag, which
+/// is what a type designer calls it anyway.
+String fontAxisLabel(String tag) => switch (tag) {
+  'wght' => 'Weight',
+  'wdth' => 'Width',
+  'slnt' => 'Slant',
+  'ital' => 'Italic',
+  'opsz' => 'Optical size',
+  'GRAD' => 'Grade',
+  _ => tag,
+};
 
 /// The axes [bytes] declares, or an empty list when it declares none — which
 /// is what a static face and an unreadable file both answer, because a panel

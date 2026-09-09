@@ -5,7 +5,7 @@ import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
 import '../editor.dart';
-import '../../assets/model/font_axes.dart';
+import '../type_axes.dart';
 import '../externals_file.dart';
 import '../playback.dart';
 import 'canvas.dart';
@@ -60,7 +60,7 @@ class SceneWorkspaceView extends StatefulWidget {
   final List<ExternalWidgetDecl> externals;
 
   /// What a family's variable axes are — see [SceneInspector.axesFor].
-  final List<FontAxis> Function(String family)? axesFor;
+  final AxesLookup? axesFor;
 
   /// The renderer, sized to the artboard — see [SceneCanvas.content].
   final Widget? content;
@@ -233,6 +233,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
                                   MotionAside(:var name) => SceneTimeline(
                                     editor,
                                     widget.playbackFor(name),
+                                    axesFor: widget.axesFor,
                                   ),
                                   ParamAside(:var name) =>
                                     editor.doc.paramNamed(name)?.kind ==

@@ -16,6 +16,7 @@ import '../externals_file.dart';
 import '../../ui/context_menu.dart';
 import '../../ui/disclosure.dart';
 import '../../assets/model/font_axes.dart';
+import '../type_axes.dart';
 import '../../ui/design/design.dart';
 import '../../ui/action_button.dart';
 import '../../ui/menu.dart';
@@ -68,14 +69,9 @@ class SceneInspector extends StatelessWidget {
   /// The variable axes of a family the package declares, read out of the
   /// font file itself. Null where nothing has scanned — the panel then draws
   /// the discrete weights, which is what a static family gets anyway.
-  final List<FontAxis> Function(String family)? axesFor;
+  final AxesLookup? axesFor;
 
-  /// The axes of whatever face [t] is set in, or none when it names no
-  /// family, the family is static, or nobody scanned.
-  List<FontAxis> _axesOf(TextNode t) => switch ((axesFor, t.fontFamily)) {
-    (var f?, var family?) => f(family),
-    _ => const [],
-  };
+  List<FontAxis> _axesOf(TextNode t) => sceneAxesOf(t, axesFor);
 
   SceneDocument get doc => editor.doc;
 
