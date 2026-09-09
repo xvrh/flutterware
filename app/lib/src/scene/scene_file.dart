@@ -480,13 +480,19 @@ void _emitNode(
       }
       out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
-      props.add(ref('text') ?? _str(t.text));
+      // One run keeps the short spelling — `TextNode('Hello')` — and several
+      // take the rich one, the way `Text` and `Text.rich` divide. A bound
+      // text is one run by definition: a parameter fills the whole string.
+      var rich = t.runs.length > 1 && ref('text') == null;
+      props.add(
+        rich ? '[${t.runs.map(_run).join(', ')}]' : ref('text') ?? _str(t.text),
+      );
       // Every property of the TREATMENT is spelled inside the one style
       // argument, so the table skips the style subset here; align and
       // maxLines are the paragraph's and stay the node's own arguments.
       if (_styleArg(t, scope, ref) case var arg?) props.add(arg);
       table(skip: _styleArgNames);
-      out.write('TextNode(${props.join(', ')})');
+      out.write('TextNode${rich ? '.rich' : ''}(${props.join(', ')})');
     case ShapeNode _:
       table();
       out.write('ShapeNode(${props.join(', ')})');
@@ -512,6 +518,23 @@ void _emitNode(
       table();
       out.write('SceneRefNode(${props.join(', ')})');
   }
+}
+
+/// `TextRun('coffee', style: SceneTextStyle(weight: SceneFontWeight.w700))`
+/// — a stretch of the paragraph and what it differs by. A run with no delta
+/// is just its string, which is most of them.
+String _run(TextRun r) => r.style == null
+    ? 'TextRun(${_str(r.text)})'
+    : 'TextRun(${_str(r.text)}, style: ${sceneStyleLiteral(r.style!)})';
+
+/// Every property a style sets, spelled by the table — so a property added
+/// to the style subset is written here without this function knowing its
+/// name. Shared with the token library's emitter, so a style reads the same
+/// in a scene file and in the file that declares one.
+String sceneStyleLiteral(SceneTextStyle s) {
+  var values = s.values;
+  return 'SceneTextStyle(${[for (var p in sceneStyleProps)
+    if (values[p.name] case var v?) '${p.name}: ${scenePropLiteral(p, v)}'].join(', ')})';
 }
 
 /// What the style argument spells, by name — what the node's own argument
@@ -1333,15 +1356,19 @@ class _Parser {
         _refuseRest('FrameNode', named);
         _checkPositionals(positional, 0);
         return node;
-      case 'TextNode':
+      case 'TextNode' || 'TextNode.rich':
         var node = TextNode('', name: name);
-        node.text = _contentOf(positional, args, node) ?? '';
+        if (kind == 'TextNode.rich') {
+          node.runs = _runsOf(positional, args);
+        } else {
+          node.text = _contentOf(positional, args, node) ?? '';
+        }
         _take(named, styleBindingKey, (e) => _styleArgument(e, node));
         // A 0.8 file spelled its text properties beside the style. They are
         // still read here, so an old file opens and converges to the one
         // style argument on its next save.
         _applyProps(node, named, skip: const {'text'});
-        _refuseRest('TextNode', named);
+        _refuseRest(kind, named);
         _checkPositionals(positional, 1);
         return node;
       case 'ShapeNode':
@@ -1670,6 +1697,118 @@ class _Parser {
       return null;
     }
     return _stringV(positional[0], node, 'text');
+  }
+
+  /// `[TextRun('Fresh '), TextRun('coffee', style: …)]` — the runs of one
+  /// paragraph.
+  ///
+  /// A run's style is a DELTA, read through the same table and the same
+  /// value readers as any other style literal, minus the paint stack: a
+  /// stack paints a whole laid-out paragraph once per pass, and one that
+  /// applied to a stretch of one would have to lay that stretch out alone.
+  /// Refused with a line number rather than dropped.
+  List<TextRun> _runsOf(List<Expression> positional, ArgumentList args) {
+    if (positional.isEmpty) {
+      refuse(args.offset, 'missing argument', 'a list of runs is required');
+      return [];
+    }
+    var list = positional[0];
+    if (list is! ListLiteral) {
+      refuse(
+        list.offset,
+        _kind(list),
+        "a rich text is a list of runs — TextNode.rich([TextRun('a'), …])",
+      );
+      return [];
+    }
+    var runs = <TextRun>[];
+    for (var element in list.elements) {
+      var call = element is Expression ? _invocation(element) : null;
+      if (call == null || call.$1 != 'TextRun') {
+        refuse(
+          element.offset,
+          _elementKind(element),
+          "every element is a run — TextRun('a')",
+        );
+        continue;
+      }
+      if (_run(call.$2) case var run?) runs.add(run);
+    }
+    return runs;
+  }
+
+  TextRun? _run(ArgumentList args) {
+    String? text;
+    SceneTextStyle? style;
+    for (var arg in args.arguments) {
+      if (arg is NamedArgument) {
+        if (arg.name.lexeme != 'style') {
+          refuse(arg.offset, arg.name.lexeme, 'a run takes only a style');
+          return null;
+        }
+        style = _runStyle(arg.argumentExpression);
+        continue;
+      }
+      if (text != null) {
+        refuse(arg.offset, 'extra argument', 'a run is one string');
+        return null;
+      }
+      var value = arg.argumentExpression;
+      if (value is SimpleStringLiteral) {
+        text = value.value;
+      } else {
+        refuse(value.offset, _kind(value), "a run's text is a string literal");
+        return null;
+      }
+    }
+    if (text == null) {
+      refuse(args.offset, 'missing argument', "a run's text is required");
+      return null;
+    }
+    return TextRun(text, style: style);
+  }
+
+  SceneTextStyle? _runStyle(Expression e) {
+    var call = _invocation(e);
+    if (call == null || call.$1 != 'SceneTextStyle') {
+      refuse(
+        e.offset,
+        'run style',
+        "a run's style is its own delta — style: SceneTextStyle(weight: "
+            'SceneFontWeight.w700)',
+      );
+      return null;
+    }
+    var probe = TextNode('', name: '');
+    var named = <String, Expression>{};
+    for (var arg in call.$2.arguments) {
+      if (arg is! NamedArgument) {
+        refuse(arg.offset, 'positional argument', 'a style takes named fields');
+        return null;
+      }
+      if (arg.name.lexeme == 'layers') {
+        refuse(
+          arg.offset,
+          'layers on a run',
+          'a paint stack paints the whole paragraph, so it belongs on the '
+              'text rather than on one stretch of it',
+        );
+        return null;
+      }
+      named[arg.name.lexeme] = arg.argumentExpression;
+    }
+    // Read the names before applying: `_applyProps` CONSUMES the map as it
+    // takes each field.
+    var set = named.keys.toSet();
+    _applyProps(probe, named, only: _styleFieldNames);
+    _refuseRest('SceneTextStyle', named);
+    // Only what the run SAYS: the probe resolved every other field to the
+    // table's default, and a delta that carried those would override the
+    // node's on every one of them.
+    return SceneTextStyle.fromValues({
+      for (var p in sceneStyleProps)
+        if (set.contains(p.name)) p.name: p.read(probe),
+    });
   }
 
   /// `const DrinkBadgeArgs(size: 140)` — an external node's whole identity

@@ -640,6 +640,49 @@ class SceneTextStyle {
       'SceneTextStyle(${values.entries.map((e) => '${e.key}: ${e.value}').join(', ')})';
 }
 
+/// One stretch of a paragraph, and what it differs by.
+///
+/// A text is a LIST of these, and the list is the paragraph: it is laid out
+/// and wrapped as one, which is the whole reason a bold word cannot be a
+/// second node beside the first. [style] is a DELTA over the node's own —
+/// only what this run changes — and the same [SceneTextStyle] type says it,
+/// because "unset means take what is underneath" is already what a style's
+/// nulls mean.
+///
+/// A run carries no [SceneTextStyle.layers]: the paint stack paints a whole
+/// laid-out paragraph once per pass, and a stack that applied to a stretch
+/// of one would have to lay that stretch out alone — which is the law a
+/// stack exists under (a pass may change paint, never layout). The grammar
+/// refuses it rather than dropping it.
+///
+/// Anonymous, like a paint pass and for the same reason: a run named as a
+/// field of one scene is a run no other scene can have, and a style that
+/// carries its runs can be shared whole.
+class TextRun {
+  const TextRun(this.text, {this.style});
+
+  final String text;
+
+  /// What this run changes about the node's style — null where it changes
+  /// nothing, which is the ordinary run.
+  final SceneTextStyle? style;
+
+  TextRun copyWith({String? text, SceneTextStyle? style}) =>
+      TextRun(text ?? this.text, style: style ?? this.style);
+
+  @override
+  bool operator ==(Object other) =>
+      other is TextRun && other.text == text && other.style == style;
+
+  @override
+  int get hashCode => Object.hash(text, style);
+
+  @override
+  String toString() => 'TextRun(${_quoted(text)}${style == null ? '' : ', …'})';
+}
+
+String _quoted(String s) => s.length > 24 ? "'${s.substring(0, 23)}…'" : "'$s'";
+
 /// Four numbers that are one when they agree: edges, corners. What the
 /// property table needs to spell either as one number or four named parts.
 abstract interface class SceneQuad {

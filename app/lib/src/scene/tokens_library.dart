@@ -686,25 +686,13 @@ String _tokenLiteral(SceneTokenDecl t) {
   if (t.style case var style?) {
     var modes = t.modes.isEmpty
         ? ''
-        : ', modes: {${[for (var e in t.modes.entries) "'${e.key}': ${_styleLiteral(e.value as SceneTextStyle)}"].join(', ')}}';
-    return "const Token<SceneTextStyle>('${t.name}', ${_styleLiteral(style)}$modes)";
+        : ', modes: {${[for (var e in t.modes.entries) "'${e.key}': ${sceneStyleLiteral(e.value as SceneTextStyle)}"].join(', ')}}';
+    return "const Token<SceneTextStyle>('${t.name}', ${sceneStyleLiteral(style)}$modes)";
   }
   var modes = t.modes.isEmpty
       ? ''
       : ', modes: {${[for (var e in t.modes.entries) "'${e.key}': ${_valueLiteral(e.value)}"].join(', ')}}';
   return "const Token<${t.typeName}>('${t.name}', ${_valueLiteral(t.value!)}$modes)";
-}
-
-/// Every property the style sets, spelled by the table — so a property
-/// added to the text subset is written here without this function knowing
-/// its name.
-String _styleLiteral(SceneTextStyle s) {
-  var values = s.values;
-  var fields = [
-    for (var p in sceneTextProps)
-      if (values[p.name] case var v?) '${p.name}: ${scenePropLiteral(p, v)}',
-  ];
-  return 'SceneTextStyle(${fields.join(', ')})';
 }
 
 String _valueLiteral(Object value) => switch (value) {

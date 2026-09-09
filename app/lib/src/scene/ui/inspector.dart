@@ -796,6 +796,17 @@ class SceneInspector extends StatelessWidget {
         onChanged: (v) => _door('text', () => t.text = v),
       ),
     ),
+    // A paragraph of runs shows as its joined string, and typing here
+    // collapses it — which is what typing into one field means, and is worth
+    // saying before it happens rather than after.
+    if (t.runs.length > 1)
+      Padding(
+        padding: const EdgeInsets.only(bottom: FwSpacing.md),
+        child: Text(
+          '${t.runs.length} runs — typing here makes them one',
+          style: context.type.caption.copyWith(color: context.colors.mut2),
+        ),
+      ),
     // The paragraph's own: where the lines break and how they sit in the
     // box. Two texts in one display face routinely differ on both, which is
     // why a shared style does not decide them.

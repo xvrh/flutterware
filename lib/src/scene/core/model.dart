@@ -786,8 +786,62 @@ class FrameNode extends SceneNode {
 }
 
 class TextNode extends SceneNode {
-  TextNode(
-    this.text, {
+  /// The ordinary text: one run, no deltas.
+  factory TextNode(
+    String text, {
+    String name = '',
+    double x = 0,
+    double y = 0,
+    double? width,
+    double? height,
+    SceneColor? fill,
+    SceneColor? borderColor,
+    double borderWidth = 1,
+    double corner = 0,
+    double? cornerTopLeft,
+    double? cornerTopRight,
+    double? cornerBottomRight,
+    double? cornerBottomLeft,
+    double? minWidth,
+    double? maxWidth,
+    double? minHeight,
+    double? maxHeight,
+    double opacity = 1,
+    bool visible = true,
+    SceneTextAlign align = SceneTextAlign.left,
+    int? maxLines,
+    SceneTextStyle? style,
+  }) => TextNode.rich(
+    [TextRun(text)],
+    name: name,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    fill: fill,
+    borderColor: borderColor,
+    borderWidth: borderWidth,
+    corner: corner,
+    cornerTopLeft: cornerTopLeft,
+    cornerTopRight: cornerTopRight,
+    cornerBottomRight: cornerBottomRight,
+    cornerBottomLeft: cornerBottomLeft,
+    minWidth: minWidth,
+    maxWidth: maxWidth,
+    minHeight: minHeight,
+    maxHeight: maxHeight,
+    opacity: opacity,
+    visible: visible,
+    align: align,
+    maxLines: maxLines,
+    style: style,
+  );
+
+  /// A paragraph of several runs, each with its own delta over [style] —
+  /// one paragraph, laid out and wrapped as one, which is the whole reason a
+  /// bold word is not a second node beside the first.
+  TextNode.rich(
+    List<TextRun> runs, {
     super.name,
     super.x,
     super.y,
@@ -807,14 +861,11 @@ class TextNode extends SceneNode {
     super.maxHeight,
     super.opacity,
     super.visible,
-    // The paragraph's own, not the type's: two texts in one display face
-    // routinely differ on both, so a shared style deciding them would be one
-    // nobody could share. Flutter draws the same line — these are `Text`'s
-    // arguments, not `TextStyle`'s.
     this.align = SceneTextAlign.left,
     this.maxLines,
     SceneTextStyle? style,
-  }) : fontFamily = style?.fontFamily,
+  }) : runs = [...runs],
+       fontFamily = style?.fontFamily,
        fontSize = style?.fontSize ?? 16,
        weight = style?.weight ?? SceneFontWeight.w400,
        italic = style?.italic ?? false,
@@ -831,13 +882,26 @@ class TextNode extends SceneNode {
        layers = [...?style?.layers],
        axes = {...?style?.axes};
 
-  /// The text a node draws. The TYPE it is drawn in is the [style] — there
-  /// is no per-property parameter beside it, because an override is a delta
-  /// on the style (`tokens.title.copyWith(fontSize: 60)`), which is what
-  /// keeps this constructor the same size whether the table carries six
-  /// style properties or thirty. What a text does spell for itself is its
+  /// The paragraph, in runs. One run is the ordinary text; several are one
+  /// paragraph with deltas along it.
+  ///
+  /// The single source of truth for what the node says — [text] is a view of
+  /// it — because two would drift the moment one was edited.
+  List<TextRun> runs;
+
+  /// The text a node draws, as one string.
+  ///
+  /// Reading joins the runs. WRITING collapses them: a node whose words are
+  /// typed into one field is a node with one run, which is what typing into
+  /// one field means. The TYPE it is drawn in is the [style] — there is no
+  /// per-property parameter beside it, because an override is a delta on the
+  /// style (`tokens.title.copyWith(fontSize: 60)`), which is what keeps this
+  /// constructor the same size whether the table carries six style
+  /// properties or thirty. What a text does spell for itself is its
   /// PARAGRAPH — [align] and [maxLines] (master plan §4.5).
-  String text;
+  String get text => runs.map((r) => r.text).join();
+
+  set text(String value) => runs = [TextRun(value)];
 
   /// The fields below are the style RESOLVED — the style's value where it
   /// set one, the table's default where it did not. The style itself is not
