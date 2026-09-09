@@ -1,6 +1,7 @@
 // A design file's variables become `scene_tokens.dart`: every variable a
-// token with its modes, every refusal named, and the written file is one
-// the tokens reader reads back to the same declarations.
+// token at its collection's default value, every refusal named — the other
+// modes among them — and the written file is one the tokens reader reads
+// back to the same declarations.
 //
 // The fixture is shaped after the variables endpoint's answer — collections
 // with modes, values by mode, aliases within and across collections, a
@@ -23,14 +24,14 @@ void main() {
   var import = importVariables(json);
 
   test('every usable variable is a token, named as an identifier', () {
+    // A STRING and a BOOLEAN variable are refused, not imported: a library
+    // is a design system, and copy and flags are not design.
     expect(import.tokens.map((t) => t.name), [
       'brandPrimary',
       'brandSurface',
       'textOnBrand',
       'radiusCard',
       'spacing2x',
-      'copyCTA',
-      'showBadge',
       'cardSurface',
     ]);
     expect(import.tokens.map((t) => t.kind), [
@@ -39,8 +40,6 @@ void main() {
       SceneParamKind.color,
       SceneParamKind.number,
       SceneParamKind.number,
-      SceneParamKind.string,
-      SceneParamKind.bool,
       SceneParamKind.color,
     ]);
     var primary = import.tokens.first;
@@ -48,37 +47,42 @@ void main() {
     expect(primary.value, const SceneColor(0xFFE8632B));
     expect(import.tokens[3].value, 28.0);
     expect(import.tokens[4].value, 16.5);
-    expect(import.tokens[5].value, 'Order now');
-    expect(import.tokens[6].value, true);
+    expect(
+      import.refusals.map((r) => r.what),
+      containsAll(['Layout · Copy/CTA', 'Layout · Show badge']),
+    );
   });
 
-  test('modes are named across collections and carried per token', () {
-    expect(import.modeNames, ['light', 'darkMode', 'defaultMode']);
-    var primary = import.tokens.first;
-    expect(primary.modes.keys, ['light', 'darkMode']);
-    expect(primary.modes['darkMode'], const SceneColor(0xFFFF804D));
-    expect(primary.modes['light'], primary.value, reason: 'the default mode');
-    expect(import.tokens[3].modes, {'defaultMode': 28.0});
+  test("every mode but the collection's default is refused by name", () {
+    expect(
+      import.refusals.map((r) => r.what),
+      containsAllInOrder(['Colors · Dark mode']),
+    );
+    var mode = import.refusals.first;
+    expect(mode.reason, contains('only the default mode is imported'));
+    expect(mode.reason, contains('SceneTokens(…)'));
   });
 
-  test('an alias resolves in the same-named mode, else the default', () {
-    var onBrand = import.tokens[2];
-    expect(onBrand.modes['light'], const SceneColor(0xFFFFFFFF));
-    expect(onBrand.modes['darkMode'], const SceneColor(0xFF2B1B12));
-    // Layout has no Dark mode: its alias into Colors reads Colors' default.
-    expect(import.tokens.last.modes, {
-      'defaultMode': const SceneColor(0xFFFFFFFF),
-    });
+  test("an alias resolves in the target collection's default mode", () {
+    expect(import.tokens[2].value, const SceneColor(0xFFFFFFFF));
+    // Layout's alias into Colors reads Colors' default.
+    expect(import.tokens.last.value, const SceneColor(0xFFFFFFFF));
   });
 
   test('what cannot be a token is refused by name, with the reason', () {
-    expect(import.refusals.map((r) => r.what), [
-      'Colors · Brand/Primary ',
-      'Colors · 🎨',
-    ]);
-    expect(import.refusals.first.reason, contains('"brandPrimary"'));
-    expect(import.refusals.first.reason, contains('Colors · Brand/Primary'));
-    expect(import.refusals.last.reason, contains('identifier'));
+    expect(
+      import.refusals.map((r) => r.what),
+      containsAllInOrder(['Colors · Brand/Primary ', 'Colors · 🎨']),
+    );
+    var duplicate = import.refusals.firstWhere(
+      (r) => r.what == 'Colors · Brand/Primary ',
+    );
+    expect(duplicate.reason, contains('"brandPrimary"'));
+    expect(duplicate.reason, contains('Colors · Brand/Primary'));
+    expect(
+      import.refusals.firstWhere((r) => r.what == 'Colors · 🎨').reason,
+      contains('identifier'),
+    );
     // Deleted-but-referenced is not a refusal: it is not a variable any more.
     expect(
       import.tokens.map((t) => t.source),
@@ -97,49 +101,61 @@ void main() {
     return library.emit();
   }
 
-  test('the written file reads back to the same tokens, modes included', () {
+  test('the written file reads back to the same tokens', () {
     var source = emitted();
     expect(source, contains('// Imported from variables.json on '));
     expect(source, contains('// Not imported:'));
     var parsed = parseTokensFile(source);
     expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
-    expect(parsed.tokens.map((t) => t.name), import.tokens.map((t) => t.name));
-    var primary = parsed.tokens.first;
-    expect(primary.value, const SceneColor(0xFFE8632B));
-    expect(primary.modes, {
-      'light': const SceneColor(0xFFE8632B),
-      'darkMode': const SceneColor(0xFFFF804D),
-    });
-    expect(parsed.tokens[5].value, 'Order now');
-    expect(parsed.tokens[6].value, true);
+    expect(
+      parsed.tokens.map((t) => t.name).toSet(),
+      import.tokens.map((t) => t.name).toSet(),
+    );
+    expect(
+      parsed.tokens.map((t) => t.name),
+      // Grouped by kind, the sheet's order — the palette, then the scale —
+      // with the file's order kept inside each.
+      [
+        'brandPrimary',
+        'brandSurface',
+        'textOnBrand',
+        'cardSurface',
+        'radiusCard',
+        'spacing2x',
+      ],
+      reason: 'the emitter writes the order the library page draws',
+    );
+    SceneTokenDecl named(String name) =>
+        parsed.tokens.firstWhere((t) => t.name == name);
+    expect(named('brandPrimary').value, const SceneColor(0xFFE8632B));
+    expect(named('radiusCard').value, 28.0);
   });
 
-  test('the generated class carries one static set per mode', () {
+  test('the generated class is one set, with a constructor to build more', () {
     var decls = parseTokensFile(emitted()).tokens;
     var source = emitSceneArgs(externals: [], scenes: [], tokens: decls);
-    expect(source, contains('static const darkMode = SceneTokens('));
-    expect(source, contains('brandPrimary: SceneColor(0xFFFF804D)'));
-    expect(source, contains('textOnBrand: SceneColor(0xFF2B1B12)'));
-    expect(source, contains('static const defaultMode = SceneTokens('));
-    expect(source, contains('radiusCard: 28.0'));
-    expect(source, contains("'darkMode': darkMode"));
-    expect(source, contains("'light': light"));
-    expect(source, contains('static const modes = <String, SceneTokens>{'));
+    var flat = source.replaceAll(RegExp(r'\s+'), ' ');
+    expect(flat, contains('this.brandPrimary = const SceneColor(0xFFE8632B)'));
+    expect(flat, contains('this.radiusCard = 28.0'));
+    expect(flat, contains('final SceneColor brandPrimary;'));
+    expect(source, isNot(contains('static const')));
+    expect(source, isNot(contains('static const modes')));
   });
 
-  test('a hand-written declaration reads modes too, and refuses bad ones', () {
+  test('a hand-written declaration refuses a mode and an opaque value', () {
     var parsed = parseTokensFile('''
 final sceneTokens = [
   Token<double>('gap', 8, modes: {'dense': 4, 'wide': 12}),
-  Token<double>('bad', 8, modes: {'1x': 4}),
-  Token<Foo>('opaque', foo, modes: {'dark': bar}),
+  Token<double>('kept', 8),
+  Token<Foo>('opaque', foo),
 ];
 ''');
-    expect(parsed.tokens.single.modes, {'dense': 4.0, 'wide': 12.0});
+    expect(parsed.tokens.single.name, 'kept');
     expect(parsed.refusals.map((r) => r.construct), [
-      'mode name',
+      'modes',
       'token type',
     ], reason: "the app's own object is an export, not a library value");
+    expect(parsed.refusals.first.message, contains('SceneTokens(…)'));
   });
 
   test(
@@ -164,7 +180,7 @@ import 'package:flutterware/scene_authoring.dart';
 import 'scene_args.dart';
 
 class Card({final SceneTokens tokens = const SceneTokens()}) extends SceneDefinition {
-  late final label = TextNode(tokens.copyCTA, color: tokens.textOnBrand);
+  late final label = TextNode('Order now', color: tokens.textOnBrand);
   @override
   late final root = FrameNode(width: 200, height: 100, fill: tokens.brandPrimary, corner: tokens.radiusCard, children: [label]);
 }
@@ -173,7 +189,7 @@ class Card({final SceneTokens tokens = const SceneTokens()}) extends SceneDefini
       expect(result.refusals, isEmpty, reason: result.refusals.join('\n'));
       expect(result.wrote, isTrue);
       expect(result.source, contains('class SceneTokens {'));
-      expect(result.source, contains('static const darkMode = SceneTokens('));
+      expect(result.source, contains('brandPrimary'));
       expect(result.source, contains('class CardArgs extends SceneRefArgs'));
       var decls = parseTokensFile(
         File('${dir.path}/imported.tokens.dart').readAsStringSync(),

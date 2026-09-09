@@ -6,6 +6,16 @@ import 'package:flutterware_app/src/scene/fixtures.dart';
 import 'package:flutterware_app/src/scene/scene_file.dart';
 
 void main() {
+  test('a scene file is named from its class, not asked for', () {
+    // One name to type. The class is the scene's identity everywhere else,
+    // so a file name asked for separately is only a way for the two to
+    // disagree.
+    expect(sceneFileNameFor('PromoBadge'), 'promo_badge.scene.dart');
+    expect(sceneFileNameFor('Invoice'), 'invoice.scene.dart');
+    expect(sceneFileNameFor('StoreBanner2'), 'store_banner2.scene.dart');
+    expect(sceneFileNameFor('ABTest'), 'abtest.scene.dart');
+  });
+
   test('the coffee banner round-trips', () {
     var doc = coffeeBannerDraft();
     var emitted = emitSceneFile(doc, className: 'BannerScene');

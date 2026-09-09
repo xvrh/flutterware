@@ -1,24 +1,8 @@
 //@flutterware:scenes=1
-// This folder is a scene group: every `.scene.dart` below it is one of its
-// scenes, and this file says what those scenes may use. The flutterware
-// scene editor reads it as text — the closures are skipped — and generates
-// `scene_args.dart` beside it; it never writes here except to attach a token
-// library you created.
-//
-// This is the file that stands in for resolving the package. The editor
-// never compiles the app, so it cannot discover that `DrinkBadge` takes a
-// `double size` — it is told here, and everything downstream follows: the
-// generated `DrinkBadgeArgs` a scene file spells, the type the inspector
-// shows, and the refusal for an argument the widget does not have.
-//
-// - widgets: the app's widgets a scene may place, each with its arguments.
-//   It is the only place in the system that names an argument with a
-//   string, by decision: written by hand, it has to compile before anything
-//   has been generated from it, so it mentions nothing generated.
-// - exports: the app's own values, named for the scenes — any type, any
-//   expression. The canvas resolves them; the editor only names them.
-// - libraries: the token libraries these scenes read, imported above.
-// - wrap: what the canvas is mounted under — this app's theme.
+// widgets   the app's widgets a scene may place, with their arguments
+// exports   the app's own values, named for the scenes — any type
+// libraries the *.tokens.dart these scenes read, imported above
+// wrap      what the canvas is mounted under — the app's theme
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';

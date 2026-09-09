@@ -108,14 +108,10 @@ enum SceneTokenOwner { library, export }
 
 class SceneTokenDecl {
   /// A library value: the editor holds it, draws it and compares against it.
-  SceneTokenDecl(
-    this.name,
-    SceneParamKind this.kind,
-    Object this.value, {
-    this.modes = const {},
-  }) : type = _typeOf(kind),
-       owner = SceneTokenOwner.library,
-       _styleType = false;
+  SceneTokenDecl(this.name, SceneParamKind this.kind, Object this.value)
+    : type = _typeOf(kind),
+      owner = SceneTokenOwner.library,
+      _styleType = false;
 
   /// An export: the app's own value, named and typed, never read. The type
   /// decides where the editor offers it — a `Color` on colour properties, a
@@ -127,7 +123,6 @@ class SceneTokenDecl {
     : owner = SceneTokenOwner.export,
       kind = _exportKinds[type],
       value = null,
-      modes = const {},
       _styleType = _exportStyleTypes.contains(type);
 
   /// An export of a type the editor only names — kept for the callers that
@@ -135,16 +130,12 @@ class SceneTokenDecl {
   SceneTokenDecl.opaque(String name, String type) : this.export(name, type);
 
   /// A text style: a bundle of table values the editor renders and a text
-  /// node takes whole, with each property still its own to override. No
-  /// mode yet — a style that differs by mode is a later piece.
-  const SceneTokenDecl.style(
-    this.name,
-    SceneTextStyle this.value, {
-    this.modes = const {},
-  }) : kind = null,
-       type = 'SceneTextStyle',
-       owner = SceneTokenOwner.library,
-       _styleType = true;
+  /// node takes whole, with each property still its own to override.
+  const SceneTokenDecl.style(this.name, SceneTextStyle this.value)
+    : kind = null,
+      type = 'SceneTextStyle',
+      owner = SceneTokenOwner.library,
+      _styleType = true;
 
   final String name;
 
@@ -176,12 +167,6 @@ class SceneTokenDecl {
   /// String, double, bool or [SceneColor]; null for an opaque token.
   final Object? value;
 
-  /// The token's value in each named mode — `{'dark': SceneColor(…)}` — for
-  /// the modes that differ from [value]. A mode name is an identifier: the
-  /// generated class carries one static set per mode. Empty for a token
-  /// that is the same everywhere, and always for an opaque one.
-  final Map<String, Object> modes;
-
   /// A text style — a library's, whose fields the editor holds, or an
   /// export's, which the guest lays under the text's own values.
   bool get isStyle => _styleType;
@@ -197,15 +182,6 @@ class SceneTokenDecl {
   /// fields only the app knows.
   SceneTextStyle? get style =>
       value is SceneTextStyle ? value! as SceneTextStyle : null;
-
-  /// The value in [mode], or the default when the token does not name it —
-  /// which is the rule the generated `SceneTokens.<mode>` set follows. Null
-  /// for an export.
-  Object? valueIn(String? mode) => mode == null ? value : modes[mode] ?? value;
-
-  /// The style in [mode], for a library style; null otherwise.
-  SceneTextStyle? styleIn(String? mode) =>
-      style == null ? null : valueIn(mode)! as SceneTextStyle;
 
   String get typeName => type;
 
@@ -237,16 +213,15 @@ String? tokenMarkerName(Object? value) => switch (value) {
 /// declaration file compiles before anything has been generated from it,
 /// and the generated class is derived from it, never the other way round.
 ///
-/// [modes] names the value in each other mode — `modes: {'dark':
-/// SceneColor(0xFF…)}` — and [value] is the default one. A mode is a whole
-/// set of tokens, so the generated class carries one static set per mode
-/// name, filled from every token that names it and defaulted elsewhere.
+/// One value, and one only. A set that differs — a dark palette, a denser
+/// ramp — is another `SceneTokens` the app constructs and hands to a scene
+/// through its tokens formal; the library declares what the design is, not
+/// every skin it may be worn in.
 class Token<T> {
-  const Token(this.name, this.value, {this.modes = const {}});
+  const Token(this.name, this.value);
 
   final String name;
   final T value;
-  final Map<String, T> modes;
 
   Type get type => T;
 }
@@ -1429,17 +1404,6 @@ class SceneDocument extends SceneListenable {
   /// What the file calls its tokens formal, or null when it declares none.
   /// Recognised by type, so the author's own name is kept and written back.
   String? tokensFormal;
-
-  /// The mode the token-bound properties currently show — a name from the
-  /// declaration's modes, or null for the default set. View state, never
-  /// written: the file spells the reference, and the mode is what the canvas
-  /// (or the app's `tokens:` argument) puts behind it. See `applyTokenMode`.
-  String? tokenMode;
-
-  /// Every mode the group's libraries declare, whether or not any token
-  /// here differs in it — what the canvas offers to switch to. Set beside
-  /// [tokens] by whoever hands the document its vocabulary.
-  final tokenModeNames = <String>[];
 
   SceneTokenDecl? tokenNamed(String name) {
     for (var t in tokens) {

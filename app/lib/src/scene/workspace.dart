@@ -24,6 +24,50 @@ abstract interface class SceneSavable {
   List<SceneRefusal> save(void Function(String path, String source) write);
 }
 
+/// What the autosave watches: something holding savables that announces
+/// when what they owe changes.
+///
+/// Two of them. A [SceneWorkspace] is the usual one — a scene, the scenes
+/// it entered, and the libraries its group lists. A [SceneLibraryDesk] is a
+/// library open on its own page with no scene in the editor at all, which
+/// is what the index's Libraries row opens; without this the page would
+/// have needed a save button, and the studio has none.
+abstract interface class SceneSaveSource {
+  void addListener(void Function() listener);
+  void removeListener(void Function() listener);
+
+  Iterable<SceneSavable> get dirtyFiles;
+  bool get anyDirty;
+
+  /// The editor whose revision arms a write, or null. An editor notifies
+  /// for a hover as much as for an edit, so the autosave arms on its
+  /// revision rather than on the notification; a library notifies only when
+  /// it changes, so it needs none.
+  SceneEditor? get saveEditor;
+}
+
+/// One library, open by itself. Everything the autosave asks of a
+/// workspace, answered by one document.
+class SceneLibraryDesk extends SceneListenable implements SceneSaveSource {
+  SceneLibraryDesk(this.library) {
+    library.addListener(notifyListeners);
+  }
+
+  final TokensLibrary library;
+
+  @override
+  Iterable<SceneSavable> get dirtyFiles =>
+      library.isDirty ? [library] : const [];
+
+  @override
+  bool get anyDirty => library.isDirty;
+
+  @override
+  SceneEditor? get saveEditor => null;
+
+  void dispose() => library.removeListener(notifyListeners);
+}
+
 /// One open file: the pair, its editor, and where it came from.
 class SceneFile implements SceneSavable {
   SceneFile({
@@ -44,7 +88,6 @@ class SceneFile implements SceneSavable {
     String source, {
     Map<String, Set<String>> declaredArgs = const {},
     List<SceneTokenDecl> tokens = const [],
-    List<String> modes = const [],
   }) {
     var parsed = parseSceneFile(
       source,
@@ -52,7 +95,6 @@ class SceneFile implements SceneSavable {
       tokens: tokens,
     );
     if (!parsed.ok) return SceneFileOpen._(null, parsed.refusals);
-    parsed.doc!.tokenModeNames.addAll(modes);
     return SceneFileOpen._(
       SceneFile(
         path: path,
@@ -155,7 +197,6 @@ class SceneFile implements SceneSavable {
     imports
       ..clear()
       ..addAll(parsed.imports);
-    parsed.doc!.tokenModeNames.addAll(editor.doc.tokenModeNames);
     editor.adopt(parsed.doc!, parsed.motions);
     _disk = source;
     _savedRevision = editor.revision;
@@ -190,7 +231,7 @@ class SceneCrumb {
 /// pass one that finds the pair by scene class, and a test passes a fake.
 typedef NestedSceneResolver = SceneFile? Function(SceneNode node);
 
-class SceneWorkspace extends SceneListenable {
+class SceneWorkspace extends SceneListenable implements SceneSaveSource {
   SceneWorkspace(
     SceneFile root, {
     this.resolveNested,
@@ -226,16 +267,11 @@ class SceneWorkspace extends SceneListenable {
     _onLibrary();
   }
 
-  /// Every mode the libraries know, sorted.
-  List<String> get modeNames =>
-      {for (var l in libraries) ...l.modes}.toList()..sort();
-
   void _onLibrary() {
     var tokens = tokensFor?.call(libraries);
     if (tokens == null) return;
-    var modes = modeNames;
     for (var file in _opened.values) {
-      file.editor.retokenize(tokens, modes: modes);
+      file.editor.retokenize(tokens);
     }
     // A nested instance carries its own copy of the child's document.
     resolveInstances(active);
@@ -295,12 +331,17 @@ class SceneWorkspace extends SceneListenable {
   /// The files with unsaved work — what a save-all button writes and what an
   /// exit guard warns about. Includes nested scenes already left behind,
   /// and the libraries edited from here.
+  @override
   Iterable<SceneSavable> get dirtyFiles => [
     ..._opened.values.where((f) => f.isDirty),
     ...libraries.where((l) => l.isDirty),
   ];
 
+  @override
   bool get anyDirty => dirtyFiles.isNotEmpty;
+
+  @override
+  SceneEditor? get saveEditor => editor;
 
   /// The file a node stands for, through the resolver — and if that file is
   /// already open here, the open one, so edits made inside it are what the
@@ -316,7 +357,6 @@ class SceneWorkspace extends SceneListenable {
   /// scene, because that is when the child may have changed.
   void resolveInstances(SceneFile file) {
     if (resolveNested == null) return;
-    var changed = false;
     var parent = file.scene;
     for (var (node, _) in parent.walk()) {
       if (node is! SceneRefNode) continue;
@@ -328,10 +368,6 @@ class SceneWorkspace extends SceneListenable {
       // never by the author: the parent grows a formal on its next save if
       // it had none, and the child's formal name is what the file spells.
       node.tokensArg = child?.scene.tokensFormal;
-      changed = true;
-    }
-    if (changed) {
-      parent.edit(() => applyTokenMode(parent));
     }
   }
 

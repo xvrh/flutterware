@@ -101,20 +101,6 @@ class MotionAside extends SceneAside {
   const MotionAside(super.name);
 }
 
-/// A token of the group — a library's, or one the app exports — by name.
-/// Not the file's own, but read from it, and opened in the same drawer.
-class TokenAside extends SceneAside {
-  const TokenAside(super.name);
-}
-
-/// A token library the group lists, by path — opened for what is the
-/// library's rather than any one token's: its modes.
-class LibraryAside extends SceneAside {
-  const LibraryAside(super.name);
-
-  String get path => name;
-}
-
 /// Where a clip block lives, held by [MotionClip.id] the way a key is.
 class MotionClipRef {
   const MotionClipRef(this.motion, this.group, this.prop, this.clipId);
@@ -158,51 +144,9 @@ class SceneEditor extends SceneListenable {
   set activeMotion(String? name) {
     if (_activeMotion == name) return;
     _activeMotion = name;
-    if (name != null) {
-      _openParam = null;
-      _openToken = null;
-      _openLibrary = null;
-    }
+    if (name != null) _openParam = null;
     _drawerCollapsed = false;
     clearKeySelection();
-    notifyListeners();
-  }
-
-  /// The library open in the drawer, by path, or null — for its modes.
-  /// The editor knows no library; whoever draws the pane says whether the
-  /// path is still one of the group's.
-  String? get openLibrary => _openLibrary;
-  String? _openLibrary;
-
-  set openLibrary(String? path) {
-    if (_openLibrary == path) return;
-    _openLibrary = path;
-    if (path != null) {
-      _activeMotion = null;
-      _openParam = null;
-      _openToken = null;
-      clearKeySelection();
-    }
-    _drawerCollapsed = false;
-    notifyListeners();
-  }
-
-  /// The token open in the drawer, or null — a library's, to edit its
-  /// value; an export's, to see what it is and who reads it.
-  String? get openToken =>
-      doc.tokenNamed(_openToken ?? '') == null ? null : _openToken;
-  String? _openToken;
-
-  set openToken(String? name) {
-    if (_openToken == name) return;
-    _openToken = name;
-    if (name != null) {
-      _activeMotion = null;
-      _openParam = null;
-      _openLibrary = null;
-      clearKeySelection();
-    }
-    _drawerCollapsed = false;
     notifyListeners();
   }
 
@@ -218,24 +162,22 @@ class SceneEditor extends SceneListenable {
     _openParam = name;
     if (name != null) {
       _activeMotion = null;
-      _openToken = null;
-      _openLibrary = null;
       clearKeySelection();
     }
     _drawerCollapsed = false;
     notifyListeners();
   }
 
-  /// What the drawer under the canvas is showing — a motion, a parameter or
-  /// a token — or null. The outline highlights exactly this row.
-  SceneAside? get drawer =>
-      switch ((activeMotion, openParam, openToken, openLibrary)) {
-        (var m?, _, _, _) => MotionAside(m),
-        (_, var p?, _, _) => ParamAside(p),
-        (_, _, var t?, _) => TokenAside(t),
-        (_, _, _, var l?) => LibraryAside(l),
-        _ => null,
-      };
+  /// What the drawer under the canvas is showing — a motion or a parameter
+  /// — or null. The outline highlights exactly this row.
+  ///
+  /// A token is not among them: a library is the package's, and it opens on
+  /// its own page rather than under one scene's artboard.
+  SceneAside? get drawer => switch ((activeMotion, openParam)) {
+    (var m?, _) => MotionAside(m),
+    (_, var p?) => ParamAside(p),
+    _ => null,
+  };
 
   // ---------------------------------------------------------------------
   // Tokens are declared elsewhere — a library the editor owns, an export
@@ -247,34 +189,26 @@ class SceneEditor extends SceneListenable {
   /// Takes a new declaration list — a library edited, a token added or
   /// gone — and moves every reader with it. Not a journal entry: the edit
   /// lives in the library, and is undone there. A value token's readers
-  /// take its value (in the current mode); a style's readers take the new
-  /// value on every property that was inherited from the old one; a
-  /// reference to a token that is gone is dropped, as an edit would drop
-  /// it.
-  void retokenize(List<SceneTokenDecl> next, {List<String> modes = const []}) {
+  /// take its value; a style's readers take the new value on every property
+  /// that was inherited from the old one; a reference to a token that is
+  /// gone is dropped, as an edit would drop it.
+  void retokenize(List<SceneTokenDecl> next) {
     var old = {for (var t in doc.tokens) t.name: t};
     doc.edit(() {
       doc.tokens
         ..clear()
         ..addAll(next);
-      doc.tokenModeNames
-        ..clear()
-        ..addAll(modes);
-      // The mode on show may be gone with the library's change.
-      if (doc.tokenMode != null && !tokenModes.contains(doc.tokenMode)) {
-        doc.tokenMode = null;
-      }
       for (var (node, _) in doc.walk()) {
         for (var e in node.bindings.entries.toList()) {
           switch (e.value) {
             case TokenRef(:var name):
               var decl = doc.tokenNamed(name);
               if (decl != null && decl.hasValue && !decl.isStyle) {
-                setSceneProperty(node, e.key, decl.valueIn(doc.tokenMode));
+                setSceneProperty(node, e.key, decl.value);
               }
             case StyleRef(:var name):
-              var was = old[name]?.styleIn(doc.tokenMode);
-              var now = doc.tokenNamed(name)?.styleIn(doc.tokenMode);
+              var was = old[name]?.style;
+              var now = doc.tokenNamed(name)?.style;
               if (now == null) continue;
               for (var f in now.values.entries) {
                 // A property bound on its own follows its binding.
@@ -294,9 +228,6 @@ class SceneEditor extends SceneListenable {
       }
       reconcileBindings(doc);
     });
-    if (_openToken != null && doc.tokenNamed(_openToken!) == null) {
-      _openToken = null;
-    }
     notifyListeners();
   }
 
@@ -307,7 +238,6 @@ class SceneEditor extends SceneListenable {
   void renameTokenRefs(String from, String to) {
     var readers = readersOfToken(from);
     if (readers.isEmpty) return;
-    if (_openToken == from) _openToken = to;
     // The library renames after its readers do, so [to] is not declared
     // yet: an alias holds the references through the reconcile, and the
     // library's own notification replaces the whole list a moment later.
@@ -318,7 +248,7 @@ class SceneEditor extends SceneListenable {
             ? SceneTokenDecl.style(to, decl.style!)
             : decl.isExport
             ? SceneTokenDecl.export(to, decl.type)
-            : SceneTokenDecl(to, decl.kind!, decl.value!, modes: decl.modes),
+            : SceneTokenDecl(to, decl.kind!, decl.value!),
       );
     }
     perform('Rename token $from', () {
@@ -363,10 +293,9 @@ class SceneEditor extends SceneListenable {
     if (doc.tokenNamed(name) == null) {
       doc.tokens.add(SceneTokenDecl(name, decl.kind, decl.defaultValue));
     }
-    if (_openParam == name) {
-      _openParam = null;
-      _openToken = name;
-    }
+    // The parameter is gone; the drawer has nothing to show for it. Where
+    // the token now lives is the library page, which the tree reaches.
+    if (_openParam == name) _openParam = null;
     perform('Share $name', () {
       for (var (node, prop) in readersOf(name)) {
         node.bindings[prop] = TokenRef(name);
@@ -376,9 +305,8 @@ class SceneEditor extends SceneListenable {
   }
 
   /// MAKE LOCAL: the token [name] becomes a parameter of this scene, with
-  /// the token's value (in the current mode) as its default; every reader
-  /// here follows; the token stays in its library for the other scenes.
-  /// Modes do not come along — a parameter has none. Refused for a style
+  /// the token's value as its default; every reader here follows; the token
+  /// stays in its library for the other scenes. Refused for a style
   /// (several properties) and an export (no value here).
   void localizeToken(String name) {
     var decl = doc.tokenNamed(name);
@@ -393,11 +321,8 @@ class SceneEditor extends SceneListenable {
       throw ArgumentError(problem);
     }
     var kind = decl.kind!;
-    var value = decl.valueIn(doc.tokenMode)!;
-    if (_openToken == name) {
-      _openToken = null;
-      _openParam = name;
-    }
+    var value = decl.value!;
+    _openParam = name;
     perform('Make $name local', () {
       doc.params.add(SceneParamDecl(name, kind, value));
       for (var (node, prop) in readersOfToken(name)) {
@@ -405,29 +330,6 @@ class SceneEditor extends SceneListenable {
       }
     });
   }
-
-  /// The token mode the artboard shows — a mode name from the declaration,
-  /// or null for the default set. View state: not journaled, not written.
-  /// Setting it puts the mode's values behind every token reference, in
-  /// this document and every nested instance that receives the set.
-  String? get tokenMode => doc.tokenMode;
-
-  set tokenMode(String? mode) {
-    if (mode != null && !tokenModes.contains(mode)) {
-      throw ArgumentError('no token mode "$mode" — ${tokenModes.join(', ')}');
-    }
-    if (doc.tokenMode == mode) return;
-    var from = doc.tokenMode;
-    doc.tokenMode = mode;
-    doc.edit(() => applyTokenMode(doc, from: from));
-    notifyListeners();
-  }
-
-  /// Every mode the group's libraries declare or a token names, sorted.
-  List<String> get tokenModes => {
-    ...doc.tokenModeNames,
-    for (var t in doc.tokens) ...t.modes.keys,
-  }.toList()..sort();
 
   /// Whether the drawer under the canvas is folded away while its motion
   /// stays open — the header keeps naming it, the motion stays on the
@@ -471,7 +373,6 @@ class SceneEditor extends SceneListenable {
     clearKeySelection();
     perform('Reload from disk', () {
       doc.restore(incoming.snapshot());
-      applyTokenMode(doc);
       motions
         ..clear()
         ..addAll(incomingMotions);
@@ -984,7 +885,7 @@ class SceneEditor extends SceneListenable {
       // An export has no value here: the property keeps what it shows and
       // the guest draws the app's own over it.
       if (decl.hasValue) {
-        setSceneProperty(node, prop, decl.valueIn(doc.tokenMode));
+        setSceneProperty(node, prop, decl.value);
       }
     });
   }
@@ -1879,9 +1780,6 @@ class SceneEditor extends SceneListenable {
   void _restore(_JournalEntry entry) {
     _openMerge = null;
     doc.restore(entry.scene);
-    // A snapshot holds the values of the mode it was taken in; the mode is
-    // view state and outlives it.
-    applyTokenMode(doc);
     // The set of motions is part of the state: one added since is dropped,
     // one removed since comes back — revived into a fresh document, since
     // the old object is gone with whoever held it.

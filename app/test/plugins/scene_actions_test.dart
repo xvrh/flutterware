@@ -85,11 +85,18 @@ void main() {
               as Map<String, Object?>;
       expect(result['path'], 'demo/imported.tokens.dart');
       expect(result['symbol'], 'importedTokens');
-      expect(result['modes'], ['light', 'darkMode', 'defaultMode']);
-      expect((result['tokens']! as List).length, 8);
-      expect(result['added'], 8);
-      expect((result['refusals']! as List).length, 2);
-      expect(result['listedBy'], ['demo'], reason: 'attached to its group');
+      expect((result['tokens']! as List).length, 6);
+      expect(result['added'], 6);
+      expect(
+        (result['refusals']! as List).length,
+        5,
+        reason:
+            'two unusable variables, a STRING and a BOOLEAN the library does '
+            "not hold, and Colors' non-default mode",
+      );
+      expect(result['readBy'], [
+        'demo',
+      ], reason: "it landed in the group's folder, so the group reads it");
       var written = File(p.join(root.path, 'demo', 'imported.tokens.dart'));
       expect(written.readAsStringSync(), startsWith(sceneTokensFileMarker));
       expect(
@@ -107,14 +114,17 @@ void main() {
       );
       var args = File(p.join(root.path, 'demo', 'scene_args.dart'));
       expect(args.readAsStringSync(), contains('class SceneTokens {'));
-      expect(args.readAsStringSync(), contains('static const darkMode'));
+      expect(
+        args.readAsStringSync(),
+        contains('final SceneColor brandPrimary;'),
+      );
       expect(written.readAsStringSync(), contains('// Imported from '));
       // Importing again finds everything as it left it.
       var again =
           (await core().invoke('importTokens', arguments: {'file': fixture}))!
               as Map<String, Object?>;
       expect(again['added'], 0);
-      expect(again['unchanged'], 8);
+      expect(again['unchanged'], 6);
     });
 
     test('merges into a library the editor wrote, keeping its own', () async {
@@ -140,7 +150,7 @@ final brandTokens = [
               as Map<String, Object?>;
       expect(result['symbol'], 'brandTokens');
       expect(result['updated'], 1);
-      expect(result['added'], 7);
+      expect(result['added'], 5);
       expect(result['kept'], ['espresso']);
       var source = written.readAsStringSync();
       expect(source, contains("'espresso', 3"));
@@ -322,7 +332,90 @@ final brandTokens = [
     );
   });
 
-  test('newLibrary writes an empty library and lists it in a group', () async {
+  group('newScene', () {
+    test('writes the folder and its declaration on the way', () async {
+      // The action the panel's one verb had no twin for: an agent could make
+      // a folder and a library and not the thing either exists for.
+      var made =
+          (await core().invoke(
+                'newScene',
+                arguments: {'name': 'PromoBadge', 'folder': 'lib/scenes'},
+              ))!
+              as Map<String, Object?>;
+      expect(made['path'], 'lib/scenes/promo_badge.scene.dart');
+      expect(made['class'], 'PromoBadge');
+      expect(
+        made['alsoWrote'],
+        'lib/scenes/$sceneGroupFileName',
+        reason: 'the second file is named, not sprung',
+      );
+      var written = File(
+        p.join(root.path, 'lib', 'scenes', 'promo_badge.scene.dart'),
+      ).readAsStringSync();
+      expect(written, startsWith(sceneFileMarker));
+      expect(written, contains('class PromoBadge extends SceneDefinition'));
+
+      var listed = (await core().invoke('list'))! as Map<String, Object?>;
+      var groups = (listed['groups']! as List).cast<Map<String, Object?>>();
+      expect(groups.single['folder'], 'lib/scenes');
+    });
+
+    test('an existing folder gets the scene alone', () async {
+      writeScene('BannerScene', withMotion: false);
+      var made =
+          (await core().invoke(
+                'newScene',
+                arguments: {'name': 'PromoBadge', 'folder': 'demo'},
+              ))!
+              as Map<String, Object?>;
+      expect(made['path'], 'demo/promo_badge.scene.dart');
+      expect(made.containsKey('alsoWrote'), isFalse);
+    });
+
+    test(
+      'with no folder named, it lands where the scenes already are',
+      () async {
+        writeScene('BannerScene', withMotion: false);
+        var made =
+            (await core().invoke('newScene', arguments: {'name': 'Teaser'}))!
+                as Map<String, Object?>;
+        expect(made['folder'], 'demo');
+        expect(made['path'], 'demo/teaser.scene.dart');
+      },
+    );
+
+    test('a name that is not a class is refused by saying what one is', () {
+      // Rejected rather than thrown: the check is past the first await, so
+      // a synchronous expectation would pass on a Future nobody looked at.
+      expect(
+        core().invoke('newScene', arguments: {'name': 'promo badge'}),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => '$e',
+            'message',
+            contains('a capital first'),
+          ),
+        ),
+      );
+    });
+
+    test(
+      'the artboard is the size asked for, however it was spelled',
+      () async {
+        await core().invoke(
+          'newScene',
+          arguments: {'name': 'Square', 'width': '1080', 'height': 1080},
+        );
+        var written = File(
+          p.join(root.path, 'lib', 'scenes', 'square.scene.dart'),
+        ).readAsStringSync();
+        expect(written, contains('width: 1080'));
+        expect(written, contains('height: 1080'));
+      },
+    );
+  });
+
+  test('newLibrary names a group to mean its folder', () async {
     writeScene('BannerScene', withMotion: false);
     var made =
         (await core().invoke(
@@ -332,12 +425,13 @@ final brandTokens = [
             as Map<String, Object?>;
     expect(made['path'], 'demo/brand.tokens.dart');
     expect(made['symbol'], 'brandTokens');
-    expect(made['attachedTo'], 'demo');
+    expect(made['readBy'], ['demo']);
     var result = (await core().invoke('list'))! as Map<String, Object?>;
     var groups = (result['groups']! as List).cast<Map<String, Object?>>();
     expect(groups.single['libraries'], ['demo/brand.tokens.dart']);
     var libraries = (result['libraries']! as List).cast<Map<String, Object?>>();
     expect(libraries.single['symbol'], 'brandTokens');
+    expect(libraries.single['readBy'], ['demo']);
   });
 
   test('an unknown package is refused by naming the declared ones', () {
@@ -379,6 +473,114 @@ final brandTokens = [
         ),
       ),
     );
+  });
+
+  group('a library goes where the scenes that read it are', () {
+    /// A `scenes.dart` in [folder], and a library at [libraryPath] that the
+    /// declaration knows nothing about — the state a human reaches by
+    /// dropping a file into a folder, or dragging one out of it.
+    void writeLibrary(String libraryPath) {
+      var file = File(p.join(root.path, libraryPath));
+      file.parent.createSync(recursive: true);
+      file.writeAsStringSync('''
+$sceneTokensFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+final ${tokensSymbolFor(libraryPath)} = [
+  const Token<SceneColor>('brand', SceneColor(0xFFE8632B)),
+];
+''');
+    }
+
+    test(
+      'a new one is listed where it lands, without being attached',
+      () async {
+        writeScene('BannerScene', withMotion: false);
+        var result =
+            (await core().invoke(
+                  'newLibrary',
+                  arguments: {'name': 'Brand', 'folder': 'demo'},
+                ))!
+                as Map<String, Object?>;
+        expect(result['path'], 'demo/brand.tokens.dart');
+        expect(result['readBy'], ['demo']);
+        expect(
+          File(p.join(root.path, 'demo', sceneGroupFileName))
+              .readAsStringSync(),
+          contains('libraries: [brandTokens]'),
+        );
+      },
+    );
+
+    test('one written beside a group is read by nobody', () async {
+      writeScene('BannerScene', withMotion: false);
+      var result =
+          (await core().invoke(
+                'newLibrary',
+                arguments: {'name': 'Brand', 'folder': 'design'},
+              ))!
+              as Map<String, Object?>;
+      expect(result['path'], 'design/brand.tokens.dart');
+      expect(result['readBy'], isEmpty);
+      // And nothing was written into a declaration to pretend otherwise.
+      expect(
+        File(p.join(root.path, 'demo', sceneGroupFileName)).readAsStringSync(),
+        isNot(contains('brandTokens')),
+      );
+    });
+
+    test(
+      'a file dropped in is drift, shown and not silently adopted',
+      () async {
+        writeScene('BannerScene', withMotion: false);
+        var c = core();
+        await c.invoke('list');
+        writeLibrary('demo/brand.tokens.dart');
+        await c.reload('.');
+        var group = c.scanFor('.')!.groups.single;
+        var drift = c.driftFor('.', group);
+        expect(drift.missing.map((l) => l.symbol), ['brandTokens']);
+        expect(drift.stray, isEmpty);
+        // A scan does not write: the declaration is code somebody owns.
+        expect(
+          File(group.declarationPath).readAsStringSync(),
+          isNot(contains('brandTokens')),
+        );
+
+        await c.reconcileLibraries('.', group);
+        expect(
+          File(group.declarationPath).readAsStringSync(),
+          contains('libraries: [brandTokens]'),
+        );
+        expect(c.driftFor('.', c.scanFor('.')!.groups.single).isEmpty, isTrue);
+      },
+    );
+
+    test('a file dragged out is drift the other way, and reconciles', () async {
+      writeScene('BannerScene', withMotion: false);
+      writeLibrary('demo/brand.tokens.dart');
+      var c = core();
+      await c.invoke('list');
+      await c.reconcileLibraries('.', c.scanFor('.')!.groups.single);
+      expect(
+        File(p.join(root.path, 'demo', sceneGroupFileName)).readAsStringSync(),
+        contains('libraries: [brandTokens]'),
+      );
+
+      // Moved out from under the folder, the way a person moves a file.
+      Directory(p.join(root.path, 'design')).createSync();
+      File(p.join(root.path, 'demo', 'brand.tokens.dart'))
+          .renameSync(p.join(root.path, 'design', 'brand.tokens.dart'));
+      await c.reload('.');
+      var group = c.scanFor('.')!.groups.single;
+      var drift = c.driftFor('.', group);
+      expect(drift.stray.map((l) => l.symbol), ['brandTokens']);
+
+      await c.reconcileLibraries('.', group);
+      var declaration = File(group.declarationPath).readAsStringSync();
+      expect(declaration, isNot(contains('brandTokens')));
+      expect(declaration, isNot(contains("import 'brand.tokens.dart';")));
+    });
   });
 
   test('a group whose generated player is gone says so', () async {

@@ -5,8 +5,8 @@ import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/context_menu.dart';
 import '../../ui/design/design.dart';
-import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
+import '../../ui/menu.dart';
 import '../../ui/tree_row.dart';
 import '../editor.dart';
 import 'inline_name.dart';
@@ -29,19 +29,10 @@ class SceneOutlineSections extends StatefulWidget {
     this.sceneClassName,
     this.onOpenMotion,
     this.onOpenParam,
-    this.onOpenToken,
-    this.onOpenLibrary,
     this.tokens,
   });
 
   final SceneEditor editor;
-
-  /// Opens a token below the canvas.
-  final ValueChanged<String>? onOpenToken;
-
-  /// Opens a library, by path — its divider in the tokens section is the
-  /// row, and the drawer shows its modes. Null: the editor's own door.
-  final ValueChanged<String>? onOpenLibrary;
 
   /// The group's libraries and the doors past this file; null hides the
   /// Tokens section's `+` and makes rename and delete local.
@@ -67,10 +58,6 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
 
   var _paramsOpen = true;
   var _motionsOpen = true;
-  var _tokensOpen = true;
-
-  /// The libraries folded away, by path; the app's exports by [_exportsKey].
-  final _folded = <String>{};
 
   /// The row being renamed in place, if any.
   SceneAside? _renaming;
@@ -111,265 +98,17 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
         ),
         if (_motionsOpen)
           for (var name in motions) _motionRow(context, name),
-        ..._tokensSection(context),
         const SizedBox(height: FwSpacing.sm),
       ],
     );
   }
 
-  /// The group's tokens: one branch per library the group lists, with the
-  /// tokens it declares under it, then the app's exports. Package-wide, so
-  /// every scene of the group shows the same section. A library's row
-  /// opens the library in the drawer; its chevron folds it.
-  List<Widget> _tokensSection(BuildContext context) {
-    var host = widget.tokens;
-    var exports = [
-      for (var t in doc.tokens)
-        if (t.isExport) t,
-    ];
-    var count = doc.tokens.length;
-    return [
-      _section(
-        context,
-        'Tokens',
-        count,
-        open: _tokensOpen,
-        onToggle: () => setState(() => _tokensOpen = !_tokensOpen),
-        onAdd: host == null ? null : (at) => _addTokenMenu(context, at, null),
-      ),
-      if (_tokensOpen) ...[
-        if (host != null)
-          for (var library in host.libraries) ...[
-            _branch(
-              context,
-              label: library.symbol,
-              icon: Icons.style_outlined,
-              facts: '${library.tokens.length}',
-              tooltip: [
-                library.fileName,
-                if (library.modes.isNotEmpty)
-                  'modes: ${library.modes.join(', ')}'
-                else
-                  'no modes yet',
-                'click for its modes and its design file',
-              ].join(' · '),
-              open: !_folded.contains(library.path),
-              onToggle: () => setState(() {
-                if (!_folded.remove(library.path)) _folded.add(library.path);
-              }),
-              selected: editor.drawer == LibraryAside(library.path),
-              onOpen: () => _openLibrary(library.path),
-              onAdd: (at) => _addTokenMenu(context, at, library.path),
-              addTooltip: 'New token in ${library.symbol}',
-            ),
-            if (!_folded.contains(library.path))
-              for (var t in library.tokens) _tokenRow(context, t),
-          ],
-        if (exports.isNotEmpty) ...[
-          _branch(
-            context,
-            label: 'from the app',
-            icon: Icons.ios_share_outlined,
-            facts: '${exports.length}',
-            tooltip: "The group's exports — the app's own values, by name",
-            open: !_folded.contains(_exportsKey),
-            onToggle: () => setState(() {
-              if (!_folded.remove(_exportsKey)) _folded.add(_exportsKey);
-            }),
-          ),
-          if (!_folded.contains(_exportsKey))
-            for (var t in exports) _tokenRow(context, t),
-        ],
-        if (host != null && host.libraries.isEmpty && exports.isEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FwSpacing.md + FwSpacing.xl,
-              FwSpacing.xxs,
-              FwSpacing.sm,
-              FwSpacing.xs,
-            ),
-            child: Text(
-              'No library yet — + starts one for this group.',
-              style: context.type.micro.copyWith(color: context.colors.mut2),
-            ),
-          ),
-      ],
-    ];
-  }
-
-  static const _exportsKey = '<exports>';
-
-  /// A branch one level under a section — a library, the app's exports —
-  /// drawn as the layers above draw a frame: the chevron folds, the row
-  /// selects (opens the library), and the `+` at its end adds under it.
-  Widget _branch(
-    BuildContext context, {
-    required String label,
-    required IconData icon,
-    required String facts,
-    required String tooltip,
-    required bool open,
-    required VoidCallback onToggle,
-    bool selected = false,
-    VoidCallback? onOpen,
-    void Function(Offset at)? onAdd,
-    String? addTooltip,
-  }) {
-    var colors = context.colors;
-    return FwTreeRow(
-      depth: 1,
-      density: TreeRowDensity.roomy,
-      selected: selected,
-      open: open,
-      onToggleFold: onToggle,
-      onTap: onOpen,
-      label: Tooltip(
-        message: tooltip,
-        waitDuration: const Duration(milliseconds: 600),
-        child: Row(
-          spacing: FwSpacing.sm,
-          children: [
-            Icon(
-              icon,
-              size: FwIconSize.sm,
-              color: selected ? colors.accentDark : colors.mut,
-            ),
-            Expanded(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: context.type.body.copyWith(
-                  color: selected ? colors.accentDark : colors.ink,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      trailing: [
-        Text(facts, style: context.type.caption.copyWith(color: colors.mut2)),
-        if (onAdd != null) _addButton(context, addTooltip ?? 'New', onAdd),
-      ],
-    );
-  }
-
-  /// The `+` at a row's end: a real target, not a bare glyph — hover wash,
-  /// a click-sized box — sized so the thumb of the scrollbar beside it
-  /// does not take the click.
-  Widget _addButton(
-    BuildContext context,
-    String tooltip,
-    void Function(Offset at) onAdd,
-  ) {
-    return Tooltip(
-      message: tooltip,
-      child: Builder(
-        builder: (context) => Tappable(
-          onTap: () {
-            var box = context.findRenderObject()! as RenderBox;
-            onAdd(box.localToGlobal(Offset(0, box.size.height)));
-          },
-          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
-          child: Padding(
-            padding: const EdgeInsets.all(FwSpacing.xs),
-            child: Icon(
-              Icons.add,
-              size: FwIconSize.sm,
-              color: context.colors.mut,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _tokenRow(BuildContext context, SceneTokenDecl t) {
-    var aside = TokenAside(t.name);
-    var host = widget.tokens;
-    // A colour is its swatch here, the way the layers show theirs: the
-    // hex is in the tooltip, and the name keeps its room.
-    var swatch = switch (t.value) {
-      SceneColor c when !t.isExport => c,
-      _ => null,
-    };
-    return _row(
-      context,
-      aside,
-      depth: 2,
-      icon: tokenIcon(t),
-      name: t.name,
-      trailing: swatch == null ? tokenValueLabel(t) : '',
-      swatch: swatch,
-      tooltip: tokenFacts(editor, host, t.name),
-      onOpen: () => _openToken(t.name),
-      menu: () => tokenMenu(
-        editor,
-        host,
-        t.name,
-        onRename: () => setState(() => _renaming = aside),
-      ),
-      rename: (wanted) {
-        if (host?.rename case var rename?) {
-          rename(t.name, wanted);
-        } else if (host != null) {
-          host.renameHere(editor, t.name, wanted);
-        } else {
-          throw ArgumentError('no library open to rename in');
-        }
-      },
-    );
-  }
-
-  void _openToken(String name) {
-    if (widget.onOpenToken case var open?) {
-      open(name);
-    } else {
-      editor.openToken = name;
-    }
-  }
-
-  void _openLibrary(String path) {
-    if (widget.onOpenLibrary case var open?) {
-      open(path);
-    } else {
-      editor.openLibrary = path;
-    }
-  }
-
-  /// `+` on the section, or on one library's divider: a token of a kind,
-  /// or a style, in that library — the first one when the section's own
-  /// `+` was pressed — and, from the section, a new library.
-  void _addTokenMenu(BuildContext context, Offset at, String? libraryPath) {
-    var host = widget.tokens;
-    if (host == null) return;
-    var library = libraryPath == null
-        ? host.libraries.firstOrNull
-        : host.libraries.where((l) => l.path == libraryPath).firstOrNull;
-    showContextMenu(context, at, [
-      if (library != null)
-        ...newTokenEntries(
-          editor,
-          host,
-          library,
-          onAdded: (name) {
-            _openToken(name);
-            setState(() {
-              _tokensOpen = true;
-              _renaming = TokenAside(name);
-            });
-          },
-        ),
-      if (libraryPath == null && host.onNewLibrary != null) ...[
-        if (library != null) const MenuDivider(),
-        MenuItem(
-          'New library',
-          icon: Icons.library_add_outlined,
-          shortcut: 'in this folder',
-          onSelected: host.onNewLibrary,
-        ),
-      ],
-    ]);
-  }
+  // The tokens are NOT here. They were, as a listing whose every row
+  // teleported you to the library page, and a tree you cannot edit in that
+  // leaves when clicked is worse than no tree. What a property may bind to
+  // is on the property's own menu in the inspector, with each token's value
+  // beside its name; what a token IS is the library page, one back-step
+  // away. Removed 2026-09-09.
 
   /// A section's line: a branch at the root of this outline, drawn as the
   /// layers draw a frame — the chevron folds, and so does the row, since a
@@ -405,6 +144,33 @@ class _SceneOutlineSectionsState extends State<SceneOutlineSections> {
             onAdd,
           ),
       ],
+    );
+  }
+
+  Widget _addButton(
+    BuildContext context,
+    String tooltip,
+    void Function(Offset at) onAdd,
+  ) {
+    return Tooltip(
+      message: tooltip,
+      child: Builder(
+        builder: (context) => Tappable(
+          onTap: () {
+            var box = context.findRenderObject()! as RenderBox;
+            onAdd(box.localToGlobal(Offset(0, box.size.height)));
+          },
+          borderRadius: BorderRadius.circular(context.radii.radiusSmall),
+          child: Padding(
+            padding: const EdgeInsets.all(FwSpacing.xs),
+            child: Icon(
+              Icons.add,
+              size: FwIconSize.sm,
+              color: context.colors.mut,
+            ),
+          ),
+        ),
+      ),
     );
   }
 

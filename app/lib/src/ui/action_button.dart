@@ -31,6 +31,9 @@ import 'theme.dart';
 /// throws and shows it. A caller that swallows its own errors and hands back a
 /// completed future gets a green tick for a failure, which is worse than the
 /// button this replaces.
+///
+/// A button that *opens* something has no outcome to acknowledge, and
+/// [acknowledges] is how it says so — see the field.
 class FwActionButton extends StatefulWidget {
   const FwActionButton({
     super.key,
@@ -38,6 +41,7 @@ class FwActionButton extends StatefulWidget {
     required this.onPressed,
     this.tooltip,
     this.primary = false,
+    this.acknowledges = true,
   });
 
   final String label;
@@ -51,6 +55,19 @@ class FwActionButton extends StatefulWidget {
 
   /// Awaited, and its error caught and shown. Null disables the button.
   final Future<void> Function()? onPressed;
+
+  /// Whether finishing is worth saying. False for a button that opens rather
+  /// than does — a popover anchor, a dialog, a file picker.
+  ///
+  /// The acknowledgement above is for work whose result you cannot otherwise
+  /// see. Opening a form is its own result: the form is on the screen. Worse,
+  /// `controller.open()` completes in the same frame, so the tick lands the
+  /// instant you press — three buttons on the scene index announced "Done"
+  /// before you had typed anything into the form they had just opened, which
+  /// is not a slow acknowledgement but a false one.
+  ///
+  /// A failure is still reported: an open that throws is worth knowing about.
+  final bool acknowledges;
 
   @override
   State<FwActionButton> createState() => _FwActionButtonState();
@@ -82,13 +99,15 @@ class _FwActionButtonState extends State<FwActionButton> {
 
     _revert?.cancel();
     setState(() {
-      _phase = _Phase.running;
+      _phase = widget.acknowledges ? _Phase.running : _Phase.idle;
       _error = null;
     });
 
     // Started together and both awaited, so the floor is a floor and not an
     // addition — work that takes longer than it is not delayed at all.
-    var floor = Future<void>.delayed(_minRunning);
+    var floor = widget.acknowledges
+        ? Future<void>.delayed(_minRunning)
+        : Future<void>.value();
     String? failure;
     try {
       await onPressed();
@@ -99,7 +118,11 @@ class _FwActionButtonState extends State<FwActionButton> {
 
     if (!mounted) return;
     setState(() {
-      _phase = failure == null ? _Phase.done : _Phase.failed;
+      _phase = switch (failure) {
+        null when widget.acknowledges => _Phase.done,
+        null => _Phase.idle,
+        _ => _Phase.failed,
+      };
       _error = failure;
     });
 

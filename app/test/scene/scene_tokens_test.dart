@@ -25,13 +25,12 @@ import 'package:flutterware/scene_authoring.dart';
 final sceneTokens = [
   const Token<SceneColor>('brand', SceneColor(0xFFE8632B)),
   const Token<double>('radius', 28),
-  Token<String>('cta', 'Order now'),
-  const Token<bool>('compact', false),
 ];
 ''';
 
-/// The app's own objects are EXPORTS, declared in the group beside the
-/// widgets — a library holds only values the editor can draw.
+/// The app's own values are EXPORTS, declared in the group beside the
+/// widgets. Any type at all, including the String and bool a library
+/// refuses: a library is a design system, and copy is the app's.
 const _exports = '''
 import 'package:flutter/material.dart' show ButtonStyle, FilledButton;
 import 'package:flutterware/scene_authoring.dart';
@@ -39,6 +38,7 @@ import 'package:flutterware/scene_authoring.dart';
 import 'shop.dart' as app;
 
 final scenes = SceneGroup(exports: [
+  Token<String>('cta', 'Order now'),
   Token<ButtonStyle>('ctaStyle', FilledButton.styleFrom()),
   Token<app.Decor>('decor', app.decor),
 ]);
@@ -76,17 +76,10 @@ void main() {
     test('names each token, its kind and its value', () {
       var parsed = parseTokensFile(_declaration);
       expect(parsed.refusals, isEmpty);
-      expect(parsed.tokens.map((t) => t.name).take(4), [
-        'brand',
-        'radius',
-        'cta',
-        'compact',
-      ]);
-      expect(parsed.tokens.map((t) => t.kind).take(4), [
+      expect(parsed.tokens.map((t) => t.name).take(2), ['brand', 'radius']);
+      expect(parsed.tokens.map((t) => t.kind).take(2), [
         SceneParamKind.color,
         SceneParamKind.number,
-        SceneParamKind.string,
-        SceneParamKind.bool,
       ]);
       expect(parsed.tokens[0].value, const SceneColor(0xFFE8632B));
       expect(parsed.tokens[1].value, 28.0);
@@ -135,11 +128,10 @@ final sceneTokens = [
       expect(source, contains('class SceneTokens {'));
       expect(source, contains('final SceneColor brand;'));
       expect(source, contains('final double radius;'));
-      expect(source, contains('final String cta;'));
-      expect(source, contains('final bool compact;'));
       expect(source, contains('this.brand = const SceneColor(0xFFE8632B)'));
       expect(source, contains('this.radius = 28.0'));
-      expect(source, contains("this.cta = 'Order now'"));
+      // An export is a getter: its value is the app's.
+      expect(source, contains('String get cta =>'));
     });
 
     test('is absent when nothing is declared', () {
@@ -219,7 +211,9 @@ final sceneTokens = [
       expect(parsed.refusals, isEmpty);
       var box = parsed.doc!.nodeNamed('box')! as SceneRefNode;
       expect(box.bindings['args.label'], const TokenRef('cta'));
-      expect(box.args['label'], 'Order now');
+      // `cta` is the app's, so the argument carries the marker and the
+      // guest resolves it; a library token would carry its value.
+      expect(box.args['label'], {'token': 'cta'});
       expect(_emit(parsed.doc!), contains('BadgeArgs(label: t.cta)'));
     });
   });

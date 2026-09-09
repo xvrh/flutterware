@@ -113,14 +113,17 @@ class _SceneLayerListState extends State<SceneLayerList> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // The `+` sits next to the word, not at the far right: this list is
+        // as wide as whatever holds it, and in the library's full-width card
+        // an edge-pinned button was a hand's travel away from the label that
+        // names it.
         Row(
           children: [
-            Expanded(child: Text('Paint', style: caption)),
-            if (widget.marker != null) ...[
-              widget.marker!,
-              const Gap(FwSpacing.sm),
-            ],
+            Text('Paint', style: caption),
+            const Gap(FwSpacing.xs),
             _addButton(context),
+            const Spacer(),
+            if (widget.marker != null) widget.marker!,
           ],
         ),
         const Gap(FwSpacing.xs),
@@ -145,7 +148,13 @@ class _SceneLayerListState extends State<SceneLayerList> {
         'Stroke',
         icon: Icons.border_color_outlined,
         onSelected: () => _add(
-          StrokeLayer(width: widget.fontSize / 7, join: SceneStrokeJoin.round),
+          StrokeLayer(
+            // A seventh of the face is a stroke you can see; the rounding
+            // is so a 54pt title does not open with a width of
+            // 7.714285714285714.
+            width: (widget.fontSize / 7 * 100).roundToDouble() / 100,
+            join: SceneStrokeJoin.round,
+          ),
         ),
       ),
       const MenuDivider(),
@@ -399,10 +408,15 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   context,
                   'Opacity',
                   layer.opacity,
+                  // softMin/softMax are where a slider sits; min/max are what
+                  // the value may BE. Only the hints were set, so a drag ran
+                  // a pass past fully opaque and out the other side.
                   const SceneNumberShape(
                     perPixel: 0.005,
                     decimals: 2,
                     min: 0,
+                    max: 1,
+                    softMin: 0,
                     softMax: 1,
                   ),
                   (v) => _replace(

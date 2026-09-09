@@ -1653,7 +1653,7 @@ Scenes this project owns — a design and the motion animating it, in one tool-w
 
 #### `list` — List
 
-The scene groups this project has — each a folder with a scenes.dart — with the scenes in each, and the token libraries found.
+The folders this project keeps scenes in — what is in each, what its scenes may use, and every library found with the scenes that read it. A folder holds scenes when it has a scenes.dart in it; nothing is listed in configuration.
 
 ```sh
 fw run scene list [--package=…]
@@ -1665,7 +1665,7 @@ fw run scene list [--package=…]
 
 #### `video` — Video
 
-Renders a scene's motion to an mp4, drawn by the app itself — its theme, its group's widgets — one frame per moment on the harness lane, where a frame cannot be of a moment other than the one it was drawn for. Needs ffmpeg.
+Renders a scene's motion to an mp4, drawn by the app itself — its theme, the widgets its folder declares — one frame per moment on the harness lane, where a frame cannot be of a moment other than the one it was drawn for. Needs ffmpeg.
 
 ```sh
 fw run scene video [--package=…] --scene=<string> [--fps=…] [--args=…]
@@ -1678,9 +1678,25 @@ fw run scene video [--package=…] --scene=<string> [--fps=…] [--args=…]
 | `fps` | string | no | 30 | Between 1 and 120. |
 | `args` | string | no | — | A JSON object answering the scene's own parameters — {"headline": "Votre café", "shotFront": "…/01-welcome.png"}. One authored scene then renders every locale, and each setting is a file of its own rather than the same name written twice. A name the scene does not declare is refused, with the ones it does. |
 
-#### `newGroup` — New group
+#### `newScene` — New scene
 
-Makes a folder a scene group: writes its scenes.dart skeleton, which the next scan finds. The generated scene_args.dart follows.
+Writes a scene file with an empty artboard — and the folder and its scenes.dart too, when that folder does not keep scenes yet. The one thing to reach for to start a scene.
+
+```sh
+fw run scene newScene [--package=…] --name=<string> [--folder=…] [--width=…] [--height=…]
+```
+
+| parameter | kind | required | default | |
+|---|---|---|---|---|
+| `package` | string | no | — | Which declared package; the first when omitted. |
+| `name` | string | yes | — | The scene class — PromoBadge. The file is named from it: promo_badge.scene.dart. |
+| `folder` | string | no | — | Relative to the package. An existing folder of scenes, or a new one, which is written on the way. Default: the first folder that already keeps scenes, else lib/scenes. |
+| `width` | string | no | — | Default 1024. |
+| `height` | string | no | — | Default 500. |
+
+#### `newGroup` — New folder of scenes
+
+Writes a folder's scenes.dart on its own — the declaration saying what the scenes in it may use. `newScene` writes this as well when it has to, so reach for this only to prepare a folder before there is anything to put in it.
 
 ```sh
 fw run scene newGroup [--package=…] --folder=<string>
@@ -1693,7 +1709,7 @@ fw run scene newGroup [--package=…] --folder=<string>
 
 #### `newLibrary` — New library
 
-Writes an empty token library — <name>.tokens.dart, the editor's own — and lists it in a group when one is named.
+Writes an empty token library — <name>.tokens.dart, the editor's own. Where it lands is who reads it: the scenes below its folder, and no others. A colour, a number or a text style — a library is a design system, not a bag of values.
 
 ```sh
 fw run scene newLibrary [--package=…] --name=<string> [--folder=…] [--group=…]
@@ -1703,12 +1719,12 @@ fw run scene newLibrary [--package=…] --name=<string> [--folder=…] [--group=
 |---|---|---|---|---|
 | `package` | string | no | — | Which declared package; the first when omitted. |
 | `name` | string | yes | — | The library — Brand, store front. |
-| `folder` | string | no | — | Relative to the package; the group's own folder when a group is named, lib/ otherwise. |
-| `group` | string | no | — | A group folder, relative to the package. |
+| `folder` | string | no | — | Relative to the package, and the whole of who reads it — a folder of scenes for those scenes alone, a folder above several for all of them. Defaults to the folder named by group, else lib/. |
+| `group` | string | no | — | A folder of scenes, relative to the package — shorthand for that folder, so the library is read by its scenes. |
 
 #### `importTokens` — Import tokens
 
-Merges a design file's variables into a token library — the JSON its REST API answers for local variables, saved to a file. By name: a token the file knows takes its value and modes, a new one is added, one the file does not have is kept and listed; a name held here as another kind is refused by name, as is a variable that cannot be a token. The report is written into the library, where the panel shows it.
+Merges a design file's variables into a token library — the JSON its REST API answers for local variables, saved to a file. By name: a token the file knows takes the file's value, a new one is added, one the file does not have is kept and listed; a name held here as another kind is refused by name, as is a variable that cannot be a token. Only the default mode of a collection is read — a library holds one value per token — and every other mode is refused by name. The report is written into the library, where the panel shows it.
 
 ```sh
 fw run scene importTokens [--package=…] --file=<string> [--library=…]
@@ -1718,7 +1734,7 @@ fw run scene importTokens [--package=…] --file=<string> [--library=…]
 |---|---|---|---|---|
 | `package` | string | no | — | Which declared package; the first when omitted. |
 | `file` | string | yes | — | The saved response, by path. |
-| `library` | string | no | — | The library file to merge into, created when missing — relative to the package, lib/design/brand.tokens.dart. Default: imported.tokens.dart in the first group's folder. |
+| `library` | string | no | — | The library file to merge into, created when missing — relative to the package, lib/design/brand.tokens.dart. Default: imported.tokens.dart in the first folder of scenes. |
 
 
 ### `flutterware.render`

@@ -23,8 +23,8 @@ enum SceneSaveState {
   conflicted,
 }
 
-/// Writes the workspace's files once the editor goes quiet, so there is no
-/// save button to remember.
+/// Writes a [SceneSaveSource]'s files once its editor goes quiet, so there
+/// is no save button to remember.
 ///
 /// The two things that make writing without being asked safe are already in
 /// [SceneFile.save]: it re-parses its own output before writing, and it writes
@@ -52,7 +52,7 @@ class SceneAutosave {
   /// away from the keyboard does not leave work only in memory.
   final Duration quiet;
 
-  SceneWorkspace? _workspace;
+  SceneSaveSource? _source;
   SceneEditor? _editor;
   int? _revision;
   Timer? _timer;
@@ -72,22 +72,22 @@ class SceneAutosave {
   /// Whether a write is owed. Only true inside the quiet period.
   bool get isPending => _timer != null;
 
-  /// Watches [workspace], flushing whatever the last one owed.
-  void bind(SceneWorkspace? workspace) {
-    if (identical(workspace, _workspace)) return;
+  /// Watches [source], flushing whatever the last one owed.
+  void bind(SceneSaveSource? source) {
+    if (identical(source, _source)) return;
     flush();
-    _workspace?.removeListener(_onWorkspace);
+    _source?.removeListener(_onSource);
     _editor?.removeListener(_onEdit);
     _editor = null;
     _revision = null;
     _suspended.clear();
-    _workspace = workspace;
-    workspace?.addListener(_onWorkspace);
-    _onWorkspace();
-    // A workspace can arrive with work already in it — a hot reload rebinds
+    _source = source;
+    source?.addListener(_onSource);
+    _onSource();
+    // A source can arrive with work already in it — a hot reload rebinds
     // one mid-session — and saying "saved" over unwritten edits is the one
     // thing a status word must never do.
-    if (workspace != null && workspace.anyDirty) {
+    if (source != null && source.anyDirty) {
       _timer = Timer(quiet, _fire);
       _set(SceneSaveState.pending, '');
     } else {
@@ -98,15 +98,15 @@ class SceneAutosave {
   /// The breadcrumb moved, or a library was edited: edits now arrive from a
   /// different file's editor, or something not on the breadcrumb owes a
   /// write.
-  void _onWorkspace() {
-    var editor = _workspace?.editor;
+  void _onSource() {
+    var editor = _source?.saveEditor;
     if (!identical(editor, _editor)) {
       _editor?.removeListener(_onEdit);
       _editor = editor;
       _revision = editor?.revision;
       editor?.addListener(_onEdit);
     }
-    if (_workspace?.anyDirty == true && _timer == null) {
+    if (_source?.anyDirty == true && _timer == null) {
       _timer = Timer(quiet, _fire);
       _set(SceneSaveState.pending, _note);
     }
@@ -158,11 +158,11 @@ class SceneAutosave {
   }
 
   void _write({required bool includeSuspended}) {
-    var workspace = _workspace;
-    if (workspace == null || _disposed) return;
+    var source = _source;
+    if (source == null || _disposed) return;
     var refused = <String>[];
     var held = <String>[];
-    for (var file in workspace.dirtyFiles.toList()) {
+    for (var file in source.dirtyFiles.toList()) {
       if (!includeSuspended && isSuspended(file.path)) {
         held.add(p.basename(file.path));
         continue;
@@ -197,7 +197,7 @@ class SceneAutosave {
     flush();
     _disposed = true;
     _timer?.cancel();
-    _workspace?.removeListener(_onWorkspace);
+    _source?.removeListener(_onSource);
     _editor?.removeListener(_onEdit);
   }
 }

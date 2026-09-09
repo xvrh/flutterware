@@ -192,14 +192,62 @@ class SceneCore extends PluginCore {
     return declaration.path;
   }
 
+  /// A scene in [folder], relative to the package — and the folder's
+  /// declaration when it does not have one yet.
+  ///
+  /// That second clause is the whole of what making a group used to be. A
+  /// folder holding a `$sceneGroupFileName` and nothing else is not a thing
+  /// anybody wants; it was a first step you had to know about before the
+  /// step you wanted was available at all.
+  Future<String> createScene(
+    String package,
+    String folder,
+    String className, {
+    double width = 1024,
+    double height = 500,
+  }) async {
+    if (!RegExp(r'^[A-Z][A-Za-z0-9]*$').hasMatch(className)) {
+      throw ArgumentError.value(
+        className,
+        'name',
+        'a Dart class name: a capital first, then letters and digits',
+      );
+    }
+    var directory = p.normalize(p.join(projectRootFor(package), folder));
+    var file = File(p.join(directory, sceneFileNameFor(className)));
+    if (file.existsSync()) {
+      throw StateError(
+        '${p.relative(file.path, from: host.worktree.path)} already exists',
+      );
+    }
+    if (!File(p.join(directory, sceneGroupFileName)).existsSync()) {
+      // Refuses on its own terms when the folder is outside the scanned
+      // scope, which is the check this needs too.
+      await createGroup(package, folder);
+    }
+    Directory(directory).createSync(recursive: true);
+    var root = FrameNode(name: 'root')
+      ..width = width
+      ..height = height
+      ..fill = const SceneColor(0xFFFFFFFF);
+    file.writeAsStringSync(
+      emitSceneFile(SceneDocument(root), className: className),
+    );
+    await reload(package);
+    return file.path;
+  }
+
   /// A new library: `<name>.tokens.dart` in [folder], empty, the editor's
-  /// own; attached to [attachTo] when given.
+  /// own.
+  ///
+  /// Where it lands is the whole of who reads it, so the groups that read it
+  /// are reconciled straight away — this is the tool's own write, and the
+  /// only moment it can be certain what the folders mean.
   Future<String> createLibrary(
     String package,
     String folder,
-    String name, {
-    SceneGroupEntry? attachTo,
-  }) async {
+    String name,
+  ) async {
     var directory = p.normalize(p.join(projectRootFor(package), folder));
     var file = File(p.join(directory, tokensFileNameFor(name)));
     if (file.existsSync()) {
@@ -209,38 +257,71 @@ class SceneCore extends PluginCore {
     }
     Directory(directory).createSync(recursive: true);
     file.writeAsStringSync(emitTokensSkeleton(tokensSymbolFor(file.path)));
-    if (attachTo != null) {
-      _attach(attachTo, file.path);
+    var scan = discoverPackage(rootFor(package));
+    for (var group in scan.groupsReading(file.path)) {
+      _attach(group, file.path);
     }
     await reload(package);
     return file.path;
   }
 
-  /// Lists [libraryPath] in [group]'s declaration and imports it there —
-  /// the one edit the tool makes to a hand-written file.
-  Future<void> attachLibrary(
-    String package,
-    SceneGroupEntry group,
-    String libraryPath,
-  ) async {
-    _attach(group, libraryPath);
+  /// Writes [group]'s `libraries:` to say what its folder says: the ones
+  /// below it that it does not list, listed; the ones it lists that are not
+  /// below it, dropped.
+  ///
+  /// Called when the tool caused the change, and offered as one action when
+  /// the human did — never run off a scan. A scan happens on every disk
+  /// change, and `scenes.dart` is code somebody wrote: silently rewriting it
+  /// under an editor is the thing this design exists to stop.
+  Future<void> reconcileLibraries(String package, SceneGroupEntry group) async {
+    var drift = driftFor(package, group);
+    for (var library in drift.missing) {
+      _attach(group, library.path);
+    }
+    for (var library in drift.stray) {
+      _detach(group, library.path);
+    }
     await reload(package);
   }
 
-  Future<void> detachLibrary(
-    String package,
-    SceneGroupEntry group,
-    String libraryPath,
-  ) async {
-    var declaration = File(group.declarationPath);
-    var edited = detachLibraryIn(
-      declaration.readAsStringSync(),
-      group.declarationPath,
-      libraryPath,
-      refuse: (reason) => throw StateError(reason),
+  /// What [group] lists against what its folder says it reads.
+  ///
+  /// The declaration is the fact — it is what compiles, and what the guest
+  /// will have — and the walk is the intent. This is the gap between them,
+  /// and it is worth showing rather than closing behind the human's back.
+  SceneLibraryDrift driftFor(String package, SceneGroupEntry group) {
+    var scan = scanFor(package) ?? discoverPackage(rootFor(package));
+    // Parsed here rather than taken from the vocabulary, and by name rather
+    // than by what the scan found: a library somebody moved out of the folder
+    // leaves an import behind that resolves to nothing, which makes the whole
+    // declaration refused — and a refused declaration has no vocabulary to
+    // read the stray entry out of. The entry that has to go is exactly what
+    // this needs to name.
+    var parsed = parseGroupFile(
+      File(group.declarationPath).readAsStringSync(),
+      resolveImport: importResolverFor(group.declarationPath),
+      librarySymbolAt: (path) =>
+          path.endsWith(sceneTokensFileSuffix) ? tokensSymbolFor(path) : null,
     );
-    if (edited != null) declaration.writeAsStringSync(edited);
-    await reload(package);
+    var listed = <String>{};
+    var stray = <SceneLibraryEntry>[];
+    for (var ref in parsed.libraries) {
+      if (ref.path case var path?) {
+        // Readable from here means both: below this folder, and still there.
+        if (readsLibrary(group.directory, path) && File(path).existsSync()) {
+          listed.add(p.canonicalize(path));
+        } else {
+          stray.add(SceneLibraryEntry(path: path));
+        }
+      }
+    }
+    return SceneLibraryDrift(
+      missing: [
+        for (var library in scan.librariesFor(group))
+          if (!listed.contains(p.canonicalize(library.path))) library,
+      ],
+      stray: stray,
+    );
   }
 
   void _attach(SceneGroupEntry group, String libraryPath) {
@@ -254,23 +335,27 @@ class SceneCore extends PluginCore {
     if (edited != null) declaration.writeAsStringSync(edited);
   }
 
-  // --- Tokens across the group ---------------------------------------------
-
-  /// The groups listing the library at [libraryPath].
-  List<SceneGroupEntry> groupsListing(String package, String libraryPath) {
-    var scan = scanFor(package) ?? discoverPackage(rootFor(package));
-    var wanted = p.canonicalize(libraryPath);
-    return [
-      for (var group in scan.groups)
-        if (vocabularyFor(
-          package,
-          group,
-        ).libraries.any((l) => p.canonicalize(l.entry.path) == wanted))
-          group,
-    ];
+  void _detach(SceneGroupEntry group, String libraryPath) {
+    var declaration = File(group.declarationPath);
+    var edited = detachLibraryIn(
+      declaration.readAsStringSync(),
+      group.declarationPath,
+      libraryPath,
+      refuse: (reason) => throw StateError(reason),
+    );
+    if (edited != null) declaration.writeAsStringSync(edited);
   }
 
-  /// Every property reading [token] in every scene of every group listing
+  // --- Tokens across the group ---------------------------------------------
+
+  /// The groups that read the library at [libraryPath] — its folder's, and
+  /// every group below it.
+  List<SceneGroupEntry> groupsReading(String package, String libraryPath) =>
+      (scanFor(package) ?? discoverPackage(rootFor(package))).groupsReading(
+        libraryPath,
+      );
+
+  /// Every property reading [token] in every scene of every group reading
   /// [libraryPath], except the scene files in [except] — the open ones,
   /// whose editors know their own readers. Parsed fresh from disk, so a
   /// rename or a delete is judged against what the files say now.
@@ -282,7 +367,7 @@ class SceneCore extends PluginCore {
   }) {
     var skip = {for (var e in except) p.canonicalize(e)};
     var readers = <SceneTokenReader>[];
-    for (var group in groupsListing(package, libraryPath)) {
+    for (var group in groupsReading(package, libraryPath)) {
       var tokens = vocabularyFor(package, group).tokens;
       for (var scene in group.scenes) {
         if (skip.contains(p.canonicalize(scene.path))) continue;
@@ -323,7 +408,7 @@ class SceneCore extends PluginCore {
   }) {
     var touched = <String>[];
     var skip = {for (var e in except) p.canonicalize(e)};
-    for (var group in groupsListing(package, libraryPath)) {
+    for (var group in groupsReading(package, libraryPath)) {
       var before = vocabularyFor(package, group).tokens;
       var after = [
         for (var t in before)
@@ -357,7 +442,7 @@ class SceneCore extends PluginCore {
       ? SceneTokenDecl.style(name, t.style!)
       : t.isExport
       ? SceneTokenDecl.export(name, t.type)
-      : SceneTokenDecl(name, t.kind!, t.value!, modes: t.modes);
+      : SceneTokenDecl(name, t.kind!, t.value!);
 
   // --- Rendering -----------------------------------------------------------
 
@@ -550,9 +635,10 @@ class SceneCore extends PluginCore {
       'list',
       'List',
       description:
-          'The scene groups this project has — each a folder with a '
-          '$sceneGroupFileName — with the scenes in each, and the token '
-          'libraries found.',
+          'The folders this project keeps scenes in — what is in each, what '
+          'its scenes may use, and every library found with the scenes that '
+          'read it. A folder holds scenes when it has a $sceneGroupFileName '
+          'in it; nothing is listed in configuration.',
       parameters: [_packageParameter],
     ),
     PluginAction(
@@ -560,9 +646,9 @@ class SceneCore extends PluginCore {
       'Video',
       description:
           "Renders a scene's motion to an mp4, drawn by the app itself — "
-          "its theme, its group's widgets — one frame per moment on the "
-          'harness lane, where a frame cannot be of a moment other than '
-          'the one it was drawn for. Needs ffmpeg.',
+          'its theme, the widgets its folder declares — one frame per '
+          'moment on the harness lane, where a frame cannot be of a moment '
+          'other than the one it was drawn for. Needs ffmpeg.',
       parameters: [
         _packageParameter,
         ActionParameter(
@@ -596,12 +682,53 @@ class SceneCore extends PluginCore {
       ],
     ),
     PluginAction(
-      'newGroup',
-      'New group',
+      'newScene',
+      'New scene',
       description:
-          'Makes a folder a scene group: writes its $sceneGroupFileName '
-          'skeleton, which the next scan finds. The generated '
-          '$sceneArgsFileName follows.',
+          'Writes a scene file with an empty artboard — and the folder and '
+          'its $sceneGroupFileName too, when that folder does not keep '
+          'scenes yet. The one thing to reach for to start a scene.',
+      parameters: [
+        _packageParameter,
+        ActionParameter(
+          'name',
+          'Name',
+          description:
+              'The scene class — PromoBadge. The file is named '
+              'from it: promo_badge.scene.dart.',
+          required: true,
+        ),
+        ActionParameter(
+          'folder',
+          'Folder',
+          description:
+              'Relative to the package. An existing folder of scenes, or a '
+              'new one, which is written on the way. Default: the first '
+              'folder that already keeps scenes, else lib/scenes.',
+          required: false,
+        ),
+        ActionParameter(
+          'width',
+          'Artboard width',
+          description: 'Default 1024.',
+          required: false,
+        ),
+        ActionParameter(
+          'height',
+          'Artboard height',
+          description: 'Default 500.',
+          required: false,
+        ),
+      ],
+    ),
+    PluginAction(
+      'newGroup',
+      'New folder of scenes',
+      description:
+          "Writes a folder's $sceneGroupFileName on its own — the "
+          'declaration saying what the scenes in it may use. `newScene` '
+          'writes this as well when it has to, so reach for this only to '
+          'prepare a folder before there is anything to put in it.',
       parameters: [
         _packageParameter,
         ActionParameter(
@@ -617,7 +744,9 @@ class SceneCore extends PluginCore {
       'New library',
       description:
           'Writes an empty token library — <name>$sceneTokensFileSuffix, '
-          "the editor's own — and lists it in a group when one is named.",
+          "the editor's own. Where it lands is who reads it: the scenes "
+          'below its folder, and no others. A colour, a number or a text '
+          'style — a library is a design system, not a bag of values.',
       parameters: [
         _packageParameter,
         ActionParameter(
@@ -630,14 +759,18 @@ class SceneCore extends PluginCore {
           'folder',
           'Folder',
           description:
-              "Relative to the package; the group's own folder when a group "
-              'is named, lib/ otherwise.',
+              'Relative to the package, and the whole of who reads it — a '
+              'folder of scenes for those scenes alone, a folder above '
+              'several for all of them. Defaults to the folder named by '
+              'group, else lib/.',
           required: false,
         ),
         ActionParameter(
           'group',
-          'Attach to group',
-          description: 'A group folder, relative to the package.',
+          'Group',
+          description:
+              'A folder of scenes, relative to the package — shorthand for '
+              'that folder, so the library is read by its scenes.',
           required: false,
         ),
       ],
@@ -648,11 +781,13 @@ class SceneCore extends PluginCore {
       description:
           "Merges a design file's variables into a token library — the "
           'JSON its REST API answers for local variables, saved to a file. '
-          'By name: a token the file knows takes its value and modes, a new '
+          "By name: a token the file knows takes the file's value, a new "
           'one is added, one the file does not have is kept and listed; a '
           'name held here as another kind is refused by name, as is a '
-          'variable that cannot be a token. The report is written into the '
-          'library, where the panel shows it.',
+          'variable that cannot be a token. Only the default mode of a '
+          'collection is read — a library holds one value per token — and '
+          'every other mode is refused by name. The report is written into '
+          'the library, where the panel shows it.',
       parameters: [
         _packageParameter,
         ActionParameter(
@@ -668,7 +803,7 @@ class SceneCore extends PluginCore {
               'The library file to merge into, created when missing — '
               'relative to the package, lib/design/brand'
               '$sceneTokensFileSuffix. Default: imported'
-              "$sceneTokensFileSuffix in the first group's folder.",
+              '$sceneTokensFileSuffix in the first folder of scenes.',
           required: false,
         ),
       ],
@@ -742,26 +877,11 @@ class SceneCore extends PluginCore {
     target.parent.createSync(recursive: true);
     target.writeAsStringSync(source);
     await reload(package);
-    // A library nobody lists is a library nobody reads. When it landed in a
-    // group's own folder and that group does not list it yet, list it —
-    // the one edit the tool makes to a hand-written file, and the one that
-    // makes an import usable in one step.
-    var listed = false;
-    for (var group in scanFor(package)?.groups ?? const <SceneGroupEntry>[]) {
-      if (vocabularyFor(package, group).libraries.any(
-        (l) => p.canonicalize(l.entry.path) == p.canonicalize(target.path),
-      )) {
-        listed = true;
-      }
-    }
-    if (!listed) {
-      var owner = (scanFor(package)?.groups ?? const <SceneGroupEntry>[])
-          .where((g) => p.isWithin(g.directory, target.path))
-          .firstOrNull;
-      if (owner != null) {
-        _attach(owner, target.path);
-        await reload(package);
-      }
+    // The tool wrote the file, so the tool says who reads it — otherwise an
+    // import lands as a file nobody names, which is a step nobody would
+    // guess is missing.
+    for (var group in groupsReading(package, target.path)) {
+      await reconcileLibraries(package, group);
     }
     return {
       'path': p.relative(target.path, from: host.worktree.path),
@@ -770,19 +890,14 @@ class SceneCore extends PluginCore {
         for (var t in imported.tokens)
           {'name': t.name, 'type': t.decl.typeName, 'from': t.source},
       ],
-      'modes': imported.modeNames,
       'added': note.added,
       'updated': note.updated,
       'unchanged': note.unchanged,
       'kept': note.kept,
       'refusals': note.notImported,
-      'listedBy': [
-        for (var group
-            in (scanFor(package)?.groups ?? const <SceneGroupEntry>[]))
-          if (vocabularyFor(package, group).libraries.any(
-            (l) => p.canonicalize(l.entry.path) == p.canonicalize(target.path),
-          ))
-            groupPathFor(package, group),
+      'readBy': [
+        for (var group in groupsReading(package, target.path))
+          groupPathFor(package, group),
       ],
     };
   }
@@ -854,9 +969,44 @@ class SceneCore extends PluginCore {
               {
                 'symbol': library.symbol,
                 'path': p.relative(library.path, from: host.worktree.path),
+                'readBy': [
+                  for (var g in scan.groupsReading(library.path))
+                    groupPathFor(package, g),
+                ],
               },
           ],
           'strayScenes': scan.strayScenes,
+        };
+      case 'newScene':
+        var name = _text(arguments['name'], 'name', 'a scene class name');
+        var scan = scanFor(package) ?? discoverPackage(rootFor(package));
+        // The folder you did not name is the one you would have named: the
+        // first that already keeps scenes, and only failing that a new one.
+        var folder = switch (arguments['folder']) {
+          String f when f.isNotEmpty => f,
+          _ =>
+            scan.groups.isEmpty
+                ? 'lib/scenes'
+                : groupPathFor(package, scan.groups.first),
+        };
+        var wroteFolder = !File(
+          p.join(
+            p.normalize(p.join(projectRootFor(package), folder)),
+            sceneGroupFileName,
+          ),
+        ).existsSync();
+        var path = await createScene(
+          package,
+          folder,
+          name,
+          width: _number(arguments['width']) ?? 1024,
+          height: _number(arguments['height']) ?? 500,
+        );
+        return {
+          'path': p.relative(path, from: host.worktree.path),
+          'class': name,
+          'folder': folder,
+          if (wroteFolder) 'alsoWrote': p.join(folder, sceneGroupFileName),
         };
       case 'newGroup':
         var folder = _text(arguments['folder'], 'folder', 'a folder path');
@@ -888,11 +1038,14 @@ class SceneCore extends PluginCore {
           String f when f.isNotEmpty => f,
           _ => group == null ? 'lib' : groupPathFor(package, group),
         };
-        var path = await createLibrary(package, folder, name, attachTo: group);
+        var path = await createLibrary(package, folder, name);
         return {
           'path': p.relative(path, from: host.worktree.path),
           'symbol': tokensSymbolFor(path),
-          if (group != null) 'attachedTo': groupPathFor(package, group),
+          'readBy': [
+            for (var g in groupsReading(package, path))
+              groupPathFor(package, g),
+          ],
         };
       case 'importTokens':
         return importTokens(
@@ -953,6 +1106,15 @@ class SceneCore extends PluginCore {
         String s when s.trim().isNotEmpty => s.trim(),
         _ => throw ArgumentError.value(value, name, what),
       };
+
+  /// A number an argument carries, however the transport spelled it — the
+  /// CLI hands over strings, MCP hands over JSON numbers, and both mean the
+  /// same 1024. Null when it was not given.
+  static double? _number(Object? value) => switch (value) {
+    num n => n.toDouble(),
+    String s when s.trim().isNotEmpty => double.tryParse(s.trim()),
+    _ => null,
+  };
 
   /// A scene named by class, file name or path — refused by listing what
   /// this package actually has, which is the only useful answer to a typo.

@@ -79,6 +79,14 @@ import 'tokens_file.dart';
 
 const sceneFileMarker = '//@flutterware:scene=0.9';
 
+/// A scene file's name from its class: `PromoBadge` → `promo_badge.scene.dart`.
+///
+/// The class is the scene's identity everywhere else, so the file name is
+/// derived from it rather than asked for — one name to type, and no way for
+/// the two to disagree.
+String sceneFileNameFor(String className) =>
+    '${className.replaceAllMapped(RegExp('([a-z0-9])([A-Z])'), (m) => '${m[1]}_${m[2]}').toLowerCase()}.scene.dart';
+
 /// The one library a scene file imports. Its vocabulary IS the model's own
 /// class names — `FrameNode`, `TextNode`, `SceneColor` — because a spelling
 /// that differs from the type is a spelling the compiler cannot check.
@@ -161,16 +169,12 @@ String emitSceneFile(
   var readsTokens = _readsTokens(doc);
   var tokensFormal = doc.tokensFormal ?? _freeFormal(doc, 'tokens');
   var hasTokensFormal = readsTokens || doc.tokensFormal != null;
+  // The marker and nothing else. The paragraph that used to sit here
+  // explained the grammar to somebody who was, by definition, already
+  // reading a file written in it — and it was retyped into every scene in
+  // the project. What a reader needs from a file is the file.
   var out = StringBuffer('''
 $sceneFileMarker
-// Owned by the flutterware scene editor, which reads and writes this whole
-// file. Hand edits are welcome inside the grammar: every node is a
-// `late final` field (the field name is the node's identity), placed exactly
-// once in a children list; a parameter is a `final` in the class header
-// whose default is the mockup. Anything outside the grammar is refused with
-// a line number rather than silently dropped.
-//
-// This is ordinary Dart: it compiles, it analyzes, and an app mounts it.
 $sceneAuthoringImport
 ${_imports(imports, needsArgs: _placesSomething(doc) || hasTokensFormal)}
 ''');
@@ -185,12 +189,9 @@ ${_imports(imports, needsArgs: _placesSomething(doc) || hasTokensFormal)}
   if (hasTokensFormal && !seen.add(tokensFormal)) {
     throw ArgumentError('"$tokensFormal" is not a usable tokens formal name');
   }
-  var scope = _Scope(
-    params,
-    {for (var t in doc.tokens) t.name: t},
-    tokensFormal,
-    doc.tokenMode,
-  );
+  var scope = _Scope(params, {
+    for (var t in doc.tokens) t.name: t,
+  }, tokensFormal);
   if (doc.params.isEmpty && !hasTokensFormal) {
     out.writeln('class $className extends SceneDefinition {');
   } else {
@@ -284,15 +285,11 @@ String _freeFormal(SceneDocument doc, String base) {
 /// What a node initializer may name: the parameters, the tokens and what
 /// the tokens formal is called.
 class _Scope {
-  _Scope(this.params, this.tokens, this.tokensFormal, this.mode);
+  _Scope(this.params, this.tokens, this.tokensFormal);
 
   final Map<String, SceneParamDecl> params;
   final Map<String, SceneTokenDecl> tokens;
   final String tokensFormal;
-
-  /// The mode the document's values are in — what a style's fields are
-  /// compared against, since the nodes show that mode's style.
-  final String? mode;
 }
 
 /// The file's other imports, canonically: package ones first, each group
@@ -385,7 +382,7 @@ void _emitNode(
   /// baseline the text properties are compared against instead of the
   /// table's defaults: equal to the style is inherited and not written.
   var style = switch (n.bindings[styleBindingKey]) {
-    StyleRef(:var name) => scope.tokens[name]?.styleIn(scope.mode),
+    StyleRef(:var name) => scope.tokens[name]?.style,
     _ => null,
   };
 
@@ -581,7 +578,7 @@ String? _styleArg(TextNode t, _Scope scope, String? Function(String prop) ref) {
   // An EXPORT's style is the app's own object, laid under the node's values
   // by the guest — the editor never holds its fields, so it can compare
   // against nothing and the delta is measured from the table's defaults.
-  var style = bound == null ? null : scope.tokens[bound]?.styleIn(scope.mode);
+  var style = bound == null ? null : scope.tokens[bound]?.style;
   var deltas = <String>[];
   for (var p in sceneStyleProps) {
     var v = p.read(t);

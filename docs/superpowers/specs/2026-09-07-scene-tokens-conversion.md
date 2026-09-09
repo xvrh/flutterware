@@ -473,6 +473,10 @@ anywhere (`tokenReaders`). Not built: the library pane with the mode list
 (T3), and a library's own comments do not survive its first write — it is
 the editor's file, the scene-file rule.
 
+**T3 was reversed on 2026-09-09 — see T5.** What follows is what T3 built,
+kept because the next reader of the file grammar will want to know why
+`modesSymbolFor` still exists and refuses.
+
 **T3 — modes in the panel.** Add, rename, delete a mode; a value per mode
 for every kind including styles; the canvas picker reads the union's mode
 list. Lands: light and dark authored in the editor rather than in a file.
@@ -595,3 +599,123 @@ bonus, never a dependency.
    package page, and *Attach to group* is how a second group reaches it.
 5. Whether a group may carry a `label:` in its declaration, or the folder
    name is always the name. Proposed: the folder name, until one is ugly.
+
+## 9. T5 — modes out, and the library gets a page (2026-09-09)
+
+Two decisions, taken together after driving what T2–T3 shipped. The first
+is a removal; the second is what the removal made possible.
+
+### 9.1 A library declares one value per token
+
+**Modes are gone.** `Token<T>` takes a name and a value and nothing else,
+`SceneTokenDecl` holds one value, the `const <symbol>Modes = […]` line is
+gone from the file grammar, `SceneDocument.tokenMode` and `applyTokenMode`
+are gone from the read plane, and the generated `SceneTokens` carries no
+`static const dark` and no `modes` map. Net −1090 lines.
+
+The capability is not gone, because it was never in the library: the
+generated `SceneTokens` is a const class with one named field per token and
+a scene takes it through its tokens formal, so a second set is
+
+```dart
+const darkTokens = SceneTokens(brand: SceneColor(0xFFFF8A5C), ink: …);
+StoreBanner(tokens: darkTokens)
+```
+
+which is app code, compiled, typed, and outside the editor's business. What
+the library declares is what the design *is*; every skin it may be worn in
+belongs to whoever mounts it.
+
+What is genuinely given up: **the artboard cannot be shown in dark from
+inside the editor.** You look at dark by running the app. Considered and
+not taken in v1: an app-owned set the group declares (`tokenSets: {'dark':
+…}`) and the guest applies, on the export bargain — the editor names it, the
+app holds the value. It renders correctly because the artboard's picture
+*is* the guest's texture, but the editor's own model would still hold the
+default set, so the inspector and the swatches would disagree with the
+picture. It can arrive later without touching a library file.
+
+Two refusals rather than silent drops, per the grammar's own rule:
+
+- A library file still carrying `modes:` or `<symbol>Modes` is refused by
+  name, with `modesRemovedReason` telling the reader to build the set in the
+  app. Dropping them would lose values.
+- A design file's variable collection is imported **in its default mode
+  only**, and every other mode is refused by name on the report — a
+  collection's `Dark` is a whole second set, and a library has one value per
+  token to put it in.
+
+### 9.2 A library is a design system
+
+Decided 2026-09-09, on the second read of the page: **a library holds
+colours, numbers and type styles, and nothing else.**
+
+The four kinds it had were the *parameter* kinds, reused — a token
+declaration took a `SceneParamKind`, and a design tool's variables have
+STRING and BOOLEAN types, so a library grew a "Text" section and a
+"Switches" section that nobody could say the purpose of. Neither is a
+reason. A shared piece of copy is content: this scene's parameter when one
+scene wants it, the app's export when several do. A flag is configuration.
+
+`libraryTokenKinds` is the rule and three places enforce it, each refusing
+by name rather than dropping:
+
+- the file grammar, so a hand-written `Token<String>` in a `*.tokens.dart`
+  is refused with [notADesignValue] saying where it goes instead
+- `TokensLibrary.add`, so the editor cannot make one
+- the variables importer, so a design file's STRING and BOOLEAN variables
+  are listed on the report rather than becoming tokens
+
+An **export** is untouched: it is the app's own value of any type at all —
+`Token<String>('cta', 'Order now')` in the group's `scenes.dart` is exactly
+how shared copy reaches a scene, and the generated class already gives it a
+getter.
+
+### 9.3 The library is a destination, not a drawer
+
+The drawer under the canvas is for what belongs to the open scene — its
+parameters, its motions. A library belongs to the package: editing `brand`
+moves every scene of every group listing the file, so there is nothing on
+the artboard worth keeping in view for it. Measured on the running studio
+before the change: the drawer is ~200px tall, and a style token's pane was
+sixteen controls in one scrolling column of it — twice over, with a mode.
+
+**A library opens on its own page**, where a scene workspace opens: the
+index's *Libraries* row, which had been listed and inert since T2. Back
+returns to wherever you came from.
+
+**Two panes, and what you edit opens beside its picture.** A third column
+holding the fields was the first shape and it did not survive being used:
+you edited sixteen fields on the right while the specimen they describe sat
+in the middle, scrolled away. So the token's editor opens *in the sheet* —
+a style's fields under its own specimen, inside the same card; a colour's
+picker under the palette it has to work against, so the tiles never move;
+a number's under its row. Clicking the open one closes it again.
+
+- **the rail** is now a table of contents: the three sections and *From the
+  app* with their counts, each scrolling the sheet to itself, and the
+  design-file import beneath. Nothing is edited here.
+- **the sheet** draws each token as what it is: colour tiles big enough to
+  judge against each other, a number with a rule as long as it is (only
+  where there are two to compare), and a style **set in itself**. A style
+  whose colour is pale gets a dark ground, because `body` at `#D8C9BD` drew
+  as a blank card on the page's white. The app's exports are a fourth,
+  read-only section.
+
+`SceneLibraryPane`, `SceneTokenPane`, `TokenAside` and `LibraryAside` are
+deleted, and so is **the tree's whole Tokens section**. It had become a
+listing whose every row teleported you to another page, which is worse than
+no listing at all. What a property may bind to is on that property's own
+menu in the inspector, each token with its value beside its name; what a
+token *is* is the library page, one back-step away.
+
+**The file takes the page's order.** `tokensByKind` groups the emitted list
+— the value kinds as the sheet lays them out, then the styles, the file's
+order kept inside each. A page that groups over a file that does not would
+be two orders to hold in your head. The cost is a one-time reordering diff
+the first time an old library is written.
+
+**A library open by itself still autosaves.** `SceneAutosave.bind` takes a
+`SceneSaveSource` rather than a `SceneWorkspace`; `SceneLibraryDesk` is the
+one-document implementation the index's row opens with. Without it the page
+would have needed a save button, and the studio has none.
