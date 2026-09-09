@@ -98,10 +98,19 @@ abstract class PluginCore {
   /// The budget is parsing. Read files, parse them, cache the result. Do
   /// not compile, spawn a process, open a socket or hit the network — that
   /// work belongs behind an action, where a caller chose it by name and can be
-  /// told what it costs. The two first-party cores hold to this: the catalog
-  /// parses its demo files and deliberately does not start the compile loop
-  /// (see `PreviewsCore.track`), and dependencies parses pubspecs without
-  /// resolving them.
+  /// told what it costs. The catalog holds to it exactly: it parses its demo
+  /// files and deliberately does not start the compile loop (see
+  /// `PreviewsCore.track`).
+  ///
+  /// Dependencies is the one core that cannot, and shows what the exception
+  /// has to cost. Only pub knows the resolution, so it shells out — but the
+  /// answer is a pure function of the lockfile and the package config, so
+  /// `PubDepsStore` caches it against a hash of both and the warm path is a
+  /// file read. Before that store existed it was the largest cost in
+  /// `fw status` by six times, because it ran the same subprocess once per
+  /// declared package. A core that must spawn something owes the same two
+  /// things — one process for the whole answer, and a cache keyed by what the
+  /// answer actually depends on.
   ///
   /// The budget is what lets every surface call this freely — `fw status`, MCP,
   /// and search warming its index when the palette opens. A plugin that cannot
@@ -224,3 +233,24 @@ class PluginCoreRegistry {
     ];
   }
 }
+
+/// Warms every core, together.
+///
+/// Every surface that reports on all plugins at once wants this, and three of
+/// them had written the `for … await` by hand.
+///
+/// Worth less than it looks, and the measurement is the interesting part.
+/// Against the serial loop it was a third off — but nearly all of that was
+/// three `pub deps` subprocesses overlapping, and `PubDepsStore` has since made
+/// them one. What is left barely moves: 1390ms serial against 1300ms parallel,
+/// measured 2026-09-09, because the remaining cores parse files on this isolate
+/// and so queue behind each other whatever order they are started in.
+/// Overlapping is still right — it costs nothing, and it is the honest shape of
+/// "these are independent" — but a core that is slow is a core to make faster,
+/// not one to hide behind a `Future.wait`.
+///
+/// A failure still surfaces, and surfaces better: `Future.wait` lets the rest
+/// finish before it throws, where the serial loop abandoned every core after
+/// the first one that failed.
+Future<void> computeAllCores(Iterable<PluginCore> cores) =>
+    Future.wait([for (var core in cores) core.computeAll()]);

@@ -15,6 +15,7 @@ import 'dependency_graph.dart';
 import 'package_imports.dart';
 import 'package_origin.dart';
 import 'pub_deps.dart';
+import 'pub_deps_store.dart';
 import 'pub_dev_api.dart';
 import 'pubspec_lock.dart';
 
@@ -42,7 +43,26 @@ class DependenciesService {
   /// the network.
   final PubDevApi? pubDevApi;
 
-  DependenciesService(this.package, {this.runProcess, this.pubDevApi});
+  /// Where the resolution comes from.
+  ///
+  /// Handed in by `DependenciesCore` so that every package it declares shares
+  /// one: `pub deps` answers about the whole resolution, so a service per
+  /// package asking separately is the same subprocess run once per member. A
+  /// service built on its own gets its own store, which still earns the disk
+  /// half of the cache.
+  final PubDepsStore pubDepsStore;
+
+  DependenciesService(
+    this.package, {
+    this.runProcess,
+    this.pubDevApi,
+    PubDepsStore? pubDepsStore,
+  }) : assert(
+         pubDepsStore == null || runProcess == null,
+         'A shared store has its own runner; passing both would silently '
+         'ignore this one.',
+       ),
+       pubDepsStore = pubDepsStore ?? PubDepsStore(runProcess: runProcess);
 
   /// What pub.dev says about [name]. Starts the fetch on first subscription.
   ///
@@ -66,10 +86,9 @@ class DependenciesService {
     // The three sources, each asked only what it alone knows: pub deps for the
     // resolution and the declared constraints, the lockfile for where each
     // package came from, the package config for where each one is on disk.
-    var pubDeps = await PubDeps.load(
+    var pubDeps = await pubDepsStore.load(
       flutterExecutable: package.flutterSdkPath.flutter,
       directory: path,
-      runProcess: runProcess,
     );
     var lock = await PubspecLock.load(path);
     var packageConfig = await findPackageConfig(package.directory);

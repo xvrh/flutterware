@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/src/log_client.dart';
 import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/dependencies/model/package_origin.dart';
+import 'package:flutterware_app/src/dependencies/model/pub_deps.dart';
+import 'package:flutterware_app/src/dependencies/model/pub_deps_store.dart';
 import 'package:flutterware_app/src/dependencies/model/service.dart';
 import 'package:flutterware_app/src/package_ref.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
@@ -116,6 +118,28 @@ void main() {
     expect(names, isNot(contains('file_picker')));
 
     service.dispose();
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('the resolution is cached against the lockfile that produced it', () async {
+    // The disk half of `PubDepsStore`, live: `fw` and the MCP server are born
+    // for one request and hold nothing, so this file is the only reason a cold
+    // process does not pay for pub every time. The stamp is what makes serving
+    // it safe — it is a hash of the lockfile and the package config, which is
+    // everything `pub deps` reads.
+    var root = PubDepsStore.resolutionRoot('..')!;
+    var stamp = PubDepsStore.stampFor(root, sdk.flutter)!;
+    var before = PubDepsStore.cacheFileFor(root, stamp);
+    if (before.existsSync()) before.deleteSync();
+
+    var service = serviceAt('..');
+    addTearDown(service.dispose);
+    await service.dependencies.refreshOrThrow();
+
+    var cached = PubDepsStore.cacheFileFor(root, stamp);
+    expect(cached.existsSync(), isTrue, reason: 'nothing was cached');
+    // And it is pub's answer rather than a rendering of it, so a future SDK
+    // adding a field does not quietly lose it on the way through.
+    expect(PubDeps.parse(cached.readAsStringSync()).members, isNotEmpty);
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('origins come back filled in, not blank', () async {

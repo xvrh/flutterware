@@ -1966,9 +1966,7 @@ class _ExplorerState extends State<_Explorer> {
         // The same warm-up `fw status` does. A report is a pure read of cached
         // state, so a plugin nothing has mounted this session would contribute
         // "not computed" to a checklist that is about to delete a directory.
-        for (var core in session?.session.cores ?? const <PluginCore>[]) {
-          await core.computeAll();
-        }
+        await computeAllCores(session?.session.cores ?? const <PluginCore>[]);
         return TeardownPreparation(
           TeardownPlan.build(
             worktree: worktree.displayName,
