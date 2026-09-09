@@ -571,7 +571,16 @@ class SceneCore extends PluginCore {
           description: 'The scene file, by name or path.',
           required: true,
         ),
-        ActionParameter('fps', 'Frames a second', description: 'Default 30.'),
+        ActionParameter(
+          'fps',
+          'Frames a second',
+          required: false,
+          defaultValue: '30',
+          // What the default column cannot say: the range, and that this is
+          // how finely the motion is sampled rather than how long the clip is
+          // — the length is the motion's own either way.
+          description: 'Between 1 and 120.',
+        ),
         ActionParameter(
           'args',
           'Arguments',
