@@ -537,7 +537,16 @@ sealed class SceneNode {
     'scale' => 1.0,
     'fill' => fill ?? const SceneColor(0x00000000),
     _ =>
-      scenePropNamed(this, prop)?.read(this) ??
+      switch (resolveSceneKey(this, prop)) {
+            ScenePropertyKey(prop: var p) => p.read(this),
+            // A part of a map-valued property — an axis a motion moves. An
+            // axis the node has not set has no base on this side: the face's
+            // own default lives in the font file, which the model never
+            // reads. A track REPLACES rather than adds, so the zero is never
+            // what gets drawn.
+            ScenePartKey() => getSceneProperty(this, prop) ?? 0.0,
+            null => null,
+          } ??
           (throw ArgumentError('no animatable property "$prop"')),
   };
 
@@ -819,7 +828,8 @@ class TextNode extends SceneNode {
        decorationThickness = style?.decorationThickness ?? 1,
        decorationStyle =
            style?.decorationStyle ?? SceneTextDecorationStyle.solid,
-       layers = [...?style?.layers];
+       layers = [...?style?.layers],
+       axes = {...?style?.axes};
 
   /// The text a node draws. The TYPE it is drawn in is the [style] — there
   /// is no per-property parameter beside it, because an override is a delta
@@ -847,6 +857,9 @@ class TextNode extends SceneNode {
   SceneColor? decorationColor;
   double decorationThickness;
   SceneTextDecorationStyle decorationStyle;
+
+  /// The variable face's axes, by tag. Empty is "the font's own defaults".
+  Map<String, double> axes;
 
   /// The paint stack, back to front. Empty is the ordinary text: one pass,
   /// in [color].

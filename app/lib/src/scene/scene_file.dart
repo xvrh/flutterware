@@ -406,10 +406,13 @@ void _emitNode(
           : isSceneDefault(p, v);
       if (inherited && !bound) continue;
       switch (p.kind) {
-        // Never reached: a byHand row is skipped above. Named so the switch
-        // stays exhaustive and a new kind has to be thought about here.
+        // Never reached here: the two byHand rows are skipped above, and
+        // `axes` is a style field, spelled inside the style argument. Named
+        // so the switch stays exhaustive and a new kind has to be thought
+        // about rather than silently dropped.
         case ScenePropKind.style:
         case ScenePropKind.args:
+        case ScenePropKind.axes:
           break;
         case ScenePropKind.edges:
           // One number while one number says it, four names when it does
@@ -575,6 +578,7 @@ String? _styleArg(TextNode t, _Scope scope, String? Function(String prop) ref) {
 String scenePropLiteral(SceneProp p, Object? v) => switch (p.kind) {
   // Spelled by hand, never through here.
   ScenePropKind.style || ScenePropKind.args => '$v',
+  ScenePropKind.axes => emitSceneAxes(v! as Map<String, double>),
   ScenePropKind.number => _num(v! as double),
   ScenePropKind.integer => '$v',
   ScenePropKind.string => _str(v! as String),
@@ -1550,6 +1554,11 @@ class _Parser {
         case ScenePropKind.style:
         case ScenePropKind.args:
           break;
+        case ScenePropKind.axes:
+          _take(named, p.name, (e) {
+            var axes = readSceneAxes(e, refuse);
+            if (axes != null) p.write(n, axes);
+          });
         case ScenePropKind.number:
           _take(named, p.name, (e) {
             var v = _doubleV(e, n, p.name);

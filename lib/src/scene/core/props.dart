@@ -48,6 +48,12 @@ enum ScenePropKind {
   /// A list of [TextLayer]s — a text's paint stack.
   layers,
 
+  /// A variable font's axes, as a four-letter tag to a number. Its PARTS are
+  /// the tags, which is what makes one axis a key of its own: `axes.wght` is
+  /// a number a parameter can fill and a motion can animate, where the map
+  /// as a whole is neither.
+  axes,
+
   /// [SceneEdges]: one number when uniform, four named sides when not.
   edges,
 
@@ -185,10 +191,16 @@ class SceneProp {
     ScenePropKind.integer ||
     ScenePropKind.sizes ||
     ScenePropKind.layers ||
+    ScenePropKind.axes ||
     ScenePropKind.choice ||
     ScenePropKind.style ||
     ScenePropKind.args => null,
   };
+
+  /// Whether this row's value has named parts the table cannot list, so a
+  /// key reaches one through the row's own name: `args.headline`, `axes.wght`.
+  bool get hasNamedParts =>
+      kind == ScenePropKind.args || kind == ScenePropKind.axes;
 
   /// Whether the wire and the authored JSON carry this row.
   ///
@@ -207,6 +219,7 @@ class SceneProp {
     ScenePropKind.layers => [
       for (var l in value! as List<TextLayer>) l.toWire(),
     ],
+    ScenePropKind.axes => {...value! as Map<String, double>},
     ScenePropKind.edges => (value! as SceneQuad).toWire(),
     ScenePropKind.choice => value == null ? null : choices!.toWire(value),
     _ => value,
@@ -232,6 +245,13 @@ class SceneProp {
     ScenePropKind.layers => switch (raw) {
       List l => [for (var e in l) ?TextLayer.fromWire(e)],
       _ => <TextLayer>[],
+    },
+    ScenePropKind.axes => switch (raw) {
+      Map m => {
+        for (var e in m.entries)
+          if (e.value case num v) '${e.key}': v.toDouble(),
+      },
+      _ => <String, double>{},
     },
     ScenePropKind.edges => quad!(raw),
     ScenePropKind.choice => switch (raw) {
@@ -656,6 +676,16 @@ const sceneStyleProps = <SceneProp>[
     read: _layers,
     write: _setLayers,
   ),
+  // The face's own dials. The map is one property; each axis is a part of
+  // it, so `axes.wght` binds and animates while the map does neither.
+  SceneProp(
+    'axes',
+    ScenePropKind.axes,
+    owner: ScenePropOwner.text,
+    defaultValue: <String, double>{},
+    read: _axes,
+    write: _setAxes,
+  ),
 ];
 
 /// Every property a text carries, its own and its style's.
@@ -717,6 +747,8 @@ bool isSceneDefault(SceneProp p, Object? value) => switch (p.kind) {
   // emptiness — which is what every list property's default is.
   ScenePropKind.sizes || ScenePropKind.layers =>
     (value! as List).isEmpty && (p.defaultValue! as List).isEmpty,
+  // A map is not `==` another with the same entries either.
+  ScenePropKind.axes => (value! as Map).isEmpty,
   _ => value == p.defaultValue,
 };
 
@@ -830,6 +862,10 @@ Object? _layers(SceneNode n) => (n as TextNode).layers;
 // own mutable list — the trap `columns` already answers this way.
 void _setLayers(SceneNode n, Object? v) =>
     (n as TextNode).layers = [...v! as List<TextLayer>];
+Object? _axes(SceneNode n) => (n as TextNode).axes;
+// Copied, for the same reason `layers` is.
+void _setAxes(SceneNode n, Object? v) =>
+    (n as TextNode).axes = {...v! as Map<String, double>};
 Object? _maxLines(SceneNode n) => (n as TextNode).maxLines;
 void _setMaxLines(SceneNode n, Object? v) =>
     (n as TextNode).maxLines = v as int?;

@@ -454,6 +454,48 @@ class Poster() extends SceneDefinition {
     expect(out, contains('maxLines: 2'));
   });
 
+  test('a face is set by its axes, and one axis is a key of its own', () {
+    var parsed = parseSceneFile('''
+$sceneFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+class Poster() extends SceneDefinition {
+  late final title = TextNode('ARCADE', style: SceneTextStyle(axes: {'wght': 780, 'wdth': 62.5}));
+  @override
+  late final root = FrameNode(children: [title]);
+}
+''');
+    expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
+    var t = parsed.doc!.nodeNamed('title')! as TextNode;
+    expect(t.axes, {'wght': 780.0, 'wdth': 62.5});
+    expect(
+      emitSceneFile(parsed.doc!, className: 'Poster'),
+      contains("axes: {'wght': 780, 'wdth': 62.5}"),
+    );
+
+    // The map is one property; each tag is a part of it. That is what makes
+    // a continuously morphing headline possible at all — the map as a whole
+    // is neither a number a parameter can fill nor one a track can lerp.
+    expect(bindableKind(t, 'axes'), isNull);
+    expect(bindableKind(t, 'axes.wght'), SceneParamKind.number);
+    expect(getSceneProperty(t, 'axes.wght'), 780.0);
+    setSceneProperty(t, 'axes.wght', 320.0);
+    expect(t.axes, {'wght': 320.0, 'wdth': 62.5}, reason: 'one axis moved');
+    setSceneProperty(t, 'axes.wght', null);
+    expect(t.axes, {'wdth': 62.5}, reason: "null is the face's own default");
+  });
+
+  test('an axis a motion moves is drawn even where the node set none', () {
+    var t = TextNode('x', name: 't');
+    expect(sceneFontVariations(t), isNull, reason: 'nothing to say');
+    t.writeFx(Object(), 'axes.wght', 612.0);
+    expect(
+      sceneFontVariations(t)!.single,
+      const FontVariation('wght', 612),
+      reason: 'the track is the whole of what it says',
+    );
+  });
+
   test('the wire spells a style apart from a token', () {
     expect(const StyleRef('title').toWire(), 'style:title');
     expect(SceneBinding.fromWire('style:title'), const StyleRef('title'));

@@ -764,7 +764,25 @@ TextStyle sceneTextStyleFor(TextNode t) => TextStyle(
   decorationColor: t.decorationColor?.flutter,
   decorationThickness: t.fxRendered('decorationThickness') as double,
   decorationStyle: t.decorationStyle.flutter,
+  fontVariations: sceneFontVariations(t),
 );
+
+/// The face's axes, at whatever a motion has them — the one thing a discrete
+/// [FontWeight] cannot do, which is why an axis is a number key of its own.
+///
+/// A tag a track moves but the node never set is included: the track is the
+/// whole of what it says, and leaving it out would animate nothing.
+List<FontVariation>? sceneFontVariations(TextNode t) {
+  var tags = <String>{
+    ...t.axes.keys,
+    for (var k in t.fx.keys) ?sceneAxisTag(k.$2),
+  };
+  if (tags.isEmpty) return null;
+  return [
+    for (var tag in tags)
+      FontVariation(tag, (t.fxRendered('axes.$tag') as num).toDouble()),
+  ];
+}
 
 /// A builder returns `Object`, because the half of the model that declares
 /// it is pure Dart. This is where that becomes a widget again, and where a
