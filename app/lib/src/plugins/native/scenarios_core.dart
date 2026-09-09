@@ -1677,6 +1677,19 @@ class ScenariosCore extends PluginCore {
                   'last verb landed on',
             ),
             const ActionParameter(
+              'reel',
+              'Reel',
+              kind: ActionParameterKind.boolean,
+              required: false,
+              defaultValue: 'false',
+              description:
+                  'Cut the film as a reel: a push-in on every tap, a caption '
+                  'for every `s.title`, the last frame held under the '
+                  "scenario's name — the scenario's own `reel:` edit where "
+                  'it declared one, the stock one otherwise. The scenario '
+                  'runs twice for it, once dry for the take.',
+            ),
+            const ActionParameter(
               'crf',
               'Quality',
               kind: ActionParameterKind.integer,
@@ -3937,6 +3950,7 @@ class ScenariosCore extends PluginCore {
       _ => await _theOneScenarioIn(path, file),
     };
     var branches = _branchList(arguments['branch']);
+    var reel = arguments['reel'] == 'true' || arguments['reel'] == true;
 
     // Frames live in a scratch directory nobody keeps: the drain deletes each
     // one as it feeds it, and what is left at the end is the two JSON files
@@ -3990,6 +4004,7 @@ class ScenariosCore extends PluginCore {
         // rendering of screens the film already holds.
         pixels: ScenarioPixels.none,
         film: settings,
+        filmReel: reel,
       );
       ScenarioFilm film;
       try {
@@ -4028,6 +4043,7 @@ class ScenariosCore extends PluginCore {
           'scenario': scenario,
           'file': file,
           if (branches.isNotEmpty) 'branches': branches,
+          if (reel) 'reel': true,
           'frames': film.frames,
           'fps': film.fps,
           'size': [film.width, film.height],

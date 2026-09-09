@@ -318,6 +318,12 @@ class ScenarioRunner {
     /// A film is one scenario and one path through it, so a run that asks for
     /// one names the scenario and — where it splits — its branches.
     FilmSettings? film,
+
+    /// Render the film as a **reel**: the scenario runs twice in one request
+    /// — dry for the take, then filmed under the edit it declared (or the
+    /// stock one), which decides what every output frame shows. Nothing
+    /// without [film].
+    bool filmReel = false,
   }) => _host.exclusive(() async {
     var wasWarm = _host.isWarm;
     await _host.ensureGuest();
@@ -364,6 +370,8 @@ class ScenarioRunner {
           'filmDwellMs': '${film.dwell.inMilliseconds}',
           'filmCloseMs': '${film.close.inMilliseconds}',
           'filmMaxFrames': '${film.maxFrames}',
+          if (!film.pixels) 'filmPixels': 'false',
+          if (filmReel) 'filmReel': 'true',
         },
         if (clock ?? projectClock case var origin?)
           'clock': origin.toIso8601String(),

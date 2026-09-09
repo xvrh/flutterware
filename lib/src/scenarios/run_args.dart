@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 
 import '../devices.dart';
 import 'film.dart';
+import 'reel.dart';
+import 'stage.dart';
 import 'motion.dart';
 import 'network.dart';
 import 'pixels.dart';
@@ -31,6 +33,8 @@ class ScenarioRunArgs {
     this.pixels = ScenarioPixels.all,
     this.record,
     this.film,
+    this.reel,
+    this.stage,
     this.clockOrigin,
     this.assignment,
     this.expandTranslations,
@@ -65,6 +69,37 @@ class ScenarioRunArgs {
     );
   }
 
+  /// These args with the film swapped: the same framing, the same axes, a
+  /// different pass.
+  ///
+  /// What a reel render uses twice — once with [FilmSettings.dry] and no reel
+  /// for the take, once with the film and the reel the edit made of it. Every
+  /// other field is kept, which is the point: the two passes must see the
+  /// same device, locale and clock, or the take describes a run the film
+  /// never makes.
+  ScenarioRunArgs filming(FilmSettings film, {Reel? reel}) => ScenarioRunArgs(
+    size: size,
+    pixelRatio: pixelRatio,
+    padding: padding,
+    platform: platform,
+    locale: locale,
+    textScale: textScale,
+    brightness: brightness,
+    accessibility: accessibility,
+    captureScale: captureScale,
+    captureRaw: captureRaw,
+    captureNative: captureNative,
+    pixels: pixels,
+    record: record,
+    film: film,
+    reel: reel,
+    stage: stage,
+    clockOrigin: clockOrigin,
+    network: network,
+    assignment: assignment,
+    expandTranslations: expandTranslations,
+  );
+
   /// These args, re-framed as [device] turned to [orientation] — everything
   /// else kept.
   ///
@@ -93,6 +128,8 @@ class ScenarioRunArgs {
       pixels: pixels,
       record: record,
       film: film,
+      reel: reel,
+      stage: stage,
       clockOrigin: clockOrigin,
       network: network,
       // The scenario reads its axes off the assignment, so the device the
@@ -221,6 +258,16 @@ class ScenarioRunArgs {
   /// two want the same seam and want opposite things from it — and the harness
   /// refuses a request that asks for both.
   final FilmSettings? film;
+
+  /// What the film's output shows and when, when an edit has decided.
+  ///
+  /// Never comes off the wire: a reel is built in this process by an edit
+  /// reading a [Take], and there is no serialised form of one to send.
+  final Reel? reel;
+
+  /// What the frames are drawn through. Null for [BareStage] — the app with a
+  /// cursor over it, which is what a film was before a stage existed.
+  final ReelStage? stage;
 
   /// The axes above, in the vocabulary a scenario body reads —
   /// `ScenarioTester.assignment`.

@@ -941,6 +941,50 @@ void main() {
         scenario: 'Counter',
       );
       expect(((revived['scenarios']! as List).single as Map)['ok'], isTrue);
+
+      // A reel: the same scenario twice in one request — dry for the take,
+      // then filmed under the stock edit's cut of it. The take lands beside
+      // the frames, never among them.
+      var reelDir = Directory.systemTemp.createTempSync('scenario_reel');
+      try {
+        var frames = p.join(reelDir.path, 'frames');
+        var reel = await runner.run(
+          outDir: outDir,
+          file: 'test/scenarios/counter_test.dart',
+          scenario: 'Counter',
+          pixels: ScenarioPixels.none,
+          film: FilmSettings(directory: frames, scale: 1),
+          filmReel: true,
+        );
+        var cut = (reel['scenarios']! as List).single as Map;
+        expect(cut['ok'], isTrue, reason: '${cut['errors']}');
+        Map<String, dynamic> timeline(String directory) =>
+            jsonDecode(File(p.join(directory, 'film.json')).readAsStringSync())
+                as Map<String, dynamic>;
+        var take = timeline('$frames.take');
+        expect(take['dry'], isTrue);
+        expect(
+          File(p.join('$frames.take', 'film.head.json')).existsSync(),
+          isFalse,
+        );
+        var film = timeline(frames);
+        expect(film['dry'], isNull);
+        // The stock edit holds the first tap for 800ms — the app really runs
+        // through it, so the pumped count grows by 24 at 30fps — and freezes
+        // the last frame for 1200ms, 36 output frames the app never ran.
+        expect(film['pumped'], (take['frames'] as int) + 24);
+        expect(film['frames'], (take['frames'] as int) + 60);
+        // Every one of them is on disk: nothing drained this render.
+        expect(
+          Directory(frames)
+              .listSync()
+              .where((f) => f.path.endsWith('.raw'))
+              .length,
+          film['frames'],
+        );
+      } finally {
+        reelDir.deleteSync(recursive: true);
+      }
     } finally {
       await runner.dispose();
       Directory(outDir).deleteSync(recursive: true);

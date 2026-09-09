@@ -30,7 +30,20 @@ class FilmSettings {
     this.drag = const Duration(milliseconds: 420),
     this.maxFrames = 1800,
     this.batch = 15,
+    this.pixels = true,
   });
+
+  /// The same pass with the pixels turned off: a **dry** run.
+  ///
+  /// Every beat still pumps, the clock still advances, the pointer is still
+  /// tracked and the timeline is still written — only the rasterising, the
+  /// composing and the writing are skipped. So what comes out is the film's
+  /// own account of itself with none of the film: a [Take]. Measured on a
+  /// 355-frame scenario, ~300ms against ~1.3s for the same pass at scale 2,
+  /// because pixels are two thirds of a film.
+  ///
+  /// A dry pass writes no head, so nothing can be drained from it.
+  final bool pixels;
 
   /// Where the frames and the timeline go. Emptied when the film starts, so a
   /// second render never encodes half of the one before it.
@@ -116,6 +129,28 @@ class FilmSettings {
 
   /// The fake time one frame of film is worth.
   Duration get frame => Duration(microseconds: (1000000 / fps).round());
+
+  /// These settings as a **dry** pass written to [directory] — the same
+  /// pacing, the same path, no pixels. What a reel's first pass runs under:
+  /// the take it produces is measured in the film's own beats, so the two
+  /// passes agree on every instant.
+  FilmSettings dry(String directory) => FilmSettings(
+    directory: directory,
+    fps: fps,
+    scale: scale,
+    branches: branches,
+    open: open,
+    travel: travel,
+    aim: aim,
+    press: press,
+    dwell: dwell,
+    close: close,
+    typing: typing,
+    drag: drag,
+    maxFrames: maxFrames,
+    batch: batch,
+    pixels: false,
+  );
 }
 
 /// What a film run throws when a `split` is reached that its

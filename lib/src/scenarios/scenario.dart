@@ -32,6 +32,8 @@ import 'real_work.dart';
 import 'run_args.dart';
 import 'run_listener.dart';
 import 'settle.dart';
+import 'reel.dart';
+import 'stage.dart';
 import 'stall.dart';
 import 'shots.dart';
 import 'staging.dart';
@@ -98,6 +100,7 @@ void scenario(
   Timeout? timeout,
   Object? tags,
   ScenarioNetwork? network,
+  ScenarioReelEdit? reel,
 }) {
   // Captured as the scenario is *declared*, not read when it runs: a matrix
   // declares this same body once per assignment, and each declaration keeps
@@ -110,6 +113,10 @@ void scenario(
   // The folder's settle policy, read here for the reason the shots policy
   // is. Nobody having spoken is the bounded default.
   var settling = settle ?? scenarioAmbientSettle ?? Settle.standard;
+  // How this scenario is cut as a reel, captured here for the reason the
+  // settle policy is. Null is "nobody wrote one", which a reel render reads
+  // as the stock edit — the plain film never reads it at all.
+  var edit = reel ?? scenarioAmbientReel;
   // The folder's keyboard policy, captured as this scenario is declared for
   // the reason the shots policy is: a matrix declares one body once per
   // assignment, and each declaration keeps what it was made under. On unless
@@ -182,6 +189,7 @@ void scenario(
           _reachOf(network, folderReach, description, noticeKey),
           statedNetwork: network != null,
           noticeKey: noticeKey,
+          edit: edit,
         ),
       );
     },
@@ -394,6 +402,7 @@ Future<void> _runScenario(
   ScenarioNetwork reach, {
   required bool statedNetwork,
   required String noticeKey,
+  ScenarioReelEdit? edit,
 }) async {
   // The runner's assignment wins, like its args do below: the declaration
   // captured the ambient one, which under the runner is null — and a body
@@ -469,6 +478,9 @@ Future<void> _runScenario(
       // it. Without it the slab stands still through a whole beat and arrives
       // after the typing it belongs to.
       beforePump: keyboard.step,
+      reel: scenarioRunArgs?.reel,
+      stage: scenarioRunArgs?.stage ?? const BareStage(),
+      edit: edit,
       // What the cursor will be drawn as. A phone is touched and a window is
       // pointed at, and the stage already knows which this is.
       touch: switch (assignment?.orientedDevice?.platform) {
@@ -1039,6 +1051,20 @@ class ScenarioTester {
   /// per scenario, above the replay loop, because a film spans the whole of
   /// one path and not one branch of it.
   final ScenarioFilm? _film;
+
+  /// What this run is telling whatever is filming it.
+  ///
+  /// Silent when nothing is: every call is a no-op without a film, so a
+  /// scenario carrying cues costs an evidence run nothing and asserts nothing.
+  late final ScenarioFilmVoice film = ScenarioFilmVoice._(this);
+
+  /// A caption for the stretch that follows — sugar over [film].
+  ///
+  /// ```dart
+  /// s.title('Order a coffee');
+  /// await s.tap('Cappuccino');
+  /// ```
+  void title(String text) => film.emit(ScenarioTitle(text));
 
   /// What the settle loops hand their frames to.
   ///
@@ -1957,7 +1983,7 @@ class ScenarioTester {
       // what it wants is the *name* of the stretch about to be filmed. A verb
       // with a finger re-marks this from inside [_approach], with the travel
       // and the press between the two marks.
-      _film?.act(verb: verb, target: target);
+      _film?.act(verb: verb, target: target, aim: _aim);
       result = await action();
       _film?.release();
       // One purse for the whole step: the policy's frames draw whatever has
@@ -3033,6 +3059,38 @@ class _PendingEmit {
     overflowErrors: overflowErrors,
     keyboard: keyboard,
   );
+}
+
+/// What a scenario says to whatever is filming it — `s.film`.
+///
+/// A cue is an ordinary object the author already has, handed over here and
+/// read back by an edit with a pattern:
+///
+/// ```dart
+/// s.film.emit(Basket(count: 3));      // in the scenario
+/// case Said(cue: Basket(:var count))  // in the edit
+/// ```
+///
+/// There is no registry, no map and no cast — the class is the identity, and
+/// because an edit runs in this same process the object arrives as itself.
+/// Nothing is filming most of the time, and then every call here does nothing.
+class ScenarioFilmVoice {
+  ScenarioFilmVoice._(this._s);
+
+  final ScenarioTester _s;
+
+  /// Says [cue] at this point of the film.
+  ///
+  /// Instantaneous and free: it spends no fake time, draws no frame and takes
+  /// no picture. What it marks is a *moment*, and what a stage does with the
+  /// moment is the stage's business.
+  void emit(Object cue) => _s._film?.say(cue);
+
+  /// Whether anything is listening — false in an ordinary run.
+  ///
+  /// Rarely needed, because emitting into silence is already free. It is here
+  /// for the cue whose *value* is expensive to compute.
+  bool get isFilming => _s._film != null;
 }
 
 /// The software keyboard's own verbs — `s.keyboard`.

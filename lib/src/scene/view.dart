@@ -431,8 +431,18 @@ class _SceneViewState extends State<SceneView> {
       );
     }
 
+    // The wrappers below stay for as long as a writer holds the property,
+    // not only while its value is non-identity. A wrapper that comes and
+    // goes with the value reparents the keyed node under it on the frame the
+    // value crosses 1 — and a GlobalKey reparent resolves through the
+    // *binding's* build owner, so in a tree mounted on an owner of its own
+    // (an export, a reel's stage) it cannot resolve and the framework
+    // asserts a duplicate key. Stable while animated is also cheaper: no
+    // subtree deactivates and re-inflates mid-motion.
     var opacity = (n.fxRendered('opacity') as double).clamp(0.0, 1.0);
-    if (opacity < 1) result = Opacity(opacity: opacity, child: result);
+    if (opacity < 1 || n.hasFx('opacity')) {
+      result = Opacity(opacity: opacity, child: result);
+    }
 
     // The imposed transforms have no authored slots — identity is the base —
     // so they wrap only while a writer moves them, about the node's centre.
@@ -440,7 +450,12 @@ class _SceneViewState extends State<SceneView> {
     var ty = n.fxRendered('translateY') as double;
     var scale = n.fxRendered('scale') as double;
     var rotate = n.fxRendered('rotate') as double;
-    if (tx != 0 || ty != 0 || scale != 1 || rotate != 0) {
+    var moved =
+        n.hasFx('translateX') ||
+        n.hasFx('translateY') ||
+        n.hasFx('scale') ||
+        n.hasFx('rotate');
+    if (moved || tx != 0 || ty != 0 || scale != 1 || rotate != 0) {
       var m = Matrix4.translationValues(tx, ty, 0);
       if (rotate != 0) m.rotateZ(rotate * 3.1415926535897932 / 180);
       if (scale != 1) m.multiply(Matrix4.diagonal3Values(scale, scale, 1));

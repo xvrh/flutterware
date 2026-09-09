@@ -1536,7 +1536,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 Renders one scenario as an mp4 — the app moving under a cursor that travels, presses and types, paced for somebody watching rather than for a suite. For a landing page, a README or a release note. It is a second run of the same scenario: the verbs are the same, the pacing is not, and nothing it captures is evidence. Needs `ffmpeg` on PATH.
 
 ```sh
-fw run scenarios video [--package=…] --file=<string> [--scenario=…] [--branch=…] [--device=…] [--orientation=…] [--language=…] [--brightness=…] [--scale=…] [--fps=…] [--travel=…] [--aim=…] [--dwell=…] [--open=…] [--press=…] [--close=…] [--crf=…] [--preset=…] [--output=…]
+fw run scenarios video [--package=…] --file=<string> [--scenario=…] [--branch=…] [--device=…] [--orientation=…] [--language=…] [--brightness=…] [--scale=…] [--fps=…] [--travel=…] [--aim=…] [--dwell=…] [--open=…] [--press=…] [--close=…] [--reel=…] [--crf=…] [--preset=…] [--output=…]
 ```
 
 Returns `Artifact`:
@@ -1567,6 +1567,7 @@ meta: Map<String, Object?>?   # Anything the producer wants the reader to know: 
 | `open` | integer | no | 500 | The hold on the first screen, before anything is touched |
 | `press` | integer | no | 120 | The cursor is down and the verb has not fired yet |
 | `close` | integer | no | 800 | The final hold, so the clip does not cut on the frame the last verb landed on |
+| `reel` | boolean | no | false | Cut the film as a reel: a push-in on every tap, a caption for every `s.title`, the last frame held under the scenario's name — the scenario's own `reel:` edit where it declared one, the stock one otherwise. The scenario runs twice for it, once dry for the take. |
 | `crf` | integer | no | 18 | What `libx264` aims at, lower being better and bigger. Cheap either way: the render moves far more pixels than the encode does. |
 | `preset` | string | no | slow | The `libx264` preset. The whole span from `medium` to `ultrafast` is 15% of a render, so `slow` is nearly free here. |
 | `output` | string | no | — | Where the mp4 goes, worktree-relative unless absolute. Defaults to `build/flutterware/video/<scenario>.mp4` under the package. |
