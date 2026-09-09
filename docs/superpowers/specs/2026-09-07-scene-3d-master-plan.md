@@ -504,3 +504,40 @@ Built:
 Not built: a drag that slips the clip inside a fixed block (offset by
 drag). The field covers it; a modifier-drag would be the next step if it
 is missed.
+
+## 20. Landing: replayed onto master — 2026-09-09
+
+Master moved six commits while this branch ran, three of them rewriting
+the same scene files (rich text and one key space, variable font axes,
+the render package fold). A commit-by-commit rebase would have hit those
+regions thirty times over, each intermediate state untestable, so the
+branch was squashed and replayed onto master instead: twelve conflicts,
+resolved once against the final state, where the suites can judge them.
+The pre-replay history is kept as the tag `pre-rebase-3d`.
+
+What the replay had to reconcile:
+
+- **The same bug, found twice.** Both sides discovered that a guest
+  spawned from under a `flutter test` inherits `UNIT_TEST_ASSETS` and
+  answers every asset read from the outer package's bundle. Master's fix
+  was already complete; this branch's was dropped.
+- **Text moved into a style.** `fontSize`, `weight` and `color` are no
+  longer TextNode arguments, so this branch's four scene files were
+  migrated into `style: SceneTextStyle(...)`.
+- **One key space.** A group's `args` map is gone; an argument track is
+  filed in `tracks` under its own `args.` key, which is one line in the
+  clip-block door.
+- **The property table met the kind table.** Master's `resolveSceneKey`
+  walk already reaches a registered kind's rows through `appliesTo`, so
+  the branch's separate lookup in `animatableBase` was dropped for it.
+
+One test had to change, and it is worth stating why rather than burying
+it. `compiler_daemon_test` asserted that the published kernel is bigger
+than the seed it grew from — "the seed plus this checkout". A seed is
+shared across the workspace's members, and this branch gives one member a
+3D engine, so the seed a compile of THAT member writes is larger than the
+studio catalog's whole program while still being a valid seed for it.
+Measured here: program 101,990,888 bytes, seed 102,858,320. The published
+kernel was a real program either way; what the test is actually guarding
+against is the kernel BEING the seed, byte for byte, so that is what it
+now checks, plus a floor.

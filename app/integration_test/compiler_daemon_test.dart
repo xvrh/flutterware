@@ -1021,12 +1021,23 @@ Widget fixtureBroken() => const Placeholder();
       // loads would be a root with an empty `main` in it.
       var kernel = File(p.join(ready.assetsDir, 'kernel_blob.bin'));
       expect(kernel.existsSync(), isTrue);
+      // Not "bigger than the seed": a seed is shared across the workspace's
+      // members, so the one found here may have been written by a compile of
+      // another member and carry packages this catalog never imports — one
+      // that pulls in a 3D engine is larger than this program despite being
+      // a seed for it. What the failure actually looks like is the published
+      // kernel BEING the seed, byte for byte, so that is what is checked.
       expect(
         kernel.lengthSync(),
-        greaterThan(File(seed.kernelPath).lengthSync()),
+        isNot(File(seed.kernelPath).lengthSync()),
         reason:
-            'the published kernel is the program, which is the seed plus '
-            'this checkout',
+            'the published kernel is the program, not the seed it grew '
+            'from',
+      );
+      expect(
+        kernel.lengthSync(),
+        greaterThan(1000000),
+        reason: 'and it is a program rather than a root with an empty main',
       );
     });
   });
