@@ -205,6 +205,12 @@ jobs:
       # either is usually a break in both — but only this one spawns a run.
       - run: dart run flutterware_app:fw run scenarios run --steps=none
         working-directory: examples/example
-      # The 3D lane on Windows, as on Linux.
-      - run: flutter test test/previews/showcase_export_test.dart test/previews/phone_rig_probe_test.dart
+      # The 3D lane on Windows. One file a step, unlike Linux: run together
+      # they exited 1 with all nine tests passing, no error printed, six of
+      # the results uncounted and a flutter_tester left orphaned — a suite
+      # that did not shut down cleanly rather than a test that failed. Split,
+      # the next red says which file owns it.
+      - run: flutter test test/previews/showcase_export_test.dart
+        working-directory: app
+      - run: flutter test test/previews/phone_rig_probe_test.dart
         working-directory: app
