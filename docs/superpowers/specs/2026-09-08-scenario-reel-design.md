@@ -503,6 +503,15 @@ runtime.
    is sharp enough at film scale 2 and zoom 1.5; oversampling the app's
    raster for the zoom is not needed yet.
 
+   *The cursor's look is the reel's* — **2026-09-09.** `CursorLook` is a
+   value (ink, paper, size, ripple) and `PointerArgs` carries one as the
+   pointer node's typed args, so an edit that knows what the finger is drawn
+   over picks the pair that survives it, and a track on `args.size` or
+   `args.ink` changes it mid-reel like any arg. What the args do not carry:
+   where the finger is (the run's), and fingertip versus arrow (the
+   device's). The shop reel draws its finger latte on roast, 1.15×, with no
+   ripple because the app's chips answer a press with ink of their own.
+
 4. **Many sources.** Pool above one: dissolve, grid, replay.
 5. **The desk.** A frame-cache scrub, provenance from a rendered frame back
    to the edit line that made it. Reel selection is done (3).

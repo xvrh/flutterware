@@ -70,7 +70,18 @@ class BrewlineReel extends ScenarioReelEdit {
         ExternalNode(const ScreenArgs(), name: 'screen')
           ..width = w
           ..height = h,
-        ExternalNode(const PointerArgs(), name: 'pointer')
+        // The finger in the shop's own pair: latte on roast, a touch larger
+        // than the film's — and no ripple, the app's chips and buttons
+        // already answer a press with ink of their own.
+        ExternalNode(
+            const PointerArgs(
+              ink: _ground,
+              paper: _accent,
+              size: 1.15,
+              ripple: false,
+            ),
+            name: 'pointer',
+          )
           ..width = w
           ..height = h,
       ]);

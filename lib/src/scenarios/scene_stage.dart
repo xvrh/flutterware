@@ -92,20 +92,60 @@ class ScreenArgs extends SceneExtArgs {
 
 /// The cursor, as a scene node — placed in the same node as the screen, so a
 /// camera moving one moves both.
+///
+/// Its args are the cursor's look, so an edit that knows what the finger is
+/// drawn over picks the pair of colours that survives it, and a motion track
+/// on `args.size` or `args.ink` changes it mid-reel like any other arg. What
+/// the args do **not** carry is the pointer's position or whether it is a
+/// fingertip or an arrow: where the finger is comes from the run, and what a
+/// device is touched with is the device's fact, not the reel's.
 class PointerArgs extends SceneExtArgs {
-  const PointerArgs();
+  const PointerArgs({this.ink, this.paper, this.size = 1, this.ripple = true});
+
+  /// The dark mark, or null for the film's own.
+  final SceneColor? ink;
+
+  /// The light mark, or null for the film's own.
+  final SceneColor? paper;
+
+  /// A multiplier on every dimension of the cursor.
+  final double size;
+
+  /// Whether a press sends a ring out.
+  final bool ripple;
 
   @override
   String get entry => 'scenario.pointer';
 
   @override
-  PointerArgs merge(SceneArgs fx) => this;
+  PointerArgs merge(SceneArgs fx) => PointerArgs(
+    ink: fx.color('ink') ?? ink,
+    paper: fx.color('paper') ?? paper,
+    size: fx.number('size') ?? size,
+    ripple: fx.flag('ripple') ?? ripple,
+  );
 
   @override
-  Map<String, Object?> toMap() => const {};
+  Map<String, Object?> toMap() => {
+    if (ink case var c?) 'ink': c.argb,
+    if (paper case var c?) 'paper': c.argb,
+    'size': size,
+    'ripple': ripple,
+  };
+
+  /// The look these args describe.
+  CursorLook get look {
+    const standard = CursorLook.standard;
+    return CursorLook(
+      ink: ink == null ? standard.ink : Color(ink!.argb),
+      paper: paper == null ? standard.paper : Color(paper!.argb),
+      size: size,
+      ripple: ripple,
+    );
+  }
 
   @override
-  Object build() => const Pointer();
+  Object build() => Pointer(look: look);
 }
 
 /// Where a camera has to move to zoom in on a point.

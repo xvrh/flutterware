@@ -19,24 +19,24 @@ import 'package:flutter/painting.dart';
 /// not a preference: a phone is touched and a window is pointed at, and a film
 /// showing an arrow on a phone is showing something that never happens.
 class ScenarioFilmCursor {
-  const ScenarioFilmCursor({required this.touch});
+  const ScenarioFilmCursor({
+    required this.touch,
+    this.look = CursorLook.standard,
+  });
 
   /// Whether the stage is a touch device.
   final bool touch;
 
-  /// Ink and paper, and every mark is drawn in both.
-  ///
-  /// A cursor lands wherever the flow takes it: over a white card, over a
-  /// brown button, over a photograph. One colour cannot survive all three, so
-  /// every shape here is a dark mark with a light one under or around it —
-  /// the same defence `ScenarioAimPainter` makes for its rings, and the reason
-  /// a film of a dark app needs no setting.
-  static const _ink = Color(0xCC000000);
-  static const _paper = Color(0xF2FFFFFF);
+  /// What the marks are drawn in — see [CursorLook].
+  final CursorLook look;
+
+  Color get _ink => look.ink;
+  Color get _paper => look.paper;
 
   /// A fingertip. The tap target every mobile guideline asks for, so the mark
-  /// stays a mark whatever the film is watched at.
-  static const _touchRadius = 20.0;
+  /// stays a mark whatever the film is watched at — times the look's size.
+  double get _touchRadius => _fingertip * look.size;
+  static const _fingertip = 20.0;
 
   /// How long a press ripple takes to travel out and fade.
   ///
@@ -55,8 +55,8 @@ class ScenarioFilmCursor {
     required bool down,
     double? sincePress,
   }) {
-    if (sincePress case var since? when since < rippleSeconds) {
-      _ripple(canvas, at, since / rippleSeconds);
+    if (look.ripple && sincePress != null && sincePress < rippleSeconds) {
+      _ripple(canvas, at, sincePress / rippleSeconds);
     }
     if (touch) {
       _finger(canvas, at, down: down);
@@ -69,8 +69,8 @@ class ScenarioFilmCursor {
   void _ripple(ui.Canvas canvas, Offset at, double t) {
     var eased = Curves.easeOutCubic.transform(t);
     var radius = ui.lerpDouble(
-      touch ? _touchRadius : 6,
-      touch ? 46 : 28,
+      touch ? _touchRadius : 6 * look.size,
+      (touch ? 46 : 28) * look.size,
       eased,
     )!;
     var fade = 1 - t;
@@ -156,7 +156,7 @@ class ScenarioFilmCursor {
     canvas
       ..save()
       ..translate(at.dx, at.dy)
-      ..scale(dip)
+      ..scale(dip * look.size)
       // Under the arrow rather than around it: an outline alone disappears
       // into a busy background, and a shadow is what a real cursor has.
       ..drawPath(
@@ -179,5 +179,45 @@ class ScenarioFilmCursor {
 
   /// How far a fingertip reaches past the point it is on — what a caller adds
   /// to a bound when it needs to know the mark's own extent.
-  static double get reach => math.max(_touchRadius, 28);
+  static double get reach => math.max(_fingertip, 28);
+}
+
+/// What the cursor is drawn in: the two colours every mark is made of, how
+/// big it is, and whether a press ripples.
+///
+/// A value, so a stage can hand one over and a reel can change it per node —
+/// the pointer is a scene node, and this is what its args carry. The default
+/// is the film's own look: ink and paper, because a cursor lands wherever the
+/// flow takes it — over a white card, over a brown button, over a photograph
+/// — and one colour cannot survive all three, so every shape is a dark mark
+/// with a light one under or around it. A reel that knows what it is drawn
+/// over can pick its own pair.
+class CursorLook {
+  const CursorLook({
+    this.ink = const Color(0xCC000000),
+    this.paper = const Color(0xF2FFFFFF),
+    this.size = 1.0,
+    this.ripple = true,
+  });
+
+  /// The film's own look.
+  static const standard = CursorLook();
+
+  /// The dark mark: the fill of the fingertip, the outline and shadow of the
+  /// arrow, the outer ring of the ripple.
+  final Color ink;
+
+  /// The light mark: the ring around the fingertip, the body of the arrow,
+  /// the inner ring of the ripple.
+  final Color paper;
+
+  /// A multiplier on every dimension. `1` is a 20-point fingertip and a
+  /// 20-point arrow; a reel that zooms 2× and wants the finger to stay a
+  /// finger says `0.5`, and a landing page that wants it seen says `1.4`.
+  final double size;
+
+  /// Whether a press sends a ring out. Off for a look that draws its own
+  /// press feedback, or for a cursor over an app whose own ink ripple is the
+  /// point.
+  final bool ripple;
 }

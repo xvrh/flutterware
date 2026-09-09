@@ -4,6 +4,8 @@ import 'package:flutter/widgets.dart';
 
 import '../render/offscreen.dart';
 import 'film_cursor.dart';
+
+export 'film_cursor.dart' show CursorLook;
 import 'reel.dart';
 
 /// What a reel is drawn *through*.
@@ -120,7 +122,11 @@ class Screen extends StatelessWidget {
 /// [Screen] must put this under the same transform or the finger will point
 /// somewhere the app is not.
 class Pointer extends StatelessWidget {
-  const Pointer({super.key});
+  const Pointer({super.key, this.look = CursorLook.standard});
+
+  /// What the cursor is drawn in. The default is the film's own; a reel
+  /// hands one over through `PointerArgs`.
+  final CursorLook look;
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +136,7 @@ class Pointer extends StatelessWidget {
       size: frame.screenSize,
       child: CustomPaint(
         painter: _CursorPainter(
-          ScenarioFilmCursor(touch: frame.touch),
+          ScenarioFilmCursor(touch: frame.touch, look: look),
           frame.pointer!,
           frame.down,
           frame.sincePress,
@@ -154,7 +160,11 @@ class _CursorPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CursorPainter old) =>
-      old.at != at || old.down != down || old.sincePress != sincePress;
+      old.at != at ||
+      old.down != down ||
+      old.sincePress != sincePress ||
+      old.cursor.look != cursor.look ||
+      old.cursor.touch != cursor.touch;
 }
 
 /// Hands the moment down the stage's tree.
