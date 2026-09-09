@@ -132,6 +132,14 @@ flutter:
         - asset: assets/fonts/Roboto-Regular.ttf
         - asset: assets/fonts/Roboto-Bold.ttf
           weight: 700
+    # A VARIABLE face, for the scene editor's axis sliders and for a headline
+    # that morphs along wght and wdth — which is the thing a set of static
+    # weights cannot do. Archivo, by the Omnibus-Type authors, under the SIL
+    # Open Font License 1.1; the licence travels beside the file.
+    # wght 100..900 (default 600), wdth 62..125 (default 100).
+    - family: Archivo
+      fonts:
+        - asset: assets/fonts/Archivo-Variable.ttf
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/custom-fonts/#from-packages
