@@ -174,6 +174,7 @@ Future<void> _runHarness(
     :profiles,
     shots: folderShots,
     keyboards: folderKeyboards,
+    shadows: folderShadows,
     networks: folderNetworks,
     settles: folderSettles,
   ) = await _probeFolders(
@@ -212,6 +213,7 @@ Future<void> _runHarness(
         profiles: profiles,
         shots: folderShots,
         keyboards: folderKeyboards,
+        shadows: folderShadows,
         networks: folderNetworks,
         settles: folderSettles,
         // The host resolved a device id to geometry, or said it had nobody's
@@ -416,6 +418,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
   Map<String, void Function()> scenarioMains, {
   Map<String, Shots> shots = const {},
   Map<String, bool> keyboards = const {},
+  Map<String, bool> shadows = const {},
   Map<String, ScenarioNetwork> networks = const {},
   Map<String, Settle> settles = const {},
 }) {
@@ -438,6 +441,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
         // index two functions up.
         scenarioAmbientShots = _nearest(entry.key, shots);
         scenarioAmbientKeyboard = _nearest(entry.key, keyboards);
+        scenarioAmbientShadows = _nearest(entry.key, shadows);
         scenarioAmbientNetwork = _nearest(entry.key, networks);
         scenarioAmbientSettle = _nearest(entry.key, settles);
         try {
@@ -447,6 +451,7 @@ class _SpyMessenger extends TestDefaultBinaryMessenger {
           scenarioAmbientFile = null;
           scenarioAmbientShots = null;
           scenarioAmbientKeyboard = null;
+          scenarioAmbientShadows = null;
           scenarioAmbientNetwork = null;
           scenarioAmbientSettle = null;
         }
@@ -468,6 +473,7 @@ Future<
     Map<String, ScenarioProfile> profiles,
     Map<String, Shots> shots,
     Map<String, bool> keyboards,
+    Map<String, bool> shadows,
     Map<String, ScenarioNetwork> networks,
     Map<String, Settle> settles,
   })
@@ -478,6 +484,7 @@ _probeFolders(
   var profiles = <String, ScenarioProfile>{};
   var shots = <String, Shots>{};
   var keyboards = <String, bool>{};
+  var shadows = <String, bool>{};
   var networks = <String, ScenarioNetwork>{};
   var settles = <String, Settle>{};
   for (var MapEntry(key: directory, value: config) in configs.entries) {
@@ -485,6 +492,7 @@ _probeFolders(
     scenarioProbedProfile = null;
     scenarioProbedShots = null;
     scenarioProbedKeyboard = null;
+    scenarioProbedShadows = null;
     scenarioProbedNetwork = null;
     scenarioProbedSettle = null;
     try {
@@ -497,6 +505,9 @@ _probeFolders(
       }
       if (scenarioProbedKeyboard case var wanted?) {
         keyboards[directory] = wanted;
+      }
+      if (scenarioProbedShadows case var wanted?) {
+        shadows[directory] = wanted;
       }
       if (scenarioProbedNetwork case var reach?) {
         networks[directory] = reach;
@@ -511,6 +522,7 @@ _probeFolders(
       scenarioProbedProfile = null;
       scenarioProbedShots = null;
       scenarioProbedKeyboard = null;
+      scenarioProbedShadows = null;
       scenarioProbedNetwork = null;
       scenarioProbedSettle = null;
     }
@@ -519,6 +531,7 @@ _probeFolders(
     profiles: profiles,
     shots: shots,
     keyboards: keyboards,
+    shadows: shadows,
     networks: networks,
     settles: settles,
   );
@@ -778,6 +791,7 @@ Future<Map<String, Object?>> _run(
   Map<String, ScenarioProfile> profiles = const {},
   Map<String, Shots> shots = const {},
   Map<String, bool> keyboards = const {},
+  Map<String, bool> shadows = const {},
   Map<String, ScenarioNetwork> networks = const {},
   Map<String, Settle> settles = const {},
   String? device,
@@ -800,6 +814,7 @@ Future<Map<String, Object?>> _run(
     mains,
     shots: shots,
     keyboards: keyboards,
+    shadows: shadows,
     networks: networks,
     settles: settles,
   );

@@ -168,6 +168,34 @@ ScenarioAssignment? scenarioAmbientAssignment;
 /// that named one — `--network=live`, or `FW_NETWORK=live` in the bare
 /// `flutter test` lane.
 ///
+/// [shadows] is whether this folder's captures carry real shadows, and it is
+/// **on**. `flutter_test` hard-codes `debugDisableShadows` to true for every
+/// test it runs, which paints a `BoxShadow` with its blur dropped — a solid,
+/// hard-edged copy of the shape — and turns a Material `elevation:` into a
+/// stroked outline `elevation * 2` wide. That is the right default for a
+/// golden file, whose whole job is to be compared across engine versions; it
+/// is the wrong one for a picture somebody looks at, and every picture this
+/// harness takes is looked at.
+///
+/// The cost is the one upstream's default buys off: shadow rasterisation is
+/// not promised stable from one engine to the next, so a suite that gates on
+/// `drift` across a Flutter bump has one more reason for its pictures to move.
+/// Run to run on one machine it is deterministic, which is the comparison
+/// `previews compare` and the drift report actually make. A folder that would
+/// rather keep upstream's says so once, and gets the old pictures back byte
+/// for byte:
+///
+/// ```dart
+/// Future<void> testExecutable(FutureOr<void> Function() testMain) =>
+///     runScenarios(testMain, profile: goldens, shadows: false);
+/// ```
+///
+/// A suite adopting this version sees every shadowed surface move once — the
+/// same shape the keyboard default has, and [scenarioAmbientKeyboard] says
+/// what to do about it. The flag is set around each scenario's body and put
+/// back before it ends, which is what keeps the binding's own end-of-test
+/// check on its debug variables happy.
+///
 /// Also loads the project's fonts, once, before anything is declared — the
 /// step `flutter test` otherwise leaves to each project's own
 /// `flutter_test_config.dart`. Without it this lane measures text in the
@@ -178,6 +206,7 @@ Future<void> runScenarios(
   ScenarioProfile? profile,
   Shots? shots,
   bool keyboard = true,
+  bool shadows = true,
   ScenarioNetwork? network,
   Settle? settle,
 }) async {
@@ -196,6 +225,7 @@ Future<void> runScenarios(
     scenarioProbedProfile = profile;
     scenarioProbedShots = shots;
     scenarioProbedKeyboard = keyboard;
+    scenarioProbedShadows = shadows;
     scenarioProbedNetwork = network;
     scenarioProbedSettle = settle;
     return;
@@ -215,6 +245,7 @@ Future<void> runScenarios(
   var assignments = scenarioAssignments(profile);
   scenarioAmbientShots = shots;
   scenarioAmbientKeyboard = keyboard;
+  scenarioAmbientShadows = shadows;
   scenarioAmbientNetwork = network;
   scenarioAmbientSettle = settle;
   try {
@@ -231,6 +262,7 @@ Future<void> runScenarios(
     scenarioAmbientIsMatrix = false;
     scenarioAmbientShots = null;
     scenarioAmbientKeyboard = null;
+    scenarioAmbientShadows = null;
     scenarioAmbientNetwork = null;
     scenarioAmbientSettle = null;
   }
@@ -250,6 +282,17 @@ bool? scenarioAmbientKeyboard;
 
 /// What the last probed config said about the keyboard.
 bool? scenarioProbedKeyboard;
+
+/// Whether the folder being declared right now wants real shadows, or null
+/// where it said nothing — which is on, unlike every other `flutter_test`.
+///
+/// Read by `scenario()` **as it declares**, like [scenarioAmbientShots] and for
+/// the same reason. See [runScenarios] for what the two renderings look like
+/// and what turning it back off buys.
+bool? scenarioAmbientShadows;
+
+/// What the last probed config said about shadows.
+bool? scenarioProbedShadows;
 
 /// What the folder being declared right now said its http requests reach, or
 /// null where it said nothing.

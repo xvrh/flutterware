@@ -699,6 +699,15 @@ void _declare(
         // Held rather than built inline: `landRealWork` reads its in-flight count
         // to know an asset the entry asked for is genuinely still on the way.
         var assets = ScenarioAssetBundle();
+        // Real shadows, for the reason the clock above is pinned: this is the
+        // lane the audit and the comparison read, and `flutter_test` paints a
+        // `BoxShadow` with its blur dropped and a Material `elevation:` as a
+        // stroked outline. A preview and a scenario of one widget have to be
+        // pictures of the same widget — see `runScenarios`, which says what
+        // the default costs. Put back in the `finally`, never a tearDown, for
+        // the reason `reset()` is.
+        var priorShadows = debugDisableShadows;
+        debugDisableShadows = false;
         try {
           // The harness read the app's fonts through `rootBundle` at startup, and
           // that cached a future belonging to a zone this test is not in.
@@ -874,6 +883,7 @@ void _declare(
           }
         } finally {
           FlutterError.onError = previous;
+          debugDisableShadows = priorShadows;
           // Inside the body, never a tearDown: the binding verifies its debug
           // variables at the end of the body, and a reset filed as a tearDown
           // fails the test it was meant to clean up after.
