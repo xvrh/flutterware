@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:path/path.dart' as p;
@@ -375,6 +376,7 @@ class SceneCore extends PluginCore {
     required String package,
     required String scenePath,
     int fps = 30,
+    Map<String, Object?> args = const {},
   }) async {
     var group = groupFor(package, scenePath);
     if (group == null) {
@@ -393,6 +395,23 @@ class SceneCore extends PluginCore {
         'that scene does not parse, so there is nothing to render:\n'
         '${opened.refusals.take(3).join('\n')}',
       );
+    }
+    // The scene's own parameters, answered by the caller: the same door a
+    // preview or an app uses when it writes `StoreHero(headline: …)`, which
+    // is what lets ONE authored scene render every locale's clip. Applied to
+    // the parsed document before it travels, so the walk sees the values and
+    // nothing downstream has to know they were overridden.
+    if (args.isNotEmpty) {
+      var declared = {for (var param in opened.doc!.params) param.name};
+      var unknown = args.keys.where((k) => !declared.contains(k)).toList();
+      if (unknown.isNotEmpty) {
+        throw StateError(
+          '${p.basename(scenePath)} declares no parameter '
+          '${unknown.join(', ')} — it takes '
+          '${declared.isEmpty ? 'none' : declared.join(', ')}',
+        );
+      }
+      opened.doc!.applyArgs(args);
     }
     if (opened.motions.isEmpty) {
       throw StateError(
@@ -421,7 +440,7 @@ class SceneCore extends PluginCore {
       host.workspace.appContext.appToolDirectory.path,
       'build',
       'scene',
-      '${opened.className}.mp4',
+      '${opened.className}${_argsSuffix(args)}.mp4',
     );
     // The whole motion at `fps`: only the running motion knows how long it
     // is, so the stops are not computed here.
@@ -553,6 +572,17 @@ class SceneCore extends PluginCore {
           required: true,
         ),
         ActionParameter('fps', 'Frames a second', description: 'Default 30.'),
+        ActionParameter(
+          'args',
+          'Arguments',
+          description:
+              "A JSON object answering the scene's own parameters — "
+              '{"headline": "Votre café", "shotFront": "…/01-welcome.png"}. '
+              'One authored scene then renders every locale, and each '
+              'setting is a file of its own rather than the same name '
+              'written twice. A name the scene does not declare is refused, '
+              'with the ones it does.',
+        ),
       ],
     ),
     PluginAction(
@@ -877,10 +907,35 @@ class SceneCore extends PluginCore {
             String text when int.tryParse(text) != null => int.parse(text),
             _ => 30,
           }.clamp(1, 120),
+          args: _argsObject(arguments['args']),
         );
       default:
         return super.invoke(actionId, arguments: arguments);
     }
+  }
+
+  /// The `args` argument, from a JSON object or a map that already is one.
+  static Map<String, Object?> _argsObject(Object? value) => switch (value) {
+    null => const {},
+    Map<String, Object?> map => map,
+    String text when text.trim().isEmpty => const {},
+    String text => switch (jsonDecode(text)) {
+      Map<String, Object?> map => map,
+      _ => throw StateError('args must be a JSON object, not: $text'),
+    },
+    _ => throw StateError('args must be a JSON object'),
+  };
+
+  /// What tells two settings of one scene apart on disk.
+  ///
+  /// A digest rather than the values: a headline is a sentence and a shot is
+  /// an absolute path, and neither belongs in a file name. Empty for the
+  /// unparameterised call, so the plain `Scene.mp4` keeps its name.
+  static String _argsSuffix(Map<String, Object?> args) {
+    if (args.isEmpty) return '';
+    var keys = args.keys.toList()..sort();
+    var canonical = jsonEncode({for (var k in keys) k: args[k]});
+    return '-${sha1.convert(utf8.encode(canonical)).toString().substring(0, 8)}';
   }
 
   static String _text(Object? value, String name, String what) =>
