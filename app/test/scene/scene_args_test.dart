@@ -122,6 +122,43 @@ final scenes = SceneGroup(widgets: []);
     });
   });
 
+  group('a string default', () {
+    // A store headline is multi-line about half the time, and a price has a
+    // `$` in it. Both used to reach the generated file unescaped — a raw
+    // newline inside a single-quoted literal, and an interpolation nobody
+    // wrote — and the failure was `Null check operator used on a null value`
+    // from the formatter, with no line and no name. There are three emitters
+    // of a Dart string in this tool and only `sceneStringLiteral` was right;
+    // this is the grader that keeps the other two using it.
+    test('survives a newline, a quote, a backslash and a dollar', () {
+      var awkward =
+          "Your coffee,\nready before you are — 4,20 \$ o'clock C:\\x";
+      var source = emitSceneArgs(
+        externals: [
+          ExternalWidgetDecl('Shot', [
+            ExternalArgDecl('path', 'String', sceneStringLiteral(awkward)),
+          ]),
+        ],
+        scenes: [
+          SceneClassDecl('StoreHero', [
+            SceneParamDecl('headline', SceneParamKind.string, awkward),
+          ], 'store_hero.scene.dart'),
+        ],
+      );
+      // The escapes are spelled, not the characters: a literal newline here
+      // is source that does not parse.
+      expect(source, isNot(contains("'Your coffee,\nready")));
+      expect(source, contains(r'\n'));
+      expect(source, contains(r"o\'clock"));
+      expect(source, contains(r'C:\\x'));
+      expect(source, contains(r'\$'));
+      // The whole point, and it is already proved above: `emitSceneArgs`
+      // formats what it wrote, and the formatter throws on source that does
+      // not parse — so reaching this line at all is the assertion.
+      expect(source, contains('class StoreHeroArgs'));
+    });
+  });
+
   group('the generated vocabulary', () {
     var source = emitSceneArgs(
       externals: [
