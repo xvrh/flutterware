@@ -11,6 +11,7 @@ import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/scenarios/network_mode.dart';
 
+import '../scenarios/discovery.dart';
 import '../scenarios/runner.dart';
 import '../embedder/build_directory.dart';
 import 'scenario_alignment.dart';
@@ -82,6 +83,34 @@ class ScenariosSide {
     for (var listing in await runner.list())
       idFor(file: listing.file, scenario: listing.name),
   ];
+
+  /// Every scenario [checkout] declares, read from its **sources**.
+  ///
+  /// The cheap twin of [scenarios], and the difference is the whole fixed cost
+  /// of this half: that one asks a live harness, which has to be generated,
+  /// compiled and booted first — on each side, before a single closure has
+  /// been looked at. This parses the very files that harness's entrypoint is
+  /// generated from, with the same scanner and the same root.
+  ///
+  /// Null where the scan cannot promise the whole set. A `scenario()` whose
+  /// name is *built* rather than written is invisible to a parser and present
+  /// in the harness's own listing, and a plan made from a listing one short
+  /// would call a scenario nobody removed removed. Tags and `skip:` are
+  /// missing from here too and do not matter: they decide what a replay does,
+  /// and whoever asks this is deciding whether to replay at all.
+  List<String>? scannedScenarios(String checkout) {
+    var scan = ScenarioScanner(
+      packageRoot: p.normalize(p.join(checkout, packagePath)),
+      directory: directory,
+    ).scan();
+    if (scan.unnamed > 0) return null;
+    // Duplicates are kept rather than folded: the harness lists a name
+    // declared twice twice, and a listing that disagrees with the one it
+    // stands in for is worse than no listing.
+    return [
+      for (var ref in scan.scenarios) idFor(file: ref.file, scenario: ref.name),
+    ];
+  }
 
   /// A runner for [checkout], building in a claimed directory of its own.
   ///

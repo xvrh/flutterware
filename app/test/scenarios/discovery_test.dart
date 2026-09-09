@@ -84,6 +84,27 @@ void main() {
     expect(result.scenarios, isEmpty);
     expect(result.diagnostics, hasLength(1));
     expect(result.diagnostics.single, contains('not a string literal'));
+    // The count, not only the prose: a comparison plans from this listing
+    // when it is whole and refuses to when it is not, and a sentence is not
+    // something it can ask.
+    expect(result.unnamed, 1);
+  });
+
+  test('a listing with every name written down says so', () {
+    write(
+      'test/scenarios/a_test.dart',
+      "void main() => scenario('Same', (s) async {});",
+    );
+    write('test/scenarios/b_test.dart', '''
+void main() {
+  scenario('Same', (s) async {});
+  scenario('Same', (s) async {});
+}
+''');
+    var result = ScenarioScanner(packageRoot: root.path).scan();
+    // A duplicate is ambiguous, not missing — the listing still holds it.
+    expect(result.diagnostics, hasLength(1));
+    expect(result.unnamed, 0);
   });
 
   test('a name repeated across files is not a duplicate', () {

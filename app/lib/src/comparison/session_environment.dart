@@ -216,7 +216,11 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   }) async {
     var side = _scenariosSide();
     if (side == null) throw StateError('no package declares scenarios');
-    onProgress?.call('building a scenario harness for each side');
+    // Nothing is narrated here any more. This used to promise a harness per
+    // side before the runner had decided whether it needed one, and the run
+    // that needs none now never builds one — see `ScenariosRunner.plan`. The
+    // runner narrates its own first phase immediately, so there is no gap to
+    // fill.
     var source = LiveScenarioSource(
       side: side,
       headRoot: topLevel,

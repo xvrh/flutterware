@@ -118,6 +118,88 @@ void main() {
     });
   });
 
+  // The fixed cost of this half is two harness builds and two boots, and it
+  // used to be paid before a single closure had been hashed — so a branch that
+  // touched no scenario paid all of it to be told there was nothing to do.
+  // Measured 2026-09-09 on this repo: 60.5s of a 63s comparison.
+  group('the scan gate', () {
+    test('nothing to replay is answered without listing a harness', () async {
+      source.scannedHead = ['test/shop.dart#Checkout'];
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      var files = {'test/shop.dart': 'const flow = 1;'};
+
+      var plan = await runnerFor(
+        base: checkout('base', files),
+        head: checkout('head', files),
+      ).plan();
+
+      expect(plan.toRun, isEmpty);
+      expect(plan.settled.single.state, ComparedState.skipped);
+      expect(source.listed, 0, reason: 'no harness should have been started');
+    });
+
+    test('something to replay falls through to the harness', () async {
+      source.scannedHead = ['test/shop.dart#Checkout'];
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      source.declared = ['test/shop.dart#Checkout'];
+
+      var plan = await runnerFor(
+        base: checkout('base', {'test/shop.dart': '1'}),
+        head: checkout('head', {'test/shop.dart': '2'}),
+      ).plan();
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
+      expect(source.listed, 2, reason: 'both sides are listed live');
+    });
+
+    // The harness's listing is ground truth, and a fall-through takes it: the
+    // scan cannot see `skip:` or a name that is built rather than written, and
+    // by this point a harness is starting anyway.
+    test('the fall-through plans from the listing, not the scan', () async {
+      source.scannedHead = ['test/shop.dart#Checkout'];
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      source.onHead = ['test/shop.dart#Checkout', 'test/late.dart#Generated'];
+      source.onBase = ['test/shop.dart#Checkout'];
+
+      var plan = await runnerFor(
+        base: checkout('base', {'test/shop.dart': '1'}),
+        head: checkout('head', {'test/shop.dart': '2', 'test/late.dart': '1'}),
+      ).plan();
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
+      expect(plan.settled.single.state, ComparedState.added);
+    });
+
+    test('a scan that cannot promise the whole set is not used', () async {
+      source.scannedHead = null;
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      source.declared = ['test/shop.dart#Checkout'];
+      var files = {'test/shop.dart': 'const flow = 1;'};
+
+      await runnerFor(
+        base: checkout('base', files),
+        head: checkout('head', files),
+      ).plan();
+
+      expect(source.listed, 2);
+    });
+
+    // Two empty listings are the absence of an answer, not an answer: a
+    // package the scan sees no scenarios in is exactly where the harness's
+    // refusal to build is the message the reader needs.
+    test('two empty scans are not an answer', () async {
+      source.scannedHead = const [];
+      source.scannedBase = const [];
+
+      await runnerFor(
+        base: checkout('base', {'test/shop.dart': '1'}),
+        head: checkout('head', {'test/shop.dart': '1'}),
+      ).plan();
+
+      expect(source.listed, 2);
+    });
+  });
+
   group('the run', () {
     test('a plan already made is not made again', () async {
       source.declared = ['test/shop.dart#Checkout'];
@@ -215,6 +297,13 @@ class _FakeSource implements ScenarioSource {
   List<String>? onBase;
   List<String>? onHead;
 
+  /// What the *sources* say, when they can say — null is a source the scan
+  /// cannot promise the whole of, which is what every test that does not set
+  /// this one gets, so the live listing stays the default path.
+  List<String>? scannedBase;
+  List<String>? scannedHead;
+  var scanned = 0;
+
   /// The scenario whose head replay throws at its step.
   String? failOn;
 
@@ -230,6 +319,12 @@ class _FakeSource implements ScenarioSource {
   Future<List<String>> list({required bool base}) async {
     listed++;
     return (base ? onBase : onHead) ?? declared;
+  }
+
+  @override
+  List<String>? scan({required bool base}) {
+    scanned++;
+    return base ? scannedBase : scannedHead;
   }
 
   @override
