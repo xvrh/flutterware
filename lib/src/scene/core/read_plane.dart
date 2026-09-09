@@ -141,6 +141,25 @@ void applyTokenMode(SceneDocument doc, {String? from}) {
   }
 }
 
+/// The quad row a key names ONE SIDE of, with which side — `paddingLeft` on
+/// the `padding` row, `cornerTopLeft` on `corner`.
+///
+/// A side is not a row of its own: the four names live on the row that owns
+/// them, in [SceneProp.sides]. The file grammar has always let one be bound
+/// (`FrameNode(paddingLeft: gutter)`, which the parser reads and the emitter
+/// writes back), and nothing here answered for it — so the read plane saw no
+/// property under the key, took that for "the property was cleared", and
+/// dropped the binding on the first reconcile. The next save wrote the
+/// literal. This is what answers for it.
+(SceneProp, int)? sceneSideNamed(SceneNode node, String key) {
+  for (var p in sceneProps) {
+    if (!p.appliesTo(node)) continue;
+    var i = p.sides?.indexOf(key) ?? -1;
+    if (i >= 0) return (p, i);
+  }
+  return null;
+}
+
 /// The parameter kind [prop] of [node] can read, or null when the property
 /// cannot be bound — the table's kind, seen as a parameter's. A nested
 /// scene's argument reads a parameter of the kind the child declares it;
@@ -156,6 +175,8 @@ SceneParamKind? bindableKind(SceneNode node, String prop) {
       _ => null,
     };
   }
+  // Every side of every quad is a number.
+  if (sceneSideNamed(node, prop) != null) return SceneParamKind.number;
   return scenePropNamed(node, prop)?.paramKind;
 }
 
@@ -172,6 +193,9 @@ Object? getSceneProperty(SceneNode node, String prop) {
       ExternalNode e => e.args[name],
       _ => null,
     };
+  }
+  if (sceneSideNamed(node, prop) case (var quad, var i)) {
+    return (quad.read(node)! as SceneQuad).sides[i];
   }
   var p = scenePropNamed(node, prop);
   if (p == null) return null;
@@ -199,6 +223,14 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
       default:
         break;
     }
+    return;
+  }
+  if (sceneSideNamed(node, prop) case (var quad, var i)) {
+    // One side moves, the other three stay: a side is a number on a value
+    // that is four of them.
+    if (value == null) return;
+    var current = quad.read(node)! as SceneQuad;
+    quad.write(node, current.withSide(i, (value as num).toDouble()));
     return;
   }
   var p = scenePropNamed(node, prop);

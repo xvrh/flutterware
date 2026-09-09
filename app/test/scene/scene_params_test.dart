@@ -28,7 +28,52 @@ SceneEditor open() => SceneEditor(parseSceneFile(_source).doc!);
 
 String emit(SceneEditor e) => emitSceneFile(e.doc, className: 'Card');
 
+const _sides =
+    '''
+$sceneFileMarker
+import 'package:flutterware/scene_authoring.dart';
+
+class Card({final double gutter = 12}) extends SceneDefinition {
+  late final box = FrameNode(paddingLeft: gutter, paddingTop: 4);
+  @override
+  late final root = FrameNode(children: [box]);
+}
+''';
+
+void sideTests() {
+  test('one side of a quad binds, and survives the read plane', () {
+    // The grammar has always let a side be bound — the parser reads it and
+    // the emitter writes it back — and nothing in the read plane answered
+    // for the key, because a side is not a row of its own. So the reconcile
+    // read no property under `paddingLeft`, took that for "the property was
+    // cleared", dropped the binding, and the next save wrote the literal.
+    var parsed = parseSceneFile(_sides);
+    expect(parsed.refusals, isEmpty, reason: parsed.refusals.join('\n'));
+    var doc = parsed.doc!;
+    var box = doc.nodeNamed('box')! as FrameNode;
+    expect(box.bindings['paddingLeft'], const ParamRef('gutter'));
+    expect(getSceneProperty(box, 'paddingLeft'), 12.0);
+    expect(bindableKind(box, 'paddingLeft'), SceneParamKind.number);
+
+    expect(reconcileBindings(doc), isEmpty, reason: 'nothing is dropped');
+    expect(box.bindings['paddingLeft'], const ParamRef('gutter'));
+    expect(
+      emitSceneFile(doc, className: 'Card'),
+      contains('paddingLeft: gutter'),
+    );
+
+    // And it moves like any other bound number: the parameter's default
+    // follows an edit here, and the side alone moves.
+    setSceneProperty(box, 'paddingLeft', 20.0);
+    expect(box.padding.left, 20);
+    expect(box.padding.top, 4, reason: 'the other three stay');
+    reconcileBindings(doc);
+    expect(doc.paramNamed('gutter')!.defaultValue, 20.0);
+  });
+}
+
 void main() {
+  sideTests();
   visibleTests();
   listTests();
   motionKeyTests();
