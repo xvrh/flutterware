@@ -14,6 +14,7 @@ import 'package:flutterware/scene_authoring.dart';
 import '../externals_file.dart';
 
 import '../../ui/context_menu.dart';
+import '../../ui/disclosure.dart';
 import '../../ui/design/design.dart';
 import '../../ui/action_button.dart';
 import '../../ui/menu.dart';
@@ -21,8 +22,10 @@ import '../../ui/picker.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import 'curve_picker.dart';
+import 'layer_list.dart';
 import 'number_shape.dart';
 import 'number_field.dart';
+import 'property_row.dart';
 import 'swatches.dart';
 
 /// The three states a size can be in, in the order the menu offers them.
@@ -118,8 +121,16 @@ class SceneInspector extends StatelessWidget {
               style: context.type.caption.copyWith(color: context.colors.mut2),
             ),
           ),
-        const SizedBox(height: FwSpacing.lg),
-        if (node.bindings.isNotEmpty) ..._bindings(context, node),
+        if (node != doc.root)
+          _check(
+            context,
+            node,
+            'visible',
+            'Visible',
+            node.visible,
+            () => _door('visible', () => node.visible = !node.visible),
+          ),
+        _section(context, 'Layout'),
         if (isRow)
           // A row under a table is not laid out at all: the table places the
           // cells, and the row is what paints behind them. Saying so beats
@@ -159,38 +170,33 @@ class SceneInspector extends StatelessWidget {
           ),
         ]),
         _row([
-          _bindable(
+          _size(
             context,
+            'W',
             node,
             'width',
-            _size(
-              'W',
-              node,
-              node.width,
-              horizontal: true,
-              onChanged: (v) => node.width = v,
-            ),
+            node.width,
+            horizontal: true,
+            onChanged: (v) => node.width = v,
           ),
-          _bindable(
+          _size(
             context,
+            'H',
             node,
             'height',
-            _size(
-              'H',
-              node,
-              node.height,
-              horizontal: false,
-              onChanged: (v) => node.height = v,
-            ),
+            node.height,
+            horizontal: false,
+            onChanged: (v) => node.height = v,
           ),
         ]),
-        const SizedBox(height: FwSpacing.md),
-        _label(context, 'Fill'),
-        _bindable(
+        ..._bounds(context, node),
+        _section(context, 'Fill & stroke'),
+        _prop(
           context,
           node,
           'fill',
-          SceneSwatches(
+          'Fill',
+          SceneColorField(
             current: editor.records(node, 'fill') && node.hasFx('fill')
                 ? node.fxRendered('fill') as SceneColor
                 : node.fill,
@@ -201,11 +207,15 @@ class SceneInspector extends StatelessWidget {
                 : _set('fill', c, () => node.fill = c),
           ),
         ),
-        const SizedBox(height: FwSpacing.md),
-        _label(context, 'Border'),
-        SceneSwatches(
-          current: node.borderColor,
-          onPick: (c) => _door('borderColor', () => node.borderColor = c),
+        _prop(
+          context,
+          node,
+          'borderColor',
+          'Border',
+          SceneColorField(
+            current: node.borderColor,
+            onPick: (c) => _door('borderColor', () => node.borderColor = c),
+          ),
         ),
         if (node.borderColor != null)
           _row([
@@ -218,13 +228,16 @@ class SceneInspector extends StatelessWidget {
             ),
           ]),
         _row([
-          _number(
-            'corner',
-            node.corners.isUniform ? 'Corner' : 'Corners · all',
-            node.corners.isUniform ? node.corner : 0,
-            SceneNumberShape.pixels,
-            apply: (v) => node.corner = v,
-          ),
+          // One number while the four agree; when they do not, this field
+          // could only lie, so the section below is the only one shown.
+          if (node.corners.isUniform)
+            _number(
+              'corner',
+              'Corner',
+              node.corner,
+              SceneNumberShape.pixels,
+              apply: (v) => node.corner = v,
+            ),
           _number(
             'opacity',
             'Opacity',
@@ -233,41 +246,9 @@ class SceneInspector extends StatelessWidget {
             apply: (v) => node.opacity = v.clamp(0, 1),
           ),
         ]),
-        // One number for most nodes; four when a corner has to differ, the
-        // way a padding names its sides. Bounds likewise: behind a word
-        // until a node has any, because most never will. Both words share a
-        // line, so the folded state costs one row.
-        if (node.corners.isUniform && !_hasBounds(node))
-          Padding(
-            padding: const EdgeInsets.only(bottom: FwSpacing.md),
-            // A Wrap, not a Row: two short words in the app's font, and a
-            // second line rather than an overflow under a wider one.
-            child: Wrap(
-              spacing: FwSpacing.md,
-              children: [
-                _cornersWord(context, node),
-                _boundsWord(context, node),
-              ],
-            ),
-          )
-        else ...[
-          ..._corners(context, node),
-          ..._bounds(context, node),
-        ],
-        if (node != doc.root)
-          _bindable(
-            context,
-            node,
-            'visible',
-            _check(
-              context,
-              'Visible',
-              node.visible,
-              () => _door('visible', () => node.visible = !node.visible),
-            ),
-          ),
+        ..._corners(context, node),
         if (node != doc.root) ..._repeat(context, node),
-        const Divider(height: FwSpacing.xxl),
+        if (node is! FrameNode || !isRow) _section(context, _sectionOf(node)),
         ...switch (node) {
           TextNode t => _textProps(context, t),
           FrameNode f => isRow ? const [] : _frameProps(context, f),
@@ -290,16 +271,16 @@ class SceneInspector extends StatelessWidget {
     required void Function(double) apply,
     bool enabled = true,
   }) => Builder(
-    builder: (context) => _bindable(
+    builder: (context) => _prop(
       context,
       editor.primary ?? doc.root,
       prop,
+      label,
       Opacity(
         opacity: enabled ? 1 : 0.4,
         child: IgnorePointer(
           ignoring: !enabled,
           child: SceneNumberField(
-            label: label,
             value: value,
             shape: shape,
             onChanged: (v) => _set(prop, v, () => apply(v)),
@@ -313,123 +294,245 @@ class SceneInspector extends StatelessWidget {
     ),
   );
 
-  /// Right-click on a property: make a parameter of it, bind it to one that
-  /// exists, or unbind it. Nothing for a property no parameter can fill —
-  /// the menu simply is not there.
-  Widget _bindable(
+  /// A number with a label and no row of its own — one of the four sides
+  /// inside a grouped property, where the plug and the origin belong to the
+  /// group and not to each side.
+  Widget _side(
+    String prop,
+    String label,
+    double value, {
+    required void Function(double) apply,
+  }) => SceneNumberField(
+    label: label,
+    value: value,
+    shape: SceneNumberShape.pixels,
+    onChanged: (v) => _set(prop, v, () => apply(v)),
+    onCommit: (v) {
+      _set(prop, v, () => apply(v));
+      editor.endMerge();
+    },
+  );
+
+  /// A property whose value is one of a fixed set — the picker, in a row
+  /// that says where the value comes from like any other.
+  Widget _choice<T>(
+    SceneNode node,
+    String prop,
+    String label,
+    T? selected,
+    List<FwChoice<T>> choices,
+    ValueChanged<T> onChanged,
+  ) => Builder(
+    builder: (context) => _prop(
+      context,
+      node,
+      prop,
+      label,
+      FwPicker<T>(selected: selected, choices: choices, onChanged: onChanged),
+    ),
+  );
+
+  /// One property, one row: the label, the control, and where the value
+  /// comes from — the whole of what the panel used to say in a separate
+  /// block at the top and on the field itself not at all.
+  ///
+  /// A bound property shows its source instead of a control. That is the
+  /// decision the old panel got wrong in both directions: a bound field was
+  /// fully draggable, and dragging it silently moved the parameter every
+  /// sibling reads.
+  Widget _prop(
     BuildContext context,
     SceneNode node,
     String prop,
-    Widget child,
-  ) {
-    var kind = bindableKind(node, prop);
-    if (kind == null) return child;
-    // Bound to the app's own value: there is nothing here to edit — the
-    // guest draws it — so the control gives way to the fact.
-    if (node.bindings[prop] case TokenRef(:var name)
-        when doc.tokenNamed(name)?.isExport == true) {
-      child = Padding(
-        padding: const EdgeInsets.symmetric(vertical: FwSpacing.xs),
-        child: Text(
-          '← tokens.$name · from the app',
-          style: context.type.caption.copyWith(color: context.colors.mut2),
+    String label,
+    Widget control, {
+    Widget? trailing,
+    bool inline = false,
+    bool strongLabel = false,
+  }) {
+    var origin = _originOf(node, prop);
+    var bindable = !sceneBindSources(doc, node, prop).isEmpty;
+    // What the chip says the property currently is. A style has no single
+    // value to show, so it says what it decides instead — which is the one
+    // thing a reader wants from a name like `tokens.title`.
+    var isStyle = resolveSceneKey(node, prop)?.prop.kind == ScenePropKind.style;
+    var value = origin == PropertyOrigin.appValue || isStyle
+        ? null
+        : getSceneProperty(node, prop);
+    var styleSets = isStyle ? styleOf(doc, node)?.values.keys : null;
+    return PropertyRow(
+      label: label,
+      origin: origin,
+      sourceName: _sourceOf(node, prop),
+      valueLabel: styleSets != null
+          ? styleSets.map(_propLabel).join(' · ')
+          : value == null
+          ? null
+          : _valueLabel(value),
+      swatch: value is SceneColor ? Color(value.argb) : null,
+      overridden:
+          origin == PropertyOrigin.style && !inheritsFromStyle(doc, node, prop),
+      trailing: trailing,
+      inline: inline,
+      strongLabel: strongLabel,
+      onBind: bindable ? (at) => _bindMenu(context, node, prop, at) : null,
+      onUnbind: () => editor.unbind(node, prop),
+      onOpenSource: switch (node.bindings[prop]) {
+        ParamRef(:var name) when onOpenParam != null => () => onOpenParam!(
+          name,
         ),
-      );
-    }
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onSecondaryTapDown: (d) {
-        var bound = node.bindings[prop];
-        var candidates = [
-          for (var p in doc.params)
-            if (p.kind == kind) p,
-        ];
-        var tokens = [
-          for (var t in doc.tokens)
-            if (t.kind == kind && t.hasValue) t,
-        ];
-        var exports = [
-          for (var t in doc.tokens)
-            if (t.kind == kind && t.isExport) t,
-        ];
-        showContextMenu(context, d.globalPosition, [
-          MenuHeader(_propLabel(prop)),
-          if (bound != null) ...[
-            MenuItem('Reads $bound', icon: Icons.link),
-            MenuItem(
-              'Unbind',
-              icon: Icons.link_off,
-              onSelected: () => editor.unbind(node, prop),
-            ),
-          ] else ...[
-            MenuItem(
-              'Make a parameter',
-              icon: Icons.add,
-              shortcut: editor.freeParamName(prop),
-              onSelected: () => editor.promote(node, prop),
-            ),
-            if (candidates.isNotEmpty) ...[
-              const MenuDivider(),
-              const MenuHeader('Bind to'),
-              for (var p in candidates)
-                MenuItem(
-                  p.name,
-                  icon: Icons.link,
-                  onSelected: () => editor.bind(node, prop, p.name),
-                ),
-            ],
-            // The package's shared values, of this property's kind. The
-            // value rides along as the shortcut, so a colour can be picked
-            // by what it is and not only by what it is called.
-            if (tokens.isNotEmpty) ...[
-              const MenuDivider(),
-              const MenuHeader('Tokens'),
-              for (var t in tokens)
-                MenuItem(
-                  t.name,
-                  icon: Icons.style_outlined,
-                  shortcut: _tokenValue(t),
-                  onSelected: () => editor.bindToken(node, prop, t.name),
-                ),
-            ],
-            // The app's own values of this kind: a name to pick, and the
-            // canvas to see the result on — the editor holds no value.
-            if (exports.isNotEmpty) ...[
-              const MenuDivider(),
-              const MenuHeader('From the app'),
-              for (var t in exports)
-                MenuItem(
-                  t.name,
-                  icon: Icons.ios_share_outlined,
-                  shortcut: t.type,
-                  onSelected: () => editor.bindToken(node, prop, t.name),
-                ),
-            ],
-          ],
-        ]);
+        _ => null,
       },
-      child: child,
+      onReset: () => editor.resetToStyle(node, prop),
+      child: control,
     );
   }
 
+  /// Where [prop] of [node] gets its value. A binding beats a style: the
+  /// style is what the node would otherwise say, and a bound property says
+  /// nothing of its own at all.
+  PropertyOrigin _originOf(SceneNode node, String prop) {
+    switch (node.bindings[prop]) {
+      case ParamRef() || ItemRef():
+        return PropertyOrigin.parameter;
+      case TokenRef(:var name):
+        return doc.tokenNamed(name)?.isExport == true
+            ? PropertyOrigin.appValue
+            : PropertyOrigin.token;
+      case StyleRef(:var name):
+        return doc.tokenNamed(name)?.isExport == true
+            ? PropertyOrigin.appValue
+            : PropertyOrigin.token;
+      case null:
+        break;
+    }
+    if (styleOf(doc, node)?.sets(prop) ?? false) return PropertyOrigin.style;
+    return PropertyOrigin.own;
+  }
+
+  /// What the row names as the source: a parameter by its bare name, a token
+  /// the way a scene file spells it.
+  String? _sourceOf(SceneNode node, String prop) {
+    if (styleOf(doc, node)?.sets(prop) ?? false) {
+      if (node.bindings[prop] == null) {
+        return switch (node.bindings[styleBindingKey]) {
+          StyleRef(:var name) => name,
+          _ => null,
+        };
+      }
+    }
+    return switch (node.bindings[prop]) {
+      ParamRef(:var name) => name,
+      ItemRef(:var list, :var field) => '$list.$field',
+      TokenRef(:var name) => 'tokens.$name',
+      StyleRef(:var name) => 'tokens.$name',
+      null => null,
+    };
+  }
+
+  /// Make a parameter of a property, bind it to one that exists, or bind it
+  /// to a token. Reached from the row's plug, and still from a right-click
+  /// anywhere on the row.
+  void _bindMenu(BuildContext context, SceneNode node, String prop, Offset at) {
+    var sources = sceneBindSources(doc, node, prop);
+    if (sources.isEmpty) return;
+    var bound = node.bindings[prop];
+    showContextMenu(context, at, [
+      MenuHeader(_propLabel(prop)),
+      if (bound != null) ...[
+        MenuItem('Reads $bound', icon: Icons.link),
+        MenuItem(
+          'Its own values',
+          icon: Icons.link_off,
+          onSelected: () => editor.unbind(node, prop),
+        ),
+      ] else ...[
+        if (sources.canPromote)
+          MenuItem(
+            'Make a parameter',
+            icon: Icons.add,
+            shortcut: editor.freeParamName(prop),
+            onSelected: () => editor.promote(node, prop),
+          ),
+        if (sources.params.isNotEmpty) ...[
+          const MenuDivider(),
+          const MenuHeader('Bind to'),
+          for (var p in sources.params)
+            MenuItem(
+              p.name,
+              icon: Icons.link,
+              onSelected: () => editor.bind(node, prop, p.name),
+            ),
+        ],
+        // The package's shared values, of this property's type. What it is
+        // rides along as the shortcut, so a colour can be picked by its
+        // value and a style by what it sets — not only by their names.
+        if (sources.tokens.isNotEmpty) ...[
+          const MenuDivider(),
+          const MenuHeader('Tokens'),
+          for (var t in sources.tokens)
+            MenuItem(
+              'tokens.${t.name}',
+              icon: Icons.style_outlined,
+              shortcut: _tokenValue(t),
+              onSelected: () => _bindToken(node, prop, t),
+            ),
+        ],
+        // The app's own values of this type: a name to pick, and the canvas
+        // to see the result on — the editor holds no value.
+        if (sources.exports.isNotEmpty) ...[
+          const MenuDivider(),
+          const MenuHeader('From the app'),
+          for (var t in sources.exports)
+            MenuItem(
+              'tokens.${t.name}',
+              icon: Icons.ios_share_outlined,
+              shortcut: t.type,
+              onSelected: () => _bindToken(node, prop, t),
+            ),
+        ],
+      ],
+    ]);
+  }
+
+  /// A style is applied — every property it sets lands on the node and stays
+  /// the node's to override — where an ordinary token is bound.
+  void _bindToken(SceneNode node, String prop, SceneTokenDecl t) =>
+      resolveSceneKey(node, prop)?.prop.kind == ScenePropKind.style
+      ? editor.applyStyle(node, t.name)
+      : editor.bindToken(node, prop, t.name);
+
   /// A token's value, short enough for a menu's right edge.
-  static String _tokenValue(SceneTokenDecl t) => switch (t.value) {
+  static String _tokenValue(SceneTokenDecl t) {
+    if (t.style case var style?) {
+      return 'sets ${style.values.keys.map(_propLabel).join(' · ')}';
+    }
+    return _valueLabel(t.value);
+  }
+
+  /// A value, short enough to ride beside a name — in a bound row's chip
+  /// and at a menu's right edge.
+  static String _valueLabel(Object? value) => switch (value) {
     SceneColor c =>
       '#${c.argb.toRadixString(16).toUpperCase().padLeft(8, '0').substring(2)}',
-    double d => d == d.roundToDouble() ? '${d.round()}' : '$d',
-    String s => s.length > 16 ? "'${s.substring(0, 15)}…'" : "'$s'",
+    double d when d.isInfinite => 'fill',
+    double d => d == d.roundToDouble() ? '${d.round()}' : d.toStringAsFixed(2),
+    bool b => b ? 'on' : 'off',
+    String t => t.length > 18 ? "'${t.substring(0, 17)}…'" : "'$t'",
     var v => '$v',
   };
 
   /// A size, in the three states one can be in: a number, hug, or fill.
   ///
-  /// The mode is a word you tap rather than a picker, because the three
-  /// live in a 96 pixel column beside a number, and the word is also the
-  /// answer to "what is this doing" — which a dropdown showing the same
-  /// word would only repeat.
+  /// The mode is a word you tap rather than a picker, because the three live
+  /// in a 96 pixel column beside a number, and the word is also the answer to
+  /// "what is this doing" — which a dropdown showing the same word would only
+  /// repeat. It rides in the row's trailing slot, beside the plug.
   Widget _size(
+    BuildContext context,
     String label,
     SceneNode node,
+    String prop,
     double? value, {
     required bool horizontal,
     required void Function(double?) onChanged,
@@ -440,52 +543,16 @@ class SceneInspector extends StatelessWidget {
         ? _SizeMode.fill
         : _SizeMode.fixed;
     var warning = _sizeWarning(node, mode, horizontal: horizontal);
-    return Builder(
-      builder: (context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    var colors = context.colors;
+    return _prop(
+      context,
+      node,
+      prop,
+      label,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: context.type.caption.copyWith(
-                  color: context.colors.mut2,
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTapDown: (d) => showContextMenu(context, d.globalPosition, [
-                  for (var option in _SizeMode.values)
-                    MenuItem(
-                      option.label,
-                      icon: option == mode ? Icons.check : null,
-                      onSelected: () => _door(
-                        label,
-                        () => onChanged(switch (option) {
-                          _SizeMode.hug => null,
-                          _SizeMode.fill => double.infinity,
-                          // Back from hug or fill to a number: the measured
-                          // size, so the box does not jump when you pin it.
-                          _SizeMode.fixed => _measuredOf(
-                            node,
-                            horizontal: horizontal,
-                          ),
-                        }),
-                      ),
-                    ),
-                ]),
-                child: Text(
-                  mode.label,
-                  style: context.type.caption.copyWith(
-                    color: warning == null
-                        ? context.colors.accent
-                        : context.colors.red,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: FwSpacing.xs),
           if (mode == _SizeMode.fixed)
             SceneScrubNumber(
               value: value!,
@@ -497,30 +564,56 @@ class SceneInspector extends StatelessWidget {
               },
             )
           else
+            // Hugging or filling, the box has no number to edit — so it says
+            // what the layout arrived at instead of repeating the mode word
+            // that is already on the line above it.
             Container(
               height: 27,
               alignment: Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: FwSpacing.md),
               decoration: BoxDecoration(
-                border: Border.all(color: context.colors.line),
+                border: Border.all(color: colors.line),
                 borderRadius: BorderRadius.circular(context.radii.radiusSmall),
               ),
-              child: Text(
-                mode.label,
-                style: context.type.caption.copyWith(
-                  color: context.colors.mut2,
-                ),
-              ),
+              child: Text(switch (node.measured) {
+                null => '—',
+                var r => '${_pt(horizontal ? r.width : r.height)} px',
+              }, style: context.type.body.copyWith(color: colors.mut3)),
             ),
           if (warning != null)
             Padding(
               padding: const EdgeInsets.only(top: FwSpacing.xs),
               child: Text(
                 warning,
-                style: context.type.micro.copyWith(color: context.colors.red),
+                style: context.type.micro.copyWith(color: colors.red),
               ),
             ),
         ],
+      ),
+      trailing: GestureDetector(
+        onTapDown: (d) => showContextMenu(context, d.globalPosition, [
+          for (var option in _SizeMode.values)
+            MenuItem(
+              option.label,
+              icon: option == mode ? Icons.check : null,
+              onSelected: () => _door(
+                label,
+                () => onChanged(switch (option) {
+                  _SizeMode.hug => null,
+                  _SizeMode.fill => double.infinity,
+                  // Back from hug or fill to a number: the measured size, so
+                  // the box does not jump when you pin it.
+                  _SizeMode.fixed => _measuredOf(node, horizontal: horizontal),
+                }),
+              ),
+            ),
+        ]),
+        child: Text(
+          mode.label,
+          style: context.type.caption.copyWith(
+            color: warning == null ? colors.accent : colors.red,
+          ),
+        ),
       ),
     );
   }
@@ -582,65 +675,39 @@ class SceneInspector extends StatelessWidget {
     return null;
   }
 
-  Widget _row(List<Widget> children) => Padding(
-    padding: const EdgeInsets.only(bottom: FwSpacing.md),
+  /// Two or three property rows across. Each owns its own bottom rhythm, so
+  /// this only distributes the width.
+  Widget _row(List<Widget> children) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (var (index, child) in children.indexed) ...[
+        if (index > 0) const SizedBox(width: FwSpacing.md),
+        Expanded(child: child),
+      ],
+    ],
+  );
+
+  /// Where one group of properties ends and the next begins. A panel of
+  /// thirty controls with nothing but vertical rhythm between them is the
+  /// reason a reader cannot tell where a field starts.
+  Widget _section(BuildContext context, String title) => Padding(
+    padding: const EdgeInsets.only(top: FwSpacing.md, bottom: FwSpacing.md),
     child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (var (index, child) in children.indexed) ...[
-          if (index > 0) const SizedBox(width: FwSpacing.md),
-          Expanded(child: child),
-        ],
+        Text(title, style: context.type.bodyStrong),
+        const Gap(FwSpacing.md),
+        Expanded(child: Divider(height: 1, color: context.colors.line)),
       ],
     ),
   );
 
-  /// What this node reads rather than holds: one line per bound property,
-  /// and the way out. Editing a bound field edits the parameter's default,
-  /// so this is where a reader learns why a sibling moved too — and unbind
-  /// is the only way to keep a value of one's own, which is why it is here
-  /// and not a side effect of typing.
-  List<Widget> _bindings(BuildContext context, SceneNode node) => [
-    _label(context, 'Bound'),
-    for (var e in node.bindings.entries)
-      Padding(
-        padding: const EdgeInsets.only(bottom: FwSpacing.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: Tappable(
-                // A step to the parameter: it opens below, where its
-                // mockup and its other readers are.
-                onTap: switch (e.value) {
-                  ParamRef(:var name) when onOpenParam != null =>
-                    () => onOpenParam!(name),
-                  _ => null,
-                },
-                feedback: TapFeedback.none,
-                child: Text(
-                  '${_propLabel(e.key)} ← ${e.value}',
-                  style: context.type.mono,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-            Tappable(
-              onTap: () => editor.perform(
-                'Unbind ${e.key}',
-                () => node.bindings.remove(e.key),
-              ),
-              child: Text(
-                'unbind',
-                style: context.type.caption.copyWith(
-                  color: context.colors.accent,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    const SizedBox(height: FwSpacing.md),
-  ];
+  static String _sectionOf(SceneNode node) => switch (node) {
+    TextNode() => 'Text',
+    FrameNode() => 'Frame',
+    ShapeNode() => 'Shape',
+    ExternalNode() => 'Widget',
+    SceneRefNode() => 'Scene',
+  };
 
   Widget _label(BuildContext context, String text) => Padding(
     padding: const EdgeInsets.only(bottom: FwSpacing.xs),
@@ -650,13 +717,17 @@ class SceneInspector extends StatelessWidget {
     ),
   );
 
+  /// A text is two arguments — `TextNode(text, style: …)` — and the panel
+  /// says so: the content, then everything the style carries, inside one
+  /// railed block under its own header. Which properties ARE the style was
+  /// the thing a reader could not see; a fold called *More type* holding
+  /// four of them did not help.
   List<Widget> _textProps(BuildContext context, TextNode t) => [
-    ..._styleRow(context, t),
-    _label(context, 'Content'),
-    _bindable(
+    _prop(
       context,
       t,
       'text',
+      'Content',
       TextFormField(
         // Keyed on the binding too: binding rewrites the text from outside
         // this field, and a field keeps its own buffer otherwise.
@@ -667,7 +738,58 @@ class SceneInspector extends StatelessWidget {
         onChanged: (v) => _door('text', () => t.text = v),
       ),
     ),
-    const SizedBox(height: FwSpacing.md),
+    // The paragraph's own: where the lines break and how they sit in the
+    // box. Two texts in one display face routinely differ on both, which is
+    // why a shared style does not decide them.
+    _row([
+      _choice(t, 'align', 'Align', t.align, const [
+        FwChoice(value: SceneTextAlign.left, label: 'Left'),
+        FwChoice(value: SceneTextAlign.center, label: 'Center'),
+        FwChoice(value: SceneTextAlign.right, label: 'Right'),
+        FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
+      ], (v) => _door('align', () => t.align = v)),
+      _number(
+        'maxLines',
+        'Max lines',
+        (t.maxLines ?? 0).toDouble(),
+        const SceneNumberShape(perPixel: 0.1, decimals: 0, min: 0, softMax: 10),
+        apply: (v) => t.maxLines = v < 1 ? null : v.round(),
+      ),
+    ]),
+    ..._styleHeader(context, t),
+    Container(
+      margin: const EdgeInsets.only(bottom: FwSpacing.md),
+      padding: const EdgeInsets.only(left: FwSpacing.md),
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: context.colors.line)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: _styleFields(context, t),
+      ),
+    ),
+  ];
+
+  /// Every field a [SceneTextStyle] carries, in the order they are reached
+  /// for. Nothing is behind a fold but the decoration family, which is four
+  /// properties nobody sets one of.
+  List<Widget> _styleFields(BuildContext context, TextNode t) => [
+    _prop(
+      context,
+      t,
+      'fontFamily',
+      'Typeface',
+      TextFormField(
+        key: ValueKey('family:${t.name}:${t.bindings['fontFamily']}'),
+        initialValue: t.fontFamily ?? '',
+        decoration: const InputDecoration(hintText: "the app's own"),
+        onChanged: (v) => _door(
+          'fontFamily',
+          () => t.fontFamily = v.trim().isEmpty ? null : v.trim(),
+        ),
+      ),
+    ),
     _row([
       _number(
         'fontSize',
@@ -676,149 +798,189 @@ class SceneInspector extends StatelessWidget {
         SceneNumberShape.of(propSpecFor(t, 'fontSize')),
         apply: (v) => t.fontSize = v,
       ),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _label(context, 'Weight'),
-          FwPicker<SceneFontWeight>(
-            selected: t.weight,
-            choices: const [
-              FwChoice(value: SceneFontWeight.w400, label: 'Regular'),
-              FwChoice(value: SceneFontWeight.w500, label: 'Medium'),
-              FwChoice(value: SceneFontWeight.w600, label: 'Semibold'),
-              FwChoice(value: SceneFontWeight.w700, label: 'Bold'),
-              FwChoice(value: SceneFontWeight.w900, label: 'Black'),
-            ],
-            onChanged: (v) => _door('weight', () => t.weight = v),
-          ),
-        ],
-      ),
+      _choice(t, 'weight', 'Weight', t.weight, const [
+        FwChoice(value: SceneFontWeight.w400, label: 'Regular'),
+        FwChoice(value: SceneFontWeight.w500, label: 'Medium'),
+        FwChoice(value: SceneFontWeight.w600, label: 'Semibold'),
+        FwChoice(value: SceneFontWeight.w700, label: 'Bold'),
+        FwChoice(value: SceneFontWeight.w900, label: 'Black'),
+      ], (v) => _door('weight', () => t.weight = v)),
     ]),
+    // Slant is a face, so it sits with the face; Case transforms the words,
+    // and the pair is what a display line is set with.
     _row([
-      Builder(
-        builder: (context) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _label(context, 'Align'),
-            FwPicker<SceneTextAlign>(
-              selected: t.align,
-              choices: const [
-                FwChoice(value: SceneTextAlign.left, label: 'Left'),
-                FwChoice(value: SceneTextAlign.center, label: 'Center'),
-                FwChoice(value: SceneTextAlign.right, label: 'Right'),
-                FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
-              ],
-              onChanged: (v) => _door('align', () => t.align = v),
-            ),
-          ],
-        ),
+      _choice(t, 'italic', 'Slant', t.italic, const [
+        FwChoice(value: false, label: 'Roman'),
+        FwChoice(value: true, label: 'Italic'),
+      ], (v) => _door('italic', () => t.italic = v)),
+      _choice(t, 'textCase', 'Case', t.textCase, const [
+        FwChoice(value: SceneTextCase.none, label: 'As typed'),
+        FwChoice(value: SceneTextCase.upper, label: 'UPPER'),
+        FwChoice(value: SceneTextCase.lower, label: 'lower'),
+        FwChoice(value: SceneTextCase.title, label: 'Title'),
+      ], (v) => _door('textCase', () => t.textCase = v)),
+    ]),
+    // Tracking and leading, together: they are read together and a display
+    // size wants both moved at once.
+    _row([
+      _number(
+        'letterSpacing',
+        'Tracking',
+        _shown(t, 'letterSpacing', t.letterSpacing),
+        SceneNumberShape.of(propSpecFor(t, 'letterSpacing')),
+        apply: (v) => t.letterSpacing = v,
       ),
       _number(
-        'maxLines',
-        'Max lines (0 = all)',
-        (t.maxLines ?? 0).toDouble(),
-        const SceneNumberShape(perPixel: 0.1, decimals: 0, min: 0, softMax: 10),
-        apply: (v) => t.maxLines = v < 1 ? null : v.round(),
+        'lineHeight',
+        'Leading',
+        _shown(t, 'lineHeight', t.lineHeight),
+        SceneNumberShape.of(propSpecFor(t, 'lineHeight')),
+        apply: (v) => t.lineHeight = v,
       ),
     ]),
-    _label(context, 'Color'),
-    _bindable(
+    _number(
+      'wordSpacing',
+      'Word spacing',
+      _shown(t, 'wordSpacing', t.wordSpacing),
+      SceneNumberShape.of(propSpecFor(t, 'wordSpacing')),
+      apply: (v) => t.wordSpacing = v,
+    ),
+    _prop(
       context,
       t,
       'color',
-      SceneSwatches(
+      'Color',
+      SceneColorField(
         current: _shown(t, 'color', t.color),
         allowNone: false,
         onPick: (c) => _set('color', c!, () => t.color = c),
       ),
     ),
+    SceneLayerList(
+      layers: t.layers,
+      fontSize: t.fontSize,
+      color: Color(t.color.argb),
+      marker: PropertyOriginMark(
+        origin: _originOf(t, 'layers'),
+        sourceName: _sourceOf(t, 'layers'),
+        overridden: !inheritsFromStyle(doc, t, 'layers'),
+        onReset: () => editor.resetToStyle(t, 'layers'),
+      ),
+      onChanged: (next, {required label, mergeKey}) =>
+          editor.perform(label, () => t.layers = next, mergeKey: mergeKey),
+    ),
+    const SizedBox(height: FwSpacing.md),
+    // Four properties nobody sets one of, behind the word that names them.
+    Disclosure(
+      label: 'Decoration',
+      initiallyOpen: t.decoration != SceneTextDecoration.none,
+      children: [
+        _choice(t, 'decoration', 'Line', t.decoration, const [
+          FwChoice(value: SceneTextDecoration.none, label: 'None'),
+          FwChoice(value: SceneTextDecoration.underline, label: 'Underline'),
+          FwChoice(value: SceneTextDecoration.overline, label: 'Overline'),
+          FwChoice(
+            value: SceneTextDecoration.lineThrough,
+            label: 'Strikethrough',
+          ),
+        ], (v) => _door('decoration', () => t.decoration = v)),
+        if (t.decoration != SceneTextDecoration.none) ...[
+          _row([
+            _choice(
+              t,
+              'decorationStyle',
+              'Line style',
+              t.decorationStyle,
+              const [
+                FwChoice(value: SceneTextDecorationStyle.solid, label: 'Solid'),
+                FwChoice(
+                  value: SceneTextDecorationStyle.double,
+                  label: 'Double',
+                ),
+                FwChoice(
+                  value: SceneTextDecorationStyle.dotted,
+                  label: 'Dotted',
+                ),
+                FwChoice(
+                  value: SceneTextDecorationStyle.dashed,
+                  label: 'Dashed',
+                ),
+                FwChoice(value: SceneTextDecorationStyle.wavy, label: 'Wavy'),
+              ],
+              (v) => _door('decorationStyle', () => t.decorationStyle = v),
+            ),
+            _number(
+              'decorationThickness',
+              'Line thickness',
+              _shown(t, 'decorationThickness', t.decorationThickness),
+              SceneNumberShape.of(propSpecFor(t, 'decorationThickness')),
+              apply: (v) => t.decorationThickness = v,
+            ),
+          ]),
+          _prop(
+            context,
+            t,
+            'decorationColor',
+            'Line color',
+            SceneColorField(
+              current: t.decorationColor,
+              onPick: (c) =>
+                  _door('decorationColor', () => t.decorationColor = c),
+            ),
+          ),
+        ],
+      ],
+    ),
   ];
 
-  /// The shared text style, when the package declares any: a picker over
-  /// them, and — once one is applied — one word per property it sets,
-  /// saying whether the node inherits it or overrides it, with the way back.
-  /// Equal is inherited, by decision: there is no flag to show.
-  List<Widget> _styleRow(BuildContext context, TextNode t) {
-    var styles = [
-      for (var s in doc.tokens)
-        if (s.isStyle) s,
-    ];
-    if (styles.isEmpty) return const [];
-    var bound = switch (t.bindings[styleBindingKey]) {
-      StyleRef(:var name) => name,
+  /// The block's own header, and the shared style it reads — which is one
+  /// property row like every other, because that is what it is. It used to
+  /// be a dropdown, and the dropdown was the reason a reader could not tell
+  /// whether a style was a binding: it looked like a control that set a
+  /// value, listed its options with a second line nobody could read, and
+  /// shared no vocabulary with the plug on every field under it.
+  List<Widget> _styleHeader(BuildContext context, TextNode t) {
+    var boundDecl = switch (t.bindings[styleBindingKey]) {
+      StyleRef(:var name) => doc.tokenNamed(name),
       _ => null,
     };
-    var style = styleOf(doc, t);
-    var boundDecl = bound == null ? null : doc.tokenNamed(bound);
-    var colors = context.colors;
-    var caption = context.type.caption.copyWith(color: colors.mut2);
     return [
-      _label(context, 'Style'),
-      FwPicker<String?>(
-        selected: bound,
-        choices: [
-          const FwChoice(value: null, label: 'none', detail: 'its own values'),
-          for (var s in styles)
-            FwChoice(
-              value: s.name,
-              label: 'tokens.${s.name}',
-              detail: s.style == null
-                  ? 'from the app'
-                  : s.style!.values.keys.map(_propLabel).join(' · '),
-            ),
-        ],
-        onChanged: (name) =>
-            name == null ? editor.detachStyle(t) : editor.applyStyle(t, name),
+      _prop(
+        context,
+        t,
+        styleBindingKey,
+        'Text style',
+        const SizedBox.shrink(),
+        strongLabel: true,
       ),
-      // An export's style: the app's own, laid under the values here by
-      // the canvas. Nothing to inherit or reset — what is set here is set.
+      // An export's style: the app's own, laid under the values here by the
+      // canvas. Nothing to inherit or reset — what is set here is set.
       if (boundDecl?.isExport == true)
         Padding(
-          padding: const EdgeInsets.only(top: FwSpacing.xs),
+          padding: const EdgeInsets.only(bottom: FwSpacing.md),
           child: Text(
             "the app's ${boundDecl!.type}, under the values here",
-            style: caption,
+            style: context.type.caption.copyWith(color: context.colors.mut2),
           ),
         ),
-      if (style != null)
-        Padding(
-          padding: const EdgeInsets.only(top: FwSpacing.xs),
-          child: Wrap(
-            spacing: FwSpacing.md,
-            runSpacing: FwSpacing.xxs,
-            children: [
-              for (var prop in style.values.keys)
-                if (inheritsFromStyle(doc, t, prop))
-                  Text('${_propLabel(prop)} ← $bound', style: caption)
-                else
-                  Tappable(
-                    onTap: () => editor.resetToStyle(t, prop),
-                    child: Text(
-                      '${_propLabel(prop)} overridden · reset',
-                      style: caption.copyWith(color: colors.accent),
-                    ),
-                  ),
-            ],
-          ),
-        ),
-      const SizedBox(height: FwSpacing.md),
     ];
   }
 
   List<Widget> _frameProps(BuildContext context, FrameNode f) => [
-    Padding(
-      padding: const EdgeInsets.only(bottom: FwSpacing.md),
-      child: _check(
-        context,
-        'Clip children at the edge',
-        f.clip,
-        () => _door('clip', () => f.clip = !f.clip),
-      ),
+    _check(
+      context,
+      f,
+      'clip',
+      'Clip children at the edge',
+      f.clip,
+      () => _door('clip', () => f.clip = !f.clip),
     ),
-    _label(context, 'Layout'),
-    FwPicker<NodeLayout>(
-      selected: f.layout,
-      choices: const [
+    _choice(
+      f,
+      'layout',
+      'Layout',
+      f.layout,
+      const [
         FwChoice(value: NodeLayout.absolute, label: 'Free'),
         FwChoice(value: NodeLayout.row, label: 'Row'),
         FwChoice(value: NodeLayout.column, label: 'Column'),
@@ -831,7 +993,7 @@ class SceneInspector extends StatelessWidget {
       // A layout switch is a geometry transaction, not a flag flip: entering
       // Free bakes each child's measured position into authored x/y; entering
       // a flex re-derives order from visual position.
-      onChanged: (next) => _door('layout', () {
+      (next) => _door('layout', () {
         var origin = f.measured;
         if (next == NodeLayout.absolute) {
           for (var c in f.children) {
@@ -855,7 +1017,6 @@ class SceneInspector extends StatelessWidget {
         f.layout = next;
       }),
     ),
-    const SizedBox(height: FwSpacing.md),
     if (f.layout == NodeLayout.table) ...[
       ..._tableProps(context, f),
     ] else
@@ -868,95 +1029,127 @@ class SceneInspector extends StatelessWidget {
           apply: (v) => f.gap = v,
         ),
       ]),
-    _label(context, 'Padding'),
-    _row([
-      _number(
-        'padding',
-        'Left',
-        f.padding.left,
-        SceneNumberShape.pixels,
-        apply: (v) => f.padding = f.padding.copyWith(left: v),
-      ),
-      _number(
-        'padding',
-        'Top',
-        f.padding.top,
-        SceneNumberShape.pixels,
-        apply: (v) => f.padding = f.padding.copyWith(top: v),
-      ),
-    ]),
-    _row([
-      _number(
-        'padding',
-        'Right',
-        f.padding.right,
-        SceneNumberShape.pixels,
-        apply: (v) => f.padding = f.padding.copyWith(right: v),
-      ),
-      _number(
-        'padding',
-        'Bottom',
-        f.padding.bottom,
-        SceneNumberShape.pixels,
-        apply: (v) => f.padding = f.padding.copyWith(bottom: v),
-      ),
-    ]),
-    if (f.layout == NodeLayout.table) ...[
-      _label(context, 'Cells sit'),
-      FwPicker<SceneCrossAxisAlignment>(
-        selected: f.crossAlign,
-        choices: const [
-          FwChoice(value: SceneCrossAxisAlignment.start, label: 'Top'),
-          FwChoice(value: SceneCrossAxisAlignment.center, label: 'Middle'),
-          FwChoice(value: SceneCrossAxisAlignment.end, label: 'Bottom'),
-          FwChoice(
-            value: SceneCrossAxisAlignment.stretch,
-            label: 'Filling the row',
-          ),
+    // Four sides, one property: an edges binding sets them together, so the
+    // plug belongs to the group and each side is a plain field.
+    _prop(
+      context,
+      f,
+      'padding',
+      'Padding',
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _row([
+            _side(
+              'padding',
+              'Left',
+              f.padding.left,
+              apply: (v) => f.padding = f.padding.copyWith(left: v),
+            ),
+            _side(
+              'padding',
+              'Top',
+              f.padding.top,
+              apply: (v) => f.padding = f.padding.copyWith(top: v),
+            ),
+          ]),
+          const SizedBox(height: FwSpacing.md),
+          _row([
+            _side(
+              'padding',
+              'Right',
+              f.padding.right,
+              apply: (v) => f.padding = f.padding.copyWith(right: v),
+            ),
+            _side(
+              'padding',
+              'Bottom',
+              f.padding.bottom,
+              apply: (v) => f.padding = f.padding.copyWith(bottom: v),
+            ),
+          ]),
         ],
-        onChanged: (v) => _door('crossAlign', () => f.crossAlign = v),
       ),
+    ),
+    if (f.layout == NodeLayout.table) ...[
+      _choice(f, 'crossAlign', 'Cells sit', f.crossAlign, const [
+        FwChoice(value: SceneCrossAxisAlignment.start, label: 'Top'),
+        FwChoice(value: SceneCrossAxisAlignment.center, label: 'Middle'),
+        FwChoice(value: SceneCrossAxisAlignment.end, label: 'Bottom'),
+        FwChoice(
+          value: SceneCrossAxisAlignment.stretch,
+          label: 'Filling the row',
+        ),
+      ], (v) => _door('crossAlign', () => f.crossAlign = v)),
     ] else if (f.layout != NodeLayout.absolute) ...[
       // Both axes, always, and each says when it has nothing to do. Cross
       // align alone was read as "align the contents", which is what main
       // align does — and a frame that hugs the axis it is aligning on has
       // no spare room, so every option looks the same and the control
       // looks broken.
-      _label(context, 'Main align'),
-      _alignNote(context, f, main: true),
-      FwPicker<SceneMainAxisAlignment>(
-        selected: f.mainAlign,
-        choices: const [
-          FwChoice(value: SceneMainAxisAlignment.start, label: 'Start'),
-          FwChoice(value: SceneMainAxisAlignment.center, label: 'Center'),
-          FwChoice(value: SceneMainAxisAlignment.end, label: 'End'),
-          FwChoice(
-            value: SceneMainAxisAlignment.spaceBetween,
-            label: 'Space between',
-          ),
-          FwChoice(
-            value: SceneMainAxisAlignment.spaceAround,
-            label: 'Space around',
-          ),
-          FwChoice(
-            value: SceneMainAxisAlignment.spaceEvenly,
-            label: 'Space evenly',
-          ),
-        ],
-        onChanged: (v) => _door('mainAlign', () => f.mainAlign = v),
+      _prop(
+        context,
+        f,
+        'mainAlign',
+        'Main align',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _alignNote(context, f, main: true),
+            FwPicker<SceneMainAxisAlignment>(
+              selected: f.mainAlign,
+              choices: const [
+                FwChoice(value: SceneMainAxisAlignment.start, label: 'Start'),
+                FwChoice(value: SceneMainAxisAlignment.center, label: 'Center'),
+                FwChoice(value: SceneMainAxisAlignment.end, label: 'End'),
+                FwChoice(
+                  value: SceneMainAxisAlignment.spaceBetween,
+                  label: 'Space between',
+                ),
+                FwChoice(
+                  value: SceneMainAxisAlignment.spaceAround,
+                  label: 'Space around',
+                ),
+                FwChoice(
+                  value: SceneMainAxisAlignment.spaceEvenly,
+                  label: 'Space evenly',
+                ),
+              ],
+              onChanged: (v) => _door('mainAlign', () => f.mainAlign = v),
+            ),
+          ],
+        ),
       ),
-      const SizedBox(height: FwSpacing.md),
-      _label(context, 'Cross align'),
-      _alignNote(context, f, main: false),
-      FwPicker<SceneCrossAxisAlignment>(
-        selected: f.crossAlign,
-        choices: const [
-          FwChoice(value: SceneCrossAxisAlignment.start, label: 'Start'),
-          FwChoice(value: SceneCrossAxisAlignment.center, label: 'Center'),
-          FwChoice(value: SceneCrossAxisAlignment.end, label: 'End'),
-          FwChoice(value: SceneCrossAxisAlignment.stretch, label: 'Stretch'),
-        ],
-        onChanged: (v) => _door('crossAlign', () => f.crossAlign = v),
+      _prop(
+        context,
+        f,
+        'crossAlign',
+        'Cross align',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _alignNote(context, f, main: false),
+            FwPicker<SceneCrossAxisAlignment>(
+              selected: f.crossAlign,
+              choices: const [
+                FwChoice(value: SceneCrossAxisAlignment.start, label: 'Start'),
+                FwChoice(
+                  value: SceneCrossAxisAlignment.center,
+                  label: 'Center',
+                ),
+                FwChoice(value: SceneCrossAxisAlignment.end, label: 'End'),
+                FwChoice(
+                  value: SceneCrossAxisAlignment.stretch,
+                  label: 'Stretch',
+                ),
+              ],
+              onChanged: (v) => _door('crossAlign', () => f.crossAlign = v),
+            ),
+          ],
+        ),
       ),
     ],
   ];
@@ -1167,37 +1360,31 @@ class SceneInspector extends StatelessWidget {
   List<Widget> _shapeProps(BuildContext context, ShapeNode s) => [
     _check(
       context,
+      s,
+      'circle',
       'Circle',
       s.circle,
       () => _door('circle', () => s.circle = !s.circle),
     ),
   ];
 
-  static bool _hasBounds(SceneNode node) =>
-      node.minWidth != null ||
-      node.maxWidth != null ||
-      node.minHeight != null ||
-      node.maxHeight != null;
+  /// A number, in points, with no row of its own.
+  static String _pt(double v) =>
+      v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
 
-  Widget _boundsWord(BuildContext context, SceneNode node) => Tappable(
-    onTap: () =>
-        _door('minWidth', () => node.minWidth = node.measured?.width ?? 100),
-    child: Text(
-      'bounds',
-      style: context.type.caption.copyWith(color: context.colors.accent),
-    ),
-  );
-
-  /// Min and max width and height, behind a word until any is set.
+  /// Min and max width and height, behind a section most nodes never open.
+  ///
+  /// Opening it shows fields; it does not WRITE one. The old word set
+  /// `minWidth` to the measured width so that the section's own visibility
+  /// test would pass — a document edit, an undo entry, and no way back short
+  /// of clearing all four by hand.
   List<Widget> _bounds(BuildContext context, SceneNode node) {
-    if (!_hasBounds(node)) {
-      return [
-        Padding(
-          padding: const EdgeInsets.only(bottom: FwSpacing.md),
-          child: _boundsWord(context, node),
-        ),
-      ];
-    }
+    var set = [
+      if (node.minWidth != null) 'min W ${_pt(node.minWidth!)}',
+      if (node.maxWidth != null) 'max W ${_pt(node.maxWidth!)}',
+      if (node.minHeight != null) 'min H ${_pt(node.minHeight!)}',
+      if (node.maxHeight != null) 'max H ${_pt(node.maxHeight!)}',
+    ];
     Widget bound(
       String prop,
       String label,
@@ -1211,43 +1398,37 @@ class SceneInspector extends StatelessWidget {
       apply: (v) => set(v <= 0 ? null : v),
     );
     return [
-      _row([
-        bound('minWidth', 'Min W', node.minWidth, (v) => node.minWidth = v),
-        bound('maxWidth', 'Max W', node.maxWidth, (v) => node.maxWidth = v),
-      ]),
-      _row([
-        bound('minHeight', 'Min H', node.minHeight, (v) => node.minHeight = v),
-        bound('maxHeight', 'Max H', node.maxHeight, (v) => node.maxHeight = v),
-      ]),
+      Disclosure(
+        label: set.isEmpty ? 'Size limits' : 'Size limits · ${set.join(' · ')}',
+        initiallyOpen: set.isNotEmpty,
+        children: [
+          _row([
+            bound('minWidth', 'Min W', node.minWidth, (v) => node.minWidth = v),
+            bound('maxWidth', 'Max W', node.maxWidth, (v) => node.maxWidth = v),
+          ]),
+          _row([
+            bound(
+              'minHeight',
+              'Min H',
+              node.minHeight,
+              (v) => node.minHeight = v,
+            ),
+            bound(
+              'maxHeight',
+              'Max H',
+              node.maxHeight,
+              (v) => node.maxHeight = v,
+            ),
+          ]),
+        ],
+      ),
     ];
   }
 
-  Widget _cornersWord(BuildContext context, SceneNode node) => Tappable(
-    onTap: () => _door(
-      'corner',
-      // Nudged apart so the four fields appear; back together is a number
-      // in any one of them matching the rest.
-      () => node.corners = node.corners.copyWith(
-        bottomRight: node.corners.topLeft + 0.5,
-      ),
-    ),
-    child: Text(
-      'corners one by one',
-      style: context.type.caption.copyWith(color: context.colors.accent),
-    ),
-  );
-
-  /// The corners one by one, behind a word: most nodes never open it.
+  /// The corners one by one, behind a section: most nodes never open it, and
+  /// the ones that do can close it again.
   List<Widget> _corners(BuildContext context, SceneNode node) {
     var c = node.corners;
-    if (c.isUniform) {
-      return [
-        Padding(
-          padding: const EdgeInsets.only(bottom: FwSpacing.md),
-          child: _cornersWord(context, node),
-        ),
-      ];
-    }
     Widget corner(
       String prop,
       String label,
@@ -1261,59 +1442,89 @@ class SceneInspector extends StatelessWidget {
       apply: (v) => node.corners = set(v),
     );
     return [
-      _row([
-        corner(
-          'cornerTopLeft',
-          'Top left',
-          c.topLeft,
-          (v) => c.copyWith(topLeft: v),
-        ),
-        corner(
-          'cornerTopRight',
-          'Top right',
-          c.topRight,
-          (v) => c.copyWith(topRight: v),
-        ),
-      ]),
-      _row([
-        corner(
-          'cornerBottomLeft',
-          'Bottom left',
-          c.bottomLeft,
-          (v) => c.copyWith(bottomLeft: v),
-        ),
-        corner(
-          'cornerBottomRight',
-          'Bottom right',
-          c.bottomRight,
-          (v) => c.copyWith(bottomRight: v),
-        ),
-      ]),
+      Disclosure(
+        label: c.isUniform
+            ? 'Corners one by one'
+            : 'Corners · ${_pt(c.topLeft)} · ${_pt(c.topRight)} · '
+                  '${_pt(c.bottomRight)} · ${_pt(c.bottomLeft)}',
+        initiallyOpen: !c.isUniform,
+        children: [
+          _row([
+            corner(
+              'cornerTopLeft',
+              'Top left',
+              c.topLeft,
+              (v) => c.copyWith(topLeft: v),
+            ),
+            corner(
+              'cornerTopRight',
+              'Top right',
+              c.topRight,
+              (v) => c.copyWith(topRight: v),
+            ),
+          ]),
+          _row([
+            corner(
+              'cornerBottomLeft',
+              'Bottom left',
+              c.bottomLeft,
+              (v) => c.copyWith(bottomLeft: v),
+            ),
+            corner(
+              'cornerBottomRight',
+              'Bottom right',
+              c.bottomRight,
+              (v) => c.copyWith(bottomRight: v),
+            ),
+          ]),
+          if (!c.isUniform)
+            Padding(
+              padding: const EdgeInsets.only(bottom: FwSpacing.md),
+              child: Tappable(
+                onTap: () => _door(
+                  'corner',
+                  () => node.corners = SceneCorners.all(c.topLeft),
+                ),
+                child: Text(
+                  'make them all ${_pt(c.topLeft)}',
+                  style: context.type.caption.copyWith(
+                    color: context.colors.accent,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     ];
   }
 
-  /// A boolean as a row you tap: the box and its word.
+  /// A boolean, on the label's own line: the word is the row's label and
+  /// this is only the box, so a checkbox costs one line rather than three.
   Widget _check(
     BuildContext context,
+    SceneNode node,
+    String prop,
     String label,
     bool value,
     VoidCallback onTap,
-  ) => Tappable(
-    onTap: onTap,
-    child: Row(
-      children: [
-        Icon(
+  ) => _prop(
+    context,
+    node,
+    prop,
+    label,
+    _checkBox(context, value, onTap),
+    inline: true,
+  );
+
+  Widget _checkBox(BuildContext context, bool value, VoidCallback onTap) =>
+      Tappable(
+        onTap: onTap,
+        child: Icon(
           value ? Icons.check_box : Icons.check_box_outline_blank,
           size: FwIconSize.md,
           color: value ? context.colors.accent : context.colors.mut2,
         ),
-        const SizedBox(width: FwSpacing.sm),
-        // Flexible: a label is a sentence in one place, and the test font
-        // is a box per glyph, so a fixed one overflows there first.
-        Flexible(child: Text(label, style: context.type.body)),
-      ],
-    ),
-  );
+      );
 
   /// The widget's declared arguments, each at its override or its default —
   /// the same shape as a nested scene's parameters, because a declaration is
@@ -1347,12 +1558,16 @@ class SceneInspector extends StatelessWidget {
             apply: (v) => e.args[arg.name] = v,
           )
         else
-          Padding(
-            padding: const EdgeInsets.only(bottom: FwSpacing.md),
-            child: TextFormField(
+          // The label goes above the field like every other row's, not
+          // inside it as a Material floating label — one panel, one anatomy.
+          _prop(
+            context,
+            e,
+            'args.${arg.name}',
+            arg.name,
+            TextFormField(
               key: ValueKey('${e.name}:${arg.name}'),
               initialValue: '${e.args[arg.name] ?? _fallback(arg) ?? ''}',
-              decoration: InputDecoration(labelText: arg.name, isDense: true),
               onChanged: (v) => _door('args', () => e.args[arg.name] = v),
             ),
           ),
@@ -1477,7 +1692,7 @@ class SceneInspector extends StatelessWidget {
             )
           else if (key.value case SceneColor color) ...[
             _label(context, 'Value'),
-            SceneSwatches(
+            SceneColorField(
               current: color,
               allowNone: false,
               onPick: (c) => editor.setKeyValue(single, c!),
@@ -1518,8 +1733,10 @@ class SceneInspector extends StatelessWidget {
 
   static double _half(double v) => (v * 2).round() / 2;
 
-  static String _propLabel(String prop) =>
-      prop.startsWith('args.') ? prop.substring(5) : prop;
+  static String _propLabel(String prop) => switch (prop) {
+    styleBindingKey => 'Text style',
+    _ => sceneArgName(prop) ?? prop,
+  };
 
   /// The child's declared parameters, each at its override or its default.
   /// A parameter the child does not declare cannot be set here — the args
@@ -1555,15 +1772,6 @@ class SceneInspector extends StatelessWidget {
       return Text('default', style: caption);
     }
 
-    Widget head(SceneParamDecl p) => Padding(
-      padding: const EdgeInsets.only(bottom: FwSpacing.xs),
-      child: Row(
-        children: [
-          Expanded(child: Text(p.name, style: caption)),
-          state(p),
-        ],
-      ),
-    );
     Object? value(SceneParamDecl p) => r.args[p.name] ?? p.defaultValue;
     return [
       Row(
@@ -1591,59 +1799,51 @@ class SceneInspector extends StatelessWidget {
         Text('${r.sceneClassName} takes no arguments', style: caption),
       const SizedBox(height: FwSpacing.md),
       for (var p in inst?.params ?? const <SceneParamDecl>[])
-        Padding(
-          padding: const EdgeInsets.only(bottom: FwSpacing.md),
-          child: _bindable(
-            context,
-            r,
-            'args.${p.name}',
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                head(p),
-                switch (p.kind) {
-                  SceneParamKind.number => SceneNumberField(
-                    value: (value(p)! as num).toDouble(),
-                    shape: const SceneNumberShape(perPixel: 1, decimals: 2),
-                    onChanged: (v) =>
-                        _set('args.${p.name}', v, () => r.args[p.name] = v),
-                    onCommit: (v) {
-                      _set('args.${p.name}', v, () => r.args[p.name] = v);
-                      editor.endMerge();
-                    },
-                  ),
-                  SceneParamKind.bool => _check(
-                    context,
-                    value(p)! as bool ? 'on' : 'off',
-                    value(p)! as bool,
-                    () => _door(
-                      'args',
-                      () => r.args[p.name] = !(value(p)! as bool),
-                    ),
-                  ),
-                  SceneParamKind.string => TextFormField(
-                    key: ValueKey(
-                      '${r.name}:${p.name}:${r.bindings['args.${p.name}']}',
-                    ),
-                    initialValue: '${value(p)}',
-                    onChanged: (v) => _door('args', () => r.args[p.name] = v),
-                  ),
-                  SceneParamKind.color => SceneSwatches(
-                    current: value(p) as SceneColor?,
-                    allowNone: false,
-                    onPick: (c) =>
-                        _set('args.${p.name}', c!, () => r.args[p.name] = c),
-                  ),
-                  // A list is data, not a value with a field: the nested
-                  // scene repeats over whatever it declares, and passing a
-                  // different one is the caller's job.
-                  SceneParamKind.list => Text(
-                    '${p.items.length} items, from the scene itself',
-                    style: caption,
-                  ),
+        _prop(
+          context,
+          r,
+          'args.${p.name}',
+          p.name,
+          trailing: state(p),
+          Builder(
+            builder: (context) => switch (p.kind) {
+              SceneParamKind.number => SceneNumberField(
+                value: (value(p)! as num).toDouble(),
+                shape: const SceneNumberShape(perPixel: 1, decimals: 2),
+                onChanged: (v) =>
+                    _set('args.${p.name}', v, () => r.args[p.name] = v),
+                onCommit: (v) {
+                  _set('args.${p.name}', v, () => r.args[p.name] = v);
+                  editor.endMerge();
                 },
-              ],
-            ),
+              ),
+              SceneParamKind.bool => _checkBox(
+                context,
+                value(p)! as bool,
+                () =>
+                    _door('args', () => r.args[p.name] = !(value(p)! as bool)),
+              ),
+              SceneParamKind.string => TextFormField(
+                key: ValueKey(
+                  '${r.name}:${p.name}:${r.bindings['args.${p.name}']}',
+                ),
+                initialValue: '${value(p)}',
+                onChanged: (v) => _door('args', () => r.args[p.name] = v),
+              ),
+              SceneParamKind.color => SceneColorField(
+                current: value(p) as SceneColor?,
+                allowNone: false,
+                onPick: (c) =>
+                    _set('args.${p.name}', c!, () => r.args[p.name] = c),
+              ),
+              // A list is data, not a value with a field: the nested
+              // scene repeats over whatever it declares, and passing a
+              // different one is the caller's job.
+              SceneParamKind.list => Text(
+                '${p.items.length} items, from the scene itself',
+                style: caption,
+              ),
+            },
           ),
         ),
     ];

@@ -244,6 +244,39 @@ List<ScenePropSpec> animatableProps(SceneNode node) => [
         softMin: 8,
         softMax: 96,
       ),
+      // Tracking is the one a display size wants animated, and it wants it
+      // negative: a title that tightens as it lands.
+      ScenePropSpec(
+        'letterSpacing',
+        TrackKind.number,
+        identity: 0,
+        unit: 'px',
+        softMin: -8,
+        softMax: 24,
+        entrance: 12,
+      ),
+      ScenePropSpec(
+        'wordSpacing',
+        TrackKind.number,
+        identity: 0,
+        unit: 'px',
+        softMin: -8,
+        softMax: 24,
+      ),
+      ScenePropSpec(
+        'lineHeight',
+        TrackKind.number,
+        identity: 1.15,
+        softMin: 0.8,
+        softMax: 2,
+      ),
+      ScenePropSpec(
+        'decorationThickness',
+        TrackKind.number,
+        identity: 1,
+        softMin: 0,
+        softMax: 6,
+      ),
       ScenePropSpec('color', TrackKind.color),
     ],
     FrameNode() => const [
@@ -367,6 +400,10 @@ extension TextNodeAnimate on TextNode {
     MotionTrack? scale,
     MotionTrack? rotate,
     MotionTrack? fontSize,
+    MotionTrack? letterSpacing,
+    MotionTrack? wordSpacing,
+    MotionTrack? lineHeight,
+    MotionTrack? decorationThickness,
     MotionTrack? color,
   }) => _group(this, {
     'opacity': opacity,
@@ -375,6 +412,10 @@ extension TextNodeAnimate on TextNode {
     'scale': scale,
     'rotate': rotate,
     'fontSize': fontSize,
+    'letterSpacing': letterSpacing,
+    'wordSpacing': wordSpacing,
+    'lineHeight': lineHeight,
+    'decorationThickness': decorationThickness,
     'color': color,
   });
 }

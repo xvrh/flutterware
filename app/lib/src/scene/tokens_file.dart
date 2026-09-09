@@ -24,6 +24,8 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:flutterware/scene_authoring.dart';
 
+import 'paint_grammar.dart';
+
 import 'group_file.dart';
 import 'scene_file.dart';
 
@@ -470,9 +472,12 @@ Object? _value(Expression e, SceneParamKind kind) {
   }
 }
 
-/// `SceneTextStyle(fontSize: 54, weight: SceneFontWeight.w700, color:
-/// SceneColor(0xFF…), align: SceneTextAlign.center, maxLines: 2)` — each
-/// field a literal of its kind, any of them absent.
+/// `SceneTextStyle(fontFamily: 'Recursive', fontSize: 54, weight:
+/// SceneFontWeight.w700, letterSpacing: -2, color: SceneColor(0xFF…))` —
+/// each field a literal of its kind, any of them absent.
+///
+/// Read by the property table's text subset, so a property added there is
+/// accepted here without this function naming it.
 SceneTextStyle? _style(
   Expression e,
   void Function(int, String, String) refuse,
@@ -491,11 +496,8 @@ SceneTextStyle? _style(
     refuse(e.offset, 'token value', 'a style is SceneTextStyle(fontSize: …)');
     return null;
   }
-  double? fontSize;
-  SceneFontWeight? weight;
-  SceneColor? color;
-  SceneTextAlign? align;
-  int? maxLines;
+  var fields = {for (var p in sceneTextProps) p.name: p}..remove('text');
+  var values = <String, Object?>{};
   for (var arg in args.arguments) {
     if (arg is! NamedArgument) {
       refuse(arg.offset, 'style', 'a style names each field — fontSize: 54');
@@ -503,62 +505,47 @@ SceneTextStyle? _style(
     }
     var v = arg.argumentExpression;
     var name = arg.name.lexeme;
-    var read = switch (name) {
-      'fontSize' => _value(v, SceneParamKind.number),
-      'color' => _value(v, SceneParamKind.color),
-      'maxLines' => switch (_value(v, SceneParamKind.number)) {
-        double d => d.round(),
-        _ => null,
-      },
-      'weight' => switch (v) {
-        PrefixedIdentifier(:var prefix, :var identifier)
-            when prefix.name == 'SceneFontWeight' =>
-          SceneFontWeight.values
-              .where((w) => 'w${w.value}' == identifier.name)
-              .firstOrNull,
-        _ => null,
-      },
-      'align' => switch (v) {
-        PrefixedIdentifier(:var prefix, :var identifier)
-            when prefix.name == 'SceneTextAlign' =>
-          SceneTextAlign.values
-              .where((a) => a.name == identifier.name)
-              .firstOrNull,
-        _ => null,
-      },
-      _ => null,
+    var read = switch (fields[name]) {
+      var p? => _styleField(p, v, refuse),
+      null => null,
     };
     if (read == null) {
       refuse(
         v.offset,
         'style',
-        'a style has fontSize, weight (SceneFontWeight.w700), color '
-            '(SceneColor(0x…)), align (SceneTextAlign.center) and maxLines — '
-            '"$name" is not one, or not a literal of its kind',
+        'a style sets ${fields.keys.join(', ')} — "$name" is not one of '
+            'them, or not a literal of its kind',
       );
       return null;
     }
-    switch (name) {
-      case 'fontSize':
-        fontSize = read as double;
-      case 'weight':
-        weight = read as SceneFontWeight;
-      case 'color':
-        color = read as SceneColor;
-      case 'align':
-        align = read as SceneTextAlign;
-      case 'maxLines':
-        maxLines = read as int;
-    }
+    values[name] = read;
   }
-  return SceneTextStyle(
-    fontSize: fontSize,
-    weight: weight,
-    color: color,
-    align: align,
-    maxLines: maxLines,
-  );
+  return SceneTextStyle.fromValues(values);
 }
+
+/// One field of a style literal, by the kind the table gives it. A choice is
+/// `Type.member` — the file's own spelling, checked against the type the
+/// table names.
+Object? _styleField(SceneProp p, Expression v, Refuse refuse) =>
+    switch (p.kind) {
+      ScenePropKind.style || ScenePropKind.args => null,
+      ScenePropKind.number => _value(v, SceneParamKind.number),
+      ScenePropKind.integer => switch (_value(v, SceneParamKind.number)) {
+        double d => d.round(),
+        _ => null,
+      },
+      ScenePropKind.string => _value(v, SceneParamKind.string),
+      ScenePropKind.boolean => _value(v, SceneParamKind.bool),
+      ScenePropKind.color => _value(v, SceneParamKind.color),
+      ScenePropKind.choice => switch (v) {
+        PrefixedIdentifier(:var prefix, :var identifier)
+            when prefix.name == p.choices!.typeName =>
+          p.choices!.valueOf(identifier.name),
+        _ => null,
+      },
+      ScenePropKind.layers => readSceneLayers(v, refuse),
+      ScenePropKind.size || ScenePropKind.sizes || ScenePropKind.edges => null,
+    };
 
 String? _typeArgument(TypeArgumentList? types) =>
     types != null && types.arguments.length == 1

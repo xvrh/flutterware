@@ -7,7 +7,9 @@ import '../../ui/picker.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
 import '../tokens_library.dart';
+import '../../ui/disclosure.dart';
 import 'drawer_pane.dart';
+import 'layer_list.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
 import 'swatches.dart';
@@ -202,7 +204,7 @@ class SceneTokenPane extends StatelessWidget {
           onChanged: (v) => set(v, mergeKey: key),
         );
       case SceneParamKind.color:
-        return SceneSwatches(
+        return SceneColorField(
           current: value as SceneColor,
           allowNone: false,
           onPick: (c) => set(c!),
@@ -229,9 +231,16 @@ class SceneTokenPane extends StatelessWidget {
     }
   }
 
-  /// A style's fields in one mode: size, weight and align on a row, the
-  /// colour under them — each unset-able, because a style sets only what
-  /// it sets, and a text takes it whole.
+  /// A style's fields in one mode. Every field the table carries, each
+  /// unset-able, because a style sets only what it sets and a text takes it
+  /// whole.
+  ///
+  /// The write goes through [SceneTextStyle.values] and
+  /// [SceneTextStyle.fromValues] — the table's own round trip — rather than
+  /// through a hand-written constructor call. The hand-written one named
+  /// five fields and silently dropped the other eleven: setting the weight
+  /// on a token that had a tracking, a stack of paint passes or a typeface
+  /// deleted them from the file on the next autosave.
   Widget _styleFields(
     BuildContext context,
     TokensLibrary library,
@@ -242,9 +251,23 @@ class SceneTokenPane extends StatelessWidget {
     var key = 'style:${decl.name}:${mode ?? ''}';
     var colors = context.colors;
     var caption = context.type.caption.copyWith(color: colors.mut2);
-    void put(SceneTextStyle next, {String? mergeKey}) =>
-        library.setStyle(decl.name, next, mode: mode, mergeKey: mergeKey);
-    Widget field(String label, Widget control, {VoidCallback? unset}) => Column(
+
+    void put(String prop, Object? value, {String? mergeKey}) {
+      var values = Map<String, Object?>.of(style.values);
+      if (value == null) {
+        values.remove(prop);
+      } else {
+        values[prop] = value;
+      }
+      library.setStyle(
+        decl.name,
+        SceneTextStyle.fromValues(values),
+        mode: mode,
+        mergeKey: mergeKey,
+      );
+    }
+
+    Widget field(String prop, String label, Widget control) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -254,110 +277,185 @@ class SceneTokenPane extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  label,
+                  style.sets(prop) ? label : '$label · unset',
                   overflow: TextOverflow.ellipsis,
                   style: caption,
                 ),
               ),
-              if (unset != null) DrawerLink('unset', onTap: unset),
+              if (style.sets(prop))
+                DrawerLink('unset', onTap: () => put(prop, null)),
             ],
           ),
         ),
         control,
       ],
     );
+
+    Widget number(
+      String prop,
+      String label,
+      double fallback, {
+      SceneNumberShape shape = const SceneNumberShape(perPixel: 1, decimals: 2),
+    }) => field(
+      prop,
+      label,
+      SceneNumberField(
+        value: (style.values[prop] as double?) ?? fallback,
+        shape: shape,
+        onChanged: (v) => put(prop, v, mergeKey: '$key:$prop'),
+        onCommit: (v) {
+          put(prop, v, mergeKey: '$key:$prop');
+          library.endMerge();
+        },
+      ),
+    );
+
+    Widget choice<T>(String prop, String label, List<FwChoice<T?>> choices) =>
+        field(
+          prop,
+          label,
+          FwPicker<T?>(
+            selected: style.values[prop] as T?,
+            choices: [
+              const FwChoice(value: null, label: 'unset'),
+              ...choices,
+            ],
+            onChanged: (v) => put(prop, v),
+          ),
+        );
+
+    Widget colour(String prop, String label) => field(
+      prop,
+      label,
+      SceneColorField(
+        current: style.values[prop] as SceneColor?,
+        onPick: (c) => put(prop, c),
+      ),
+    );
+
+    Widget row(List<Widget> children) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var (i, child) in children.indexed) ...[
+          if (i > 0) const Gap(FwSpacing.md),
+          Expanded(child: child),
+        ],
+      ],
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       spacing: FwSpacing.md,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: FwSpacing.md,
-          children: [
-            Expanded(
-              child: field(
-                style.fontSize == null ? 'Size · unset' : 'Size',
-                SceneNumberField(
-                  value: style.fontSize ?? 16,
-                  shape: const SceneNumberShape(perPixel: 1, decimals: 2),
-                  onChanged: (v) =>
-                      put(_with(style, fontSize: v), mergeKey: key),
-                  onCommit: (v) {
-                    put(_with(style, fontSize: v), mergeKey: key);
-                    library.endMerge();
-                  },
-                ),
-                unset: style.fontSize == null
-                    ? null
-                    : () => put(_with(style, clearFontSize: true)),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: field(
-                'Weight',
-                FwPicker<SceneFontWeight?>(
-                  selected: style.weight,
-                  choices: const [
-                    FwChoice(value: null, label: 'unset'),
-                    FwChoice(value: SceneFontWeight.w400, label: 'Regular'),
-                    FwChoice(value: SceneFontWeight.w500, label: 'Medium'),
-                    FwChoice(value: SceneFontWeight.w600, label: 'Semibold'),
-                    FwChoice(value: SceneFontWeight.w700, label: 'Bold'),
-                    FwChoice(value: SceneFontWeight.w900, label: 'Black'),
-                  ],
-                  onChanged: (w) =>
-                      put(_with(style, weight: w, clearWeight: w == null)),
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: field(
-                'Align',
-                FwPicker<SceneTextAlign?>(
-                  selected: style.align,
-                  choices: const [
-                    FwChoice(value: null, label: 'unset'),
-                    FwChoice(value: SceneTextAlign.left, label: 'Left'),
-                    FwChoice(value: SceneTextAlign.center, label: 'Center'),
-                    FwChoice(value: SceneTextAlign.right, label: 'Right'),
-                    FwChoice(value: SceneTextAlign.justify, label: 'Justify'),
-                  ],
-                  onChanged: (a) =>
-                      put(_with(style, align: a, clearAlign: a == null)),
-                ),
-              ),
-            ),
-          ],
-        ),
         field(
-          style.color == null ? 'Colour · unset' : 'Colour',
-          SceneSwatches(
-            current: style.color,
-            onPick: (c) => put(_with(style, color: c, clearColor: c == null)),
+          'fontFamily',
+          'Typeface',
+          TextFormField(
+            key: ValueKey('$key:family:${style.fontFamily}'),
+            initialValue: style.fontFamily ?? '',
+            decoration: const InputDecoration(hintText: "the app's own"),
+            onChanged: (v) =>
+                put('fontFamily', v.trim().isEmpty ? null : v.trim()),
           ),
+        ),
+        row([
+          number('fontSize', 'Size', 16),
+          choice<SceneFontWeight>('weight', 'Weight', const [
+            FwChoice(value: SceneFontWeight.w400, label: 'Regular'),
+            FwChoice(value: SceneFontWeight.w500, label: 'Medium'),
+            FwChoice(value: SceneFontWeight.w600, label: 'Semibold'),
+            FwChoice(value: SceneFontWeight.w700, label: 'Bold'),
+            FwChoice(value: SceneFontWeight.w900, label: 'Black'),
+          ]),
+        ]),
+        row([
+          number('letterSpacing', 'Tracking', 0),
+          number('lineHeight', 'Leading', 1.15),
+        ]),
+        row([
+          choice<bool>('italic', 'Slant', const [
+            FwChoice(value: false, label: 'Roman'),
+            FwChoice(value: true, label: 'Italic'),
+          ]),
+          choice<SceneTextCase>('textCase', 'Case', const [
+            FwChoice(value: SceneTextCase.none, label: 'As typed'),
+            FwChoice(value: SceneTextCase.upper, label: 'UPPER'),
+            FwChoice(value: SceneTextCase.lower, label: 'lower'),
+            FwChoice(value: SceneTextCase.title, label: 'Title'),
+          ]),
+        ]),
+        colour('color', 'Colour'),
+        // A treatment is what a shared style is FOR — a poster's outline
+        // belongs in the library beside the size it was drawn at, not
+        // copied onto each text that wants it.
+        SceneLayerList(
+          layers: style.layers ?? const [],
+          fontSize: style.fontSize ?? 16,
+          color: Color(style.color?.argb ?? 0xFF000000),
+          onChanged: (next, {required label, mergeKey}) =>
+              put('layers', next, mergeKey: mergeKey),
+        ),
+        Disclosure(
+          label: 'More type',
+          children: [
+            number('wordSpacing', 'Word spacing', 0),
+            const Gap(FwSpacing.md),
+            row([
+              choice<SceneTextDecoration>('decoration', 'Decoration', const [
+                FwChoice(value: SceneTextDecoration.none, label: 'None'),
+                FwChoice(
+                  value: SceneTextDecoration.underline,
+                  label: 'Underline',
+                ),
+                FwChoice(
+                  value: SceneTextDecoration.overline,
+                  label: 'Overline',
+                ),
+                FwChoice(
+                  value: SceneTextDecoration.lineThrough,
+                  label: 'Strikethrough',
+                ),
+              ]),
+            ]),
+            if (style.decoration != null &&
+                style.decoration != SceneTextDecoration.none) ...[
+              const Gap(FwSpacing.md),
+              row([
+                choice<SceneTextDecorationStyle>(
+                  'decorationStyle',
+                  'Line style',
+                  const [
+                    FwChoice(
+                      value: SceneTextDecorationStyle.solid,
+                      label: 'Solid',
+                    ),
+                    FwChoice(
+                      value: SceneTextDecorationStyle.double,
+                      label: 'Double',
+                    ),
+                    FwChoice(
+                      value: SceneTextDecorationStyle.dotted,
+                      label: 'Dotted',
+                    ),
+                    FwChoice(
+                      value: SceneTextDecorationStyle.dashed,
+                      label: 'Dashed',
+                    ),
+                    FwChoice(
+                      value: SceneTextDecorationStyle.wavy,
+                      label: 'Wavy',
+                    ),
+                  ],
+                ),
+                number('decorationThickness', 'Line thickness', 1),
+              ]),
+              const Gap(FwSpacing.md),
+              colour('decorationColor', 'Line color'),
+            ],
+          ],
         ),
       ],
     );
   }
-
-  static SceneTextStyle _with(
-    SceneTextStyle s, {
-    double? fontSize,
-    bool clearFontSize = false,
-    SceneFontWeight? weight,
-    bool clearWeight = false,
-    SceneColor? color,
-    bool clearColor = false,
-    SceneTextAlign? align,
-    bool clearAlign = false,
-  }) => SceneTextStyle(
-    fontSize: clearFontSize ? null : fontSize ?? s.fontSize,
-    weight: clearWeight ? null : weight ?? s.weight,
-    color: clearColor ? null : color ?? s.color,
-    align: clearAlign ? null : align ?? s.align,
-    maxLines: s.maxLines,
-  );
 }

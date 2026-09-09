@@ -1,4 +1,4 @@
-//@flutterware:scene=0.8
+//@flutterware:scene=0.9
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
@@ -23,9 +23,11 @@ class SampleScene({
   late final badge = ShapeNode(width: 24, height: 24, fill: tint, circle: true);
   late final title = TextNode(
     headline,
-    fontSize: 32,
-    weight: SceneFontWeight.w700,
-    color: tokens.ink,
+    style: SceneTextStyle(
+      fontSize: 32,
+      weight: SceneFontWeight.w700,
+      color: tokens.ink,
+    ),
   );
   late final bar = FrameNode(
     layout: NodeLayout.row,
@@ -36,8 +38,12 @@ class SampleScene({
   late final table = FrameNode.repeating(
     over: rows,
     row: (line) => [
-      TextNode(line.label, fontSize: 11),
-      TextNode(line.value, fontSize: 11, align: SceneTextAlign.right),
+      TextNode(line.label, style: SceneTextStyle(fontSize: 11)),
+      TextNode(
+        line.value,
+        style: SceneTextStyle(fontSize: 11),
+        align: SceneTextAlign.right,
+      ),
     ],
     layout: NodeLayout.row,
   );

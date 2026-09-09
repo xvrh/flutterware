@@ -17,6 +17,7 @@ import 'core/props.dart';
 import 'core/motion_runtime.dart';
 import 'core/values.dart';
 import 'flutter_bridge.dart';
+import 'layered_text.dart';
 
 /// Reports what the layout measured, in artboard coordinates. The editor's
 /// geometry comes from here: a flex child has no authored position, so the
@@ -262,19 +263,12 @@ class _SceneViewState extends State<SceneView> {
     Widget? inner;
     switch (n) {
       case TextNode t:
-        inner = Text(
-          t.text,
+        inner = LayeredText(
+          span: TextSpan(children: sceneTextRuns(t)),
+          style: sceneTextStyleFor(t),
+          layers: t.layers,
           textAlign: t.align.flutter,
           maxLines: t.maxLines,
-          overflow: t.maxLines == null
-              ? TextOverflow.clip
-              : TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: t.fxRendered('fontSize') as double,
-            fontWeight: t.weight.flutter,
-            color: (t.fxRendered('color') as SceneColor).flutter,
-            height: 1.15,
-          ),
         );
       case ShapeNode _:
         inner = null;
@@ -691,7 +685,7 @@ void resolveExports(SceneNode node, Map<String, Object?> exports) {
   for (var e in node.bindings.entries) {
     var prop = e.key;
     switch (e.value) {
-      case TokenRef(:var name) when !prop.startsWith('args.'):
+      case TokenRef(:var name) when sceneArgName(prop) == null:
         if (!exports.containsKey(name)) continue;
         var value = switch (exports[name]) {
           Color c => c.scene,
@@ -734,6 +728,43 @@ SceneArgs resolveTokenArgs(SceneArgs args, Map<String, Object?> tokens) =>
           null => args.raw(name),
         },
     });
+
+/// The spans a text node draws — its runs, each carrying only what it
+/// DIFFERS by, over the node's own style.
+///
+/// One span today, because a `TextNode` carries one string, and a list
+/// because it will not always: a run is a string with a style delta, and
+/// when text becomes several of them only this function changes. The
+/// renderer already asks for a list and already puts the node's style above
+/// it, so that landing is a model and a grammar change with no renderer work
+/// (master plan §4.5).
+List<InlineSpan> sceneTextRuns(TextNode t) => [
+  TextSpan(text: t.textCase.apply(t.text)),
+];
+
+/// A text node's resolved properties as Flutter draws them. The animatable
+/// ones are read composed — what a motion track put there this frame — and
+/// the rest straight off the node.
+///
+/// A null [TextNode.fontFamily] is left null on purpose: the span merges
+/// with whatever `DefaultTextStyle` the app wraps the canvas in, so a scene
+/// that names no typeface inherits the app's rather than a guess.
+TextStyle sceneTextStyleFor(TextNode t) => TextStyle(
+  fontFamily: t.fontFamily,
+  fontSize: t.fxRendered('fontSize') as double,
+  fontWeight: t.weight.flutter,
+  fontStyle: t.italic ? FontStyle.italic : FontStyle.normal,
+  letterSpacing: t.fxRendered('letterSpacing') as double,
+  wordSpacing: t.fxRendered('wordSpacing') as double,
+  height: t.fxRendered('lineHeight') as double,
+  color: (t.fxRendered('color') as SceneColor).flutter,
+  decoration: t.decoration.flutter,
+  // Null is Flutter's own "the text's colour", which is what a design tool
+  // means by leaving it unset.
+  decorationColor: t.decorationColor?.flutter,
+  decorationThickness: t.fxRendered('decorationThickness') as double,
+  decorationStyle: t.decorationStyle.flutter,
+);
 
 /// A builder returns `Object`, because the half of the model that declares
 /// it is pure Dart. This is where that becomes a widget again, and where a

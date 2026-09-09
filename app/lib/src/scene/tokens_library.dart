@@ -695,13 +695,14 @@ String _tokenLiteral(SceneTokenDecl t) {
   return "const Token<${t.typeName}>('${t.name}', ${_valueLiteral(t.value!)}$modes)";
 }
 
+/// Every property the style sets, spelled by the table — so a property
+/// added to the text subset is written here without this function knowing
+/// its name.
 String _styleLiteral(SceneTextStyle s) {
+  var values = s.values;
   var fields = [
-    if (s.fontSize case var v?) 'fontSize: ${_valueLiteral(v)}',
-    if (s.weight case var v?) 'weight: SceneFontWeight.w${v.value}',
-    if (s.color case var v?) 'color: ${_valueLiteral(v)}',
-    if (s.align case var v?) 'align: SceneTextAlign.${v.name}',
-    if (s.maxLines case var v?) 'maxLines: $v',
+    for (var p in sceneTextProps)
+      if (values[p.name] case var v?) '${p.name}: ${scenePropLiteral(p, v)}',
   ];
   return 'SceneTextStyle(${fields.join(', ')})';
 }

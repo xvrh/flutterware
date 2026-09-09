@@ -1,4 +1,4 @@
-//@flutterware:scene=0.8
+//@flutterware:scene=0.9
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
@@ -21,23 +21,31 @@ class BannerScene extends SceneDefinition {
     opacity: 0.7,
     circle: true,
   );
-  late final cup = TextNode('☕', x: 690, y: 110, fontSize: 190);
+  late final cup = TextNode(
+    '☕',
+    style: SceneTextStyle(fontSize: 190),
+    x: 690,
+    y: 110,
+  );
   late final headline = TextNode(
     'Fresh coffee, faster',
-    fontSize: 54,
-    weight: SceneFontWeight.w700,
-    color: SceneColor(0xFFFFFFFF),
+    style: SceneTextStyle(
+      fontSize: 54,
+      weight: SceneFontWeight.w700,
+      color: SceneColor(0xFFFFFFFF),
+    ),
   );
   late final subtitle = TextNode(
     'Order ahead. Skip the line. Earn rewards.',
-    fontSize: 20,
-    color: SceneColor(0xFFD8C9BD),
+    style: SceneTextStyle(fontSize: 20, color: SceneColor(0xFFD8C9BD)),
   );
   late final ctaLabel = TextNode(
     'Get the app',
-    fontSize: 17,
-    weight: SceneFontWeight.w600,
-    color: SceneColor(0xFFFFFFFF),
+    style: SceneTextStyle(
+      fontSize: 17,
+      weight: SceneFontWeight.w600,
+      color: SceneColor(0xFFFFFFFF),
+    ),
   );
   late final cta = FrameNode(
     fill: SceneColor(0xFFE8632B),

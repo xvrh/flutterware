@@ -163,7 +163,7 @@ class SceneParamPane extends StatelessWidget {
           onChanged: (v) => editor.setParamDefault(p.name, v, mergeKey: key),
         );
       case SceneParamKind.color:
-        return SceneSwatches(
+        return SceneColorField(
           current: p.defaultValue as SceneColor,
           allowNone: false,
           onPick: (c) => editor.setParamDefault(p.name, c!),

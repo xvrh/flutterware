@@ -1,4 +1,4 @@
-//@flutterware:scene=0.8
+//@flutterware:scene=0.9
 // Owned by the flutterware scene editor, which reads and writes this whole
 // file. Hand edits are welcome inside the grammar: every node is a
 // `late final` field (the field name is the node's identity), placed exactly
@@ -27,14 +27,24 @@ class StoreBanner({
     opacity: 0.7,
     circle: true,
   );
-  late final cup = TextNode('☕', x: 700, y: 120, fontSize: 180);
-  late final title = TextNode(headline, style: tokens.title, color: tokens.ink);
+  late final cup = TextNode(
+    '☕',
+    style: SceneTextStyle(fontSize: 180),
+    x: 700,
+    y: 120,
+  );
+  late final title = TextNode(
+    headline,
+    style: tokens.title.copyWith(color: tokens.ink),
+  );
   late final sub = TextNode(subtitle, style: tokens.shopSubtitle);
   late final ctaLabel = TextNode(
     cta,
-    fontSize: 17,
-    weight: SceneFontWeight.w600,
-    color: tokens.ink,
+    style: SceneTextStyle(
+      fontSize: 17,
+      weight: SceneFontWeight.w600,
+      color: tokens.ink,
+    ),
   );
   late final ctaBox = FrameNode(
     fill: tint,

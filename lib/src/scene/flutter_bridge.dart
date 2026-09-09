@@ -25,20 +25,49 @@ extension SceneFontWeightToFlutter on SceneFontWeight {
 /// puts on a property bound to one.
 SceneColor sceneColorOf(Color color) => color.scene;
 
-/// The properties of the app's text style the table knows — size, weight
-/// and colour. The rest (family, letter spacing, height) is the app's to
-/// draw: the guest renders with the app's own `TextStyle` underneath, so
-/// nothing is lost on the canvas, only unnamed in the editor.
+/// The properties of the app's text style the table knows. What is left out
+/// (`fontFeatures`, `shadows`, a `foreground` paint) is the app's to draw:
+/// the guest renders with the app's own `TextStyle` underneath, so nothing
+/// is lost on the canvas, only unnamed in the editor.
 SceneTextStyle sceneTextStyleOf(TextStyle style) => SceneTextStyle(
+  fontFamily: style.fontFamily,
   fontSize: style.fontSize,
   weight: style.fontWeight == null
       ? null
       : SceneFontWeight.values[FontWeight.values.indexOf(style.fontWeight!)],
+  italic: style.fontStyle == null ? null : style.fontStyle == FontStyle.italic,
+  letterSpacing: style.letterSpacing,
+  wordSpacing: style.wordSpacing,
+  lineHeight: style.height,
   color: style.color?.scene,
+  decorationColor: style.decorationColor?.scene,
+  decorationThickness: style.decorationThickness,
+  decorationStyle: style.decorationStyle == null
+      ? null
+      : SceneTextDecorationStyle.values[style.decorationStyle!.index],
 );
 
 extension SceneTextAlignToFlutter on SceneTextAlign {
   TextAlign get flutter => TextAlign.values[index];
+}
+
+/// `TextDecoration` is a combinable set rather than an enum, so this one
+/// switches where the others index.
+extension SceneTextDecorationToFlutter on SceneTextDecoration {
+  TextDecoration get flutter => switch (this) {
+    SceneTextDecoration.none => TextDecoration.none,
+    SceneTextDecoration.underline => TextDecoration.underline,
+    SceneTextDecoration.overline => TextDecoration.overline,
+    SceneTextDecoration.lineThrough => TextDecoration.lineThrough,
+  };
+}
+
+extension SceneTextDecorationStyleToFlutter on SceneTextDecorationStyle {
+  TextDecorationStyle get flutter => TextDecorationStyle.values[index];
+}
+
+extension SceneStrokeJoinToFlutter on SceneStrokeJoin {
+  StrokeJoin get flutter => StrokeJoin.values[index];
 }
 
 extension SceneEdgesToFlutter on SceneEdges {

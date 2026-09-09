@@ -1,10 +1,12 @@
 # The scene editor becomes a design tool
 
 **Date:** 2026-09-05
-**Status:** direction. The four decisions below are taken; every milestone
+**Status:** direction. The five decisions below are taken; every milestone
 still gets its own design before it is built. Nothing here is scheduled.
 **Hardened 2026-09-05** by a second pass against the code — the corrections
 are in place, and §8 lists what that pass found.
+**Extended 2026-09-07** with §4.5 and M10 — the text model, decided in
+discussion; §9 lists what that pass changed, including the reversal of §7.1.
 **Leans on:** `2026-08-31-scene-v1-design.md` (parameters are the crux, the
 mockup is the default), `2026-09-03-scene-as-dart-plan.md` (P1–P7 done — the
 file is Dart and compiles), `2026-09-03-external-args-findings.md` (the
@@ -101,7 +103,7 @@ Measured on this checkout, so nobody re-derives it.
   copy is the instance — and what makes the shared child file the only place
   a mockup lives.
 
-## 4. Four decisions, taken at the ambitious end
+## 4. Five decisions, taken at the ambitious end
 
 ### 4.1 A binding is a type, and an edit reaches its source
 
@@ -174,6 +176,127 @@ Import the node tree, text, auto-layout, variables and component instances;
 refuse the rest **per node, in a report**, never approximate silently. The
 report is then what orders the widening — real files deciding which property
 matters, instead of us guessing.
+
+### 4.5 A text style is the whole treatment, and a node spells one
+
+Decided 2026-09-07, in discussion. It reverses §7.1 and undefers one of §6's
+three deferrals.
+
+The ask that produced it: text rich enough to design with — a poster, a game
+title — which means the paragraph is painted more than once. Once that is
+true, four things fall out of it.
+
+**Lay out once, paint many.** A stroke widens a glyph visually without
+touching its metrics, so every pass stays registered. That is the whole
+reason multi-pass works, and it is therefore a law: **a pass may change
+paint, never layout.** It splits the text properties in two — the METRIC
+ones (family, size, weight, axes, tracking, leading, case, italic, align,
+maxLines), which are the paragraph, and the PAINT ones, which are a list of
+passes over it. Let a pass carry its own tracking and there are two layouts,
+and every effect drifts by a subpixel that grows along the line.
+
+**The paint stack is one property, on the style.** `layers`, a new kind: an
+ordered list of anonymous `FillLayer` / `StrokeLayer` values, painted back to
+front, each with a paint, a width, a join, a blur, an offset, an opacity and
+a blend. A drop shadow is a blurred offset fill; an outline is a stroke
+beneath the fill; sticker type is stroke-stroke-fill; extruded arcade type is
+a dozen offset fills under a gradient one; neon is two blurred fills under a
+tight one. None of those is a code path — the effect space is combinatorial
+rather than enumerated. Which is the argument against `shadows` and `stroke`
+as scalar properties, considered and rejected: they are two points in a space
+one list covers whole, and they would not compose, because you cannot put a
+shadow BETWEEN two strokes if a shadow is a property.
+
+Layers are anonymous, and they sit on the style rather than the node, because
+**a named per-node stack cannot be shared** — a treatment spelled as fields
+in one scene file is a treatment nobody else can have. On the style, one
+token carries the whole look. The price is that an override replaces the list
+whole: anonymous lists cannot merge. Taken.
+
+They are immutable values — they have to be, to sit inside a `const
+Token<SceneTextStyle>` — so an edit replaces the list, and an animation
+composes a value at read time, which is what `fxRendered` already does for
+`fontSize` and `color` (`view.dart:273`).
+
+*Narrowed 2026-09-08, in discussion:* **`align` and `maxLines` came back out
+of the style.** The line the two lists are drawn on is whether a property
+describes the TYPE or the PARAGRAPH. A face, a size, a tracking, a stack of
+paint passes are the treatment, and sharing them across a poster and a card
+is the whole point of a style. Where the lines break and how they sit in the
+box are the box's business: two texts in one display face routinely differ on
+both, and a shared style that decided them would be one nobody could share.
+Flutter draws the same line — `align` and `maxLines` are `Text`'s arguments,
+not `TextStyle`'s. So the table's text rows split: `sceneTextOwnProps` (the
+positional `text`, plus those two) and `sceneStyleProps`, and it is the
+SECOND that is pinned to `sceneTextStyleFields`. `textCase` was considered
+alongside them and kept: it is a treatment — a display style that is always
+uppercase is a real thing to share — even though Flutter has no such field.
+
+This is a **breaking change to the scene grammar**, and a scene file is real
+Dart, so a file spelling `align:` inside its style stops compiling until it
+is rewritten. The parser is deliberately lenient in the other direction: it
+still reads both inside a style literal or a `copyWith`, puts them on the
+node, and the next save writes them where they belong — the same courtesy
+the 0.8 files get.
+
+**`SceneTextStyle` is the style subset of the property table**, walked rather
+than the five hand-written fields it is today. Then `values`, `sets`,
+equality, the emitter's inherit test, the token literal, the token parse and
+the inspector's *from `title`* row all walk one list, and a new text property
+is a row instead of six edits across five files. The constructor stays
+hand-written and pinned by a test — the table cannot derive a constructor,
+and `copyWith` is constructor-shaped.
+
+*Corrected while building M10a:* the first draft of this said **map-backed**,
+storing the values in a `Map` keyed by the table's names. It cannot be done.
+A style has to be `const` — `const Token<SceneTextStyle>('title', …)` is what
+a declaration file spells and what a generated default needs — and **a const
+constructor cannot build a map out of its own parameters** (`values = {…}` in
+an initialiser is "not a constant expression"; only a `const` literal, which
+cannot see the parameters, is allowed). So the fields stay fields, and the
+one organ is a list beside them — `sceneTextStyleFields`, name plus accessor
+— that `values`, `==` and `hashCode` walk. `scene_props_test.dart` pins it to
+the table's text rows in both directions, which is what makes the two lists
+one. The property that made the difference is `==`: a field forgotten there
+is a silent bug, and it now cannot be forgotten.
+
+**A node spells a style and its paragraph.** `TextNode(headline, style:
+tokens.display.copyWith(letterSpacing: -6), align: SceneTextAlign.center)`. This is the reversal of §7.1:
+an override is no longer the property spelled beside the style, it is a delta
+ON the style — and an in-file `SceneTextStyle(…)` literal becomes legal,
+because it is the only way to say a node's own type. Bindings survive
+untouched, `color: tint` simply moving inside the copy call, where the
+emitter writes a reference exactly as it does now.
+
+What that buys is that the cost §4.3 accepted and named — *"the one place
+this plan adds runtime"* — is not paid. `TextNode` keeps `text` and `style`
+and never grows another text parameter, whether the table carries six text
+rows or thirty. The model does not move: the node keeps flat resolved fields,
+so the read plane, the inspector's inherit/override display and the motion
+tracks are untouched. The constructor and the file spelling are what change.
+
+Three consequences, all accepted:
+
+- **`copy` is taken.** `SceneMotion.copy(scene)` means *clone, rebound to a
+  scene*. The style's is `copyWith`, so one word keeps one meaning.
+- **The trivial case gets noisier.** `TextNode('☕', fontSize: 180)` becomes
+  `TextNode('☕', style: SceneTextStyle(fontSize: 180))`, which is most nodes
+  in every example file here. **No shorthand**, decided: two spellings for one
+  thing means the emitter has to choose between them and the reader has to
+  accept both forever.
+- **Grammar 0.9.** Every scene file written so far spells `fontSize:` on the
+  node. The reader accepts the old form and Save converges, the way the motion
+  parser already converges its non-canonical spellings.
+
+**Runs are the endgame, and the painter is written for them now.** §6 defers
+*mixed styles inside one text*; this undefers it. A run is a string plus a
+style delta — which the map-backed style makes a value type that already
+exists rather than a new concept. So the renderer stops being `Text(style:)`
+and becomes a painter over a run LIST, with today's `String` producing exactly
+one run; runs then land as a model, grammar and inspector change with no
+renderer work at all. Layers stay the paragraph's and runs carry metrics plus
+a colour: a per-run stroke pass would need per-run geometry, and it is refused
+rather than deferred.
 
 ## 5. Milestones
 
@@ -257,7 +380,51 @@ build next.
 Expected order, to be overruled by the report: paints (several fills,
 gradients, images), effects (shadows, blur), text (family, letter spacing,
 line height, decoration — `maxLines` is already there), strokes (alignment, dash), constraints.
-Each is a table row and a renderer case.
+Each is a table row and a renderer case. The text row is superseded: §4.5 took
+it out of here and made it M10.
+
+**M10 — text becomes a type system, in four slices.**
+Pulled out of M9's widening list, which named text as one row among several.
+§4.5 makes it the largest thing on the roadmap, so it gets its own chain.
+
+**M10a — the foundation, and the typography that comes with it.**
+`SceneTextStyle` map-backed over the table's text rows; `copyWith`; `TextNode`
+loses its text parameters; grammar 0.9 with a converging read; the painter
+rewritten over a run list. Then the flat properties, a table row each:
+`fontFamily`, `letterSpacing`, `wordSpacing`, `lineHeight`, `italic`,
+`textCase`, `decoration` with its colour, thickness and style. `lineHeight` is
+a bug fix as much as a property — `view.dart:276` hardcodes `height: 1.15` and
+no file can reach it. The font picker's source already exists:
+`asset_catalog.dart` parses the pubspec's families with their declared
+per-face weights, so the picker can offer the project's own faces and grey out
+a weight that has no face. Lands: a scene can name a typeface and set its
+tracking, which today it cannot.
+
+**M10b — layers, paint, and the style library.**
+`ScenePropKind.layers`; `ScenePaint` (solid and the gradients) built here,
+because a gradient fill pass is table stakes for poster type, and shaped so
+`fill` can adopt it the day §6's one breaking change is taken; the painter's
+multi-pass loop with a cache keyed on the METRIC properties only; blur through
+a `MaskFilter` on the pass's own paint rather than a `saveLayer` per pass. A
+preset is a style applied and detached — a seeded library, not a mechanism,
+which is what collapses it into this milestone instead of being its own.
+Lands: the poster.
+
+**M10c — variable axes.**
+`axes` as a tag → number map, discovered from the font's `fvar` table so the
+inspector draws real sliders with the font's own min, default and max rather
+than asking for four-letter tags. `weight` writes `wght` when the family is
+variable, so one control means one thing. Tracks are `TrackKind.number`
+already, which makes a continuously morphing headline nearly free once the
+axis exists — the thing a discrete `FontWeight` can never do. An OFL variable
+face is bundled in `examples/example` for it. Lands: the demo animates.
+
+**M10d — runs.**
+Text becomes a list of runs, each a string and a style delta. Every open
+question here is grammar, not rendering: how a run list is spelled in a `late
+final` field, whether a run is addressable in the tree, whether motion or a
+parameter may target one. Lands: a bold word inside a paragraph that still
+wraps as one paragraph.
 
 ## 6. Known hazards
 
@@ -277,13 +444,29 @@ Each is a table row and a renderer case.
   document, same standing. The editor should say so rather than let it read as
   checked.
 - **Three concepts a component import will ask for that this plan defers**,
-  each named so the report can name it too: a **slot** (a parameter whose
+  each named so the report can name it too — and one of which §4.5 has since
+  undeferred (see §9): a **slot** (a parameter whose
   value is content — another scene or a widget — which is how a component
   takes its children; today a parameter is data), a **variant** (one class
   per variant or an enum parameter — undecided), and **mixed styles inside
   one text** (a `TextNode` is one style; a run of styled spans is not in the
   model). Slots are the largest of the three and probably the first real
   addition after M9 begins.
+- **Multi-pass wants a cache before it wants features.** Eight passes with a
+  blur at 60fps on an editor canvas means one `TextPainter` per pass, keyed on
+  the METRIC properties alone — rebuilt when the metrics change and not when a
+  colour does. Get that key wrong and the canvas re-lays-out the paragraph
+  once per pass per frame.
+- **`ScenePaint` arrives in text before `fill` is ready for it.** The one
+  breaking model change above is `fill` becoming a list of paints; M10b needs
+  the paint VALUE first, for text layers. Shape it for both, or the day `fill`
+  widens there are two notions of paint to reconcile.
+- **Scene export is raster today.** `export/filmstrip.dart` and
+  `export/video.dart` composite images, and nothing in this plugin goes
+  through `captureSvg`/`capturePdf`. A multi-pass painter keeps text as vector
+  operations rather than pixels, so that stays true — but a stroke pass and a
+  blurred pass are the first two things a vector export would have to answer
+  for.
 
 ## 7. Open
 
@@ -300,6 +483,17 @@ Each is a table row and a renderer case.
    the compiler built agree. A style is a token (`Token<SceneTextStyle>`),
    never an in-file literal: a bundle nothing else could share is not a
    style. Modes on styles are not built yet; the reader refuses them.
+
+   **Reversed 2026-09-07** by §4.5, which is where the reasoning now lives.
+   The override moves inside the style — `style: tokens.body.copyWith(fontSize:
+   24)` — so a node spells one slot and never grows a text parameter again,
+   and an in-file `SceneTextStyle(…)` literal is legal because it is the only
+   way to say a node's own type. What survives the reversal is the rule
+   underneath it: equal is inherited, there is no override flag, and the
+   emitter writes only what differs from the style. What changed is where the
+   difference is spelled. The reversal is what makes `layers` affordable:
+   a list-valued property would have been a node parameter under the old
+   spelling, and a treatment nobody could share.
 2. ~~**Whether a token set is a class or a map.**~~ Decided in M5, 2026-09-05:
    **a class**, generated. `scene_tokens.dart` declares `final sceneTokens =
    [Token<SceneColor>('brand', SceneColor(0xFF…)), …]`; the generator writes a
@@ -366,6 +560,59 @@ Each is a table row and a renderer case.
    did NOT build: an app-side widget that watches `Theme.of(context)` and
    does the copy for you — the pieces are public and one app will show the
    idiom before it is framed.
+4. ~~**How a layer animates.**~~ Decided 2026-09-07: **a style-valued
+   track.** Anonymous layers have no address, so `scene.<layer>.animate(width:
+   …)` cannot exist; index-addressed tracks (`layers[2].width`) were rejected
+   because reordering a stack would silently repoint the animation —
+   precisely the failure `AnimateGroup` holding a NODE rather than a name was
+   built to avoid — and a static treatment was rejected because varying
+   stroke widths are what motivated layers in the first place. So a track's
+   value is a whole `SceneTextStyle`, lerped between two keys: key
+   `tokens.display` at 0ms and a heavier, wider variant at 600ms, and the
+   metrics and the paint stack move together. It is the decision above
+   applied to time — the treatment is one value, so one value is what
+   animates.
+
+   What it opens, to be designed in M10b rather than assumed:
+   - **A new `TrackKind`.** Today a track is `number | color` and both lerp
+     a scalar. A style track lerps a struct: numbers interpolate, colours
+     through `SceneColor.lerp`, and the discrete fields (weight, align,
+     case, decoration, family, maxLines) snap at the midpoint — which is
+     what `TextStyle.lerp` itself does, so the rule is borrowed rather than
+     invented.
+   - **A compatibility rule for stacks of unequal length.** Flutter's
+     `Shadow.lerpList` pads the shorter list with transparent shadows, and
+     the same shape works for a missing layer. A kind mismatch at one index
+     — a fill against a stroke — cannot lerp, and snaps.
+   - **How it composes with the per-property tracks.** `fxRendered` folds
+     contributions per property, so a style track has to EXPAND into
+     per-property contributions rather than sit beside them; otherwise a
+     `fontSize` track and a `style` track fight over one field with the
+     winner decided by stack order.
+   - **What a key's value is spelled as.** A number key is a literal or a
+     parameter name. A style key is a token reference or a literal style,
+     which is a shape the motion grammar has not carried before.
+5. **The type panel.** Twenty metric properties plus a layer list cannot be a
+   flat column, and a flat column is what the text section is today
+   (`inspector.dart` `_textProps`). The intended shape: a summary row in the
+   inspector — `Inter · 54 · Bold · -2%` — opening a real type panel, with the
+   rare knobs in the panel and never in the sidebar; the layer stack as an
+   add / remove / reorder list, the pattern every design tool already teaches;
+   axes shown only when the family is variable. To be designed against
+   rendered catalog demos rather than in prose, per the house rule about
+   looking at what you built.
+
+   **M10a stopped at the scope line here, deliberately.** It ships the
+   properties in a grouped column with a `Disclosure` (`ui/disclosure.dart`)
+   over the rare half, and the typeface as a plain field whose empty state is
+   *the app's own*. What it does NOT ship is the family PICKER: the source is
+   identified — `asset_catalog.dart` already parses the pubspec's families
+   with their declared per-face weights, so the picker can offer the
+   project's own faces and grey out a weight that has no face — but reaching
+   it from the scene panel is a plugin → workspace → inspector wiring that
+   belongs with the panel, not in front of it. Until then a typo in a family
+   name falls back to the app's font silently, which is the one rough edge
+   M10a knowingly leaves.
 
 ## 8. What the second pass changed
 
@@ -397,3 +644,29 @@ inspector row built by hand before M4 is a row M4 rewrites, and the
 generic round-trip test is what makes every token and style property cheap to
 prove. If the wait for M4 gets long, M5 without the picker is the fallback,
 and this line is where that was weighed.
+
+## 9. What the 2026-09-07 text pass changed
+
+Decided in discussion, against the code. Kept here so the corrections are not
+mistaken for the original claims.
+
+- **§7.1's answer is reversed.** The M7 record stays in place; the reversal
+  sits beneath it and the reasoning is §4.5.
+- **§4.3's runtime cost is not paid.** It named the nullable constructor
+  parameter per styleable property as "the one place this plan adds runtime".
+  Overrides moved into the style, so no node constructor grows one.
+- **§6 deferred mixed styles inside one text.** Undeferred: M10d, and the
+  painter M10a builds is written for a run list from the start so that landing
+  needs no renderer work.
+- **M9's text row is superseded.** "text (family, letter spacing, line height,
+  decoration)" was one row in the widening list. It is M10 now, and the
+  widening it was listed beside is not what orders it.
+- **`shadows` and `stroke` as properties were the wrong build.** Considered
+  and rejected: two points in the space `layers` covers whole, and they do not
+  compose.
+- **A named per-node layer stack was the first draft, and it was unshareable.**
+  Layers went onto the style for that reason, which also collapsed presets
+  into "a style applied and detached" rather than a mechanism of their own.
+- **`SceneTextStyle` was assumed to be five hand-written fields for good.**
+  §4.3 already said a style is a subset of the property table; the map-backed
+  reading makes that literal, and it is what makes every text property a row.

@@ -73,10 +73,11 @@ import 'package:dart_style/dart_style.dart';
 import 'package:flutterware/scene_authoring.dart' hide Token;
 
 import 'group_file.dart';
+import 'paint_grammar.dart';
 import 'motion_file.dart';
 import 'tokens_file.dart';
 
-const sceneFileMarker = '//@flutterware:scene=0.8';
+const sceneFileMarker = '//@flutterware:scene=0.9';
 
 /// The one library a scene file imports. Its vocabulary IS the model's own
 /// class names — `FrameNode`, `TextNode`, `SceneColor` — because a spelling
@@ -394,16 +395,22 @@ void _emitNode(
   /// a repeat are structure, not values.
   void table({Set<String> skip = const {}}) {
     for (var p in scenePropsOf(n)) {
+      if (p.byHand) continue;
       if (skip.contains(p.name)) continue;
       var v = p.read(n);
       var bound =
           n.bindings.containsKey(p.name) ||
           (p.sides ?? const []).any(n.bindings.containsKey);
       var inherited = style != null && style.sets(p.name)
-          ? v == style.values[p.name]
+          ? sceneValuesEqual(v, style.values[p.name])
           : isSceneDefault(p, v);
       if (inherited && !bound) continue;
       switch (p.kind) {
+        // Never reached: a byHand row is skipped above. Named so the switch
+        // stays exhaustive and a new kind has to be thought about here.
+        case ScenePropKind.style:
+        case ScenePropKind.args:
+          break;
         case ScenePropKind.edges:
           // One number while one number says it, four names when it does
           // not. A frame that only ever wanted `padding: 16` keeps writing
@@ -424,6 +431,8 @@ void _emitNode(
           props.add(
             '${p.name}: [${(v! as List<double?>).map(_track).join(', ')}]',
           );
+        case ScenePropKind.layers:
+          props.add('${p.name}: ${emitSceneLayers(v! as List<TextLayer>)}');
         case ScenePropKind.choice:
           props.add(
             '${p.name}: ${p.choices!.typeName}.${p.choices!.nameOf(v!)}',
@@ -469,12 +478,11 @@ void _emitNode(
       out.write('FrameNode(${props.join(', ')})');
     case TextNode t:
       props.add(ref('text') ?? _str(t.text));
-      // The binding, not the style: an export's style has no fields here
-      // and is still the text's.
-      if (n.bindings[styleBindingKey] case StyleRef(:var name)) {
-        props.add('$styleBindingKey: ${scope.tokensFormal}.$name');
-      }
-      table(skip: const {'text'});
+      // Every property of the TREATMENT is spelled inside the one style
+      // argument, so the table skips the style subset here; align and
+      // maxLines are the paragraph's and stay the node's own arguments.
+      if (_styleArg(t, scope, ref) case var arg?) props.add(arg);
+      table(skip: _styleArgNames);
       out.write('TextNode(${props.join(', ')})');
     case ShapeNode _:
       table();
@@ -502,6 +510,82 @@ void _emitNode(
       out.write('SceneRefNode(${props.join(', ')})');
   }
 }
+
+/// What the style argument spells, by name — what the node's own argument
+/// list skips. `text` rides with them because it is the positional.
+final _styleArgNames = {'text', for (var p in sceneStyleProps) p.name};
+
+/// What a style literal or a `copyWith` may name — every text property but
+/// the positional, which is WIDER than what a style carries. `align` and
+/// `maxLines` moved out to the node's own arguments, and a file that still
+/// spells them inside the style is read rather than refused: they land on
+/// the node, and the next save writes them where they belong. Same courtesy
+/// the 0.8 files get.
+final _styleFieldNames = {
+  for (var p in sceneTextProps)
+    if (p.name != 'text') p.name,
+};
+
+/// `style: tokens.title`, `style: tokens.title.copyWith(fontSize: 60)` or
+/// `style: SceneTextStyle(fontSize: 180)` — a text node's whole typographic
+/// treatment, in one argument.
+///
+/// The base is the style token the node is bound to, when it is bound to
+/// one; the delta is every text property that differs from what that style
+/// says, or from the table's default where it says nothing — plus every one
+/// that is BOUND, because a reference is written whatever its value. Equal
+/// to the style drops out and follows the style: there is no override flag,
+/// by decision.
+///
+/// Null when there is nothing to say: no style, and every text property at
+/// its default.
+String? _styleArg(TextNode t, _Scope scope, String? Function(String prop) ref) {
+  var bound = switch (t.bindings[styleBindingKey]) {
+    StyleRef(:var name) => name,
+    _ => null,
+  };
+  // An EXPORT's style is the app's own object, laid under the node's values
+  // by the guest — the editor never holds its fields, so it can compare
+  // against nothing and the delta is measured from the table's defaults.
+  var style = bound == null ? null : scope.tokens[bound]?.styleIn(scope.mode);
+  var deltas = <String>[];
+  for (var p in sceneStyleProps) {
+    var v = p.read(t);
+    var inherited = style != null && style.sets(p.name)
+        ? sceneValuesEqual(v, style.values[p.name])
+        : isSceneDefault(p, v);
+    if (inherited && !t.bindings.containsKey(p.name)) continue;
+    deltas.add('${p.name}: ${ref(p.name) ?? scenePropLiteral(p, v)}');
+  }
+  if (bound != null) {
+    var base = '${scope.tokensFormal}.$bound';
+    return deltas.isEmpty
+        ? '$styleBindingKey: $base'
+        : '$styleBindingKey: $base.copyWith(${deltas.join(', ')})';
+  }
+  if (deltas.isEmpty) return null;
+  return '$styleBindingKey: SceneTextStyle(${deltas.join(', ')})';
+}
+
+/// One scalar property as the file spells it — shared with the token
+/// library's emitter, so a style spells its fields the same way in a scene
+/// file and in the file that declares it. The kinds a text property can
+/// take; a quad or a list of sizes is spelled where it is written, because
+/// it has more than one spelling.
+String scenePropLiteral(SceneProp p, Object? v) => switch (p.kind) {
+  // Spelled by hand, never through here.
+  ScenePropKind.style || ScenePropKind.args => '$v',
+  ScenePropKind.number => _num(v! as double),
+  ScenePropKind.integer => '$v',
+  ScenePropKind.string => _str(v! as String),
+  ScenePropKind.boolean => '$v',
+  ScenePropKind.color => _color(v! as SceneColor),
+  ScenePropKind.choice => '${p.choices!.typeName}.${p.choices!.nameOf(v!)}',
+  ScenePropKind.layers => emitSceneLayers(v! as List<TextLayer>),
+  ScenePropKind.size ||
+  ScenePropKind.sizes ||
+  ScenePropKind.edges => throw ArgumentError('${p.name} has no one spelling'),
+};
 
 /// `const DrinkBadgeArgs(size: 140)` — the whole of an external node's
 /// identity and arguments, and the reason a scene file spells no strings.
@@ -1248,8 +1332,10 @@ class _Parser {
       case 'TextNode':
         var node = TextNode('', name: name);
         node.text = _contentOf(positional, args, node) ?? '';
-        // The style first, so what the node spells beside it overrides.
-        _take(named, styleBindingKey, (e) => _styleRef(e, node));
+        _take(named, styleBindingKey, (e) => _styleArgument(e, node));
+        // A 0.8 file spelled its text properties beside the style. They are
+        // still read here, so an old file opens and converges to the one
+        // style argument on its next save.
         _applyProps(node, named, skip: const {'text'});
         _refuseRest('TextNode', named);
         _checkPositionals(positional, 1);
@@ -1452,10 +1538,18 @@ class _Parser {
     SceneNode n,
     Map<String, Expression> named, {
     Set<String> skip = const {},
+    Set<String>? only,
   }) {
     for (var p in scenePropsOf(n)) {
+      // The file spells `text`, `style` and `args` itself.
+      if (p.byHand) continue;
       if (skip.contains(p.name)) continue;
+      if (only != null && !only.contains(p.name)) continue;
       switch (p.kind) {
+        // Never reached: a byHand row is skipped above.
+        case ScenePropKind.style:
+        case ScenePropKind.args:
+          break;
         case ScenePropKind.number:
           _take(named, p.name, (e) {
             var v = _doubleV(e, n, p.name);
@@ -1500,6 +1594,11 @@ class _Parser {
               p.write(n, (p.read(n)! as SceneQuad).withSide(k, v));
             });
           }
+        case ScenePropKind.layers:
+          _take(named, p.name, (e) {
+            var layers = readSceneLayers(e, refuse);
+            if (layers != null) p.write(n, layers);
+          });
         case ScenePropKind.sizes:
           _take(named, p.name, (e) {
             if (e is! ListLiteral) {
@@ -1782,16 +1881,59 @@ class _Parser {
     SceneParamKind.list => const <Object?>[],
   };
 
+  /// A text node's one style argument, in its three spellings: the shared
+  /// style whole (`tokens.title`), the shared style with a delta over it
+  /// (`tokens.title.copyWith(fontSize: 60)`), and a node's own type with
+  /// nothing shared (`SceneTextStyle(fontSize: 180)`).
+  ///
+  /// A delta is read exactly like a node's own arguments used to be, through
+  /// the same table and the same value readers — so a property inside
+  /// `copyWith` may still name a parameter, and binds.
+  void _styleArgument(Expression e, TextNode n) {
+    switch (e) {
+      case MethodInvocation(:var methodName, :var target?, :var argumentList)
+          when methodName.name == 'copyWith':
+        _styleRef(target, n);
+        _styleFields(argumentList, n, 'copyWith');
+      case InstanceCreationExpression(:var constructorName, :var argumentList)
+          when constructorName.type.name.lexeme == 'SceneTextStyle':
+        _styleFields(argumentList, n, 'SceneTextStyle');
+      case MethodInvocation(:var methodName, target: null, :var argumentList)
+          when methodName.name == 'SceneTextStyle':
+        _styleFields(argumentList, n, 'SceneTextStyle');
+      default:
+        _styleRef(e, n);
+    }
+  }
+
+  /// The named arguments of a style literal or a `copyWith`, onto [n].
+  void _styleFields(ArgumentList args, TextNode n, String what) {
+    var named = <String, Expression>{};
+    for (var arg in args.arguments) {
+      if (arg is NamedArgument) {
+        named[arg.name.lexeme] = arg.argumentExpression;
+      } else {
+        refuse(
+          arg.offset,
+          'positional argument',
+          '$what takes named properties only',
+        );
+      }
+    }
+    _applyProps(n, named, only: _styleFieldNames);
+    _refuseRest(what, named);
+  }
+
   /// `style: tokens.title` — a shared text style, applied whole: every
-  /// property it sets lands on the node, and the node's own arguments,
-  /// read after, override. Only a token: a style literal in a scene file
-  /// would be a bundle nothing else could share.
+  /// property it sets lands on the node, and a delta beside it overrides.
   void _styleRef(Expression e, TextNode n) {
     if (e is! PrefixedIdentifier || e.prefix.name != _tokensFormal) {
       refuse(
         e.offset,
         styleBindingKey,
-        "a text's style is a shared token — style: tokens.title",
+        "a text's style is a shared token (style: tokens.title), that token "
+        'with a delta over it (style: tokens.title.copyWith(fontSize: '
+        '60)), or its own (style: SceneTextStyle(fontSize: 60))',
       );
       return;
     }
