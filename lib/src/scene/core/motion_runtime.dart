@@ -106,9 +106,6 @@ class BoundGroup extends Playable {
     for (var entry in group.tracks.entries) {
       node.writeFx(this, entry.key, entry.value.evaluate(t));
     }
-    for (var entry in group.args.entries) {
-      node.writeFx(this, 'args.${entry.key}', entry.value.evaluate(t));
-    }
   }
 
   @override

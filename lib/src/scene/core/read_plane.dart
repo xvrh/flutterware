@@ -201,13 +201,31 @@ String? sceneArgName(String key) => key.startsWith(sceneArgsPrefix)
 /// could be any property's.
 const sceneArgsPrefix = 'args.';
 
+/// The axis's four-letter tag when [key] names one, else null.
+String? sceneAxisTag(String key) => key.startsWith(sceneAxesPrefix)
+    ? key.substring(sceneAxesPrefix.length)
+    : null;
+
+/// The prefix an axis's key carries, for the same reason an argument's does:
+/// the tags come from the font, not from this table.
+const sceneAxesPrefix = 'axes.';
+
 /// Which [SceneKey] [key] is on [node], or null when it names nothing the
 /// node can hold.
+///
+/// The grammar is `row`, `row.part` or a side's own flat name. A dotted key
+/// is a part of a property whose parts this table cannot list — an argument
+/// of the child a node stands for, an axis of whatever face it is set in —
+/// so the row's name carries them. A quad's four sides are flat instead,
+/// because that is what the constructor spells.
 SceneKey? resolveSceneKey(SceneNode node, String key) {
-  if (sceneArgName(key) case var name?) {
+  var dot = key.indexOf('.');
+  if (dot > 0) {
+    var row = key.substring(0, dot);
+    var part = key.substring(dot + 1);
     for (var p in sceneProps) {
-      if (p.kind == ScenePropKind.args && p.appliesTo(node)) {
-        return ScenePartKey(p, name);
+      if (p.name == row && p.hasNamedParts && p.appliesTo(node)) {
+        return ScenePartKey(p, part);
       }
     }
     return null;
@@ -263,7 +281,7 @@ class SceneBindSources {
 SceneParamKind? bindableKind(SceneNode node, String prop) =>
     switch (resolveSceneKey(node, prop)) {
       ScenePropertyKey(:var prop) => prop.paramKind,
-      ScenePartKey(prop: SceneProp(kind: ScenePropKind.args), :var part) =>
+      ScenePartKey(:var prop, :var part) when prop.kind == ScenePropKind.args =>
         switch (node) {
           SceneRefNode r => switch (r.instance?.paramNamed(part)) {
             SceneParamDecl(kind: SceneParamKind.list) => null,
@@ -272,7 +290,7 @@ SceneParamKind? bindableKind(SceneNode node, String prop) =>
           },
           _ => null,
         },
-      // Every side of every quad is a number.
+      // Every side of every quad, and every axis of every face, is a number.
       ScenePartKey() => SceneParamKind.number,
       null => null,
     };
@@ -324,13 +342,15 @@ Object? getSceneProperty(SceneNode node, String prop) =>
         ScenePropKind.size => sizeToWire(prop.read(node) as double?),
         _ => prop.read(node),
       },
-      ScenePartKey(prop: SceneProp(kind: ScenePropKind.args), :var part) =>
+      ScenePartKey(:var prop, :var part) when prop.kind == ScenePropKind.args =>
         switch (node) {
           SceneRefNode r =>
             r.args[part] ?? r.instance?.paramNamed(part)?.defaultValue,
           ExternalNode e => e.args[part],
           _ => null,
         },
+      ScenePartKey(:var prop, :var part) when prop.kind == ScenePropKind.axes =>
+        (prop.read(node)! as Map<String, double>)[part],
       ScenePartKey(:var prop, :var sideIndex) =>
         (prop.read(node)! as SceneQuad).sides[sideIndex],
       null => null,
@@ -358,7 +378,8 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
         ScenePropKind.size => sizeFromWire(value),
         _ => value,
       });
-    case ScenePartKey(prop: SceneProp(kind: ScenePropKind.args), :var part):
+    case ScenePartKey(:var prop, :var part)
+        when prop.kind == ScenePropKind.args:
       // Null is "not written": the argument leaves the map, so the file
       // spells nothing and the widget's own fallback answers.
       switch (node) {
@@ -369,6 +390,17 @@ void setSceneProperty(SceneNode node, String prop, Object? value) {
         default:
           break;
       }
+    case ScenePartKey(:var prop, :var part)
+        when prop.kind == ScenePropKind.axes:
+      var axes = Map<String, double>.of(
+        prop.read(node)! as Map<String, double>,
+      );
+      // Null puts the axis back at whatever the face itself defaults to,
+      // which is what an absent tag means.
+      value == null
+          ? axes.remove(part)
+          : axes[part] = (value as num).toDouble();
+      prop.write(node, axes);
     case ScenePartKey(:var prop, :var sideIndex):
       // One side moves, the other three stay: a side is a number on a value
       // that is four of them.

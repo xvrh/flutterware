@@ -529,6 +529,7 @@ SceneTextStyle? _style(
 Object? _styleField(SceneProp p, Expression v, Refuse refuse) =>
     switch (p.kind) {
       ScenePropKind.style || ScenePropKind.args => null,
+      ScenePropKind.axes => readSceneAxes(v, refuse),
       ScenePropKind.number => _value(v, SceneParamKind.number),
       ScenePropKind.integer => switch (_value(v, SceneParamKind.number)) {
         double d => d.round(),

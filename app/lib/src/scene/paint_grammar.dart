@@ -1,8 +1,9 @@
-// How a paint stack is spelled in a file, and read back out of one.
+// How a style's structured values — a paint stack, a face's axes — are
+// spelled in a file and read back out of one.
 //
-// Its own organ because TWO grammars carry it: a scene file spells a text's
-// own stack, and a token library spells the stack a shared style declares.
-// One copy each is two dialects a month later.
+// Its own organ because TWO grammars carry them: a scene file spells a text's
+// own, and a token library spells what a shared style declares. One copy each
+// is two dialects a month later.
 //
 // The vocabulary is the model's own class names, like the rest of the
 // grammar — `StrokeLayer(width: 14, paint: SolidPaint(SceneColor(0xFF…)))` —
@@ -316,3 +317,56 @@ bool _rest(Map<String, Expression> named, String what, Refuse refuse) {
   }
   return named.isEmpty;
 }
+
+/// `{'wght': 700, 'wdth': 85}` — a variable face's axes.
+String emitSceneAxes(Map<String, double> axes) =>
+    '{${[for (var e in axes.entries) "'${e.key}': ${_num(e.value)}"].join(', ')}}';
+
+/// The inverse, refused rather than half-read.
+///
+/// A tag the font does not have and a tag that is not four letters both draw
+/// nothing and say nothing, and a map literal is where a typo hides best.
+Map<String, double>? readSceneAxes(Expression e, Refuse refuse) {
+  if (e is! SetOrMapLiteral) {
+    refuse(e.offset, 'axes', "a map of tags to numbers, like {'wght': 700}");
+    return null;
+  }
+  var out = <String, double>{};
+  for (var entry in e.elements) {
+    if (entry is! MapLiteralEntry) {
+      refuse(entry.offset, 'axes', 'a tag and a number');
+      return null;
+    }
+    if (_axisTag(entry.key) case var tag?) {
+      if (_axisValue(entry.value) case var v?) {
+        out[tag] = v;
+        continue;
+      }
+      refuse(entry.value.offset, "axis '$tag'", 'a number');
+      return null;
+    }
+    refuse(
+      entry.key.offset,
+      'axis tag',
+      "a four-letter tag in quotes, like 'wght'",
+    );
+    return null;
+  }
+  return out;
+}
+
+String? _axisTag(Expression e) => switch (e) {
+  SimpleStringLiteral(:var value) when value.length == 4 => value,
+  _ => null,
+};
+
+double? _axisValue(Expression e) => switch (e) {
+  IntegerLiteral(:var value?) => value.toDouble(),
+  DoubleLiteral(:var value) => value,
+  PrefixExpression(:var operator, :var operand) when operator.lexeme == '-' =>
+    switch (_axisValue(operand)) {
+      var v? => -v,
+      null => null,
+    },
+  _ => null,
+};

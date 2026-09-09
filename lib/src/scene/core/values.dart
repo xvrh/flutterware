@@ -247,15 +247,25 @@ class LinearPaint extends ScenePaint {
 
 /// Whether two property values are the same value.
 ///
-/// `==` is not enough, because one property kind is a LIST and two lists with
-/// the same contents are not `==` each other. Every place that asks "is this
-/// what the style says" or "is this still the default" goes through here, or
-/// an inherited paint stack reads as an override — which is exactly what it
-/// did before this existed.
+/// `==` is not enough, because two property kinds are COLLECTIONS and two
+/// lists — or two maps — with the same contents are not `==` each other.
+/// Every place that asks "is this what the style says" or "is this still the
+/// default" goes through here, or an inherited paint stack reads as an
+/// override — which is exactly what it did before this existed.
 bool sceneValuesEqual(Object? a, Object? b) => switch ((a, b)) {
   (List x, List y) => _sameList(x, y),
+  (Map x, Map y) => _sameMap(x, y),
   _ => a == b,
 };
+
+bool _sameMap(Map? a, Map? b) {
+  if (a == null || b == null) return a == b;
+  if (a.length != b.length) return false;
+  for (var e in a.entries) {
+    if (!b.containsKey(e.key) || b[e.key] != e.value) return false;
+  }
+  return true;
+}
 
 bool _sameList<T>(List<T>? a, List<T>? b) {
   if (a == null || b == null) return a == b;
@@ -445,6 +455,7 @@ const sceneTextStyleFields = <SceneStyleField>[
   SceneStyleField('decorationThickness', _sDecorationThickness),
   SceneStyleField('decorationStyle', _sDecorationStyle),
   SceneStyleField('layers', _sLayers),
+  SceneStyleField('axes', _sAxes),
 ];
 
 Object? _sFamily(SceneTextStyle s) => s.fontFamily;
@@ -461,6 +472,7 @@ Object? _sDecorationColor(SceneTextStyle s) => s.decorationColor;
 Object? _sDecorationThickness(SceneTextStyle s) => s.decorationThickness;
 Object? _sDecorationStyle(SceneTextStyle s) => s.decorationStyle;
 Object? _sLayers(SceneTextStyle s) => s.layers;
+Object? _sAxes(SceneTextStyle s) => s.axes;
 
 /// A text style: the text subset of the property table, as one value — what
 /// a token names and a `TextNode` takes as `style:`, so a whole typographic
@@ -489,6 +501,7 @@ class SceneTextStyle {
     this.decorationThickness,
     this.decorationStyle,
     this.layers,
+    this.axes,
   });
 
   /// The family name as the app declares it in its pubspec, or null to take
@@ -519,6 +532,13 @@ class SceneTextStyle {
   /// with its own colour — which is how a style clears a stack it inherited.
   final List<TextLayer>? layers;
 
+  /// A variable face's axes, by their four-letter tags — `wght`, `wdth`,
+  /// `slnt`, and whatever else the font declares. Null is "this style says
+  /// nothing about them"; an EMPTY map is a style that puts every axis back
+  /// at the font's own default, which is how a style clears axes it
+  /// inherited.
+  final Map<String, double>? axes;
+
   /// A style from the table's own names — what a reader builds when it has
   /// values by name rather than by field, and the inverse of [values].
   ///
@@ -540,6 +560,7 @@ class SceneTextStyle {
     decorationThickness: v['decorationThickness'] as double?,
     decorationStyle: v['decorationStyle'] as SceneTextDecorationStyle?,
     layers: (v['layers'] as List?)?.cast<TextLayer>(),
+    axes: (v['axes'] as Map?)?.cast<String, double>(),
   );
 
   /// The properties this style sets, by the table's name — what an emitter
@@ -569,6 +590,7 @@ class SceneTextStyle {
     double? decorationThickness,
     SceneTextDecorationStyle? decorationStyle,
     List<TextLayer>? layers,
+    Map<String, double>? axes,
   }) => SceneTextStyle(
     fontFamily: fontFamily ?? this.fontFamily,
     fontSize: fontSize ?? this.fontSize,
@@ -584,6 +606,7 @@ class SceneTextStyle {
     decorationThickness: decorationThickness ?? this.decorationThickness,
     decorationStyle: decorationStyle ?? this.decorationStyle,
     layers: layers ?? this.layers,
+    axes: axes ?? this.axes,
   );
 
   @override
@@ -594,6 +617,7 @@ class SceneTextStyle {
         // contents — so the comparison is by contents wherever it finds one.
         (f) => switch ((f.read(this), f.read(other))) {
           (List a, List b) => _sameList(a, b),
+          (Map a, Map b) => _sameMap(a, b),
           var pair => pair.$1 == pair.$2,
         },
       );
@@ -601,13 +625,63 @@ class SceneTextStyle {
   @override
   int get hashCode => Object.hashAll([
     for (var f in sceneTextStyleFields)
-      if (f.read(this) case var v) v is List ? Object.hashAll(v) : v,
+      if (f.read(this) case var v)
+        switch (v) {
+          List l => Object.hashAll(l),
+          Map m => Object.hashAll([
+            for (var e in m.entries) Object.hash(e.key, e.value),
+          ]),
+          _ => v,
+        },
   ]);
 
   @override
   String toString() =>
       'SceneTextStyle(${values.entries.map((e) => '${e.key}: ${e.value}').join(', ')})';
 }
+
+/// One stretch of a paragraph, and what it differs by.
+///
+/// A text is a LIST of these, and the list is the paragraph: it is laid out
+/// and wrapped as one, which is the whole reason a bold word cannot be a
+/// second node beside the first. [style] is a DELTA over the node's own —
+/// only what this run changes — and the same [SceneTextStyle] type says it,
+/// because "unset means take what is underneath" is already what a style's
+/// nulls mean.
+///
+/// A run carries no [SceneTextStyle.layers]: the paint stack paints a whole
+/// laid-out paragraph once per pass, and a stack that applied to a stretch
+/// of one would have to lay that stretch out alone — which is the law a
+/// stack exists under (a pass may change paint, never layout). The grammar
+/// refuses it rather than dropping it.
+///
+/// Anonymous, like a paint pass and for the same reason: a run named as a
+/// field of one scene is a run no other scene can have, and a style that
+/// carries its runs can be shared whole.
+class TextRun {
+  const TextRun(this.text, {this.style});
+
+  final String text;
+
+  /// What this run changes about the node's style — null where it changes
+  /// nothing, which is the ordinary run.
+  final SceneTextStyle? style;
+
+  TextRun copyWith({String? text, SceneTextStyle? style}) =>
+      TextRun(text ?? this.text, style: style ?? this.style);
+
+  @override
+  bool operator ==(Object other) =>
+      other is TextRun && other.text == text && other.style == style;
+
+  @override
+  int get hashCode => Object.hash(text, style);
+
+  @override
+  String toString() => 'TextRun(${_quoted(text)}${style == null ? '' : ', …'})';
+}
+
+String _quoted(String s) => s.length > 24 ? "'${s.substring(0, 23)}…'" : "'$s'";
 
 /// Four numbers that are one when they agree: edges, corners. What the
 /// property table needs to spell either as one number or four named parts.

@@ -198,7 +198,6 @@ extension MotionDocumentJson on MotionDocument {
           'tracks': {
             for (var e in g.tracks.entries) e.key: _trackToJson(e.value),
           },
-          'args': {for (var e in g.args.entries) e.key: _trackToJson(e.value)},
         },
     ],
     'timeline': _exprToJson(timeline),
@@ -242,8 +241,10 @@ MotionDocument motionFromJson(
         (e.value as Map).cast<String, Object?>(),
       );
     }
+    // A payload written before the maps became one carried the argument
+    // tracks under their bare names in a map of their own.
     for (var e in ((g['args'] as Map?) ?? const {}).entries) {
-      group.args['${e.key}'] = _trackFromJson(
+      group.tracks['$sceneArgsPrefix${e.key}'] = _trackFromJson(
         (e.value as Map).cast<String, Object?>(),
       );
     }

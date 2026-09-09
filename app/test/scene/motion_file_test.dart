@@ -574,7 +574,7 @@ MotionDocument _randomMotion(Random random, SceneDocument scene) {
       group.tracks[spec.name] = _randomTrack(random, spec.kind, doc);
     }
     if (target is ExternalNode && random.nextBool()) {
-      group.args['arg${random.nextInt(3)}'] = _randomTrack(
+      group.tracks['args.arg${random.nextInt(3)}'] = _randomTrack(
         random,
         TrackKind.number,
         doc,

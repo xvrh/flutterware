@@ -92,7 +92,10 @@ void main() {
       editor.deleteTrack(m, 'headlineIn', 'translateY');
       expect(motion.groupNamed('headlineIn')!.tracks.keys, ['opacity']);
       editor.deleteTrack(m, 'badgePop', 'args.size');
-      expect(motion.groupNamed('badgePop')!.args, isEmpty);
+      expect(
+        motion.groupNamed('badgePop')!.tracks.keys,
+        isNot(contains('args.size')),
+      );
       expect(motion.groupNamed('badgePop'), isNotNull);
     });
   });

@@ -27,6 +27,7 @@ class ArcadePoster({
   late final kickerLine = TextNode(
     kicker,
     style: SceneTextStyle(
+      fontFamily: 'Archivo',
       fontSize: 30,
       weight: SceneFontWeight.w700,
       letterSpacing: 11,
@@ -41,12 +42,13 @@ class ArcadePoster({
   late final titleLine = TextNode(
     title,
     style: SceneTextStyle(
+      fontFamily: 'Archivo',
       fontSize: 166,
-      weight: SceneFontWeight.w900,
       letterSpacing: -4,
       lineHeight: 0.95,
       color: SceneColor(0xFFFFF3B0),
       textCase: SceneTextCase.upper,
+      axes: {'wght': 900},
       layers: [
         FillLayer(paint: SolidPaint(SceneColor(0xFF120720)), dx: 9, dy: 9),
         FillLayer(paint: SolidPaint(SceneColor(0xFF120720)), dx: 8, dy: 8),
@@ -75,6 +77,7 @@ class ArcadePoster({
   late final scoreLine = TextNode(
     score,
     style: SceneTextStyle(
+      fontFamily: 'Archivo',
       fontSize: 46,
       weight: SceneFontWeight.w700,
       letterSpacing: 14,
@@ -88,6 +91,7 @@ class ArcadePoster({
   late final press = TextNode(
     'press start',
     style: SceneTextStyle(
+      fontFamily: 'Archivo',
       fontSize: 22,
       weight: SceneFontWeight.w600,
       letterSpacing: 6,
@@ -121,4 +125,26 @@ class ArcadePoster({
     clip: true,
     children: [glow, stack],
   );
+}
+
+class ArcadeAttract(super.scene) extends SceneMotion<ArcadePoster> {
+  late final titleBreathe = scene.titleLine.animate(
+    axes: {
+      'wght': MotionTrack([
+        MotionKey(at: 0.ms, value: 900),
+        MotionKey(at: 900.ms, value: 240, curve: SceneCurves.easeInOut),
+        MotionKey(at: 1800.ms, value: 900, curve: SceneCurves.easeInOut),
+      ]),
+    },
+  );
+  late final kickerBlink = scene.kickerLine.animate(
+    opacity: MotionTrack([
+      MotionKey(at: 0.ms, value: 1),
+      MotionKey(at: 600.ms, value: 0.25, curve: SceneCurves.easeInOut),
+      MotionKey(at: 1200.ms, value: 1, curve: SceneCurves.easeInOut),
+    ]),
+  );
+  @override
+  late final timeline = ParExpr([titleBreathe, kickerBlink]);
+  ArcadeAttract copy(ArcadePoster scene) => copyStateInto(ArcadeAttract(scene));
 }

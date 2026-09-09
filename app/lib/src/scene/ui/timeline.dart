@@ -11,6 +11,7 @@ import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
 import '../../ui/tappable.dart';
 import '../editor.dart';
+import '../type_axes.dart';
 import '../playback.dart';
 import 'inline_name.dart';
 import 'modifiers.dart';
@@ -56,6 +57,7 @@ class SceneTimeline extends StatefulWidget {
     super.key,
     this.gutterWidth = 240,
     this.transport = true,
+    this.axesFor,
   });
 
   final SceneEditor editor;
@@ -65,6 +67,10 @@ class SceneTimeline extends StatefulWidget {
   /// Whether the transport sits in the ruler's gutter. Off where the
   /// arrangement puts it on a toolbar instead.
   final bool transport;
+
+  /// What a family's variable axes are. Without it the menus offer the
+  /// table's rows and nothing else, which is what a static family has.
+  final AxesLookup? axesFor;
 
   @override
   State<SceneTimeline> createState() => _SceneTimelineState();
@@ -171,8 +177,6 @@ class _SceneTimelineState extends State<SceneTimeline> {
         _GroupLanes(group, at, [
           for (var MapEntry(key: prop, value: track) in group.tracks.entries)
             _Lane(group, prop, track, at),
-          for (var MapEntry(key: arg, value: track) in group.args.entries)
-            _Lane(group, 'args.$arg', track, at),
         ]),
       );
     }
@@ -190,7 +194,23 @@ class _SceneTimelineState extends State<SceneTimeline> {
       group.name,
       prop,
       t < Duration.zero ? Duration.zero : t,
+      value: _seed(group.node, prop),
     );
+  }
+
+  /// Where a fresh track on an AXIS starts.
+  ///
+  /// Every other property answers for itself — the editor reads the node —
+  /// but an axis the node has not set rests wherever the FONT puts it, and
+  /// only the file knows that. Null everywhere else, which leaves the
+  /// editor's own answer alone.
+  Object? _seed(SceneNode node, String prop) {
+    if (sceneAxisTag(prop) == null) return null;
+    if (getSceneProperty(node, prop) case var v?) return v;
+    for (var spec in sceneAnimatableProps(node, widget.axesFor)) {
+      if (spec.name == prop) return spec.identity;
+    }
+    return null;
   }
 
   /// The selected node's first group — made and placed at zero when it has
@@ -311,6 +331,7 @@ class _SceneTimelineState extends State<SceneTimeline> {
                                     playback: playback,
                                     scale: scale,
                                     gutterWidth: widget.gutterWidth,
+                                    axesFor: widget.axesFor,
                                     onAddKey: (prop) =>
                                         _keyAtPlayhead(g.group, prop),
                                   ),
@@ -330,6 +351,7 @@ class _SceneTimelineState extends State<SceneTimeline> {
                                   _AnimateRow(
                                     node: selected,
                                     gutterWidth: widget.gutterWidth,
+                                    axesFor: widget.axesFor,
                                     onPick: (prop) =>
                                         _animateSelected(selected, prop),
                                   ),
@@ -360,7 +382,7 @@ class _Lane {
   /// Where the group starts on the timeline.
   final Duration at;
 
-  String get label => sceneArgName(prop) ?? prop;
+  String get label => sceneKeyLabel(prop);
 }
 
 /// A placed group and the lanes under it.
@@ -378,6 +400,7 @@ class _GroupLanes {
 class _GroupRow extends StatefulWidget {
   const _GroupRow({
     super.key,
+    this.axesFor,
     required this.lanes,
     required this.editor,
     required this.playback,
@@ -393,6 +416,9 @@ class _GroupRow extends StatefulWidget {
   final TimeScale scale;
   final double gutterWidth;
   final ValueChanged<String> onAddKey;
+
+  /// See [SceneTimeline.axesFor].
+  final AxesLookup? axesFor;
 
   /// Whether the row says the group's name after the node's. The name is
   /// the group's field in the motion class — `headlineIn` — and reads as
@@ -467,13 +493,13 @@ class _GroupRowState extends State<_GroupRow> {
   Widget build(BuildContext context) {
     var colors = context.colors;
     var node = editor.doc.nodeNamed(group.node.name);
-    var tracked = {
-      ...group.tracks.keys,
-      ...group.args.keys.map((a) => 'args.$a'),
-    };
+    var tracked = group.tracks.keys.toSet();
     var offered = node == null
         ? const <ScenePropSpec>[]
-        : animatableProps(node).where((p) => !tracked.contains(p.name));
+        : sceneAnimatableProps(
+            node,
+            widget.axesFor,
+          ).where((p) => !tracked.contains(p.name));
     var hovered = editor.hover == group.node.name;
     var selected = node != null && editor.isSelected(node);
     return GestureDetector(
@@ -556,7 +582,7 @@ class _GroupRowState extends State<_GroupRow> {
                             entries: [
                               for (var spec in offered)
                                 MenuItem(
-                                  sceneArgName(spec.name) ?? spec.name,
+                                  sceneKeyLabel(spec.name),
                                   onSelected: () => widget.onAddKey(spec.name),
                                 ),
                             ],
@@ -676,11 +702,15 @@ class _AnimateRow extends StatelessWidget {
     required this.node,
     required this.gutterWidth,
     required this.onPick,
+    this.axesFor,
   });
 
   final SceneNode node;
   final double gutterWidth;
   final ValueChanged<String> onPick;
+
+  /// See [SceneTimeline.axesFor].
+  final AxesLookup? axesFor;
 
   @override
   Widget build(BuildContext context) {
@@ -710,9 +740,9 @@ class _AnimateRow extends StatelessWidget {
                   _AddPropertyButton(
                     tooltip: 'Animate ${node.name} — a key at the playhead',
                     entries: [
-                      for (var spec in animatableProps(node))
+                      for (var spec in sceneAnimatableProps(node, axesFor))
                         MenuItem(
-                          sceneArgName(spec.name) ?? spec.name,
+                          sceneKeyLabel(spec.name),
                           onSelected: () => onPick(spec.name),
                         ),
                     ],

@@ -739,8 +739,41 @@ SceneArgs resolveTokenArgs(SceneArgs args, Map<String, Object?> tokens) =>
 /// it, so that landing is a model and a grammar change with no renderer work
 /// (master plan §4.5).
 List<InlineSpan> sceneTextRuns(TextNode t) => [
-  TextSpan(text: t.textCase.apply(t.text)),
+  for (var run in t.runs)
+    TextSpan(
+      text: t.textCase.apply(run.text),
+      // Only what the run DIFFERS by: the renderer puts the node's style
+      // above the list, and a span that repeated it would be a second
+      // resolution of the same fields — the shape that made the ambient
+      // style bug possible.
+      style: run.style == null ? null : sceneRunStyle(run.style!),
+    ),
 ];
+
+/// A run's delta as Flutter spells one: only the fields it sets.
+///
+/// A run never carries a paint stack — that is refused where a file is read
+/// — and it never carries the paragraph's own properties, which left the
+/// style when `align` and `maxLines` did.
+TextStyle sceneRunStyle(SceneTextStyle d) => TextStyle(
+  fontFamily: d.fontFamily,
+  fontSize: d.fontSize,
+  fontWeight: d.weight?.flutter,
+  fontStyle: d.italic == null
+      ? null
+      : (d.italic! ? FontStyle.italic : FontStyle.normal),
+  letterSpacing: d.letterSpacing,
+  wordSpacing: d.wordSpacing,
+  height: d.lineHeight,
+  color: d.color?.flutter,
+  decoration: d.decoration?.flutter,
+  decorationColor: d.decorationColor?.flutter,
+  decorationThickness: d.decorationThickness,
+  decorationStyle: d.decorationStyle?.flutter,
+  fontVariations: d.axes == null
+      ? null
+      : [for (var e in d.axes!.entries) FontVariation(e.key, e.value)],
+);
 
 /// A text node's resolved properties as Flutter draws them. The animatable
 /// ones are read composed — what a motion track put there this frame — and
@@ -764,7 +797,25 @@ TextStyle sceneTextStyleFor(TextNode t) => TextStyle(
   decorationColor: t.decorationColor?.flutter,
   decorationThickness: t.fxRendered('decorationThickness') as double,
   decorationStyle: t.decorationStyle.flutter,
+  fontVariations: sceneFontVariations(t),
 );
+
+/// The face's axes, at whatever a motion has them — the one thing a discrete
+/// [FontWeight] cannot do, which is why an axis is a number key of its own.
+///
+/// A tag a track moves but the node never set is included: the track is the
+/// whole of what it says, and leaving it out would animate nothing.
+List<FontVariation>? sceneFontVariations(TextNode t) {
+  var tags = <String>{
+    ...t.axes.keys,
+    for (var k in t.fx.keys) ?sceneAxisTag(k.$2),
+  };
+  if (tags.isEmpty) return null;
+  return [
+    for (var tag in tags)
+      FontVariation(tag, (t.fxRendered('axes.$tag') as num).toDouble()),
+  ];
+}
 
 /// A builder returns `Object`, because the half of the model that declares
 /// it is pure Dart. This is where that becomes a widget again, and where a

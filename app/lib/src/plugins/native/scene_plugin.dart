@@ -1,3 +1,5 @@
+import '../../assets/model/font_axes.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -583,6 +585,19 @@ class _ScenePanelState extends State<_ScenePanel>
 
   List<ExternalWidgetDecl> _externals() => _vocabulary().widgets;
 
+  /// The variable axes of a family this package declares, read out of the
+  /// font file. Cached for the session: a font file does not change under a
+  /// running editor, and opening one per panel rebuild would.
+  final _axesByPackage = <String, Map<String, List<FontAxis>>>{};
+
+  List<FontAxis> _fontAxes(String family) {
+    var package = _package;
+    if (package == null) return const [];
+    var root = _core.projectRootFor(package);
+    return (_axesByPackage[root] ??= readPackageFontAxes(root))[family] ??
+        const [];
+  }
+
   Map<String, Set<String>> _declaredArgs() => _vocabulary().declaredArgs;
 
   /// The tokens as the open workspace holds them, or the scan's when
@@ -1138,6 +1153,7 @@ class _ScenePanelState extends State<_ScenePanel>
             key: ValueKey(workspace.active.path),
             editor,
             externals: _externals(),
+            axesFor: _fontAxes,
             tokens: _tokensHost(workspace),
             playbackFor: (motion) => _playbackFor(workspace.active, motion),
             sceneClassName: workspace.active.className,

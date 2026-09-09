@@ -37,6 +37,7 @@ Object? sample(SceneProp p) => switch (p.kind) {
     ),
     FillLayer(),
   ],
+  ScenePropKind.axes => const {'wght': 640.0, 'wdth': 85.0},
   ScenePropKind.edges => p.quad!([1.0, 2.0, 3.0, 4.0]),
   ScenePropKind.choice => p.choices!.values.firstWhere(
     (v) => v != p.defaultValue,
