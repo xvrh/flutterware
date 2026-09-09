@@ -1,5 +1,30 @@
 ## Unreleased
 
+- **`tapAt(Offset)`, and a coordinate now means the coordinate.** The regions
+  of an SVG, a chart or a map are painted rather than built, so they share one
+  widget and one box — and every verb pressed the centre of that box, which on
+  a full-bleed canvas is the middle of the screen whatever was asked for. A
+  consumer aiming at an SVG's hit-test regions had `dragFrom(p, Offset.zero)`
+  as the only spelling: the right gesture arrived at sideways, and a step that
+  read `dragFrom` in the report for what they meant as a tap.
+
+  `tapAt(Offset)` is that press, spelled as itself, beside the `dragFrom` that
+  was already there. And `Target.at` now means the same thing everywhere it is
+  said: `tap`, `longPress` and `drag` given one put the finger down on the
+  point rather than on the centre of the widget the hit test found under it,
+  as does `{"at": {"x": …, "y": …}}` — and `{"item": n}` with it — when
+  driving a running app. Resolution is unchanged: the point still picks a
+  widget, and covered, offscreen, gone and ambiguous are still refusals.
+
+  Two consequences worth knowing. A scenario that used `Target.at` to reach an
+  unlabelled control presses a point inside it rather than its centre, which
+  is the same button. And the aim mark on such a step is now the point with no
+  box, the shape `dragFrom` already used, so the ring in a report sits where
+  the finger did.
+
+  `enterText` is untouched: it focuses an editable and pushes a value with no
+  pointer anywhere, so it has no contact point to move.
+
 - **Shadows are real, in both harnesses.** `flutter_test` sets
   `debugDisableShadows` for every test it runs, so a `BoxShadow` was painted
   with its blur dropped — a solid, hard-edged copy of the shape — and a

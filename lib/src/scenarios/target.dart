@@ -135,9 +135,15 @@ sealed class Target {
   /// offscreen or gone is refused exactly as it would be for a text target.
   ///
   /// What the point picks is the widget the pointer would *reach*; where a
-  /// verb with a finger puts it down is the point — see [point]. Which
-  /// matters exactly where this form earns its keep, on a surface whose
-  /// regions are painted rather than built and therefore share one box.
+  /// verb with a finger puts it down is the point itself — see [point].
+  /// Which matters exactly where this form earns its keep, on a surface whose
+  /// regions are painted rather than built and therefore share one box: there
+  /// the widget is the whole canvas and its centre is a different region
+  /// every time.
+  ///
+  /// The same on both surfaces that speak this vocabulary — a scenario's
+  /// verbs and a drive's. `tap(Target.at(x, y))` is `tapAt(Offset(x, y))`,
+  /// and `{"at": {"x": …, "y": …}}` is the same press again.
   const factory Target.at(double x, double y) = _At;
 
   Finder toFinder();
