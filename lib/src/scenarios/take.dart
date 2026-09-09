@@ -192,7 +192,8 @@ class Take {
     var target = phases.map((p) => p.target).nonNulls.firstOrNull;
     var rect = phases.map((p) => p.rect).nonNulls.firstOrNull;
     return switch (verb) {
-      'tap' => Tapped._(phases, label: target, target: rect, held: false),
+      'tap' ||
+      'tapAt' => Tapped._(phases, label: target, target: rect, held: false),
       'longPress' => Tapped._(phases, label: target, target: rect, held: true),
       'enterText' => Typed._(
         phases,

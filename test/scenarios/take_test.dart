@@ -93,6 +93,21 @@ void main() {
     expect((take.beats.single as Tapped).held, isTrue);
   });
 
+  // A point verb is the verb it says it is. `tapAt` reads back as a tap whose
+  // label is the coordinate it was given, so an edit that holds on taps holds
+  // on this one too — rather than falling through to the anonymous `Acted`.
+  test('a tap at a point is a tap', () {
+    var take = Take.decode(
+      timeline([
+        phase('travel', 0, 350, verb: 'tapAt'),
+        phase('act', 350, 200, verb: 'tapAt', target: '200,500'),
+      ]),
+    );
+    var tap = take.beats.single as Tapped;
+    expect(tap.held, isFalse);
+    expect(tap.label, '200,500');
+  });
+
   test('typing carries the words, not a verb name', () {
     var take = Take.decode(
       timeline([

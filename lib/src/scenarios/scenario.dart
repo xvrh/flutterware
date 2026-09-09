@@ -1181,6 +1181,36 @@ class ScenarioTester {
     target: describeTarget(target),
   );
 
+  /// Taps a point rather than a widget — the same press as [tap], aimed where
+  /// no finder can reach.
+  ///
+  /// The zones of an SVG, a chart or a map are painted rather than built, so
+  /// they share one widget and one box: [tap] resolves that box and presses
+  /// its centre, and [Target.at] comes back to the same centre by way of the
+  /// widget under the point. Only a coordinate says which zone was meant.
+  /// Spelled with what was already here, that is `dragFrom(at, Offset.zero)`
+  /// — the right gesture arrived at sideways, and a step that reads `dragFrom`
+  /// in the report for what the author meant as a tap.
+  ///
+  /// The coordinates are the ones every box in a report is in: the view's
+  /// logical pixels, top-left origin — what a step's aim rectangle reads back
+  /// in, so a point can be lifted straight off one.
+  ///
+  /// It makes the same trade [dragFrom] makes: there is no target to prove
+  /// reachable, so it goes where it is told, and a point over nothing taps
+  /// nothing silently where every finder verb would have refused.
+  Future<void> tapAt(Offset at, {Shot? shot, Settle? settle}) => _step(
+    shot,
+    settle,
+    () async {
+      _aimAtPoint(at);
+      await _approach('tapAt');
+      await tester.tapAt(at);
+    },
+    verb: 'tapAt',
+    target: '${at.dx.round()},${at.dy.round()}',
+  );
+
   Future<void> longPress(dynamic target, {Shot? shot, Settle? settle}) => _step(
     shot,
     settle,
@@ -1805,7 +1835,7 @@ class ScenarioTester {
     }
   }
 
-  /// The mark for a verb aimed at a bare point — [dragFrom].
+  /// The mark for a verb aimed at a bare point — [tapAt], [dragFrom].
   ///
   /// A box of no size, which is the honest shape of what the author said: a
   /// point verb names a coordinate and not a widget, and inventing a box
