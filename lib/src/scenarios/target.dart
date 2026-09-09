@@ -28,6 +28,14 @@ Finder finderForTarget(dynamic target) {
   };
 }
 
+/// Where a verb with a finger puts it down for [target], or null when the
+/// target names a widget rather than a coordinate — see [Target.point].
+///
+/// Only a [Target] can name one, so every other form of target is null here
+/// by construction: a `Finder`, a string, a key and a type all say *what*,
+/// and where is then the centre of what they found.
+Offset? pointOf(dynamic target) => target is Target ? target.point : null;
+
 /// How a verb's target reads back to a human — quoted when it is the visible
 /// text the author wrote, bare otherwise.
 ///
@@ -125,6 +133,11 @@ sealed class Target {
   /// It resolves through the same ladder as every other target rather than
   /// tapping blind coordinates: the point picks the widget, and being covered,
   /// offscreen or gone is refused exactly as it would be for a text target.
+  ///
+  /// What the point picks is the widget the pointer would *reach*; where a
+  /// verb with a finger puts it down is the point — see [point]. Which
+  /// matters exactly where this form earns its keep, on a surface whose
+  /// regions are painted rather than built and therefore share one box.
   const factory Target.at(double x, double y) = _At;
 
   Finder toFinder();
@@ -132,6 +145,21 @@ sealed class Target {
   /// Whether resolving this needs the semantics tree, which a scenario turns
   /// on lazily — it is not free, and it changes what the app builds.
   bool get needsSemantics => false;
+
+  /// The coordinate this target *is*, for the one form that is a coordinate —
+  /// [Target.at], and nothing else.
+  ///
+  /// A verb with a finger asks this before it asks for a centre. The widget a
+  /// point resolves to is the thing the pointer would reach, but its centre is
+  /// somewhere else entirely when the widget is bigger than the region that
+  /// was meant: a full-bleed canvas, a chart, an SVG whose zones are painted
+  /// rather than built. There the point *is* the target and the centre is a
+  /// guess, so a verb that has one uses it.
+  ///
+  /// Deliberately not recursive. `Target.nth` and `Target.within` compose
+  /// *lookups*, and a lookup that happens to contain a point is still asking
+  /// for whatever it found — the point named a scope, not a contact.
+  Offset? get point => null;
 }
 
 class _At extends Target {
@@ -168,6 +196,9 @@ class _At extends Target {
     }
     return null;
   }
+
+  @override
+  Offset get point => Offset(x, y);
 
   @override
   String toString() => 'Target.at($x, $y)';
