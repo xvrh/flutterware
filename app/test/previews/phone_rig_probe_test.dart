@@ -190,10 +190,12 @@ Future<void> _probe(String entryId, {bool screen = true}) async {
       var backwards = (await walk(stops.reversed.toList())).reversed.toList();
       _report('backwards', backwards);
 
-      // A picture of each stop of each walk, for looking at.
+      // A picture of each stop of each walk, for looking at — under the
+      // app's build directory, which CI uploads when this goes red.
       var out = Directory(
         p.join(
-          Directory.systemTemp.path,
+          Directory.current.path,
+          'build',
           'phone_rig_probe',
           entryId.split('#').last,
         ),
@@ -232,9 +234,16 @@ Future<void> _probe(String entryId, {bool screen = true}) async {
       var repeats = <double>[];
       var orderFree = <double>[];
       for (var i = 0; i < stops.length; i++) {
-        if (!_same(again[i].pixels, first[i].pixels)) repeats.add(stops[i]);
+        if (!_same(again[i].pixels, first[i].pixels)) {
+          repeats.add(stops[i]);
+          print('  again t=${stops[i]}: ${_describeDiff(first[i], again[i])}');
+        }
         if (!_same(backwards[i].pixels, first[i].pixels)) {
           orderFree.add(stops[i]);
+          print(
+            '  backwards t=${stops[i]}: '
+            '${_describeDiff(first[i], backwards[i])}',
+          );
         }
       }
       print("stops whose screen is not the stop's own: $lagging");
@@ -304,6 +313,38 @@ void _report(String label, List<WalkFrame> frames) {
 double _hueDistance(double a, double b) {
   var d = (a - b).abs() % 360;
   return d > 180 ? 360 - d : d;
+}
+
+/// How two frames of one stop differ: how many pixels, by how much at most,
+/// and where — the difference between a renderer that is off by a rounding
+/// step somewhere and a walk that drew another stop's screen.
+String _describeDiff(WalkFrame a, WalkFrame b) {
+  if (a.width != b.width || a.height != b.height) {
+    return 'sizes differ: ${a.width}×${a.height} vs ${b.width}×${b.height}';
+  }
+  var pixels = 0;
+  var maxDelta = 0;
+  var left = a.width, top = a.height, right = -1, bottom = -1;
+  for (var y = 0; y < a.height; y++) {
+    for (var x = 0; x < a.width; x++) {
+      var at = (y * a.width + x) * 4;
+      var delta = 0;
+      for (var c = 0; c < 4; c++) {
+        var d = (a.pixels[at + c] - b.pixels[at + c]).abs();
+        if (d > delta) delta = d;
+      }
+      if (delta == 0) continue;
+      pixels++;
+      if (delta > maxDelta) maxDelta = delta;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  if (pixels == 0) return 'identical';
+  return '$pixels of ${a.width * a.height} pixels differ, by at most '
+      '$maxDelta/255, within ($left,$top)–($right,$bottom)';
 }
 
 bool _same(List<int> a, List<int> b) {
