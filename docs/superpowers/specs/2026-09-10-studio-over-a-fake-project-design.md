@@ -741,13 +741,24 @@ example's coffee shop, which the scenarios already walked.
   the example's README explains and the panel's cases depend on. So
   `flutter_launcher_icons` was not put in the loop: it has one mode, and
   the README already says why a config per set cannot work. Instead
-  `demo/brand.dart` is a preview of the icon with two knobs, the set (told
-  apart by tint) and the role (icon, adaptive foreground, monochrome);
-  `previews screenshot` photographs it at 1024 into `assets/brand/`, and
-  `app/tool/demo/brand_icons.dart` writes those into every existing file at
-  the size it already has, never adding or removing one. The icon preview
-  is also the first entry of the web demo, which is where a reader meets
-  knobs.
+  `demo/brand.dart` draws the icon: `appIcon` is a sheet of every variant,
+  a row per set (told apart by tint) and a column per role (icon, adaptive
+  foreground, monochrome), and `appIconVariant` is one cell filling the
+  canvas, chosen by two knobs. `previews screenshot` photographs the
+  variant at 1024 into `assets/brand/`, and `app/tool/demo/brand_icons.dart`
+  writes those into every existing file at the size it already has, never
+  adding or removing one. The sheet is the first entry of the web demo;
+  the confirmation screen (a `name` knob) is where a reader meets knobs,
+  and `shopBadges` — one component at three sizes — is the entry that is
+  not a screen. The example declares `device: Devices.iphone16`, in its
+  own manifest and in the recorded one, so every shop preview opens on a
+  phone.
+
+  Found while doing this: picking a knob in the inline guest emptied the
+  knob list. `CatalogGuest` rebuilt once more than the demo did, began a
+  declaration pass the demo never took part in, and the pass ended with
+  nothing declared. A pass now begins only for a new `(entry, revision)`;
+  `inline_guest_test.dart` pins it.
 
 ### The recording and the scenario, in that order
 

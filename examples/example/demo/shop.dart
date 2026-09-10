@@ -41,4 +41,46 @@ Widget shopDrink() => DrinkScreen(drinks[0]);
 Widget shopCart() => const CartScreen();
 
 @Preview(name: 'Order placed', group: 'Brewline', wrapper: wrapInShop)
-Widget shopConfirmation() => const ConfirmationScreen(name: 'Sam');
+Widget shopConfirmation() => Builder(
+  builder: (context) =>
+      ConfirmationScreen(name: context.knobs.string('name', 'Sam')),
+);
+
+/// One component in every state it has, on one sheet — the badge that
+/// stands for a drink, for every drink at the three sizes the screens use.
+/// Not a screen: what a reader checks here is that the set reads as one
+/// family, which no screen shows at once.
+@Preview(name: 'Drink badges', group: 'Brewline', wrapper: wrapInShop)
+Widget shopBadges() => const _BadgeSheet();
+
+class _BadgeSheet extends StatelessWidget {
+  const _BadgeSheet();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        for (var size in const [40.0, 56.0, 80.0]) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              '${size.round()} points',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (var drink in drinks) DrinkBadge(drink, size: size),
+              ],
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}

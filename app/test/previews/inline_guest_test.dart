@@ -5,7 +5,8 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutterware/previews.dart';
-import 'package:flutterware/previews_guest.dart' show CatalogEntryBuilder;
+import 'package:flutterware/previews_guest.dart'
+    show CatalogEntryBuilder, CatalogKnobs;
 import 'package:flutterware_app/src/previews/catalog_entry.dart';
 import 'package:flutterware_app/src/previews/catalog_session.dart';
 import 'package:flutterware_app/src/previews/catalog_view.dart';
@@ -44,6 +45,10 @@ void main() {
       preview: const Preview(name: 'Beta'),
       builder: () => const Center(child: Text('Beta here')),
     ),
+    'demo/d.dart#delta' => (
+      preview: const Preview(name: 'Delta'),
+      builder: () => const _Delta(),
+    ),
     'demo/c.dart#gamma' => (
       preview: Preview(
         name: 'Gamma',
@@ -53,6 +58,13 @@ void main() {
     ),
     _ => null,
   };
+
+  const delta = CatalogEntry(
+    path: 'demo/d.dart',
+    symbol: 'delta',
+    annotation: "Preview(name: 'Delta')",
+    name: 'Delta',
+  );
 
   const gamma = CatalogEntry(
     path: 'demo/c.dart',
@@ -79,11 +91,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<CatalogSession> pumpInline(WidgetTester tester) async {
+  Future<CatalogSession> pumpInline(
+    WidgetTester tester, {
+    CatalogEntry first = alpha,
+  }) async {
     // Through `start`, the way the panel opens one: the catalog and the
     // guest both come from the two seams, and nothing else is special.
     var inline = InlinePreviewsGuest((
-      entries: [alpha, beta, gamma],
+      entries: [alpha, beta, gamma, delta],
       entryOf: entryOf,
     ));
     var session = CatalogSession(
@@ -132,7 +147,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(session.phase, CatalogSessionPhase.ready);
-    await open(tester, session, alpha);
+    await open(tester, session, first);
     return session;
   }
 
@@ -193,6 +208,25 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('picking a knob keeps every knob declared', (tester) async {
+    var session = await pumpInline(tester);
+    await open(tester, session, delta);
+    expect(find.text('main/icon'), findsOneWidget);
+    expect(session.knobs.knobs.map((k) => k.name), ['set', 'role']);
+    address.value = address.value.copyWith(axes: {'knob.set': 'pro'});
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+    print(
+      'PROBE selections=${session.knobSelections} report=${session.knobs.knobs.map((k) => '${k.name}=${k.value}')} guest=${CatalogKnobs.instance.editable.knobs.keys.toList()} entry=${CatalogKnobs.instance.entryId}',
+    );
+    expect(find.text('pro/icon'), findsOneWidget);
+    expect(session.knobs.knobs.map((k) => k.name), [
+      'set',
+      'role',
+    ], reason: 'a pick rebuilds the demo, which declares both again');
+  });
+
   testWidgets('a knob set through the address rebuilds the entry', (
     tester,
   ) async {
@@ -213,5 +247,26 @@ class _Alpha extends StatelessWidget {
   Widget build(BuildContext context) {
     var label = context.knobs.string('label', 'Hello');
     return Center(child: Text(label));
+  }
+}
+
+/// Two pickers built from map literals, read before a [LayoutBuilder] — the
+/// shape of the example's app-icon preview.
+class _Delta extends StatelessWidget {
+  const _Delta();
+
+  @override
+  Widget build(BuildContext context) {
+    var knobs = context.knobs;
+    var set = knobs.picker('set', {
+      for (var name in const ['main', 'pro']) name: name,
+    }, 'main');
+    var role = knobs.picker('role', const {
+      'icon': 'icon',
+      'foreground': 'foreground',
+    }, 'icon');
+    return LayoutBuilder(
+      builder: (context, constraints) => Center(child: Text('$set/$role')),
+    );
   }
 }

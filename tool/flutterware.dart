@@ -103,25 +103,19 @@ void main() => Flutterware.configure((fw) {
             ),
           ],
         ),
-        // A canvas for one file, which is the point of the pair in
-        // `demo/`: `home_page_mobile.dart` opens framed on a phone and
+        // The example is a phone app: its previews open on a phone, and the
+        // web demo's do the same (see `app/lib/src/demo/recorded_project.dart`).
+        // One file opts out, which is the point of the pair in `demo/`:
+        // `home_page_mobile.dart` opens framed like everything else and
         // `home_page.dart` opens on the plain rectangle beside it. Declared
         // here rather than on the annotation because a device is a property of
         // where a preview is looked at, not of the widget — and a file is a
         // legal prefix precisely so one entry can differ from its neighbours.
-        //
-        // This is also the entry the previews rename knowingly regressed
-        // (2026-08-01-previews-rename.md, "The regression this accepts"): it
-        // lost its declared device with `formFactor:` and had been opening
-        // unframed ever since, which the README's screenshot went on claiming
-        // otherwise.
         .new(
           example,
           canvases: [
-            PreviewCanvas(
-              'demo/home_page_mobile.dart',
-              devices: [Devices.iphone16],
-            ),
+            PreviewCanvas('', devices: [Devices.iphone16]),
+            PreviewCanvas('demo/home_page.dart'),
           ],
         ),
       ],

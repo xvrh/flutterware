@@ -143,6 +143,7 @@ void main(List<String> arguments) {
 /// What the page shows, in this order: the coffee shop's screens.
 const webDemoEntryIds = [
   'demo/brand.dart#appIcon',
+  'demo/shop.dart#shopBadges',
   'demo/shop.dart#shopWelcome',
   'demo/shop.dart#shopMenu',
   'demo/shop.dart#shopDrink',

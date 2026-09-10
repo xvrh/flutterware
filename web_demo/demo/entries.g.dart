@@ -13,17 +13,27 @@ import 'entries/entry_2.dart' as e2;
 import 'entries/entry_3.dart' as e3;
 import 'entries/entry_4.dart' as e4;
 import 'entries/entry_5.dart' as e5;
+import 'entries/entry_6.dart' as e6;
 
 const webDemoEntries = <CatalogEntry>[
   CatalogEntry(
     path: 'demo/brand.dart',
     symbol: 'appIcon',
-    annotation:
-        "Preview(name: 'App icon', group: 'Brewline', size: Size(1024, 1024))",
+    annotation: "Preview(name: 'App icon', group: 'Brewline')",
     name: 'App icon',
     group: 'Brewline',
-    line: 13,
-    endLine: 14,
+    line: 12,
+    endLine: 13,
+  ),
+  CatalogEntry(
+    path: 'demo/shop.dart',
+    symbol: 'shopBadges',
+    annotation:
+        "Preview(name: 'Drink badges', group: 'Brewline', wrapper: wrapInShop)",
+    name: 'Drink badges',
+    group: 'Brewline',
+    line: 53,
+    endLine: 54,
   ),
   CatalogEntry(
     path: 'demo/shop.dart',
@@ -71,22 +81,23 @@ const webDemoEntries = <CatalogEntry>[
     name: 'Order placed',
     group: 'Brewline',
     line: 43,
-    endLine: 44,
+    endLine: 47,
   ),
 ];
 
 CatalogEntryBuilder? webDemoEntryOf(String id) => switch (id) {
   'demo/brand.dart#appIcon' => (preview: e0.fwPreview, builder: e0.fwBuilder),
+  'demo/shop.dart#shopBadges' => (preview: e1.fwPreview, builder: e1.fwBuilder),
   'demo/shop.dart#shopWelcome' => (
-    preview: e1.fwPreview,
-    builder: e1.fwBuilder,
+    preview: e2.fwPreview,
+    builder: e2.fwBuilder,
   ),
-  'demo/shop.dart#shopMenu' => (preview: e2.fwPreview, builder: e2.fwBuilder),
-  'demo/shop.dart#shopDrink' => (preview: e3.fwPreview, builder: e3.fwBuilder),
-  'demo/shop.dart#shopCart' => (preview: e4.fwPreview, builder: e4.fwBuilder),
+  'demo/shop.dart#shopMenu' => (preview: e3.fwPreview, builder: e3.fwBuilder),
+  'demo/shop.dart#shopDrink' => (preview: e4.fwPreview, builder: e4.fwBuilder),
+  'demo/shop.dart#shopCart' => (preview: e5.fwPreview, builder: e5.fwBuilder),
   'demo/shop.dart#shopConfirmation' => (
-    preview: e5.fwPreview,
-    builder: e5.fwBuilder,
+    preview: e6.fwPreview,
+    builder: e6.fwBuilder,
   ),
   _ => null,
 };

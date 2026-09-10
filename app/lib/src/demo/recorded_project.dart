@@ -63,7 +63,10 @@ PluginManifest recordedManifest() {
   var fw = FlutterwareConfig();
   fw.use(Dependencies(packages: const [DependenciesPackage(root)]));
   fw.use(Assets(packages: const [AssetsPackage(root)]));
-  fw.use(Previews(packages: const [PreviewsPackage(root)]));
+  // A phone app: its previews open on a phone, as the root manifest says.
+  fw.use(
+    Previews(packages: const [PreviewsPackage(root, device: Devices.iphone16)]),
+  );
   fw.use(Scenarios(packages: const [ScenariosPackage(root)]));
   fw.use(LauncherIcon(packages: const [LauncherIconPackage(root)]));
   fw.use(NativeSplash(packages: const [NativeSplashPackage(root)]));

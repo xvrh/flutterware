@@ -14,7 +14,7 @@ import 'package:path/path.dart' as p;
 /// `examples/example/assets/brand/<set>-<role>.png` by the studio:
 ///
 /// ```sh
-/// fw run previews screenshot --entry=demo/brand.dart#appIcon \
+/// fw run previews screenshot --entry=demo/brand.dart#appIconVariant \
 ///   --knobs=set=pro,role=foreground --width=1024 --height=1024 \
 ///   --output=assets/brand/pro-foreground.png
 /// ```

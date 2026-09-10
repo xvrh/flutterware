@@ -42,6 +42,6 @@ import '../../../examples/example/demo/shop.dart' as fw1;
 // `Lookup failed: <wrapper> in @methods in file:...` instead of the demo.
 // Behind a getter there is nothing to inline and nothing to re-resolve.
 Preview get fwPreview =>
-    Preview(name: 'Welcome', group: 'Brewline', wrapper: wrapInShop);
+    Preview(name: 'Drink badges', group: 'Brewline', wrapper: wrapInShop);
 
-Widget Function() get fwBuilder => fw1.shopWelcome;
+Widget Function() get fwBuilder => fw1.shopBadges;
