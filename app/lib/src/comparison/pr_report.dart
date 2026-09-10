@@ -209,9 +209,21 @@ bool _isFinding(ComparedState state) =>
 
 String? _delta(ComparedItem item) {
   var pixels = item.pixels?.diff;
-  if (pixels == null || !pixels.changed) return item.note;
+  if (pixels == null || !pixels.changed) return _oneLine(item.note);
   return '${(pixels.fraction * 100).toStringAsFixed(2)}% · '
       '${pixels.clusters.length} region${pixels.clusters.length == 1 ? '' : 's'}';
+}
+
+/// A cell's worth of a note.
+///
+/// A newline inside a markdown table cell **ends the row**, so a compiler
+/// error dropped in whole does not merely look untidy: it breaks the table
+/// from that row down, and a failing entry's note is exactly where the
+/// compiler's diagnostics live. The page has the whole message.
+String? _oneLine(String? note) {
+  if (note == null) return null;
+  var first = note.split('\n').first.trim();
+  return first.length < note.trim().length ? '$first …' : first;
 }
 
 _MosaicRow? _row(_Finding finding, {required ShotCache cache}) {
@@ -407,29 +419,58 @@ String _comment(
   var elapsed =
       artifact.previews.elapsed +
       (artifact.scenarios?.elapsed ?? Duration.zero);
+  // Which packages, when there is more than one to name — a comparison that
+  // covered three of a repository's four is a different receipt from one that
+  // covered everything, and the row ids alone do not add up to that.
+  var packages = {
+    ...artifact.previews.packages,
+    ...?artifact.scenarios?.packages,
+  };
   // The skip clause only when the skip rule answered anything: a cold CI run
   // printing "0 skipped" is noise wearing a number.
   var receipt = [
     '$compared entries compared',
+    if (packages.length > 1) 'across ${packages.length} packages',
     if (skipped > 0) '$skipped skipped',
     if (elapsed > Duration.zero) 'in ${_took(elapsed)}',
   ].join(' · ');
 
   var buffer = StringBuffer()..writeln(commentMarker);
-  if (findings.isEmpty) {
+  // **Before the verdict, because it unmakes it.** A half whose harness would
+  // not build leaves no rows, and no rows read as "nothing changed" — the
+  // silence a `note` exists to break. The comment used to print that silence
+  // as a pass, which is the one thing a pull-request gate must never do.
+  var gap = verdictGapOf(
+    scenariosNote: artifact.scenarios?.note,
+    previewsNote: artifact.previews.note,
+    scenarioStates:
+        artifact.scenarios?.items.map((item) => item.state) ?? const [],
+    previewStates: artifact.previews.items.map((item) => item.state),
+    narrowed: artifact.narrowed,
+  );
+  if (findings.isEmpty && gap == null) {
     buffer
       ..writeln('### Comparison against `$against`\n')
       ..writeln('Nothing changed — $receipt.');
+  } else if (findings.isEmpty) {
+    buffer
+      ..writeln('### Comparison against `$against` — **no verdict**\n')
+      ..writeln('$gap.\n')
+      ..writeln(
+        '[**Open the full comparison →**]($viewerUrlPlaceholder) · $receipt\n',
+      );
   } else {
     var summary = [
       for (var entry in counts.entries)
         if (_isFinding(entry.key)) '${entry.value} ${entry.key.name}',
     ].join(' · ');
-    buffer
-      ..writeln('### Comparison against `$against` — **$summary**\n')
-      ..writeln(
-        '[**Open the full comparison →**]($viewerUrlPlaceholder) · $receipt\n',
-      );
+    buffer.writeln('### Comparison against `$against` — **$summary**\n');
+    // Above the link rather than folded away with the table: a reader who
+    // stops at the pictures has to know part of the run answered nothing.
+    if (gap != null) buffer.writeln('> **No verdict** — $gap.\n');
+    buffer.writeln(
+      '[**Open the full comparison →**]($viewerUrlPlaceholder) · $receipt\n',
+    );
     if (hasMosaic) {
       // The image is the biggest thing in the comment, so it is also a door:
       // clicking it opens the page rather than the raw PNG.

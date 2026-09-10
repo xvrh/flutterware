@@ -46,6 +46,42 @@ class FindingBody extends StatelessWidget {
   /// preview has no pictures and never will, and that is not a failed decode.
   final Widget? whenNotRendered;
 
+  /// The sentence for a row whose pictures this **export** left out.
+  ///
+  /// A different absence from [whenNotRendered]'s and the difference matters:
+  /// nothing was skipped and nothing failed, the two sides rendered and came
+  /// out identical, and a page carrying only the findings' frames simply did
+  /// not bring them. Saying "neither side rendered" over that is the page
+  /// contradicting its own verdict.
+  static Widget framesWithheld(BuildContext context) {
+    var colors = context.colors;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.hide_image_outlined,
+              size: FwIconSize.lg,
+              color: colors.mut2,
+            ),
+            const Gap(FwSpacing.md),
+            Text('Identical, and not exported', style: context.type.bodyStrong),
+            const Gap(FwSpacing.sm),
+            Text(
+              'Both sides rendered and the frames matched, so this page — '
+              "written with only the findings' pictures — did not carry "
+              'them. Every channel it compared is still below.',
+              textAlign: TextAlign.center,
+              style: context.type.caption.copyWith(color: colors.mut),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;

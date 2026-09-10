@@ -24,19 +24,24 @@ class HttpShotStore implements ShotStore {
   }
 
   @override
-  Future<Shot?> byKey(String key) async {
+  Future<Shot?> byKey(String key, {int? width}) async {
     var bytes = await _fetch(key);
-    return bytes == null ? null : decodeEncodedShot(bytes);
+    return bytes == null ? null : decodeEncodedShot(bytes, targetWidth: width);
   }
 
   @override
-  Future<Shot?> byRef(FrameRef ref) async {
+  Future<Shot?> byRef(FrameRef ref, {int? width}) async {
     var bytes = await _fetch(ref.path);
     if (bytes == null) return null;
     // The export encodes every frame; raw survives only in a report that was
     // never exported, where the ref's own dimensions make it decodable.
     return ref.path.endsWith('.png')
-        ? decodeEncodedShot(bytes)
-        : decodeRawShot(bytes, width: ref.width, height: ref.height);
+        ? decodeEncodedShot(bytes, targetWidth: width)
+        : decodeRawShot(
+            bytes,
+            width: ref.width,
+            height: ref.height,
+            targetWidth: width,
+          );
   }
 }

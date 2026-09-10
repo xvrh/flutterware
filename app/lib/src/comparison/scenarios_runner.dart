@@ -25,8 +25,25 @@ abstract interface class ScenarioSource {
   /// Every scenario id one side declares.
   Future<List<String>> list({required bool base});
 
+  /// Every scenario id one side declares, read from its sources instead of
+  /// from a running harness — or null where the sources cannot answer for the
+  /// whole set.
+  ///
+  /// Synchronous and nearly free, which is the entire point of its existing
+  /// beside [list]. [list] costs a harness build and a boot **on each side**,
+  /// and that is what a comparison spends its fixed time on: measured
+  /// 2026-09-09 on this repo, a run whose every scenario was skipped spent
+  /// 60.5 of its 63 seconds getting two harnesses up to ask them a question
+  /// the sources had already answered.
+  List<String>? scan({required bool base});
+
   /// Where a scenario's source lives, relative to a checkout root.
   String fileOf(String id);
+
+  /// The folder config that governs [id] on the head side, relative to a
+  /// checkout root — or null where none does. See
+  /// `ScenariosSide.configOf`.
+  String? configOf(String id);
 
   /// Replays [id] on one side and reads back every step it captured.
   Future<List<ScenarioStepShot>> shots(
@@ -46,23 +63,38 @@ abstract interface class ScenarioSource {
 class LiveScenarioSource implements ScenarioSource {
   LiveScenarioSource({
     required this.side,
-    required String headRoot,
-    required String baseRoot,
-  }) : _head = side.runnerFor(headRoot),
-       _base = side.runnerFor(baseRoot);
+    required this.headRoot,
+    required this.baseRoot,
+  });
 
   final ScenariosSide side;
-  final ScenarioRunner _head;
-  final ScenarioRunner _base;
+  final String headRoot;
+  final String baseRoot;
 
-  ScenarioRunner _runner({required bool base}) => base ? _base : _head;
+  /// Built on the first ask, because a plan answered from [scan] never asks.
+  /// A runner is a claimed build directory before it is anything else, so
+  /// making them lazy is what lets a comparison that replays nothing leave
+  /// nothing behind in either checkout.
+  ScenarioRunner? _head;
+  ScenarioRunner? _base;
+
+  ScenarioRunner _runner({required bool base}) => base
+      ? _base ??= side.runnerFor(baseRoot)
+      : _head ??= side.runnerFor(headRoot);
 
   @override
   Future<List<String>> list({required bool base}) =>
       side.scenarios(_runner(base: base));
 
   @override
+  List<String>? scan({required bool base}) =>
+      side.scannedScenarios(base ? baseRoot : headRoot);
+
+  @override
   String fileOf(String id) => side.fileOf(id);
+
+  @override
+  String? configOf(String id) => side.configOf(headRoot, id);
 
   @override
   Future<List<ScenarioStepShot>> shots(
@@ -77,17 +109,22 @@ class LiveScenarioSource implements ScenarioSource {
 
   @override
   Future<void> dispose() async {
-    await _head.dispose();
-    await _base.dispose();
-    // The runners built in claimed directories — `runnerFor` says why — and
-    // the claim ends with the runner that held it.
+    // Only the ones that were built. A run answered from the scan alone made
+    // neither, and there is nothing to tear down or release.
     for (var runner in [_head, _base]) {
+      if (runner == null) continue;
+      await runner.dispose();
+      // The runners built in claimed directories — `runnerFor` says why — and
+      // the claim ends with the runner that held it.
       releaseBuildDirectory(
         runner.packageRoot,
         runner.buildDirectory,
         root: comparisonBuildRoot,
       );
     }
+    // Not cleared. A null field here means "never built", and a source that
+    // forgot it had been disposed would answer the next ask by building a
+    // fresh runner in a fresh claim rather than by failing.
   }
 }
 
@@ -128,6 +165,7 @@ class ScenariosRunner {
     required this.baseRoot,
     required this.source,
     required this.cache,
+    required this.locks,
     this.pixels,
     this.only,
     this.onScenario,
@@ -145,6 +183,17 @@ class ScenariosRunner {
   /// parameter rather than derived here because [source] deliberately hides
   /// where the package lives.
   final PixelInputs? pixels;
+
+  /// Both sides' lockfiles, read per package — see [LockSides]. Passed for
+  /// the same reason [pixels] is, and used the same way: a scenario carries
+  /// the resolution of the packages it reaches and no others.
+  ///
+  /// **Required, and nullable on purpose.** It was optional, and both callers
+  /// forgot it: the lockfile had just left the pixel inputs to come in through
+  /// here, so a runner built without it hashed no lockfile at all and a
+  /// dependency bump replayed nothing. Null is still a legal answer — a test's
+  /// fake checkout has no lock — but it has to be said.
+  final LockSides? locks;
 
   /// Compare only these scenario ids.
   final List<String>? only;
@@ -164,10 +213,55 @@ class ScenariosRunner {
   /// effect at the next one.
   final CancelToken? cancel;
 
+  /// What has to be replayed, decided without starting anything where the
+  /// sources can say.
+  ///
+  /// Two listings answer "which scenarios does each side declare", and they
+  /// cost wildly different amounts. [ScenarioSource.scan] parses the files;
+  /// [ScenarioSource.list] builds and boots a harness on **each** side, which
+  /// is the whole fixed cost of this half and is paid before a single closure
+  /// has been hashed. So the scan goes first, and the listing is asked for
+  /// only when something has to be replayed — at which point a harness is
+  /// starting anyway and the plan is remade from the answer that knows about
+  /// `skip:` and about names no parser can read.
+  ///
+  /// The scan is therefore never trusted to *decide* a replay, only to decide
+  /// that there is none. What it can get wrong on that path is `added` and
+  /// `removed` — and only on a run where nothing is replayed, since the next
+  /// run that replays anything re-asks the harness.
   Future<ScenariosPlan> plan({ImportGraph? graph}) async {
-    // The listing is the expensive-looking part of a scenario plan: each side
-    // answers from a live harness, so the first ask builds and boots one.
-    //
+    cancel?.check();
+    var imports =
+        graph ??
+        ImportGraph.read(
+          root: headRoot,
+          packageConfig: p.join(headRoot, '.dart_tool', 'package_config.json'),
+        );
+    // One pass's digests, so the library every scenario imports is hashed
+    // once rather than once per scenario — and once across both decisions
+    // below, on the runs that make two. Scoped to this plan and no longer:
+    // see [DigestCache].
+    var digests = DigestCache();
+
+    onProgress?.call('reading the scenarios on both sides');
+    var scannedHead = source.scan(base: false);
+    var scannedBase = source.scan(base: true);
+    // Both sides empty is not an answer, it is the absence of one: a package
+    // whose scenarios the scan cannot see at all is exactly the case where
+    // the harness's refusal to build is the message, and short-circuiting
+    // here would replace it with a clean, silent, empty half.
+    if (scannedHead != null &&
+        scannedBase != null &&
+        (scannedHead.isNotEmpty || scannedBase.isNotEmpty)) {
+      var provisional = _decide(
+        headIds: scannedHead,
+        baseIds: scannedBase,
+        imports: imports,
+        digests: digests,
+      );
+      if (provisional.toRun.isEmpty) return provisional;
+    }
+
     // Both at once, because they are two harnesses: a separate checkout, a
     // separate build directory and a separate `flutter_tester` each, sharing
     // nothing but the machine. Asking one and then the other spent the base
@@ -177,9 +271,27 @@ class ScenariosRunner {
       source.list(base: false),
       source.list(base: true),
     ]);
-    var headIds = listed[0];
-    var baseIds = listed[1];
     cancel?.check();
+    return _decide(
+      headIds: listed[0],
+      baseIds: listed[1],
+      imports: imports,
+      digests: digests,
+    );
+  }
+
+  /// The plan two id listings imply — added, removed, skipped, and what is
+  /// left to replay.
+  ///
+  /// Pure and synchronous: whichever listing it is given, the deciding is the
+  /// same, which is what lets [plan] run it twice for the price of one digest
+  /// pass.
+  ScenariosPlan _decide({
+    required List<String> headIds,
+    required List<String> baseIds,
+    required ImportGraph imports,
+    required DigestCache digests,
+  }) {
     if (only case var only?) {
       headIds = [
         for (var id in headIds)
@@ -191,20 +303,9 @@ class ScenariosRunner {
       ];
     }
 
-    var imports =
-        graph ??
-        ImportGraph.read(
-          root: headRoot,
-          packageConfig: p.join(headRoot, '.dart_tool', 'package_config.json'),
-        );
-
     var settled = <ScenarioComparison>[];
     var toRun = <String>[];
     var reasons = <String>[];
-    // One pass's digests, so the library every scenario imports is hashed
-    // once rather than once per scenario. Scoped to this plan and no longer:
-    // see [DigestCache].
-    var digests = DigestCache();
     for (var id in headIds) {
       if (!baseIds.contains(id)) {
         settled.add(
@@ -212,7 +313,16 @@ class ScenariosRunner {
         );
         continue;
       }
-      cache.memo.remember(id, imports.closureOf(source.fileOf(id)));
+      // The scenario's own file and the folder config the harness wraps it
+      // in. Both decide what it draws, and only the first is named by
+      // anything the scenario imports — so both the closure and the reach
+      // are taken over the pair.
+      var file = source.fileOf(id);
+      var config = source.configOf(id);
+      cache.memo.remember(id, {
+        ...imports.closureOf(file),
+        if (config != null) ...imports.closureOf(config),
+      });
       var decision = SkipDecision.of(
         entryId: id,
         memo: cache.memo,
@@ -220,6 +330,10 @@ class ScenariosRunner {
         headRoot: headRoot,
         pixels: pixels,
         digests: digests,
+        lock: locks?.forPackages({
+          ...imports.packagesOf(file),
+          if (config != null) ...imports.packagesOf(config),
+        }),
       );
       if (decision.skip) {
         settled.add(

@@ -87,7 +87,7 @@ class ScenarioWebExporter {
     outputDir.createSync(recursive: true);
 
     onOutput?.call('[export] copying the viewer');
-    _bundle.copyTo(output);
+    _bundle.copyTo(output, offline: offline);
     setBaseHrefIn(p.join(output, 'index.html'), baseHref);
 
     onOutput?.call('[export] collecting the artifacts');

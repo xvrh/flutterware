@@ -66,9 +66,11 @@ class ViewerBundle {
       target,
       '--output',
       viewerDir,
-      // The page carries its own CanvasKit rather than fetching it from
-      // Google's CDN — for a CI artifact read behind a firewall, or after the
-      // engine revision it was built against stops being hosted.
+      // Offline makes the page carry its own CanvasKit rather than fetch it
+      // from Google's CDN — for an artifact read behind a firewall, or after
+      // the engine revision it was built against stops being hosted. Without
+      // it the engine still lands in the build output and [copyTo] leaves it
+      // there, because the page will never ask for it.
       if (offline) '--no-web-resources-cdn',
     ], onOutput);
     if (cancelled) return;
@@ -81,14 +83,38 @@ class ViewerBundle {
     }
   }
 
-  /// Copies the compiled bundle into [output].
-  void copyTo(String output) =>
-      _copyDirectory(Directory(viewerDir), Directory(output));
+  /// What `flutter build web` leaves behind whether or not the page will ever
+  /// ask for it.
+  ///
+  /// **38MB, and on a CDN page not one byte of it is fetched.** Measured on an
+  /// exported comparison 2026-09-10: `canvaskit/` was 37.9MB of a 66.7MB page,
+  /// and the browser loaded the engine from `www.gstatic.com` instead — which
+  /// is what a build without `--no-web-resources-cdn` tells it to do. The
+  /// directory is emitted regardless; it is only *used* by an offline build.
+  static const _localEngine = 'canvaskit';
 
-  static void _copyDirectory(Directory source, Directory destination) {
+  /// Copies the compiled bundle into [output].
+  ///
+  /// [offline] must be the value [build] was given: it decided whether the
+  /// page loads its engine from beside itself or from the CDN, and this
+  /// decides whether the engine is put there. They are one call apart in both
+  /// exporters for exactly that reason.
+  void copyTo(String output, {required bool offline}) => _copyDirectory(
+    Directory(viewerDir),
+    Directory(output),
+    skip: offline ? const {} : const {_localEngine},
+  );
+
+  static void _copyDirectory(
+    Directory source,
+    Directory destination, {
+    Set<String> skip = const {},
+  }) {
     for (var entity in source.listSync()) {
-      var target = p.join(destination.path, p.basename(entity.path));
+      var name = p.basename(entity.path);
+      var target = p.join(destination.path, name);
       if (entity is Directory) {
+        if (skip.contains(name)) continue;
         Directory(target).createSync(recursive: true);
         _copyDirectory(entity, Directory(target));
       } else if (entity is File) {

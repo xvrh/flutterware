@@ -11,6 +11,8 @@ import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/scenarios/network_mode.dart';
 
+import '../scenarios/discovery.dart';
+import '../scenarios/harness_entrypoint.dart';
 import '../scenarios/runner.dart';
 import '../embedder/build_directory.dart';
 import 'scenario_alignment.dart';
@@ -65,6 +67,27 @@ class ScenariosSide {
   static String idFor({required String file, required String scenario}) =>
       '$file#$scenario';
 
+  /// The `flutter_test_config.dart` that governs [id] in [checkout],
+  /// relative to the checkout root — or null where no folder config does.
+  ///
+  /// The harness imports it, so it decides what the scenario draws as surely
+  /// as the scenario's own file does: a theme, the fonts, the device. It is
+  /// not in the scenario's import closure — nothing the scenario writes names
+  /// it — so without this a change to it, or a bump to a package only it
+  /// imports, reached no scenario at all. Found with the same rule the harness
+  /// uses, [testConfigFolderFor], so the two cannot disagree about which file
+  /// that is.
+  String? configOf(String checkout, String id) {
+    var hash = id.indexOf('#');
+    var file = hash < 0 ? id : id.substring(0, hash);
+    var folder = testConfigFolderFor(
+      p.normalize(p.join(checkout, packagePath)),
+      file,
+    );
+    if (folder == null) return null;
+    return p.normalize(p.join(packagePath, folder, testConfigFileName));
+  }
+
   /// Where a scenario's source lives, relative to a checkout root.
   String fileOf(String id) {
     var hash = id.indexOf('#');
@@ -82,6 +105,34 @@ class ScenariosSide {
     for (var listing in await runner.list())
       idFor(file: listing.file, scenario: listing.name),
   ];
+
+  /// Every scenario [checkout] declares, read from its **sources**.
+  ///
+  /// The cheap twin of [scenarios], and the difference is the whole fixed cost
+  /// of this half: that one asks a live harness, which has to be generated,
+  /// compiled and booted first — on each side, before a single closure has
+  /// been looked at. This parses the very files that harness's entrypoint is
+  /// generated from, with the same scanner and the same root.
+  ///
+  /// Null where the scan cannot promise the whole set. A `scenario()` whose
+  /// name is *built* rather than written is invisible to a parser and present
+  /// in the harness's own listing, and a plan made from a listing one short
+  /// would call a scenario nobody removed removed. Tags and `skip:` are
+  /// missing from here too and do not matter: they decide what a replay does,
+  /// and whoever asks this is deciding whether to replay at all.
+  List<String>? scannedScenarios(String checkout) {
+    var scan = ScenarioScanner(
+      packageRoot: p.normalize(p.join(checkout, packagePath)),
+      directory: directory,
+    ).scan();
+    if (scan.unnamed > 0) return null;
+    // Duplicates are kept rather than folded: the harness lists a name
+    // declared twice twice, and a listing that disagrees with the one it
+    // stands in for is worse than no listing.
+    return [
+      for (var ref in scan.scenarios) idFor(file: ref.file, scenario: ref.name),
+    ];
+  }
 
   /// A runner for [checkout], building in a claimed directory of its own.
   ///

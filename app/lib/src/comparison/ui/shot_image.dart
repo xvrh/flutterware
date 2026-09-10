@@ -42,24 +42,28 @@ class ShotPair extends ChangeNotifier implements SettleSource {
   String? get busyWith => _pending > 0 ? 'loading frames' : null;
 
   /// Two frames the renderer filed, by `ShotCache` key.
-  Future<void> load({String? baseKey, String? headKey}) => _replace(
+  ///
+  /// [width] is the decode size — see [ShotStore.byKey]. A stage leaves it
+  /// null and gets the frame; a thumbnail names its own width and gets one.
+  Future<void> load({String? baseKey, String? headKey, int? width}) => _replace(
     baseId: baseKey,
     headId: headKey,
     decode: () => Future.wait([
-      baseKey == null ? Future.value(null) : store.byKey(baseKey),
-      headKey == null ? Future.value(null) : store.byKey(headKey),
+      baseKey == null ? Future.value(null) : store.byKey(baseKey, width: width),
+      headKey == null ? Future.value(null) : store.byKey(headKey, width: width),
     ]),
   );
 
   /// Two frames the replay wrote, by path — see [FrameRef].
-  Future<void> loadFrames({FrameRef? base, FrameRef? head}) => _replace(
-    baseId: base?.path,
-    headId: head?.path,
-    decode: () => Future.wait([
-      base == null ? Future.value(null) : store.byRef(base),
-      head == null ? Future.value(null) : store.byRef(head),
-    ]),
-  );
+  Future<void> loadFrames({FrameRef? base, FrameRef? head, int? width}) =>
+      _replace(
+        baseId: base?.path,
+        headId: head?.path,
+        decode: () => Future.wait([
+          base == null ? Future.value(null) : store.byRef(base, width: width),
+          head == null ? Future.value(null) : store.byRef(head, width: width),
+        ]),
+      );
 
   Future<void> _replace({
     required String? baseId,

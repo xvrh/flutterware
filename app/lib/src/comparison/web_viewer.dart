@@ -7,10 +7,12 @@ import 'package:http/http.dart' as http;
 
 import '../capture/settle.dart';
 import '../ui/empty_state.dart';
+import '../ui/age.dart';
 import '../ui/theme.dart';
 import '../utils/url_fragment.dart';
 import 'comparison_controller.dart';
 import 'shot_store_http.dart';
+import 'ui/findings_tab.dart';
 import 'ui/previews_tab.dart';
 import 'ui/scenarios_tab.dart';
 import 'ui/state_chip.dart';
@@ -56,7 +58,9 @@ class ComparisonWebViewer extends StatefulWidget {
 (String tab, String? selected)? parseViewerFragment(String fragment) {
   var slash = fragment.indexOf('/');
   var tab = slash < 0 ? fragment : fragment.substring(0, slash);
-  if (tab != 'previews' && tab != 'scenarios') return null;
+  if (tab != 'previews' && tab != 'scenarios' && tab != 'findings') {
+    return null;
+  }
   if (slash < 0) return (tab, null);
   var rest = fragment.substring(slash + 1);
   try {
@@ -159,10 +163,16 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
         ComparisonHalfKind.scenarios,
         stage: HalfStage.done,
       )..scenarios.addAll(index.scenarios);
-      if (!_addressed &&
-          index.previewItems.isEmpty &&
-          index.scenarios.isNotEmpty) {
-        _tab = 'scenarios';
+      // Findings first unless the link named a place. It is the answer to
+      // the question a reader arrives with, and it is empty exactly when
+      // there is no such question — in which case the halves are what is left
+      // to look at.
+      if (!_addressed) {
+        _tab = index.findings.isNotEmpty
+            ? 'findings'
+            : (index.previewItems.isEmpty && index.scenarios.isNotEmpty
+                  ? 'scenarios'
+                  : 'previews');
       }
     } catch (error) {
       _error = 'index.json could not be read:\n$error';
@@ -201,6 +211,7 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
     }
 
     var tabs = [
+      'findings',
       if (index.previewItems.isNotEmpty) 'previews',
       if (index.scenarios.isNotEmpty || index.scenariosNote != null)
         'scenarios',
@@ -228,6 +239,17 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
       );
     }
     var tab = tabs.contains(_tab) ? _tab : tabs.first;
+    if (tab == 'findings') {
+      return FindingsTab(
+        index: index,
+        store: _store,
+        onOpen: (tab, id) => setState(() {
+          _tab = tab;
+          _selected = id;
+          _writeAddress();
+        }),
+      );
+    }
     if (tab == 'scenarios' && index.scenarios.isEmpty) {
       return EmptyState(
         icon: Icons.route_outlined,
@@ -246,6 +268,7 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
             selected: _selected,
             onSelect: _selectRow,
             header: ComparisonVerdict.ofHalf(_previews!),
+            framesWithheld: index.framesWithheldFor,
           )
         : ScenariosTab(
             half: _scenarios!,
@@ -254,6 +277,7 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
             selected: _selected,
             onSelect: _selectRow,
             header: ComparisonVerdict.ofHalf(_scenarios!),
+            framesWithheld: index.framesWithheldFor,
           );
   }
 
@@ -266,10 +290,23 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
   }
 }
 
-/// `[ previews ][ scenarios ]  · chips ·  against master`.
+/// A receipt, then `[ findings ][ previews ][ scenarios ]  · chips ·`.
 ///
-/// The changes panel's strip, without the files tab: an exported page has no
-/// git to read, so the file diff stays where the repository is.
+/// The changes panel's strip, without the files tab — an exported page has no
+/// git to read, so the file diff stays where the repository is — over a line
+/// the panel does not need and this page cannot do without.
+///
+/// **The receipt is the page's provenance.** A reader arriving from a
+/// pull-request comment is looking at a page some workflow uploaded, and their
+/// first two questions are whether it still describes the branch and whether
+/// it still describes today. The page could answer neither: it knew the base
+/// ref and nothing else, and the only `head` in the file was the *path* of a
+/// worktree on somebody else's machine.
+///
+/// The chips count the **selected tab's** findings, not the comparison's. They
+/// used to count the comparison's while sitting over one half, so the
+/// scenarios tab read `Changes 0 · All 19` under a header saying `2 failed · 7
+/// changed` — numbers about the other tab.
 class _Header extends StatelessWidget {
   const _Header({
     required this.index,
@@ -283,32 +320,118 @@ class _Header extends StatelessWidget {
   final String selected;
   final ValueChanged<String> onSelect;
 
+  /// What the chips over [selected] count.
+  Map<ComparedState, int> get _counts {
+    var states = switch (selected) {
+      'previews' => index.previewItems.map((item) => item.state),
+      'scenarios' => index.scenarios.map((scenario) => scenario.state),
+      _ => [
+        ...index.previewItems.map((item) => item.state),
+        ...index.scenarios.map((scenario) => scenario.state),
+      ],
+    };
+    var counts = <ComparedState, int>{};
+    for (var state in states) {
+      if (isComparedFinding(state)) {
+        counts[state] = (counts[state] ?? 0) + 1;
+      }
+    }
+    return Map.fromEntries(
+      counts.entries.toList()
+        ..sort((a, b) => a.key.index.compareTo(b.key.index)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(
+          FwSpacing.xl,
+          FwSpacing.md,
+          FwSpacing.xl,
+          0,
+        ),
+        child: _Receipt(index),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(left: FwSpacing.xl, right: FwSpacing.xl),
+        child: Row(
+          children: [
+            for (var tab in tabs)
+              _TabButton(
+                label: tab,
+                selected: tab == selected,
+                onTap: () => onSelect(tab),
+              ),
+            const Spacer(),
+            for (var entry in _counts.entries)
+              Padding(
+                padding: const EdgeInsets.only(left: FwSpacing.xs),
+                child: StateChip(entry.key, count: entry.value),
+              ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+/// What this page is a report of: the two commits, the reach, and the clock.
+class _Receipt extends StatelessWidget {
+  const _Receipt(this.index);
+
+  final ComparisonIndex index;
+
+  static String _sha7(String sha) => sha.length > 7 ? sha.substring(0, 7) : sha;
+
   @override
   Widget build(BuildContext context) {
     var colors = context.colors;
-    return Padding(
-      padding: const EdgeInsets.only(left: FwSpacing.xl, right: FwSpacing.xl),
-      child: Row(
-        children: [
-          for (var tab in tabs)
-            _TabButton(
-              label: tab,
-              selected: tab == selected,
-              onTap: () => onSelect(tab),
+    var packages = {
+      ...index.previewsHalf.packages,
+      ...?index.scenariosHalf?.packages,
+    };
+    var compared = index.previewItems.length + index.scenarios.length;
+    var parts = [
+      '$compared compared',
+      if (packages.length > 1) 'across ${packages.length} packages',
+      if (index.ms > 0) 'in ${(index.ms / 1000).toStringAsFixed(1)}s',
+      // Rendered from the reader's own clock against the run's, so a page
+      // opened a week after the push says so rather than showing a date
+      // nobody subtracts in their head.
+      ?ageOf(index.at),
+    ];
+    return Row(
+      children: [
+        Expanded(
+          child: RichText(
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(
+              style: context.type.micro.copyWith(color: colors.mut),
+              children: [
+                // Head first, then base: "this, against that" is the sentence
+                // the reader is holding. Two bare shas side by side made
+                // whoever read it guess which was which.
+                if (index.headCommit case var head?) ...[
+                  TextSpan(
+                    text: _sha7(head),
+                    style: context.type.micro.copyWith(color: colors.ink),
+                  ),
+                  const TextSpan(text: ' '),
+                ],
+                const TextSpan(text: 'against '),
+                TextSpan(
+                  text: index.against,
+                  style: context.type.micro.copyWith(color: colors.ink),
+                ),
+                TextSpan(text: ' · ${parts.join(' · ')}'),
+              ],
             ),
-          const Spacer(),
-          for (var entry in index.findingCounts.entries)
-            Padding(
-              padding: const EdgeInsets.only(left: FwSpacing.xs),
-              child: StateChip(entry.key, count: entry.value),
-            ),
-          const Gap(FwSpacing.md),
-          Text(
-            'against ${index.against}',
-            style: context.type.micro.copyWith(color: colors.mut),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -313,4 +313,26 @@ void main() {
       );
     });
   });
+
+  // Two parsers disagreed: the CLI mapped `changed` itself, and the action
+  // handed the string to `ExportedFrames.fromName`, which reads the *file's*
+  // vocabulary and answered `all` for its own documented option.
+  group('--frames', () {
+    test('changed is the findings, on every surface', () {
+      expect(exportedFramesFromFlag('changed'), ExportedFrames.findings);
+    });
+
+    test('all, empty and absent are everything', () {
+      expect(exportedFramesFromFlag('all'), ExportedFrames.all);
+      expect(exportedFramesFromFlag(''), ExportedFrames.all);
+      expect(exportedFramesFromFlag(null), ExportedFrames.all);
+    });
+
+    // Refused rather than defaulted, which is what let the mismatch hide: an
+    // unknown value quietly exporting everything looks exactly like success.
+    test('anything else is refused', () {
+      expect(exportedFramesFromFlag('findings'), isNull);
+      expect(exportedFramesFromFlag('bogus'), isNull);
+    });
+  });
 }

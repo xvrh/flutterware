@@ -260,9 +260,19 @@ void main() {
     });
   });
 
-  test(
-    'an entry only one side has is added or removed, and never rendered',
-    () async {
+  // A verdict and a picture are two different needs, and this row has only
+  // one of them settled without work. The picture used to be skipped with the
+  // verdict, so the page said "Neither side rendered" over a preview the
+  // branch had just introduced — which is the row somebody opened the page
+  // for, with its head side sitting in the checkout.
+  group('an entry only one side has', () {
+    // The files exist where the side declares them: an added entry's closure
+    // is a file the base does not have, and that difference is what keeps its
+    // two keys apart.
+    late String base;
+    late String head;
+
+    setUp(() {
       side.declared[p.join(root.path, 'head')] = [
         'demo/a.dart#a',
         'demo/new.dart#fresh',
@@ -271,21 +281,86 @@ void main() {
         'demo/a.dart#a',
         'demo/old.dart#gone',
       ];
+      base = checkout('base', {'demo/a.dart': '1', 'demo/old.dart': '1'});
+      head = checkout('head', {'demo/a.dart': '1', 'demo/new.dart': '1'});
+    });
 
-      var files = {'demo/a.dart': '1'};
-      var result = await compare(
-        base: checkout('base', files),
-        head: checkout('head', files),
-      );
+    test('is added or removed without being compared', () async {
+      var result = await compare(base: base, head: head);
 
       expect(itemFor(result, 'demo/new.dart#fresh').state, ComparedState.added);
       expect(
         itemFor(result, 'demo/old.dart#gone').state,
         ComparedState.removed,
       );
+    });
+
+    test('is drawn on the side that has it, and only that side', () async {
+      await compare(base: base, head: head);
+
+      expect(side.renderedFor, [
+        ('demo/old.dart#gone', base),
+        ('demo/new.dart#fresh', head),
+      ]);
+    });
+
+    test('carries the keys its picture lands under', () async {
+      var result = await compare(base: base, head: head);
+
+      var added = itemFor(result, 'demo/new.dart#fresh');
+      expect(added.shots, isNotNull);
+      // The head key has bytes; the base key is the one for a file that side
+      // does not have, and nothing ever writes under it — which is what the
+      // stage reads as "this side rendered nothing".
+      expect(cache.has(added.shots!.head), isTrue);
+      expect(cache.has(added.shots!.base), isFalse);
+    });
+
+    // Before these rows were given pictures, a side nothing needed to render
+    // was never compiled — so a branch that only deleted an entry compared
+    // cleanly against a base that could not be built. Drawing the deleted
+    // entry must not be what refuses it.
+    test(
+      'whose side does not compile costs its picture, not the run',
+      () async {
+        side.declared[p.join(root.path, 'head')] = ['demo/a.dart#a'];
+        side.uncompilable.add(base);
+
+        var result = await compare(base: base, head: head);
+
+        expect(
+          itemFor(result, 'demo/old.dart#gone').state,
+          ComparedState.removed,
+        );
+      },
+    );
+
+    test('still refuses when the side was needed for a comparison', () async {
+      base = checkout('base', {'demo/a.dart': '2', 'demo/old.dart': '1'});
+      side.uncompilable.add(base);
+
+      expect(
+        () => compare(base: base, head: head),
+        throwsA(isA<ComparisonRefused>()),
+      );
+    });
+
+    // The picture is a bonus; the verdict must not wait for it.
+    test('is settled by the plan before anything renders', () async {
+      var plan = await ComparisonRunner(
+        headRoot: head,
+        baseRoot: base,
+        baseSha: 'abc123',
+        side: side,
+        cache: cache,
+      ).plan();
+
+      expect(plan.toRender, isEmpty);
+      expect(plan.onlyOnHead, ['demo/new.dart#fresh']);
+      expect(plan.onlyOnBase, ['demo/old.dart#gone']);
       expect(side.renderedFor, isEmpty);
-    },
-  );
+    });
+  });
 
   group('the channels reach the verdict', () {
     test('two identical pictures of changed code are still the same', () async {
@@ -588,6 +663,9 @@ class _FakeSide implements ComparisonSide {
   /// Entry id → a build that threw, leaving no frame.
   final fatal = <String, String>{};
 
+  /// Checkouts whose whole catalog does not compile.
+  final uncompilable = <String>{};
+
   @override
   Future<List<String>> entries(String checkout) async =>
       declared[checkout] ?? declared['*'] ?? const [];
@@ -598,6 +676,9 @@ class _FakeSide implements ComparisonSide {
     required List<String> entryIds,
     required Future<void> Function(RenderedEntry frame) onFrame,
   }) async {
+    if (uncompilable.contains(checkout)) {
+      throw SideDidNotCompile('lib/a.dart:1:1: Error: not found');
+    }
     var failed = <String, String>{};
     for (var entry in entryIds) {
       renderedFor.add((entry, checkout));

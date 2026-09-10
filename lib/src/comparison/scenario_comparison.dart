@@ -43,6 +43,7 @@ class ScenarioComparison {
     required this.branches,
     required this.state,
     this.frames = const {},
+    this.package,
   });
 
   /// A scenario that was never replayed — one that exists on a single side,
@@ -51,13 +52,21 @@ class ScenarioComparison {
   /// Present in the report rather than omitted, so the list of scenarios is
   /// the list of scenarios: a row that is missing tells a reader nothing, and
   /// "skipped" tells them the tool looked and found no reason to.
-  const ScenarioComparison.notRun({required this.scenario, required this.state})
-    : items = const [],
-      branches = const [],
-      frames = const {};
+  const ScenarioComparison.notRun({
+    required this.scenario,
+    required this.state,
+    this.package,
+  }) : items = const [],
+       branches = const [],
+       frames = const {};
 
   /// `<file>#<name>`.
   final String scenario;
+
+  /// Which package declared it, worktree-relative — the twin of
+  /// [ComparedItem.package], and recorded for the same reason. Its steps
+  /// carry none: they take theirs from here.
+  final String? package;
 
   /// One per step: matched pairs with their channels, plus the steps that
   /// exist on one side only.
@@ -77,12 +86,25 @@ class ScenarioComparison {
   /// how a reader ends up opening the wrong one.
   final Map<String, ({FrameRef? base, FrameRef? head})> frames;
 
+  /// The same scenario, addressed inside [package] — the twin of
+  /// [ComparedItem.inPackage], and the same rule.
+  ScenarioComparison inPackage(String package, {required bool qualify}) =>
+      ScenarioComparison(
+        scenario: qualify ? comparedIdIn(package, scenario) : scenario,
+        items: items,
+        branches: branches,
+        state: state,
+        frames: frames,
+        package: package,
+      );
+
   Map<String, Object?> toJson() => {
     // `id` rather than `scenario`, and `steps` alongside a preview's
     // `channels`: a reader walking the whole artifact should not need to know
     // which half a row came from to find out what it is called.
     'id': scenario,
     'state': state.name,
+    'package': ?package,
     if (branches.isNotEmpty)
       'branches': [
         for (var branch in branches)
@@ -133,6 +155,7 @@ class ScenarioComparison {
       state:
           ComparedState.values.asNameMap()[json['state']] ??
           ComparedState.skipped,
+      package: json['package'] as String?,
       items: items,
       frames: frames,
       branches: [

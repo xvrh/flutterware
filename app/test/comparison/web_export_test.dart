@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutterware/comparison_report.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
 import 'package:flutterware_app/src/comparison/web_export.dart';
 import 'package:image/image.dart' as img;
@@ -93,6 +94,133 @@ void main() {
         ],
       },
   };
+
+  // On a run where the skip rule did not earn its keep, an export is
+  // overwhelmingly pictures of rows that came out identical: measured at
+  // 18.1MB of unchanged frames against 1.5MB of findings.
+  group('a page of the findings alone', () {
+    Map<String, Object?> mixed() => {
+      'base': 'abc123def456',
+      'head': '/work/tree',
+      'previews': {
+        'items': [
+          {
+            'id': 'demo/card.dart#card',
+            'state': 'changed',
+            'shots': {'base': 'k-base', 'head': 'k-head'},
+          },
+          {
+            'id': 'demo/quiet.dart#quiet',
+            'state': 'same',
+            'shots': {'base': 'q-base', 'head': 'q-head'},
+          },
+        ],
+      },
+    };
+
+    setUp(() {
+      file('k-base', 40);
+      file('k-head', 200);
+      file('q-base', 90);
+      file('q-head', 90);
+    });
+
+    test('carries the findings and leaves the rest', () async {
+      var out = p.join(temp.path, 'page');
+      var export = await exporter.export(
+        index: mixed(),
+        cache: cache,
+        against: 'master',
+        output: out,
+        frames: ExportedFrames.findings,
+      );
+
+      expect(export.frames, 2);
+      expect(File(p.join(out, 'shots', 'k-head.png')).existsSync(), isTrue);
+      expect(File(p.join(out, 'shots', 'q-head.png')).existsSync(), isFalse);
+    });
+
+    // The verdict is not what was trimmed. Every row is still in the file
+    // with its state and its channels; a script over `index.json` sees what
+    // it always saw.
+    test('every row is still in the index', () async {
+      var out = p.join(temp.path, 'page');
+      await exporter.export(
+        index: mixed(),
+        cache: cache,
+        against: 'master',
+        output: out,
+        frames: ExportedFrames.findings,
+      );
+
+      var written = jsonDecode(
+        File(p.join(out, 'index.json')).readAsStringSync(),
+      ) as Map<String, Object?>;
+      var items = (written['previews']! as Map)['items'] as List;
+      expect(items, hasLength(2));
+      // And it says what it did, so a page reading this copy can tell a row
+      // whose picture was left out from one that never had a picture.
+      expect(written['exported'], 'findings');
+    });
+
+    test('a whole export says nothing about trimming', () async {
+      var out = p.join(temp.path, 'page');
+      await exporter.export(
+        index: mixed(),
+        cache: cache,
+        against: 'master',
+        output: out,
+      );
+
+      var written = jsonDecode(
+        File(p.join(out, 'index.json')).readAsStringSync(),
+      ) as Map<String, Object?>;
+      expect(written.containsKey('exported'), isFalse);
+      expect(File(p.join(out, 'shots', 'q-head.png')).existsSync(), isTrue);
+    });
+
+    // A scenario is a picture per step laid out as one graph, and dropping
+    // the unchanged steps out of a flow that is a finding would leave the
+    // reader panning across holes.
+    test('a finding scenario keeps every step it has', () async {
+      var frame = writeFrame('pay.raw', 120);
+      var out = p.join(temp.path, 'page');
+      await exporter.export(
+        index: {
+          ...mixed(),
+          'scenarios': {
+            'items': [
+              {
+                'id': 'test/shop.dart#Checkout',
+                'state': 'changed',
+                'steps': [
+                  {
+                    'id': 'guest › Open',
+                    'state': 'same',
+                    'frames': {
+                      'head': {'path': frame, 'width': 4, 'height': 4},
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        cache: cache,
+        against: 'master',
+        output: out,
+        frames: ExportedFrames.findings,
+      );
+
+      // The step is `same` and its scenario is not, so its frame travels.
+      expect(
+        Directory(p.join(out, 'frames'))
+            .listSync(recursive: true)
+            .whereType<File>(),
+        isNotEmpty,
+      );
+    });
+  });
 
   test('the page holds the viewer, the index and a PNG per frame', () async {
     file('k-base', 40);

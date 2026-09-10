@@ -4,6 +4,8 @@ import 'package:flutterware_app/src/comparison/base_checkout.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/lock_holder.dart';
+
 /// The other side of a comparison, on disk: checked out once per commit,
 /// shared by every worktree on the machine, and disposable.
 void main() {
@@ -162,6 +164,116 @@ void main() {
 
     expect(Directory(base.path).existsSync(), isFalse);
     expect(await git(['worktree', 'list']), isNot(contains(base.path)));
+  });
+
+  // Measured on one machine before this existed: `~/.flutterware/bases` was
+  // **12GB across 45 checkouts**, several of them half a gigabyte, and
+  // `dispose` carried a confession that nothing called it on a schedule.
+  group('the sweep', () {
+    /// Ages [base]'s marker by moving its mtime back.
+    void age(String base, Duration by) {
+      var marker = File(p.join(base, '.flutterware-base'));
+      marker.setLastModifiedSync(DateTime.now().subtract(by));
+    }
+
+    Future<BaseCheckout> checkout(String sha) =>
+        BaseCheckout.ensure(repoRoot: repo, sha: sha, cacheRoot: cache);
+
+    test('drops a base nothing has asked for', () async {
+      var sha = await git(['rev-parse', 'HEAD']);
+      var base = await checkout(sha);
+      age(base.path, const Duration(days: 30));
+
+      var swept = await BaseCheckout.sweep(repoRoot: repo, cacheRoot: cache);
+
+      expect(swept, 1);
+      expect(Directory(base.path).existsSync(), isFalse);
+      // And git no longer believes in it, which is the half a plain delete
+      // would have left behind.
+      expect(await git(['worktree', 'list']), isNot(contains(base.path)));
+      // The lock file stays. Deleting one another process has open lets a
+      // third create a fresh inode under the same name — two holders of "the"
+      // lock — and an empty file costs nothing.
+      expect(File('${base.path}.lock').existsSync(), isTrue);
+    });
+
+    // A comparison reusing an old base holds its lock while it renders; the
+    // sweep used to `worktree remove --force` it regardless, on the strength
+    // of an mtime it had read a moment before.
+    test('leaves a base somebody holds, however old', () async {
+      var sha = await git(['rev-parse', 'HEAD']);
+      var base = await checkout(sha);
+      age(base.path, const Duration(days: 30));
+      await holdLock('${base.path}.lock');
+
+      expect(await BaseCheckout.sweep(repoRoot: repo, cacheRoot: cache), 0);
+      expect(Directory(base.path).existsSync(), isTrue);
+    });
+
+    test('keeps one inside the window', () async {
+      var sha = await git(['rev-parse', 'HEAD']);
+      var base = await checkout(sha);
+      age(base.path, const Duration(days: 3));
+
+      expect(await BaseCheckout.sweep(repoRoot: repo, cacheRoot: cache), 0);
+      expect(Directory(base.path).existsSync(), isTrue);
+    });
+
+    // A base off master is written once and reused by every comparison
+    // against it for weeks. On the mtime it was *created* at, that is exactly
+    // what an age sweep would take first.
+    test('reuse is what keeps a base alive, not creation', () async {
+      var sha = await git(['rev-parse', 'HEAD']);
+      var base = await checkout(sha);
+      age(base.path, const Duration(days: 30));
+
+      // Asking for it again is the touch.
+      await checkout(sha);
+
+      expect(await BaseCheckout.sweep(repoRoot: repo, cacheRoot: cache), 0);
+      expect(Directory(base.path).existsSync(), isTrue);
+    });
+
+    test('never the base the run is about to use', () async {
+      var sha = await git(['rev-parse', 'HEAD']);
+      var base = await checkout(sha);
+      age(base.path, const Duration(days: 30));
+
+      var swept = await BaseCheckout.sweep(
+        repoRoot: repo,
+        cacheRoot: cache,
+        keep: base.path,
+      );
+
+      expect(swept, 0);
+      expect(Directory(base.path).existsSync(), isTrue);
+    });
+
+    // Half-built, and somebody's: `_ensureLocked` throws these away when it
+    // meets one under its own lock, which is the only place that knows
+    // whether a run is still inside it.
+    test('leaves a checkout that never finished resolving', () async {
+      var half = Directory(p.join(cache, 'deadbeef'))
+        ..createSync(recursive: true);
+
+      expect(await BaseCheckout.sweep(repoRoot: repo, cacheRoot: cache), 0);
+      expect(half.existsSync(), isTrue);
+    });
+
+    // It cannot be forgotten, which is the whole argument for putting it
+    // here rather than on a schedule.
+    test('every checkout sweeps its siblings', () async {
+      var first = await git(['rev-parse', 'HEAD']);
+      var stale = await checkout(first);
+      age(stale.path, const Duration(days: 30));
+
+      File(p.join(repo, 'card.dart')).writeAsStringSync('const card = 3;');
+      await git(['add', '.']);
+      await git(['commit', '-m', 'second']);
+      await checkout(await git(['rev-parse', 'HEAD']));
+
+      expect(Directory(stale.path).existsSync(), isFalse);
+    });
   });
 
   // Base checkouts are real git worktrees, so the explorer — whose whole

@@ -229,8 +229,8 @@ void main() {
 /// scenario that was never replayed has no frames to open anyway.
 class _NoShots implements ShotStore {
   @override
-  Future<Shot?> byKey(String key) async => null;
+  Future<Shot?> byKey(String key, {int? width}) async => null;
 
   @override
-  Future<Shot?> byRef(FrameRef ref) async => null;
+  Future<Shot?> byRef(FrameRef ref, {int? width}) async => null;
 }

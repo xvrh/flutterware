@@ -21,6 +21,30 @@ const comparisonReportFile = 'index.json';
 /// anything" is a question about the branch.
 enum ComparedHalfKind { previews, scenarios }
 
+/// Which of a report's frames were written beside it.
+///
+/// An export is read where nobody has the shot cache, so every frame it wants
+/// to show has to be encoded into it — and on a run where the skip rule did
+/// not earn its keep, that is overwhelmingly frames of rows that came out
+/// **identical**. Measured on one export 2026-09-10: 18.1MB of preview frames
+/// for 220 unchanged entries, against 1.5MB for the 24 findings.
+///
+/// So an export can carry the findings' frames alone. The verdict is
+/// untouched either way — every row is still in the file with its state and
+/// its channels — and this is how a reader tells a row whose picture was left
+/// out from a row that never had one. Without it the page says "neither side
+/// rendered" over an entry both sides rendered perfectly well.
+enum ExportedFrames {
+  /// Every frame the report names.
+  all,
+
+  /// The findings' frames only — rows that are neither `same` nor `skipped`.
+  findings;
+
+  static ExportedFrames fromName(Object? name) =>
+      name == 'findings' ? ExportedFrames.findings : ExportedFrames.all;
+}
+
 /// Where the frames a report names actually are.
 ///
 /// The one thing that separates the two files both called `index.json`, and
@@ -59,6 +83,7 @@ class ComparedHalf {
     this.ms = 0,
     this.counts = const {},
     this.because = const {},
+    this.packages = const [],
     this.note,
   });
 
@@ -85,6 +110,15 @@ class ComparedHalf {
   /// nothing to explain.
   final Map<String, int> because;
 
+  /// Which packages this half covered, worktree-relative and in the order
+  /// they were compared.
+  ///
+  /// What lets a page say *across 3 packages* and a reader tell a comparison
+  /// that covered a repository from one that covered a corner of it — a
+  /// question the row ids answer only by being read in full and counted.
+  /// Empty on a comparison written before one could span several.
+  final List<String> packages;
+
   /// Why this half has nothing to say, when it has nothing to say.
   ///
   /// A harness that would not build leaves the same empty list as a project
@@ -108,6 +142,9 @@ class ComparedHalf {
         for (var entry in (json['because'] as Map? ?? const {}).entries)
           '${entry.key}': entry.value as int? ?? 0,
       },
+      packages: [
+        for (var package in json['packages'] as List? ?? const []) '$package',
+      ],
       note: json['note'] as String?,
     );
   }
@@ -128,10 +165,15 @@ class ComparedFinding {
     this.note,
     this.preview,
     this.scenario,
+    this.package,
   });
 
   /// The entry id, or the scenario id.
   final String id;
+
+  /// Which package it came from, worktree-relative, or null on a comparison
+  /// that recorded none — see [ComparedItem.package].
+  final String? package;
 
   final ComparedHalfKind half;
   final ComparedState state;
@@ -169,6 +211,7 @@ List<ComparedFinding> rankComparedFindings({
             half: ComparedHalfKind.previews,
             state: item.state,
             note: item.note,
+            package: item.package,
             preview: item,
           ),
       for (var scenario in scenarios)
@@ -177,6 +220,7 @@ List<ComparedFinding> rankComparedFindings({
             id: scenario.scenario,
             half: ComparedHalfKind.scenarios,
             state: scenario.state,
+            package: scenario.package,
             scenario: scenario,
           ),
     ]..sort(
@@ -229,12 +273,22 @@ List<ComparedFinding> rankComparedFindings({
 /// permanent gap no change on the branch can lift.
 String? verdictGapOf({
   String? scenariosNote,
+  String? previewsNote,
   Iterable<ComparedState> scenarioStates = const [],
   Iterable<ComparedState> previewStates = const [],
   bool narrowed = false,
 }) {
   if (scenariosNote case var note?) {
     return 'the scenario half produced no verdict — ${note.split('\n').first}';
+  }
+  // The previews half records one for the same reason the scenario half does,
+  // and only since a comparison could span several packages: a package whose
+  // catalog will not compile used to end the whole run, which is the right
+  // answer when it is the only package and the wrong one when three others
+  // compared cleanly. Its rows are simply absent, and absence is what a note
+  // exists to explain.
+  if (previewsNote case var note?) {
+    return 'the previews half produced no verdict — ${note.split('\n').first}';
   }
   if (narrowed) return null;
   return _uniformGap('scenario', 'scenarios', scenarioStates) ??
@@ -271,9 +325,12 @@ class ComparisonIndex {
     required this.previewItems,
     required this.scenarios,
     this.head,
+    this.headCommit,
+    this.at,
     this.ms = 0,
     this.counts = const {},
     this.frames = ComparisonFrames.local,
+    this.exported = ExportedFrames.all,
     this.narrowed = false,
     this.previewsHalf = const ComparedHalf(),
     this.scenariosHalf,
@@ -290,9 +347,19 @@ class ComparisonIndex {
   /// export wrote one, the abbreviated sha where it did not.
   final String against;
 
-  /// The worktree the comparison ran in. Absent from an export, which is read
-  /// somewhere else by definition.
+  /// The worktree the comparison ran in — a **path**, and so meaningless off
+  /// the machine that ran it. [headCommit] is the one a reader elsewhere can
+  /// use.
   final String? head;
+
+  /// Where HEAD sat when the comparison ran, and when it ran.
+  ///
+  /// What a page reached from a pull-request comment answers first: whether it
+  /// still describes the branch, and whether it still describes today. Absent
+  /// from a comparison written before either was recorded.
+  final String? headCommit;
+
+  final DateTime? at;
 
   /// Both halves together.
   final int ms;
@@ -304,6 +371,20 @@ class ComparisonIndex {
 
   /// Whether the frames this file names can be opened from beside it.
   final ComparisonFrames frames;
+
+  /// Which of them were written there — see [ExportedFrames]. Always
+  /// [ExportedFrames.all] for a report that was never exported, whose frames
+  /// are wherever the run left them.
+  final ExportedFrames exported;
+
+  /// Whether a row in [state] is one whose frames this report chose not to
+  /// carry.
+  ///
+  /// The question a stage has to ask before it says a side drew nothing: on a
+  /// findings-only export an unchanged row has no frames beside the file and
+  /// had two perfectly good ones on the machine that ran it.
+  bool framesWithheldFor(ComparedState state) =>
+      exported == ExportedFrames.findings && !isComparedFinding(state);
 
   /// Whether the run was narrowed to named entries (`--entry`).
   ///
@@ -355,6 +436,11 @@ class ComparisonIndex {
           json['against'] as String? ??
           (base.length > 8 ? base.substring(0, 8) : base),
       head: json['head'] as String?,
+      headCommit: json['headCommit'] as String?,
+      at: switch (json['at']) {
+        String at => DateTime.tryParse(at),
+        _ => null,
+      },
       ms: json['ms'] as int? ?? 0,
       counts: _counts(json['counts']),
       // Absent means `local`: that is what every file written before this key
@@ -362,6 +448,7 @@ class ComparisonIndex {
       frames: json['frames'] == 'relative'
           ? ComparisonFrames.relative
           : ComparisonFrames.local,
+      exported: ExportedFrames.fromName(json['exported']),
       narrowed: json['narrowed'] == true,
       previewsHalf: ComparedHalf.fromJson(previews),
       scenariosHalf: scenarios == null
@@ -406,6 +493,7 @@ class ComparisonIndex {
   /// verdict about the branch.
   String? get verdictGap => verdictGapOf(
     scenariosNote: scenariosNote,
+    previewsNote: previewsHalf.note,
     scenarioStates: scenarios.map((scenario) => scenario.state),
     previewStates: previewItems.map((item) => item.state),
     narrowed: narrowed,

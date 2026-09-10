@@ -44,13 +44,26 @@ class ScenarioRef {
 }
 
 class ScenarioScanResult {
-  ScenarioScanResult({required this.scenarios, required this.diagnostics});
+  ScenarioScanResult({
+    required this.scenarios,
+    required this.diagnostics,
+    this.unnamed = 0,
+  });
 
   final List<ScenarioRef> scenarios;
 
   /// What the scan noticed but did not act on — a non-literal name it cannot
   /// list, a duplicate. Never guessed at, always reported.
   final List<String> diagnostics;
+
+  /// How many `scenario(…)` calls the scan found and could not name.
+  ///
+  /// Each is a line in [diagnostics] as well, and this is the same fact for a
+  /// reader who has to *act* on it rather than print it: zero means this
+  /// listing is the whole set, and anything else means it is a subset of what
+  /// the harness would report. A duplicate is not one of these — it is
+  /// ambiguous, not missing, and the listing still holds it.
+  final int unnamed;
 }
 
 /// Finds scenarios by **parsing** the scenario directory, never by resolving
@@ -75,6 +88,7 @@ class ScenarioScanner {
   ScenarioScanResult scan() {
     var scenarios = <ScenarioRef>[];
     var diagnostics = <String>[];
+    var unnamed = 0;
 
     var root = p.join(packageRoot, directory);
     if (Directory(root).existsSync()) {
@@ -89,15 +103,21 @@ class ScenarioScanner {
         var source = file.readAsStringSync();
         // A substring prefilter before parsing, as the catalog scanner does.
         if (!source.contains('scenario(')) continue;
-        _scanFile(file, source, scenarios, diagnostics);
+        unnamed += _scanFile(file, source, scenarios, diagnostics);
       }
     }
 
     _reportDuplicates(scenarios, diagnostics);
-    return ScenarioScanResult(scenarios: scenarios, diagnostics: diagnostics);
+    return ScenarioScanResult(
+      scenarios: scenarios,
+      diagnostics: diagnostics,
+      unnamed: unnamed,
+    );
   }
 
-  void _scanFile(
+  /// Adds one file's scenarios to [scenarios] and returns how many calls in it
+  /// could not be named — see [ScenarioScanResult.unnamed].
+  int _scanFile(
     File file,
     String source,
     List<ScenarioRef> scenarios,
@@ -108,6 +128,7 @@ class ScenarioScanner {
 
     var visitor = _ScenarioCallVisitor();
     parsed.unit.accept(visitor);
+    var unnamed = 0;
     for (var call in visitor.calls) {
       var line = parsed.lineInfo.getLocation(call.offset).lineNumber;
       var endLine = parsed.lineInfo.getLocation(call.end).lineNumber;
@@ -117,12 +138,14 @@ class ScenarioScanner {
           '$path:$line: scenario name is not a string literal, so it cannot '
           'be listed without running the file',
         );
+        unnamed++;
         continue;
       }
       scenarios.add(
         ScenarioRef(name: name, file: path, line: line, endLine: endLine),
       );
     }
+    return unnamed;
   }
 
   /// Two scenarios with one name are both real, and the name is only

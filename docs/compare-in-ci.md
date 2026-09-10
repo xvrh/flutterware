@@ -47,13 +47,16 @@ comparison:
     - uses: actions/checkout@v4
       with: { fetch-depth: 0 } # the base is the merge base; a shallow clone has none
     - uses: subosito/flutter-action@v2
-    - name: Cache the shot cache
+    - name: Cache the pictures and the seed kernel
       uses: actions/cache@v4
       with:
-        path: ~/.flutterware/shots
-        key: fw-shots-${{ runner.os }}
+        path: |
+          ~/.flutterware/shots
+          ~/.flutterware/kernels
+        key: fw-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+        restore-keys: fw-${{ runner.os }}-
     - name: Compare
-      run: dart run flutterware compare --report=comparison-report
+      run: dart run flutterware compare --report=comparison-report --frames=changed
     - name: Host the report
       env: { PR: ${{ github.event.number }} }
       run: |
@@ -95,13 +98,78 @@ precisely so a workflow can find its own comment and update it rather than
 stack a new one per push; the footer's `@<sha>` says which push the report
 still describes.
 
+## Several packages, one comment
+
+`fw compare` covers **every** package either half declares — previews in
+`app` and `packages/gallery`, scenarios in `app` and `packages/notes` — and
+writes one `index.json`, one `comment.md` and one page for all of them. There
+is nothing to configure and no reason to run it once per package; doing so
+would produce a comment each, and each run would overwrite the last one's
+artifact.
+
+`--package=` narrows, and it is repeatable:
+
+```sh
+dart run flutterware compare --package=app --package=packages/notes
+```
+
+Two things change in the output when a run covers more than one package, and
+nothing changes when it covers one:
+
+- **A row's id carries its package** — `packages/gallery/demo/card.dart#card`,
+  which is the file's path plus the name it was declared under. Without it two
+  packages that both declare `demo/card.dart#card` are one row.
+- **A row also carries a `package` field**, recorded whether or not the id was
+  qualified, so a script over `index.json` never has to take an id apart.
+
+A package whose catalog or harness will not compile against the base is one
+package's worth of silence, not the end of the run: the others still report,
+the half records a note naming the package and the compiler's output, and the
+comment leads with **no verdict** so the failure cannot read as a pass. `fw
+compare` still exits non-zero. When it is the *only* package, it is still the
+whole comparison — the command prints the diagnostics and exits 64.
+
+Packages are compared one at a time. Each is two `frontend_server`s and two
+guests, and a runner sized for one build will not hold four of those at once;
+since the scenario half stopped building harnesses it does not need, a package
+a branch did not touch costs milliseconds anyway.
+
+## Why `--frames=changed`
+
+The page has to carry every picture it shows, because it is read where nobody
+has the shot cache — and on a run where the skip rule did not earn its keep,
+almost all of them are pictures of rows that came out **identical**. Measured
+on one export: 18.1MB of frames for 220 unchanged entries against 1.5MB for
+the 24 findings.
+
+`--frames=changed` writes the findings' frames only. The verdict is untouched
+— every row is still in `index.json` with its state and its channels, and a
+script over the file sees exactly what it saw before — and an unchanged entry
+opens on a sentence saying its picture was left out rather than pretending
+nothing rendered. A scenario that *is* a finding keeps every one of its steps,
+holes and all being worse than weight.
+
+Leave it off for a page somebody browses rather than gates on: without the
+frames it cannot show you what a branch did not touch, which is a real thing
+to want to see. That is why the default is `all`.
+
 ## What to know before turning it on
 
-- **The shot cache is the whole performance story, and CI starts cold.**
-  Locally the skip rule plus a warm `~/.flutterware/shots` answers most
-  entries in milliseconds; a runner without the cache renders *both sides of
-  every entry, every run*. Cache `~/.flutterware/shots` (as above) and the
-  second run is back to skip-rule speed.
+- **The two caches, and what each buys.** `~/.flutterware/shots` holds the
+  rendered pictures, content-addressed: without it a runner renders *both
+  sides of every entry, every run*, and with it the skip rule answers most
+  entries in milliseconds. `~/.flutterware/kernels` holds the **seed kernel** —
+  a compiled kernel of the half of the program no checkout owns, the SDK and
+  the pub cache — and it is what a cold harness compile starts from instead of
+  starting from nothing. Measured on this repository, a scenario harness
+  compiled cold took 60s and the same one starting from a seed came up inside
+  a 9s half. The `restore-keys` line matters: a lockfile change should reuse
+  the previous run's cache and write a new one, not start empty.
+- **Do not cache `~/.flutterware/bases`.** The base checkout is a real
+  `git worktree`, registered inside the repository's own `.git` — which a
+  fresh CI checkout does not have, so a restored one is a directory git does
+  not believe in. It is also disposable by design: it gets checked out again
+  in seconds, and the pictures that took the time are in the shot cache.
 - **`fetch-depth: 0`.** The base is the merge base with the default branch; a
   shallow clone has no common commit and the compare refuses, naming the ref.
 - **The very first comment of a repository may briefly 404 its page link**:
@@ -110,3 +178,8 @@ still describes.
   cannot run the page — it has to be served, and the branch is the serving.
 - **Old directories are just directories.** A closed pull request's `pr-N/`
   on the branch is linked by nothing; delete whenever the branch feels heavy.
+- **The page fetches its rendering engine from `www.gstatic.com`**, so a
+  runner behind a firewall that blocks it gets a blank page. The engine is
+  ~38MB and is *not* copied into the export for exactly that reason; there is
+  no flag here that changes it, and the scenario export's *Offline* toggle is
+  the one place that does.

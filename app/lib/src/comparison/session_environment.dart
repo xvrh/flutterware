@@ -123,14 +123,21 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       session.session.coreById(scenariosPluginId) as ScenariosCore?;
 
   @override
-  bool get hasPreviews => _previewsPackage != null;
+  bool get hasPreviews => _previewsPackages.isNotEmpty;
 
   @override
-  bool get hasScenarios => _scenariosPackage != null;
+  bool get hasScenarios => _scenariosPackages.isNotEmpty;
 
-  String? get _previewsPackage => _previews?.packages.firstOrNull;
+  List<String> get _previewsPackages => _previews?.packages ?? const [];
 
-  String? get _scenariosPackage => _scenarios?.packages.firstOrNull;
+  List<String> get _scenariosPackages => _scenarios?.packages ?? const [];
+
+  /// Whether a row's id carries the package that declared it — the same
+  /// question `runComparison` asks, and it has to be asked the same way: the
+  /// panel and `fw compare` write into the same `index.json`, so an id that
+  /// means one thing here and another there is a deep link that lands
+  /// nowhere.
+  bool get _qualify => {..._previewsPackages, ..._scenariosPackages}.length > 1;
 
   /// A package's path relative to the checkout top level.
   String _relative(String packageInWorktree) => p.relative(
@@ -191,19 +198,56 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
     void Function(String phase)? onProgress,
     CancelToken? cancel,
   }) async {
-    var runner = _previewsRunner(
-      baseRoot,
-      onItem: onRow,
-      onPlan: onPlan == null
-          ? null
-          : (plan) => onPlan(plan.total, plan.toRender),
-      onProgress: onProgress,
-      cancel: cancel,
-    );
-    if (runner == null) {
-      throw StateError('no package declares previews');
+    var packages = _previewsPackages;
+    if (packages.isEmpty) throw StateError('no package declares previews');
+    var qualify = _qualify;
+    var watch = Stopwatch()..start();
+    var results = <ComparisonResult>[];
+    var refusals = <String, String>{};
+    // Serial, and `runComparison` says why at length: a package is two
+    // compilers and two guests, and the packages a branch did not touch are
+    // nearly free now anyway.
+    // The total accumulates, because it sizes a bar that spans every package.
+    // The ids owed an answer do **not**: `ComparisonHalf.plan` replaces its
+    // pending list rather than adding to it, and by the time the next package
+    // plans the previous one has answered everything it owed — so handing the
+    // running list over put every finished row back under STILL RENDERING
+    // beside itself until the whole half ended.
+    var total = 0;
+    for (var package in packages) {
+      if (packages.length > 1) onProgress?.call('previews in $package');
+      var runner = _previewsRunner(
+        baseRoot,
+        package: package,
+        onItem: (row) => onRow(row.inPackage(package, qualify: qualify)),
+        onPlan: onPlan == null
+            ? null
+            : (plan) {
+                total += plan.total;
+                onPlan(total, [
+                  for (var id in plan.toRender)
+                    qualify ? comparedIdIn(package, id) : id,
+                ]);
+              },
+        onProgress: onProgress,
+        cancel: cancel,
+      );
+      try {
+        results.add((await runner.run()).inPackage(package, qualify: qualify));
+      } on ComparisonRefused catch (e) {
+        refusals[package] = '$e';
+      }
     }
-    return runner.run();
+    if (results.isEmpty && refusals.isNotEmpty) {
+      throw ComparisonRefused(refusals.values.first);
+    }
+    return ComparisonResult.merged(
+      results,
+      baseSha: base.sha,
+      headRoot: topLevel,
+      elapsed: watch.elapsed,
+      refusals: refusals,
+    );
   }
 
   @override
@@ -214,53 +258,114 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
     void Function(String phase)? onProgress,
     CancelToken? cancel,
   }) async {
-    var side = _scenariosSide();
-    if (side == null) throw StateError('no package declares scenarios');
-    onProgress?.call('building a scenario harness for each side');
-    var source = LiveScenarioSource(
-      side: side,
-      headRoot: topLevel,
-      baseRoot: baseRoot,
-    );
-    try {
-      return await ScenariosRunner(
+    var packages = _scenariosPackages;
+    if (packages.isEmpty) throw StateError('no package declares scenarios');
+    var qualify = _qualify;
+    var watch = Stopwatch()..start();
+    var halves = <({String package, ScenarioResults results})>[];
+    var failures = <(Object, StackTrace)>[];
+    var total = 0;
+    for (var package in packages) {
+      if (packages.length > 1) onProgress?.call('scenarios in $package');
+      var side = _scenariosSide(package);
+      // Nothing is narrated per side any more. This used to promise a harness
+      // per side before the runner had decided whether it needed one, and the
+      // run that needs none now never builds one — see `ScenariosRunner.plan`.
+      var source = LiveScenarioSource(
+        side: side,
         headRoot: topLevel,
         baseRoot: baseRoot,
-        source: source,
-        cache: _cache,
-        pixels: PixelInputs.of(
-          packagePath: side.packagePath,
-          roots: [topLevel, baseRoot],
-        ),
-        onScenario: onScenario,
-        onPlan: onPlan == null
-            ? null
-            : (plan) => onPlan(plan.total, plan.toRun),
-        onProgress: onProgress,
-        cancel: cancel,
-      ).run(
-        outDir: p.join(
-          comparisonDirFor(cacheRoot, session.worktree),
-          'scenarios',
-        ),
       );
-    } finally {
-      // Two `flutter_tester` processes and a build directory each. A panel
-      // that navigated away mid-run would leak both without this.
-      await source.dispose();
+      try {
+        var results =
+            await ScenariosRunner(
+              headRoot: topLevel,
+              baseRoot: baseRoot,
+              source: source,
+              cache: _cache,
+              pixels: PixelInputs.of(
+                packagePath: side.packagePath,
+                roots: [topLevel, baseRoot],
+              ),
+              locks: LockSides(
+                packagePath: side.packagePath,
+                roots: [topLevel, baseRoot],
+              ),
+              onScenario: (scenario) =>
+                  onScenario(scenario.inPackage(package, qualify: qualify)),
+              onPlan: onPlan == null
+                  ? null
+                  : (plan) {
+                      // This package's ids only — see `runPreviews`.
+                      total += plan.total;
+                      onPlan(total, [
+                        for (var id in plan.toRun)
+                          qualify ? comparedIdIn(package, id) : id,
+                      ]);
+                    },
+              onProgress: onProgress,
+              cancel: cancel,
+            ).run(
+              // Per package: two packages' `test/scenarios/shop_test.dart` are two
+              // different files, and one directory would have them writing each
+              // other's frames.
+              outDir: p.join(
+                comparisonDirFor(cacheRoot, session.worktree),
+                'scenarios',
+                side.packagePath,
+              ),
+            );
+        halves.add((
+          package: package,
+          results: results.inPackage(package, qualify: qualify),
+        ));
+      } on ComparisonCancelled {
+        // Stop is the controller's to handle, and it must reach it: swallowed
+        // here it would read as a package that failed.
+        rethrow;
+      } on Object catch (error, stack) {
+        // A package whose harness will not build is that package's silence,
+        // exactly as `fw compare` records it — the two surfaces answer one
+        // comparison, and the panel used to refuse the whole half over one
+        // package the CLI reported a note for. Still thrown when it is the
+        // *only* failure mode on offer, below.
+        failures.add((error, stack));
+        halves.add((
+          package: package,
+          results: ScenarioResults.of(
+            items: const [],
+            ran: 0,
+            skipped: 0,
+            elapsed: Duration.zero,
+            note: '$error',
+          ),
+        ));
+      } finally {
+        // Two `flutter_tester` processes and a build directory each, where
+        // one was built. A panel that navigated away mid-run would leak both
+        // without this.
+        await source.dispose();
+      }
     }
+    // Every package failed: there is no half to show, and the panel's
+    // refusal — what a single broken package always produced — is still the
+    // right answer. The previews half makes the same call.
+    if (failures.length == packages.length) {
+      var (error, stack) = failures.first;
+      Error.throwWithStackTrace(error, stack);
+    }
+    return ScenarioResults.merged(halves, elapsed: watch.elapsed);
   }
 
-  ComparisonRunner? _previewsRunner(
+  ComparisonRunner _previewsRunner(
     String baseRoot, {
+    required String package,
     void Function(ComparedItem)? onItem,
     void Function(ComparisonPlan)? onPlan,
     void Function(String)? onProgress,
     CancelToken? cancel,
   }) {
-    var core = _previews;
-    var package = _previewsPackage;
-    if (core == null || package == null) return null;
+    var core = _previews!;
     return ComparisonRunner(
       headRoot: topLevel,
       baseRoot: baseRoot,
@@ -281,10 +386,8 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
     );
   }
 
-  ScenariosSide? _scenariosSide() {
-    var core = _scenarios;
-    var package = _scenariosPackage;
-    if (core == null || package == null) return null;
+  ScenariosSide _scenariosSide(String package) {
+    var core = _scenarios!;
     return ScenariosSide(
       flutterSdkRoot: flutterSdk.root,
       packagePath: _relative(package),

@@ -7,6 +7,7 @@ import 'package:flutterware_app/src/comparison/scenario_diff.dart';
 import 'package:flutterware_app/src/comparison/scenario_alignment.dart';
 import 'package:flutterware_app/src/comparison/scenarios_runner.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
+import 'package:flutterware_app/src/comparison/skip.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -44,6 +45,7 @@ void main() {
         baseRoot: base,
         source: source,
         cache: cache,
+        locks: null,
       );
 
   group('the plan', () {
@@ -110,11 +112,214 @@ void main() {
         }),
         source: source,
         cache: cache,
+        locks: null,
         only: const ['test/cart.dart#Cart'],
       ).plan();
 
       expect(plan.total, 1);
       expect(plan.toRun, ['test/cart.dart#Cart']);
+    });
+  });
+
+  // The review that found this: the lockfile left the pixel inputs to come in
+  // through `locks`, which was optional, and neither caller passed it — so a
+  // dependency bump replayed no scenario at all. `locks` is required now; these
+  // pin what it is for.
+  group('the lockfile', () {
+    String lockOf(String version) =>
+        'packages:\n'
+        '  used:\n'
+        '    dependency: "direct main"\n'
+        '    source: hosted\n'
+        '    version: "$version"\n';
+    const graph =
+        '{"roots":["pkg"],"packages":['
+        '{"name":"pkg","dependencies":["used"]},'
+        '{"name":"used","dependencies":[]}]}';
+
+    Future<ScenariosPlan> planWith({
+      required Map<String, String> base,
+      required Map<String, String> head,
+    }) {
+      var baseRoot = checkout('base', base);
+      var headRoot = checkout('head', head);
+      return ScenariosRunner(
+        headRoot: headRoot,
+        baseRoot: baseRoot,
+        source: source,
+        cache: cache,
+        locks: LockSides(packagePath: '.', roots: [headRoot, baseRoot]),
+      ).plan();
+    }
+
+    test('a bump to a package the scenario imports replays it', () async {
+      source.declared = ['test/shop.dart#Checkout'];
+      var shop = "import 'package:used/used.dart';\n";
+
+      var plan = await planWith(
+        base: {
+          'test/shop.dart': shop,
+          'pubspec.lock': lockOf('1.0.0'),
+          '.dart_tool/package_graph.json': graph,
+        },
+        head: {
+          'test/shop.dart': shop,
+          'pubspec.lock': lockOf('2.0.0'),
+          '.dart_tool/package_graph.json': graph,
+        },
+      );
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
+      expect(plan.because.keys.single, contains('pubspec.lock#used'));
+    });
+
+    // The harness wraps every scenario in its folder's config, and nothing
+    // the scenario itself imports names it — so a package only the config
+    // uses was invisible, and so was a change to the config's own source.
+    test(
+      'a bump to a package only the folder config imports replays it',
+      () async {
+        source.declared = ['test/shop.dart#Checkout'];
+        source.config = 'test/flutter_test_config.dart';
+        var config = "import 'package:used/used.dart';\n";
+
+        var plan = await planWith(
+          base: {
+            'test/shop.dart': 'var a = 1;\n',
+            'test/flutter_test_config.dart': config,
+            'pubspec.lock': lockOf('1.0.0'),
+            '.dart_tool/package_graph.json': graph,
+          },
+          head: {
+            'test/shop.dart': 'var a = 1;\n',
+            'test/flutter_test_config.dart': config,
+            'pubspec.lock': lockOf('2.0.0'),
+            '.dart_tool/package_graph.json': graph,
+          },
+        );
+
+        expect(plan.toRun, ['test/shop.dart#Checkout']);
+      },
+    );
+
+    test('a change to the folder config itself replays it', () async {
+      source.declared = ['test/shop.dart#Checkout'];
+      source.config = 'test/flutter_test_config.dart';
+
+      var plan = await planWith(
+        base: {
+          'test/shop.dart': 'var a = 1;\n',
+          'test/flutter_test_config.dart': 'var theme = 1;\n',
+        },
+        head: {
+          'test/shop.dart': 'var a = 1;\n',
+          'test/flutter_test_config.dart': 'var theme = 2;\n',
+        },
+      );
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
+    });
+
+    test('a bump nothing it reaches names still skips it', () async {
+      source.declared = ['test/shop.dart#Checkout'];
+      var shop = 'var a = 1;\n';
+
+      var plan = await planWith(
+        base: {
+          'test/shop.dart': shop,
+          'pubspec.lock': lockOf('1.0.0'),
+          '.dart_tool/package_graph.json': graph,
+        },
+        head: {
+          'test/shop.dart': shop,
+          'pubspec.lock': lockOf('2.0.0'),
+          '.dart_tool/package_graph.json': graph,
+        },
+      );
+
+      expect(plan.toRun, isEmpty);
+    });
+  });
+
+  // The fixed cost of this half is two harness builds and two boots, and it
+  // used to be paid before a single closure had been hashed — so a branch that
+  // touched no scenario paid all of it to be told there was nothing to do.
+  // Measured 2026-09-09 on this repo: 60.5s of a 63s comparison.
+  group('the scan gate', () {
+    test('nothing to replay is answered without listing a harness', () async {
+      source.scannedHead = ['test/shop.dart#Checkout'];
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      var files = {'test/shop.dart': 'const flow = 1;'};
+
+      var plan = await runnerFor(
+        base: checkout('base', files),
+        head: checkout('head', files),
+      ).plan();
+
+      expect(plan.toRun, isEmpty);
+      expect(plan.settled.single.state, ComparedState.skipped);
+      expect(source.listed, 0, reason: 'no harness should have been started');
+    });
+
+    test('something to replay falls through to the harness', () async {
+      source.scannedHead = ['test/shop.dart#Checkout'];
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      source.declared = ['test/shop.dart#Checkout'];
+
+      var plan = await runnerFor(
+        base: checkout('base', {'test/shop.dart': '1'}),
+        head: checkout('head', {'test/shop.dart': '2'}),
+      ).plan();
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
+      expect(source.listed, 2, reason: 'both sides are listed live');
+    });
+
+    // The harness's listing is ground truth, and a fall-through takes it: the
+    // scan cannot see `skip:` or a name that is built rather than written, and
+    // by this point a harness is starting anyway.
+    test('the fall-through plans from the listing, not the scan', () async {
+      source.scannedHead = ['test/shop.dart#Checkout'];
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      source.onHead = ['test/shop.dart#Checkout', 'test/late.dart#Generated'];
+      source.onBase = ['test/shop.dart#Checkout'];
+
+      var plan = await runnerFor(
+        base: checkout('base', {'test/shop.dart': '1'}),
+        head: checkout('head', {'test/shop.dart': '2', 'test/late.dart': '1'}),
+      ).plan();
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
+      expect(plan.settled.single.state, ComparedState.added);
+    });
+
+    test('a scan that cannot promise the whole set is not used', () async {
+      source.scannedHead = null;
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      source.declared = ['test/shop.dart#Checkout'];
+      var files = {'test/shop.dart': 'const flow = 1;'};
+
+      await runnerFor(
+        base: checkout('base', files),
+        head: checkout('head', files),
+      ).plan();
+
+      expect(source.listed, 2);
+    });
+
+    // Two empty listings are the absence of an answer, not an answer: a
+    // package the scan sees no scenarios in is exactly where the harness's
+    // refusal to build is the message the reader needs.
+    test('two empty scans are not an answer', () async {
+      source.scannedHead = const [];
+      source.scannedBase = const [];
+
+      await runnerFor(
+        base: checkout('base', {'test/shop.dart': '1'}),
+        head: checkout('head', {'test/shop.dart': '1'}),
+      ).plan();
+
+      expect(source.listed, 2);
     });
   });
 
@@ -186,6 +391,7 @@ void main() {
         baseRoot: checkout('base', {'test/a.dart': '1'}),
         source: source,
         cache: cache,
+        locks: null,
         onScenario: (s) => seen.add(s.scenario),
       ).run(outDir: root.path);
 
@@ -215,6 +421,13 @@ class _FakeSource implements ScenarioSource {
   List<String>? onBase;
   List<String>? onHead;
 
+  /// What the *sources* say, when they can say — null is a source the scan
+  /// cannot promise the whole of, which is what every test that does not set
+  /// this one gets, so the live listing stays the default path.
+  List<String>? scannedBase;
+  List<String>? scannedHead;
+  var scanned = 0;
+
   /// The scenario whose head replay throws at its step.
   String? failOn;
 
@@ -233,7 +446,19 @@ class _FakeSource implements ScenarioSource {
   }
 
   @override
+  List<String>? scan({required bool base}) {
+    scanned++;
+    return base ? scannedBase : scannedHead;
+  }
+
+  @override
   String fileOf(String id) => id.split('#').first;
+
+  /// The folder config every scenario is governed by, or null for none.
+  String? config;
+
+  @override
+  String? configOf(String id) => config;
 
   @override
   Future<List<ScenarioStepShot>> shots(

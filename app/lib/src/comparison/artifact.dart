@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../shell/worktree.dart';
 import 'runner.dart';
+import 'skip.dart';
 
 /// One worktree's corner of the shared comparisons cache: `index.json` and
 /// the `scenarios/` frames it references, together.
@@ -39,7 +40,34 @@ class ScenarioResults {
     required this.elapsed,
     this.note,
     this.because = const {},
+    this.packages = const [],
   });
+
+  /// Several packages' halves as one — the twin of [ComparisonResult.merged],
+  /// and the same rules: rows concatenate and re-rank, counters add, causes
+  /// fold, and [elapsed] is the caller's wall clock rather than a sum.
+  ///
+  /// The notes join with the package that produced each in front, because
+  /// "the harness would not build" is not actionable until a reader knows
+  /// whose.
+  static ScenarioResults merged(
+    List<({String package, ScenarioResults results})> halves, {
+    required Duration elapsed,
+  }) {
+    var notes = [
+      for (var half in halves)
+        if (half.results.note case var note?) '${half.package}: $note',
+    ];
+    return ScenarioResults.of(
+      items: [for (var half in halves) ...half.results.items],
+      ran: halves.fold(0, (sum, half) => sum + half.results.ran),
+      skipped: halves.fold(0, (sum, half) => sum + half.results.skipped),
+      elapsed: elapsed,
+      note: notes.isEmpty ? null : notes.join('\n'),
+      because: mergeBecause([for (var half in halves) half.results.because]),
+      packages: [for (var half in halves) half.package],
+    );
+  }
 
   /// Every scenario, worst first — the ones that ran, and the ones that exist
   /// on one side only.
@@ -63,6 +91,25 @@ class ScenarioResults {
   /// folded — see [foldReasons]. The twin of [ComparisonResult.because].
   final Map<String, int> because;
 
+  /// Which packages this half covered — the twin of
+  /// [ComparisonResult.packages].
+  final List<String> packages;
+
+  /// This half, with every scenario addressed inside [package] — the twin of
+  /// [ComparisonResult.inPackage].
+  ScenarioResults inPackage(String package, {required bool qualify}) =>
+      ScenarioResults.of(
+        items: [
+          for (var item in items) item.inPackage(package, qualify: qualify),
+        ],
+        ran: ran,
+        skipped: skipped,
+        elapsed: elapsed,
+        note: note,
+        because: because,
+        packages: [package],
+      );
+
   int countOf(ComparedState state) =>
       items.where((item) => item.state == state).length;
 
@@ -75,6 +122,7 @@ class ScenarioResults {
     required Duration elapsed,
     String? note,
     Map<String, int> because = const {},
+    List<String> packages = const [],
   }) => ScenarioResults(
     items: [...items]
       ..sort((a, b) {
@@ -86,12 +134,14 @@ class ScenarioResults {
     elapsed: elapsed,
     note: note,
     because: because,
+    packages: packages,
   );
 
   Map<String, Object?> toJson() => {
     'ran': ran,
     'skipped': skipped,
     'because': ?(because.isEmpty ? null : because),
+    'packages': ?(packages.isEmpty ? null : packages),
     'ms': elapsed.inMilliseconds,
     'note': ?note,
     'counts': {
@@ -115,6 +165,8 @@ class ComparisonArtifact {
     required this.previews,
     this.scenarios,
     this.narrowed = false,
+    this.headCommit,
+    this.at,
   });
 
   final ComparisonResult previews;
@@ -122,6 +174,17 @@ class ComparisonArtifact {
   /// Absent when the project declares no scenarios at all. A run that tried
   /// and could not is present, with a [ScenarioResults.note].
   final ScenarioResults? scenarios;
+
+  /// Where HEAD sat when this ran, and when that was.
+  ///
+  /// Neither is a fact about the comparison; both are facts about *this*
+  /// comparison, which is what a reader arriving from a pull-request comment
+  /// needs before anything else — is this still the branch I am looking at,
+  /// and is it still today. The page could not say either: `head` records the
+  /// worktree's **path**, which means nothing off the machine that ran it.
+  final String? headCommit;
+
+  final DateTime? at;
 
   /// Whether the run was narrowed to named entries (`--entry`).
   ///
@@ -157,6 +220,8 @@ class ComparisonArtifact {
     'version': comparisonReportVersion,
     'base': previews.baseSha,
     'head': previews.headRoot,
+    'headCommit': ?headCommit,
+    'at': ?at?.toUtc().toIso8601String(),
     'ms':
         previews.elapsed.inMilliseconds +
         (scenarios?.elapsed.inMilliseconds ?? 0),

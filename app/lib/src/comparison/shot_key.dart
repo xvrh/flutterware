@@ -50,7 +50,13 @@ class ShotKey {
   /// bundled one. A picture whose pixels depend on the loaded library (a
   /// version string, a behavior the versions disagree on) differs across that
   /// line, and no library is in any entry's closure.
-  static const revision = 'v8';
+  /// v9 — `pubspec.lock` is folded in **per package** rather than whole. A
+  /// v8 key hashed the entire lockfile into every entry; a v9 key hashes the
+  /// entries of the packages that entry reaches, so the two disagree for
+  /// every project with more than one dependency. Nothing about the pictures
+  /// changed — the *keys* did, and a key that means something different is a
+  /// key that must not be reused.
+  static const revision = 'v9';
 
   /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the SDK both
   /// sides are rendered with; [axes] and [knobs] are whatever was applied.

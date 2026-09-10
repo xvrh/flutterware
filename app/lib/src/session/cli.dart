@@ -232,7 +232,8 @@ const fwCommands = [
     'compare',
     usage:
         'compare [--base=<ref>] [--package=<path>] [--entry=<id>] '
-        '[--export[=<dir>]] [--base-href=<path>] [--report=<dir>] [--json]',
+        '[--export[=<dir>]] [--frames=all|changed] [--base-href=<path>] '
+        '[--report=<dir>] [--json]',
     summary: 'what this worktree did to the pictures, against its base',
     details:
         'Renders previews and replays scenarios on both sides of the branch '
@@ -256,6 +257,15 @@ const fwCommands = [
         "project's\nconfigured base, then the default branch. `--entry` "
         'narrows to named\nentries and may repeat.\n'
         '\n'
+        'Every package either half declares is compared, and the whole lot '
+        'lands\nin one `index.json`, one comment and one page. `--package` '
+        'narrows and\nmay repeat. Where a run covers more than one package a '
+        "row's id carries\nits package — "
+        '`packages/gallery/demo/card.dart#card` — and every row '
+        'carries\nthe package as a field either way. A package that will not '
+        "compile is\none package's worth of silence, named in the half's "
+        'note; the others\nstill report.\n'
+        '\n'
         '`--export` writes the comparison as a browsable page: a viewer, the\n'
         '`index.json`, and a PNG per frame. Serve the directory over HTTP — '
         'a\n`file://` page cannot fetch its own frames. The default directory '
@@ -266,6 +276,13 @@ const fwCommands = [
         '— without\nbeing told. Pass `--base-href=/comparisons/42/` only for '
         'a host that\nserves the directory without redirecting to a trailing '
         'slash.\n'
+        '\n'
+        "`--frames=changed` puts only the findings' pictures in the page. "
+        'The\nverdict is untouched — every row is still there with its state '
+        'and its\nchannels — but an unchanged entry has no picture beside it '
+        'and says so.\nOn a run where the skip rule did not earn its keep '
+        'that is most of the\npage: measured at 18.1MB of unchanged frames '
+        'against 1.5MB of findings.\n'
         '\n'
         '`--report` writes what a pull-request comment needs: `comment.md`, '
         'a\n`mosaic.png` of the changed entries, and the exported page under '
@@ -597,17 +614,20 @@ class FwCli {
   /// flags, stream the halves as they land, print where things were written.
   Future<int> _compare(List<String> arguments, {required bool json}) async {
     String? baseRef;
-    String? packagePath;
+    var packagePaths = <String>[];
     var only = <String>[];
     var export = false;
     String? exportDir;
     var baseHref = defaultBaseHref;
     String? reportDir;
+    var frames = ExportedFrames.all;
     for (var argument in arguments) {
       if (argument.startsWith('--base=')) {
         baseRef = argument.substring('--base='.length);
       } else if (argument.startsWith('--package=')) {
-        packagePath = argument.substring('--package='.length);
+        // Repeatable, like `--entry=`. Naming none compares every package
+        // either half declares.
+        packagePaths.add(argument.substring('--package='.length));
       } else if (argument.startsWith('--entry=')) {
         only.add(argument.substring('--entry='.length));
       } else if (argument == '--export') {
@@ -615,6 +635,13 @@ class FwCli {
       } else if (argument.startsWith('--export=')) {
         export = true;
         exportDir = argument.substring('--export='.length);
+      } else if (argument.startsWith('--frames=')) {
+        var named = argument.substring('--frames='.length);
+        var parsed = exportedFramesFromFlag(named);
+        if (parsed == null) {
+          return fail('--frames takes `all` or `changed`, not "$named".');
+        }
+        frames = parsed;
       } else if (argument.startsWith('--base-href=')) {
         baseHref = argument.substring('--base-href='.length);
       } else if (argument.startsWith('--report=')) {
@@ -635,12 +662,13 @@ class FwCli {
           session: session,
           options: CompareOptions(
             baseRef: baseRef,
-            package: packagePath,
+            packages: packagePaths,
             entries: only,
             export: export,
             exportDir: exportDir,
             baseHref: baseHref,
             reportDir: reportDir,
+            frames: frames,
           ),
           // Progress belongs to a terminal, not to a document: a `--json` run
           // has to be one parseable object from its first byte.
