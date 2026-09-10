@@ -11,15 +11,9 @@ import '../shader_library.dart';
 import 'gradient_field.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
+import 'paint_changed.dart';
 import 'shader_field.dart';
 import 'swatches.dart';
-
-/// A change to the paint, with the words for its undo entry.
-typedef PaintChanged = void Function(
-  ScenePaint? next, {
-  required String label,
-  String? mergeKey,
-});
 
 class ScenePaintField extends StatelessWidget {
   const ScenePaintField({
@@ -112,7 +106,8 @@ class ScenePaintField extends StatelessWidget {
 
   /// [paint] as a [kind] — and a pass that becomes a shader starts on the
   /// package's first declared one, at its defaults, rather than on a blank
-  /// asset that paints nothing.
+  /// asset that paints nothing. Before its uniforms have been read there are
+  /// no defaults to write, and it starts at zeros, which is what it paints.
   ScenePaint? _convert(ScenePaintKind kind) {
     if (kind == ScenePaintKind.shader && paint is! ShaderPaint) {
       if (shaders?.declared.firstOrNull case var first?) {

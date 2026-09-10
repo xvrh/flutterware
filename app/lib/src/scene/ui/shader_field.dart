@@ -11,7 +11,7 @@ import '../../ui/picker.dart';
 import '../shader_library.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
-import 'paint_field.dart';
+import 'paint_changed.dart';
 import 'swatches.dart';
 
 class SceneShaderField extends StatelessWidget {
@@ -116,7 +116,9 @@ class SceneShaderField extends StatelessWidget {
             ),
         ],
       for (var stray in paint.uniforms.keys)
-        if (!byName.containsKey(stray))
+        if (_isRenderers(stray))
+          _rendererCaption(context, stray)
+        else if (!byName.containsKey(stray))
           _caption(
             context,
             '$stray is set, and $name declares no such uniform',
@@ -125,13 +127,15 @@ class SceneShaderField extends StatelessWidget {
     ];
   }
 
-  /// What a uniform's control starts from: the value's own numbers when they
-  /// are the right count, else the shader's `@default`, else zeros.
+  /// What a uniform's control shows: what the renderer paints with — the
+  /// value's own numbers when they are the right count, and zeros otherwise.
+  /// A `@default` is written once, when the asset is picked, never shown in
+  /// place of a value that is not there.
   List<double> _valueOf(SceneShaderUniform u) {
     if (paint.uniforms[u.name] case var set? when set.length == u.size) {
       return set;
     }
-    return u.defaults ?? List.filled(u.size, 0);
+    return List.filled(u.size, 0);
   }
 
   Widget _uniform(BuildContext context, SceneShaderUniform u) {
@@ -189,7 +193,9 @@ class SceneShaderField extends StatelessWidget {
   /// as plain fields, so nothing in the file is out of reach.
   List<Widget> _plain(BuildContext context) => [
     for (var MapEntry(key: name, value: value) in paint.uniforms.entries)
-      if (value.isNotEmpty && value.length <= 4) ...[
+      if (_isRenderers(name))
+        _rendererCaption(context, name)
+      else if (value.isNotEmpty && value.length <= 4) ...[
         const Gap(FwSpacing.sm),
         value.length == 1
             ? _number(name, name, value.first, _scrub, (v) => [v])
@@ -240,6 +246,16 @@ class SceneShaderField extends StatelessWidget {
       if (size == 4) unit(c.alpha),
     ];
   }
+
+  /// Whether the renderer sets [name] itself — at any size, since it skips
+  /// a stored value under that name whatever the shader declares.
+  static bool _isRenderers(String name) =>
+      ShaderPaint.rendererUniforms.containsKey(name);
+
+  Widget _rendererCaption(BuildContext context, String name) => _caption(
+    context,
+    '$name is set by the renderer; the stored value is ignored',
+  );
 
   Widget _label(BuildContext context, String text) => Padding(
     padding: const EdgeInsets.only(bottom: FwSpacing.xs),

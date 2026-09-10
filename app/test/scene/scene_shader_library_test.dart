@@ -310,6 +310,69 @@ flutter:
       expect(info.error, contains('cannot feed one yet'));
     });
 
+    test('making a package view starts one compile per declared shader, '
+        'and they land without being asked for', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      write('shaders/b.frag', source);
+      write('pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/a.frag
+    - shaders/b.frag
+''');
+      var compiled = <String>[];
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (path) async {
+          compiled.add(p.basename(path));
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      expect(compiled, ['a.frag', 'b.frag']);
+      await pumpEventQueue();
+      expect(shaders.info('shaders/a.frag')!.uniforms, hasLength(4));
+      expect(shaders.info('shaders/b.frag')!.uniforms, hasLength(4));
+      library.forPackage(root.path);
+      expect(shaders.declared, hasLength(2));
+      expect(compiled, hasLength(2));
+    });
+
+    test('a shader newly declared starts compiling when the pubspec is '
+        're-read', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      write('pubspec.yaml', 'name: project\n');
+      var compiled = <String>[];
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (path) async {
+          compiled.add(p.basename(path));
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      expect(compiled, isEmpty);
+      bump(
+        write('pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/a.frag
+'''),
+      );
+      expect(shaders.declared, ['shaders/a.frag']);
+      expect(compiled, ['a.frag']);
+      await pumpEventQueue();
+      expect(shaders.info('shaders/a.frag'), isNotNull);
+    });
+
     test('declared re-reads the pubspec when its mtime changed', () {
       write('pubspec.yaml', 'name: project\n');
       var library = SceneShaderLibrary(cache: null);

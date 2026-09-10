@@ -79,8 +79,8 @@ class ScenePlugin extends NativePlugin<SceneCore> {
       });
 
   /// Every package's declared shaders and their uniforms, compiled with the
-  /// workspace's own SDK. Made when a scene is first opened; nothing
-  /// compiles until a shader pass asks for its uniforms.
+  /// workspace's own SDK. Made when a scene is first opened; a package's
+  /// declared shaders start compiling when its scene first builds.
   SceneShaderLibrary get shaderLibrary => _shaderLibrary ??= SceneShaderLibrary(
     cache: FlutterCache(p.join(host.workspace.flutterSdk.root, 'bin', 'cache')),
   );

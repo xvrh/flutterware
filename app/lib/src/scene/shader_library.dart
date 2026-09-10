@@ -47,10 +47,12 @@ class SceneShaderUniform {
   /// `// @default …`, honoured only when it gave exactly [size] numbers.
   final List<double>? defaults;
 
-  /// Whether [ShaderPaint.rendererUniforms] sets this one — same name, same
-  /// size — so the inspector leaves it to the renderer rather than drawing
-  /// a control for it.
-  bool get rendererOwned => ShaderPaint.rendererUniforms[name] == size;
+  /// Whether this is one of [ShaderPaint.rendererUniforms]' names, so the
+  /// inspector leaves it to the renderer rather than drawing a control for
+  /// it. By name alone: the renderer skips a stored value under that name
+  /// whatever size the shader declares it at, so a control for it would
+  /// edit nothing.
+  bool get rendererOwned => ShaderPaint.rendererUniforms.containsKey(name);
 }
 
 /// What is known about one shader: its uniforms, or why they could not be
@@ -262,6 +264,9 @@ class SceneShaderLibrary extends ChangeNotifier {
 
   /// The view onto one package's shaders. Cached per [packageRoot], so a
   /// caller that holds onto it sees the same compiles land as any other.
+  ///
+  /// Making it starts every declared shader compiling in the background, so
+  /// a shader picked a moment later already has its defaults to start from.
   SceneShaders forPackage(String packageRoot) {
     var key = p.normalize(p.absolute(packageRoot));
     return _packages.putIfAbsent(key, () => _PackageShaders(this, key));
@@ -293,7 +298,9 @@ class FixedSceneShaders extends ChangeNotifier implements SceneShaders {
 }
 
 class _PackageShaders extends ChangeNotifier implements SceneShaders {
-  _PackageShaders(this._library, this.packageRoot);
+  _PackageShaders(this._library, this.packageRoot) {
+    _readDeclared();
+  }
 
   final SceneShaderLibrary _library;
   final String packageRoot;
@@ -303,18 +310,27 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
 
   @override
   List<String> get declared {
-    var pubspec = File(p.join(packageRoot, 'pubspec.yaml'));
-    DateTime? modified;
-    try {
-      modified = pubspec.statSync().modified;
-    } on FileSystemException {
-      modified = null;
-    }
-    if (_declared == null || modified != _declaredAt) {
-      _declared = declaredShaders(packageRoot);
-      _declaredAt = modified;
+    if (_declared == null || _pubspecModified() != _declaredAt) {
+      _readDeclared();
     }
     return _declared!;
+  }
+
+  /// Reads the pubspec's `shaders:` again, and warms every entry: one already
+  /// read answers from a stat, and anything else starts compiling now rather
+  /// than on its first pick.
+  void _readDeclared() {
+    _declaredAt = _pubspecModified();
+    var declared = _declared = declaredShaders(packageRoot);
+    declared.forEach(info);
+  }
+
+  DateTime? _pubspecModified() {
+    try {
+      return File(p.join(packageRoot, 'pubspec.yaml')).statSync().modified;
+    } on FileSystemException {
+      return null;
+    }
   }
 
   final _infos = <String, SceneShaderInfo>{};
