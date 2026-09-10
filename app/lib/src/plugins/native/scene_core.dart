@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -533,19 +534,23 @@ class SceneCore extends PluginCore {
     // scene, and rendering it in a viewport of another shape crops one edge
     // and letterboxes the other.
     var root = opened.doc!.root;
-    var walk = await TesterRenderer(runner: _runnerFor(package, entry)).walk(
-      CatalogWalk(
-        entryId: entry.id,
-        fps: fps,
-        viewport: CaptureViewport(
-          width: (root.width ?? 1024).round(),
-          height: (root.height ?? 500).round(),
+    MotionVideo video;
+    try {
+      var walk = await TesterRenderer(runner: _runnerFor(package, entry)).walk(
+        CatalogWalk(
+          entryId: entry.id,
+          fps: fps,
+          viewport: CaptureViewport(
+            width: (root.width ?? 1024).round(),
+            height: (root.height ?? 500).round(),
+          ),
+          knobs: {'pair': pair.path},
         ),
-        knobs: {'pair': pair.path},
-      ),
-    );
-    var video = await encodeWalk(walk, output: output, fps: fps);
-    pair.parent.deleteSync(recursive: true);
+      );
+      video = await encodeWalk(walk, output: output, fps: fps);
+    } finally {
+      pair.parent.deleteSync(recursive: true);
+    }
 
     return Artifact(
       kind: Artifact.mp4,
@@ -608,6 +613,21 @@ class SceneCore extends PluginCore {
       );
 
   final _runners = <String, PreviewTestRunner>{};
+
+  /// Ends the harnesses [exportVideo] started — a `frontend_server` and a
+  /// `flutter_tester` per package.
+  ///
+  /// Without it `fw run scene video` printed its clip and never exited: the
+  /// two processes, and the service socket to the tester, held the CLI's
+  /// event loop open with nothing left to do.
+  @override
+  void dispose() {
+    for (var runner in _runners.values) {
+      unawaited(runner.dispose());
+    }
+    _runners.clear();
+    super.dispose();
+  }
 
   // --- Report --------------------------------------------------------------
 
