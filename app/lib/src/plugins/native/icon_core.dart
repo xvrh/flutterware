@@ -39,7 +39,28 @@ const _pluginDescription =
 /// nothing, and [report] only formats what a previous call caused to load.
 /// Loading is listing directories and reading image headers.
 class LauncherIconCore extends PluginCore {
-  LauncherIconCore(super.host);
+  /// [scan] is where a scan comes from — [scanIcons] off the package on disk
+  /// unless told otherwise.
+  ///
+  /// This is the one door a **recorded** core needs. Everything the panel
+  /// reads is a pass-through of the cache this fills, so a core handed a
+  /// reader that answers from a fixture is this same class with the disk left
+  /// out: same report, same actions, same panel, no second implementation to
+  /// keep in step. The studio's own catalog demos, its scenario tests and the
+  /// web demo all come through here.
+  LauncherIconCore(super.host, {IconScanner? scan}) : _scan = scan ?? _liveScan;
+
+  final IconScanner _scan;
+
+  static IconScan _liveScan({
+    required String Function() packageRoot,
+    required String packagePath,
+    String? flavor,
+  }) => scanIcons(
+    packageRoot: packageRoot(),
+    packagePath: packagePath,
+    flavor: flavor,
+  );
 
   /// Declared packages, filtered to those the workspace knows about, so a typo
   /// cannot make the plugin scan a directory that is not there.
@@ -50,9 +71,13 @@ class LauncherIconCore extends PluginCore {
 
   /// Keyed by package *and* source set: a flavour is a different set of files
   /// in the same package, so it cannot share one scan.
+  ///
+  /// The package root is resolved lazily, inside the loader, because resolving
+  /// it means asking the filesystem for an absolute path — which a recorded
+  /// core never needs and a browser cannot answer.
   late final _cache = ScanCache<(String path, String? flavor), IconScan>(
-    scan: (key) async => scanIcons(
-      packageRoot: host.workspace.packageFor(key.$1).absolutePath,
+    scan: (key) async => await _scan(
+      packageRoot: () => host.workspace.packageFor(key.$1).absolutePath,
       packagePath: key.$1,
       flavor: key.$2,
     ),

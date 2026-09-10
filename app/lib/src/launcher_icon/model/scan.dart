@@ -17,17 +17,44 @@
 /// project put it in, and `@drawable/x` answers only for `drawable*`.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutterware/plugins.dart';
+import 'package:json_annotation/json_annotation.dart';
 import 'package:path/path.dart' as p;
 
 import 'role.dart';
 import 'wiring.dart';
 
+part 'scan.g.dart';
+
+/// A role on the wire is its [IconRole.id] — the same spelling an address
+/// carries and the inventory action reports — rather than the enum constant,
+/// so a recorded scan reads the same after a constant is renamed.
+IconRole _roleFromJson(String id) =>
+    IconRole.byId(id) ??
+    (throw FormatException('Unknown launcher icon role "$id"'));
+
+String _roleToJson(IconRole role) => role.id;
+
+IconRole? _roleOrNullFromJson(String? id) =>
+    id == null ? null : _roleFromJson(id);
+
+String? _roleOrNullToJson(IconRole? role) => role?.id;
+
 /// One icon file, and what its header says about it.
+///
+/// Serialisable, like every type below it, so a scan can be **recorded**: the
+/// studio's own catalog demos, its scenario tests and the web demo all draw the
+/// panel from a scan the real reader produced once, off a real project. The
+/// inventory action's JSON is a different, deliberately narrower thing — see
+/// `IconInventoryResult` — and could not stand in for this: it drops
+/// [inherited] and [absolutePath] and re-roots every path, all of which the
+/// panel draws.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class IconFile {
   const IconFile({
     required this.path,
@@ -93,6 +120,11 @@ class IconFile {
   /// the flavored iOS read had before it was given the flavor at all.
   final bool inherited;
 
+  factory IconFile.fromJson(Map<String, Object?> json) =>
+      _$IconFileFromJson(json);
+
+  Map<String, Object?> toJson() => _$IconFileToJson(this);
+
   String get name => p.basenameWithoutExtension(path);
 
   bool get sizeMismatch =>
@@ -100,6 +132,7 @@ class IconFile {
 }
 
 /// Everything found for one role.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class IconRoleScan {
   const IconRoleScan({
     required this.role,
@@ -108,6 +141,12 @@ class IconRoleScan {
     this.referenced,
   });
 
+  factory IconRoleScan.fromJson(Map<String, Object?> json) =>
+      _$IconRoleScanFromJson(json);
+
+  Map<String, Object?> toJson() => _$IconRoleScanToJson(this);
+
+  @JsonKey(fromJson: _roleFromJson, toJson: _roleToJson)
   final IconRole role;
 
   /// Sorted smallest first.
@@ -155,15 +194,24 @@ enum IosCatalog {
 }
 
 /// One thing worth saying about what was found.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class IconFinding {
   const IconFinding(this.tone, this.message, {this.role});
 
+  factory IconFinding.fromJson(Map<String, Object?> json) =>
+      _$IconFindingFromJson(json);
+
+  Map<String, Object?> toJson() => _$IconFindingToJson(this);
+
   final Tone tone;
   final String message;
+
+  @JsonKey(fromJson: _roleOrNullFromJson, toJson: _roleOrNullToJson)
   final IconRole? role;
 }
 
 /// Everything one package's icons turned out to be.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class IconScan {
   const IconScan({
     required this.packagePath,
@@ -175,6 +223,11 @@ class IconScan {
     this.ios = IosCatalog.none,
     this.iconBundles = const [],
   });
+
+  factory IconScan.fromJson(Map<String, Object?> json) =>
+      _$IconScanFromJson(json);
+
+  Map<String, Object?> toJson() => _$IconScanToJson(this);
 
   /// Workspace-relative — `.`, `examples/example`.
   final String packagePath;
@@ -222,6 +275,18 @@ class IconScan {
 
   bool get isEmpty => roles.every((r) => r.isEmpty) && ios == IosCatalog.none;
 }
+
+/// Where a package's scan comes from — [scanIcons], or a recording of one.
+///
+/// [packageRoot] is a thunk rather than a path: a live reader needs the
+/// absolute root and a recorded one must not ask for it, since resolving a
+/// path to an absolute one is a filesystem question that has no answer where
+/// a recording is drawn from.
+typedef IconScanner = FutureOr<IconScan> Function({
+  required String Function() packageRoot,
+  required String packagePath,
+  String? flavor,
+});
 
 /// Scans [packageRoot], which must be absolute.
 IconScan scanIcons({
@@ -315,8 +380,14 @@ enum IconFlavorSource {
 }
 
 /// A flavor, and every file on disk that declares it.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class IconFlavor {
   const IconFlavor(this.name, this.sources);
+
+  factory IconFlavor.fromJson(Map<String, Object?> json) =>
+      _$IconFlavorFromJson(json);
+
+  Map<String, Object?> toJson() => _$IconFlavorToJson(this);
 
   final String name;
 

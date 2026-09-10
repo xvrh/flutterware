@@ -21,10 +21,14 @@ library;
 
 import 'dart:io';
 
+import 'package:json_annotation/json_annotation.dart';
 import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
+part 'wiring.g.dart';
+
 /// An `<adaptive-icon>` file and the layers it declares.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class AdaptiveXml {
   const AdaptiveXml({
     required this.path,
@@ -32,6 +36,11 @@ class AdaptiveXml {
     this.foreground,
     this.monochrome,
   });
+
+  factory AdaptiveXml.fromJson(Map<String, Object?> json) =>
+      _$AdaptiveXmlFromJson(json);
+
+  Map<String, Object?> toJson() => _$AdaptiveXmlToJson(this);
 
   /// Package-relative.
   final String path;
@@ -55,6 +64,7 @@ class AdaptiveXml {
 }
 
 /// Everything the Android project says about its own icons.
+@JsonSerializable(explicitToJson: true, includeIfNull: false)
 class AndroidWiring {
   const AndroidWiring({
     this.minSdk,
@@ -65,6 +75,11 @@ class AndroidWiring {
     this.launcherRound,
     this.backgroundColor,
   });
+
+  factory AndroidWiring.fromJson(Map<String, Object?> json) =>
+      _$AndroidWiringFromJson(json);
+
+  Map<String, Object?> toJson() => _$AndroidWiringToJson(this);
 
   /// Null when it could not be determined, which is a legitimate answer rather
   /// than a failure. See [readMinSdk].

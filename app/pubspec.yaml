@@ -155,6 +155,11 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/
+    # The recording the studio's own demos open — a real project's launcher
+    # icons, written by `tool/demo/record.dart`. Two lines because an asset
+    # directory is not recursive; see `lib/src/demo/recording_paths.dart`.
+    - demo/fixture/launcher_icon/
+    - demo/fixture/launcher_icon/files/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

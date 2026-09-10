@@ -18,7 +18,12 @@ export 'icon_core.dart' show LauncherIconCore, launcherIconPluginId;
 /// agent reach the same answers. This class exists because `buildPanel` returns
 /// a `Widget`.
 class LauncherIconPlugin extends NativePlugin<LauncherIconCore> {
-  LauncherIconPlugin(super.core);
+  LauncherIconPlugin(super.core, {this.image = fileIconImage});
+
+  /// How the panel turns a scanned file into a picture. The live panel reads
+  /// the file; a panel over a recorded core reads wherever the recording
+  /// keeps its files. See [LauncherIconScreen.image].
+  final IconImage image;
 
   @override
   Widget buildPanel(BuildContext context) => _LauncherIconPanel(this);
@@ -103,6 +108,7 @@ class _LauncherIconPanelState extends State<_LauncherIconPanel> {
         flavor: place.flavor,
         role: place.role,
         mask: place.mask,
+        image: widget.plugin.image,
       ),
     );
   }

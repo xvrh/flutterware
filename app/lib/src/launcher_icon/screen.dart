@@ -40,10 +40,20 @@ class LauncherIconScreen extends StatefulWidget {
     this.flavor,
     this.role,
     this.mask,
+    this.image = fileIconImage,
   });
 
   final LauncherIconCore core;
   final String package;
+
+  /// How a file becomes a picture — off the disk unless told otherwise.
+  ///
+  /// The one place the screen touches a filesystem, and so the one thing a
+  /// recorded scan has to bring with it: its files live wherever the recording
+  /// does, and in a browser that is a URL rather than a path. Kept here rather
+  /// than on the core because an `ImageProvider` is Flutter, and a core is
+  /// linked into `fw`.
+  final IconImage image;
 
   /// Which Android source set, from the address.
   final String? flavor;
@@ -137,6 +147,7 @@ class _LauncherIconScreenState extends State<LauncherIconScreen> {
         Expanded(
           child: _Plates(
             scan: scan,
+            image: widget.image,
             selected: selected,
             adaptiveMask: _adaptiveMask,
             onSelect: _select,
@@ -173,11 +184,7 @@ class _LauncherIconScreenState extends State<LauncherIconScreen> {
       color: role.color,
       files: [
         for (var file in role.files)
-          (
-            image: FileImage(File(file.absolutePath)),
-            size: file.width,
-            density: file.density,
-          ),
+          (image: widget.image(file), size: file.width, density: file.density),
       ],
       findings: _findingsFor(scan, role.role),
       context_: _contextLine(scan, role.role),
@@ -245,10 +252,17 @@ class _LauncherIconScreenState extends State<LauncherIconScreen> {
     for (var finding in scan.findings)
       if (finding.role == role) (tone: finding.tone, message: finding.message),
   ];
+
+  ImageProvider? _imageFor(IconFile? file) =>
+      file == null ? null : widget.image(file);
 }
 
-ImageProvider? _imageFor(IconFile? file) =>
-    file == null ? null : FileImage(File(file.absolutePath));
+/// How an [IconFile] becomes a picture.
+typedef IconImage = ImageProvider Function(IconFile file);
+
+/// The live answer: the file, where the scan found it.
+ImageProvider fileIconImage(IconFile file) =>
+    FileImage(File(file.absolutePath));
 
 Color? _colorOf(String? value) {
   var parsed = parseResourceColor(value);
@@ -260,6 +274,7 @@ Color? _colorOf(String? value) {
 class _Plates extends StatelessWidget {
   const _Plates({
     required this.scan,
+    required this.image,
     required this.adaptiveMask,
     required this.onSelect,
     required this.onReload,
@@ -271,12 +286,15 @@ class _Plates extends StatelessWidget {
 
   final IconScan scan;
   final IconRole? selected;
+  final IconImage image;
   final AdaptiveMask adaptiveMask;
   final ValueChanged<IconRole?> onSelect;
   final VoidCallback onReload;
   final bool scanning;
   final String? flavor;
   final ValueChanged<String?> onFlavor;
+
+  ImageProvider? _imageFor(IconFile? file) => file == null ? null : image(file);
 
   @override
   Widget build(BuildContext context) {
