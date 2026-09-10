@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -146,7 +148,7 @@ class CatalogKeyboard {
     var now = state;
     if (now == _announced) return;
     _announced = now;
-    developer.postEvent(eventKind, now.toJson());
+    GuestExtensions.post(eventKind, now.toJson());
   }
 
   /// Registers the extension. Call once, before `runApp`.
@@ -156,7 +158,7 @@ class CatalogKeyboard {
   /// writes and then reads, so a host never has to make two calls to find out
   /// what its own write did.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.keyboard', (_, args) async {
+    GuestExtensions.register('ext.flutterware.keyboard', (_, args) async {
       if (args['dismiss'] == 'true') {
         // The platform-closed path, not a mode change: the app is told its
         // connection went away and unfocuses, which brings the keyboard down

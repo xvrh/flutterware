@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -71,7 +73,7 @@ class CatalogEntries {
 
   /// Registers the extension. Call once, before `runApp`.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.showEntry', (_, args) async {
+    GuestExtensions.register('ext.flutterware.showEntry', (_, args) async {
       var before = _state?.entryId;
       var showing = show(args['id'] ?? '');
       if (showing != before) {

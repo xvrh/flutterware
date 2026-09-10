@@ -479,6 +479,287 @@ above is now answered on fact:
   `deploy-pages`). One-time repository setting: Settings → Pages → Source:
   GitHub Actions. The README link lands once the page is live.
 
+### Hardened the same day: the page is tested, the recording is not shipped
+
+Three things the first deploy left open, closed before the next plugin:
+
+- **The compiled page is opened in a browser, in CI.** `flutter build web`
+  proves the shell compiles without a filesystem; every one of the eight
+  runtime guards above was a read that compiled fine and threw when a frame
+  reached it, and every one was found by clicking. A `flutter test
+  --platform chrome` lane was measured first and rejected: it compiles with
+  DDC rather than dart2js, serves no app assets (`rootBundle` hangs, not
+  404s), and never touches `index.html`, the base href or the fetch of the
+  recording. `app/integration_test/web_demo_test.dart` instead takes the
+  directory the deploy job is about to publish, serves it with shelf under
+  the same path as Pages, and drives it with puppeteer's own Chrome: a
+  JavaScript error, a failed request, a response at 400 or above, or a
+  screen that never shows what the recording holds fails the test with the
+  list. The demo turns semantics on at boot (`ensureSemantics`), which is
+  what a screen reader gets and the only DOM a browser test can find a tab
+  by. Measured: Chrome download 24s once (cached by CI on the lockfile), the
+  walk 13s. Removing the recording from the build fails it with the 404 and
+  the panel's own "no launcher icon scan" message on screen.
+- **The recording lives in one place.** It was in three: git, the pub
+  archive (`.pubignore` had no line for it) and every desktop build of the
+  studio (declared as assets). Now `app/demo/` is in `.pubignore`, the asset
+  declaration is gone with the asset end of `Recording`, and the two ends
+  that remain are the file end (scenario, widget test, catalog demo — the
+  previews guest runs with the package as its working directory) and the
+  HTTP end (the page, resolving `demo/fixture/` against the document's
+  `<base href>`). `tool/demo/build_web.dart` is the one place that knows the
+  page and the recording go together: it builds and copies. Found on the
+  way: `.pubignore` also lets `app/test/` into the archive, 364 files.
+- **Facts and pictures, when the recording grows.** What grows is not
+  scans. It is rendered output — previews thumbnails, scenario frames and
+  trees, scene renders — and rendered pixels are not byte-stable across
+  operating systems (the 3D probe showed it). The rule for the next plugins:
+  *facts* (what the tool scans, and the small source files a panel draws)
+  are committed and freshness-checked; *pictures* (anything rendered on
+  `flutter_tester`) are never committed — the `studio_demo` job produces
+  them before it builds, and a developer runs the same recorder once. A
+  studio scenario over pictures then has a prerequisite step, which is a
+  decision for when previews arrive.
+
+And the rule the guards need, so they do not spread: **an `UnsupportedError`
+guard lives on the shell path only.** A plugin on the web is either recorded,
+so it never touches `dart:io`, or not recorded, so its panel is never built.
+The same `try/on UnsupportedError` inside a plugin core would hide a real
+desktop bug. Add an `ambient_sdk_test`-style check the day it ships twice.
+
+### The scenarios slice (same day): the runner was the seam, not the core
+
+The go/no-go the plan set for scenarios came out as a *no interface on the
+core at all*. The panel reads twenty-six members of `ScenariosCore`, which
+looked like the width of an interface — but what the core does that a
+recording cannot is only two things: parse the disk (`Isolate.run` over
+`ScenarioScanner`) and run a `flutter_tester` (`ScenarioRunner`). Both were
+already behind one call each. So the core gained two constructor doors,
+`scan:` and `runner:`, exactly like the launcher icon's, and the runner
+gained a five-member interface, `ScenarioRunSource` — `list`, `run`,
+`logPath`, `onStep`, `dispose` — which is everything the core ever calls on
+it. `ScenarioRunner` implements it; `RecordedScenarioRunner` answers the
+same five from files. The core does not know which it has.
+
+**The recording of a run is the harness's own report.** `record.dart` runs
+`ScenarioRunner` on two files of the example — the coffee shop on a phone
+and in a window, three scenarios, 31 steps — and keeps the raw report per
+file with every artifact copied in beside it and its seven path fields
+spelled relative to the recording. On the way out the recorded runner puts
+them under `/recording`, the recorded project's root, so the core's own
+relativising hands the panel a recording-relative path and the panel's
+artifact source — the recording itself, through a new `artifacts:` door on
+`ScenariosPlugin` — reads it. Opening a scenario runs it, in the panel's
+model; over a recording that run is a read, which is what lets the studio's
+own scenario of the scenarios panel settle under FakeAsync. Measured:
+recording 13s; the fixture 3.3 MB, of which 2.4 MB is trees and 1 MB
+pictures; the studio scenario 1.3s for six steps.
+
+**What the browser test caught on its first run.** Opening a scenario threw
+`_Namespace` on the web: the panel stats the folder's
+`flutter_test_config.dart` to know which *pool* a scenario belongs to — the
+scope a remembered device is valid in. That is a fact about the project,
+not the machine, so the scan now records every governing config folder
+(`ScenarioScanResult.configFolders`, by the harness's own rule) and the
+panel answers the pool from the scan. One consequence: the pool is known
+when the scan lands rather than synchronously, so the panel follows it on
+every core change and not only on an address change, and the test that
+remembers a device per pool lets the scan land first. The panel's other
+disk read, the banner's app icon, became an `appIcon:` door.
+
+**Two doors, one interface, no guard.** Nothing in the scenarios plugin
+catches `UnsupportedError`. The one place a superseded run directory was
+deleted with a narrow catch now goes through the same housekeeping rule the
+sweep already had — a delete that cannot happen is not worth failing a
+finished run over — which is a rule about housekeeping, not about the web.
+
+### Previews, step 1 (same day): the guest drawn inline, two seams
+
+Previews is not recorded. It runs: the entry is a widget, and a widget can
+be drawn inside the studio as well as in an embedder process. The plan's
+four steps ("The cut, in order", decided the same day) start with the two
+seams, proven on the desktop before any web work, and this is them.
+
+Measured first, and the measurement settled the shape. The panel reads
+about forty members of `CatalogSession`, which looked like the interface
+the spec feared. But the session reaches the *guest* through exactly three
+things: seven members of `EmbeddedEngine` (the picture), fourteen
+`ext.flutterware.*` extension calls through one `callGuestExtension` (the
+channel), and the compiler daemon (the catalog). The first two became
+interfaces; the third is step 2.
+
+- **`GuestSurface`** (`app/lib/src/embedder/guest_surface.dart`): phase,
+  pixel ratio, resize, cancel pointer, `picture()`, `input()`, capture.
+  `EmbeddedEngine` implements it — the texture and the input region moved
+  behind two methods — and `InlineGuestSurface` *is* the widget, laid out at
+  the size the stage asks for under the media query an embedder would
+  report, with the same `CatalogHost` root the generated entrypoint runs.
+  `catalog_view.dart` draws either and does not know which.
+- **`GuestChannel`** (`app/lib/src/embedder/guest_channel.dart`): call,
+  require, events, log, reload, close. `GuestVmService` implements it;
+  `InProcessGuestChannel` calls the guest's handlers directly. For that the
+  published half gained `GuestExtensions` (`lib/src/guest_extensions.dart`),
+  a registry every guest handler now registers through — it stores the
+  handler and registers it with the VM service too, so a host in another
+  process notices nothing. `installInlineGuest` sets a guest up in-process:
+  everything a panel asks, minus the key and text-input shims, the error
+  hook and the log zone, which would take over the host's.
+- **The launcher** (`CatalogSession(launchGuest:)`): the session's `start`
+  hands a `GuestLaunch` to a launcher and gets a channel back; the default
+  builds the embedder process as before. `debugInstallGuest` installs a
+  surface and a channel without `start`, which is what the test uses until
+  step 2 puts the catalog behind a seam too.
+
+**Proven by `app/test/previews/inline_guest_test.dart`**: the panel over a
+real entry with a knob, in-process. The stage draws it; the inspector walks
+it and finds `_Alpha` but not `CatalogView` — the walk starts at the demo
+root; a point under the text finds the `Text`; a knob set through the
+address rebuilds it. Four tests, no process.
+
+**What the inline guest found.** The walker measured every box against the
+*window* (`getTransformTo(null)`) and hit-tested in window coordinates.
+In an embedder guest the demo root is the window, so nothing noticed; inline
+the boxes were on the studio. Both now measure against the demo root, which
+is the same answer for a process and the right one inline. Checked the other
+way too: `previews screenshot --engine=guest --node=<id>` through a real
+embedder crops exactly the plate it names.
+
+**Also on the way.** The studio's own scenarios moved to
+`app/test/scenarios/studio/` with a profile that frames them as a window:
+under `flutter test` they ran at 800×600 and the address bar overflowed by
+15px on a step's deep address. That overflow is real at that width and is
+left as a finding.
+
+### Previews, step 2 (same day): the catalog seam, and the panel on the web
+
+The third thing the session reached the daemon for — entries, a compiled
+selection, changes — is `CatalogSource` now, which `CompilerDaemonClient`
+implements and `InlinePreviewsGuest` answers from a table. With that,
+`CatalogSession.start` runs with no daemon and no process: the inline test
+opens the panel through `start`, and the recorded shell declares previews
+over `InlinePreviewsGuest(previews)` — two doors on `PreviewsPlugin`
+(`connectToDaemon`, `launchGuest`), a scan door on `PreviewsCore`, and
+thumbnails off, since they render on `flutter_tester`.
+
+**One fact the two seams share.** An embedder guest is told which entry
+to show by a *regenerated entrypoint* whose file entry moved, hot-reloaded
+over it; `showEntry` is the fast path when the guest is already up. The
+panel's first switch after start races the picture's mount, and when the
+show arrives before it the session falls to the compile path — which for
+the inline catalog was a no-op, so the page kept showing the first entry
+under the header for the second. `select` now records the entry the way
+the entrypoint would, and the inline root rebuilds with it as its file
+entry: the guest lands on the selection whether or not it was mounted to be
+told. Found on the browser walk, pinned by the test.
+
+**Where the entries come from.** The web demo is its own workspace
+package now, `web_demo/`, never published: it has to import both the
+studio and the example's previews; the studio cannot depend on an example;
+and the example must not depend on the studio — tried, and a dev
+dependency that way put the studio's file picker and URL launcher into the
+example app's macOS plugin registrant. Its entry point is
+`web_demo/demo/main.dart`, and beside it `entries.g.dart` and one wrapper
+per entry, generated by `tool/demo/web_entries.dart` with the same
+`CatalogWrapperWriter` the guest entrypoint uses — the annotation
+evaluated in the demo's own scope, the builder reached by name — so an
+entry is staged in the browser exactly as in a process. Outside `lib/`,
+like the example's own previews: a file under `lib/` is addressed by a
+`package:` URI and a relative import from one cannot leave the package,
+and the wrappers reach the example's demos, which have no `package:` URI,
+by relative path. Nine of the example's 27 entries survive the filter: not
+`dart:ffi` anywhere, not the GPU or the scene libraries, and not `dart:io`
+in the example's own files (the studio's libraries carry `dart:io` to
+stubs everywhere and never call it from an entry). `build_web.dart`
+regenerates the table and builds the demo package into `app/build/web`;
+CI regenerates and expects no diff.
+
+**And one thing it caught in the dependencies plugin.** `pub deps` was
+cached against the lockfile and the package config, on the claim that pub
+reads nothing else. An edge between two workspace members is in neither
+— a member is not locked — so the example gaining a dev dependency served
+the answer from before it. The workspace's pubspecs are in the stamp now.
+
+**What the browser walk caught this time.** An entry wrapped in its own
+`MaterialApp` brings a navigator whose modal barrier blocks the semantics
+of everything painted before it, up to the nearest semantic boundary. In a
+process the boundary is the window; inline, without one, it was the
+studio: the rail, the tabs and the entry list vanished from the
+accessibility tree the moment Buttons mounted, and the walk could not find
+Dependencies any more. The inline picture is a boundary now, the way a
+window is. Pinned by a test that paints a text before the stage and reads
+its semantics after an app-wrapped entry opens.
+
+### Previews, closing (same day): the demo as a scenario, and no thumbnails
+
+**Thumbnails in-process were not built, on purpose.** The landing's
+pictures come from the tester lane with a content-keyed disk cache; an
+in-process version means mounting every entry hidden in the studio's own
+tree, waiting a frame each, capturing, and keeping a second pipeline in
+step with the first — a duplicate serving one page. What was wrong was
+smaller: with thumbnails off and nothing selected, the stage drew whichever
+entry the guest held, a demo nobody asked for. That state is a plain "pick
+a demo" now.
+
+**The web demo is a scenario.** `web_demo/test/scenarios/web_demo_test.dart`
+walks the page's own shell, recording and compiled-in previews under the
+harness: the catalog, an entry live, staged as a phone, its tree, another
+entry on the phone — seven steps, 2.8s, framed as a window by the folder's
+profile, and CI runs it beside the studio's own. The demo package is the
+one place the recorded shell and the example's entries meet, which is why
+the scenario lives there and not in the app.
+
+**The isolation cost, seen.** The example's column of buttons is 384
+points tall; at "Fit" into the half-height stage the Elements tab leaves,
+it overflows by 99. An embedder guest keeps that overflow to itself and
+its Problems tab; a guest drawn inline raises it in the studio's own
+tree, where the harness reports it as the studio's failure and the browser
+walk would count it as a console error. The walk stages the phone before
+it opens the tree. This is the one thing the inline guest gives up, and it
+is worth writing down: an entry's layout error is the page's. A per-guest
+error sink is possible — `FlutterError.onError` is global, but the details
+name the element chain — and is left until it is needed twice.
+
+### One subject for every fixture (same day): the coffee shop
+
+The demo's three recorded or compiled-in plugins now show one app — the
+example's coffee shop, which the scenarios already walked.
+
+- **Previews are curated, not "everything a browser can compile".** The
+  shop had no previews; `demo/shop.dart` gives it five, one per screen,
+  under a `PreviewShell` that is the shop itself — `ShopApp` takes the
+  screen as its home, so a preview reads the shop's theme, strings and a
+  sample cart, and the two axes are the app's own (dark, and its two
+  languages). `web_entries.dart` takes an explicit list of ids and keeps
+  the fitness check as a guard that fails the script rather than dropping
+  an entry quietly. One packaging fact surfaced: the shop reads its
+  strings from `assets/i18n/` at its own root, and inside another package
+  that asset is addressed under `packages/flutterware_example/` — a knob
+  on `ShopStrings` the demo's entry point and scenario set.
+- **The launcher icon is the shop's, drawn by the studio.** The sets on
+  disk are fixtures with deliberate *shapes* — a partial override, an
+  iOS-only set, a config never generated, a themed layer dropped — that
+  the example's README explains and the panel's cases depend on. So
+  `flutter_launcher_icons` was not put in the loop: it has one mode, and
+  the README already says why a config per set cannot work. Instead
+  `demo/brand.dart` draws the icon: `appIcon` is a sheet of every variant,
+  a row per set (told apart by tint) and a column per role (icon, adaptive
+  foreground, monochrome), and `appIconVariant` is one cell filling the
+  canvas, chosen by two knobs. `previews screenshot` photographs the
+  variant at 1024 into `assets/brand/`, and `app/tool/demo/brand_icons.dart`
+  writes those into every existing file at the size it already has, never
+  adding or removing one. The sheet is the first entry of the web demo;
+  the confirmation screen (a `name` knob) is where a reader meets knobs,
+  and `shopBadges` — one component at three sizes — is the entry that is
+  not a screen. The example declares `device: Devices.iphone16`, in its
+  own manifest and in the recorded one, so every shop preview opens on a
+  phone.
+
+  Found while doing this: picking a knob in the inline guest emptied the
+  knob list. `CatalogGuest` rebuilt once more than the demo did, began a
+  declaration pass the demo never took part in, and the pass ended with
+  nothing declared. A pass now begins only for a new `(entry, revision)`;
+  `inline_guest_test.dart` pins it.
+
 ### The recording and the scenario, in that order
 
 The scenario does not record. It opens `app/demo/fixture/` through the file
@@ -514,17 +795,13 @@ so is the right answer there.
 ## What to do next
 
 0. ~~The launcher-icon slice.~~ Built; see above.
-1. **Scenarios next, as the go/no-go for the interface.** Extract `ScenariosCore`'s panel-facing
-   interface, rename today's class `LiveScenariosCore`, move the artifacts
-   source onto it, write `RecordedScenariosCore` over a fixture the record
-   script produced. Deliverable: one whole-panel catalog demo, one studio
-   scenario with shots, and the panel on the web behind the `dart:ffi` fence.
-   Roughly two to three days. If the interface is unpleasant here, it will be
-   worse for previews, and that is the moment to stop.
-2. **Previews.** The still picture, recorded thumbnails and inspect, read-only
-   knobs. Three to five days.
-3. **The demo entry point, the record script as a documented command, the
-   Pages deploy and the README link.** One to two days.
+1. ~~**Scenarios next, as the go/no-go for the interface.**~~ Built — see
+   above. No interface on the core; the runner was the seam. Left for later:
+   a whole-panel catalog demo of the scenarios panel over the recording.
+2. ~~**Previews, inline.**~~ Built — see above. Thumbnails in-process
+   were declined; the demo is a scenario of its own package.
+3. ~~**The demo entry point, the record script as a documented command, the
+   Pages deploy.**~~ Built; the README link remains.
 
 Related: `2026-08-11-scenario-web-export-design.md` (the viewer this rides
 on), `2026-07-29-config-reload-findings.md` (why a panel's dependence on its

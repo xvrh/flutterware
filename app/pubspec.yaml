@@ -140,6 +140,11 @@ dev_dependencies:
   # `MockPlatformInterfaceMixin`, which is how a fake is allowed past
   # `PlatformInterface.verify`.
   plugin_platform_interface:
+  # The compiled web demo, opened in a real browser by
+  # `integration_test/web_demo_test.dart`. puppeteer fetches its own Chrome
+  # into `.dart_tool/puppeteer/` on first use.
+  puppeteer:
+  shelf_static:
   test:
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -155,11 +160,6 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/
-    # The recording the studio's own demos open — a real project's launcher
-    # icons, written by `tool/demo/record.dart`. Two lines because an asset
-    # directory is not recursive; see `lib/src/demo/recording_paths.dart`.
-    - demo/fixture/launcher_icon/
-    - demo/fixture/launcher_icon/files/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.

@@ -1,0 +1,44 @@
+{
+  "scenarios": [
+    {
+      "file": "test/scenarios/desktop/shop_window_test.dart",
+      "name": "Order a cold brew on a laptop",
+      "profile": "desktop",
+      "devices": [
+        "window-wide",
+        "windows-window"
+      ],
+      "languages": [
+        "en"
+      ]
+    },
+    {
+      "file": "test/scenarios/mobile/shop_test.dart",
+      "name": "Around the shop",
+      "profile": "phones",
+      "devices": [
+        "iphone-16",
+        "iphone-se",
+        "android-tall"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ]
+    },
+    {
+      "file": "test/scenarios/mobile/shop_test.dart",
+      "name": "Order a cappuccino",
+      "profile": "phones",
+      "devices": [
+        "iphone-16",
+        "iphone-se",
+        "android-tall"
+      ],
+      "languages": [
+        "en",
+        "fr"
+      ]
+    }
+  ]
+}

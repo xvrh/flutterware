@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 import 'package:flutter/widgets.dart';
 
 import '../inspect/guest_errors.dart';
@@ -97,12 +99,12 @@ class CatalogKnobs {
 
   /// Registers the extensions. Call once, before `runApp`.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.knobs', (_, _) async {
+    GuestExtensions.register('ext.flutterware.knobs', (_, _) async {
       return developer.ServiceExtensionResponse.result(
         jsonEncode(describe().toJson()),
       );
     });
-    developer.registerExtension('ext.flutterware.setKnobs', (_, args) async {
+    GuestExtensions.register('ext.flutterware.setKnobs', (_, args) async {
       // A service extension's arguments are strings, so the payload is JSON in
       // one of them rather than a map of typed values.
       var payload = jsonDecode(args['payload'] ?? '{}') as Map<String, dynamic>;
@@ -252,6 +254,9 @@ class CatalogGuest extends StatefulWidget {
 class _CatalogGuestState extends State<CatalogGuest> {
   CatalogKnobs get _knobs => CatalogKnobs.instance;
 
+  /// The entry and revision the last declaration pass was begun for.
+  (String, int)? _passed;
+
   /// The axes are reset from here as well as the knobs, and it has to be from
   /// here: the shell is *below* this widget, so an entry whose wrapper is not a
   /// shell declares nothing at all, and without this the previous shell's axes
@@ -290,8 +295,17 @@ class _CatalogGuestState extends State<CatalogGuest> {
         valueListenable: _knobs.revision,
         builder: (context, revision, _) {
           // Everything below is about to re-declare what it reads, which is the
-          // only chance there is to notice a knob nobody reads any more.
-          _knobs._beginPass();
+          // only chance there is to notice a knob nobody reads any more — but
+          // only when it *is* about to: a new revision (the provider below
+          // notifies its dependents) or a new entry (the subtree is
+          // remounted). Any other rebuild of this widget — the window's
+          // metrics moving on a resize or a device switch — leaves the demo's
+          // element alone, and a pass with nothing declared in it retired
+          // every knob. Measured on a switch followed by a pick.
+          if (_passed != (widget.entryId, revision)) {
+            _passed = (widget.entryId, revision);
+            _knobs._beginPass();
+          }
           return KnobsProvider(
             knobs: _knobs.editable,
             // One editable set for the life of the guest, so the revision is

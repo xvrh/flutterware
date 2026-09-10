@@ -164,7 +164,7 @@
     {
       "role": "android.adaptive-background",
       "files": [],
-      "color": "#FFFFFFFF",
+      "color": "#FF6F4E37",
       "referenced": true
     },
     {
@@ -316,7 +316,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 20,
           "height": 20,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "1x",
           "icoFrames": [],
           "declaredSize": 20,
@@ -328,7 +328,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 29,
           "height": 29,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "1x",
           "icoFrames": [],
           "declaredSize": 29,
@@ -340,7 +340,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 40,
           "height": 40,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "2x",
           "icoFrames": [],
           "declaredSize": 40,
@@ -352,7 +352,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 40,
           "height": 40,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "1x",
           "icoFrames": [],
           "declaredSize": 40,
@@ -364,7 +364,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 58,
           "height": 58,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "2x",
           "icoFrames": [],
           "declaredSize": 58,
@@ -376,7 +376,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 60,
           "height": 60,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "3x",
           "icoFrames": [],
           "declaredSize": 60,
@@ -388,7 +388,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 76,
           "height": 76,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "1x",
           "icoFrames": [],
           "declaredSize": 76,
@@ -400,7 +400,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 80,
           "height": 80,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "2x",
           "icoFrames": [],
           "declaredSize": 80,
@@ -412,7 +412,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 87,
           "height": 87,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "3x",
           "icoFrames": [],
           "declaredSize": 87,
@@ -424,7 +424,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 120,
           "height": 120,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "3x",
           "icoFrames": [],
           "declaredSize": 120,
@@ -436,7 +436,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 120,
           "height": 120,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "2x",
           "icoFrames": [],
           "declaredSize": 120,
@@ -448,7 +448,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 152,
           "height": 152,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "2x",
           "icoFrames": [],
           "declaredSize": 152,
@@ -460,7 +460,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 167,
           "height": 167,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "2x",
           "icoFrames": [],
           "declaredSize": 167,
@@ -472,7 +472,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 180,
           "height": 180,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "3x",
           "icoFrames": [],
           "declaredSize": 180,
@@ -484,7 +484,7 @@
           "modified": "2026-01-01T09:41:00.000",
           "width": 1024,
           "height": 1024,
-          "hasAlpha": false,
+          "hasAlpha": true,
           "density": "1x",
           "icoFrames": [],
           "declaredSize": 1024,
@@ -685,7 +685,13 @@
       "files": []
     }
   ],
-  "findings": [],
+  "findings": [
+    {
+      "tone": "error",
+      "message": "15 iOS icons carry an alpha channel. App Store Connect rejects a build whose icon does.",
+      "role": "ios.app"
+    }
+  ],
   "android": {
     "manifestIcon": "@mipmap/ic_launcher",
     "launcher": {
@@ -694,7 +700,7 @@
       "foreground": "@mipmap/ic_launcher_foreground",
       "monochrome": "@mipmap/ic_launcher_monochrome"
     },
-    "backgroundColor": "#FFFFFFFF"
+    "backgroundColor": "#FF6F4E37"
   },
   "ios": "appIconSet",
   "iconBundles": []

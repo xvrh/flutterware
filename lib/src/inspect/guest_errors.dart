@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
@@ -135,12 +137,12 @@ class GuestErrors {
 
   /// Registers the extension. Call once, before `runApp`.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.errors', (_, _) async {
+    GuestExtensions.register('ext.flutterware.errors', (_, _) async {
       return developer.ServiceExtensionResponse.result(
         jsonEncode(describe().toJson()),
       );
     });
-    developer.registerExtension('ext.flutterware.clearErrors', (_, _) async {
+    GuestExtensions.register('ext.flutterware.clearErrors', (_, _) async {
       clear();
       return developer.ServiceExtensionResponse.result(
         jsonEncode({'cleared': true}),

@@ -5,3 +5,8 @@ tags:
   # directory able to *block* a build. Whether a runner VM offers Metal is not
   # answerable from a desk — until somebody answers it, these run by hand.
   gpu:
+  # Opens the compiled web demo in a Chrome that puppeteer downloads
+  # (`integration_test/web_demo_test.dart`). Excluded from the general
+  # integration lane and run by the studio demo job, which has the build
+  # to validate and caches the browser.
+  browser:

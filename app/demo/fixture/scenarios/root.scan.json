@@ -1,0 +1,29 @@
+{
+  "scenarios": [
+    {
+      "name": "Order a cold brew on a laptop",
+      "file": "test/scenarios/desktop/shop_window_test.dart",
+      "line": 12,
+      "endLine": 22
+    },
+    {
+      "name": "Around the shop",
+      "file": "test/scenarios/mobile/shop_test.dart",
+      "line": 12,
+      "endLine": 49
+    },
+    {
+      "name": "Order a cappuccino",
+      "file": "test/scenarios/mobile/shop_test.dart",
+      "line": 55,
+      "endLine": 66
+    }
+  ],
+  "diagnostics": [],
+  "unnamed": 0,
+  "configFolders": [
+    "test/scenarios/api",
+    "test/scenarios/desktop",
+    "test/scenarios/mobile"
+  ]
+}

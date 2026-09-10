@@ -21,7 +21,6 @@ import '../../scenarios/axes.dart';
 import '../../scenarios/browsing.dart';
 import '../../scenarios/discovery.dart';
 import '../../scenarios/flow_view.dart';
-import '../../scenarios/harness_entrypoint.dart';
 import '../../scenarios/help_page.dart';
 import '../../scenarios/list_tree.dart';
 import '../../scenarios/new_scenario_dialog.dart';
@@ -46,6 +45,16 @@ import 'no_packages.dart';
 
 export 'scenarios_core.dart' show ScenariosCore, scenariosPluginId;
 
+/// The flow page's banner icon, by package root — see [ScenariosPlugin.appIcon].
+typedef ScenarioAppIcon = ImageProvider? Function(String packageRoot);
+
+/// The project's own launcher icon, found the way the icon plugin finds it.
+ImageProvider? liveScenarioAppIcon(String packageRoot) =>
+    switch (representativeIconPath(packageRoot: packageRoot)) {
+      var path? => FileImage(File(path)),
+      null => null,
+    };
+
 /// The GUI half of the scenarios plugin — dev_studio's proven shape on the
 /// shell: the scenario list as a master pane on the left, the selected
 /// scenario's run as a full-page flow of device-framed screenshots, and a
@@ -54,7 +63,22 @@ export 'scenarios_core.dart' show ScenariosCore, scenariosPluginId;
 /// Everything the pages show comes out of [ScenariosCore.panelRunFor]; the
 /// panel starts runs and draws state, and that is all it does.
 class ScenariosPlugin extends NativePlugin<ScenariosCore> {
-  ScenariosPlugin(super.core, {this.watchSources});
+  ScenariosPlugin(
+    super.core, {
+    this.watchSources,
+    this.artifacts,
+    this.appIcon = liveScenarioAppIcon,
+  });
+
+  /// Where every step's frame and trees are read from, or null for the files
+  /// the harness wrote into the worktree. A recording hands its own source
+  /// in, with paths the recorded runs already spell relative to it.
+  final ScenarioArtifacts? artifacts;
+
+  /// The project's own launcher icon for the flow page's banner, by package
+  /// root. The default lists the package's icon directories; a recording
+  /// answers with the icon it recorded.
+  final ScenarioAppIcon appIcon;
 
   /// How the panel watches the scan root, for tests that need the timing rules
   /// without a filesystem — the seam every other watcher in this app has
@@ -182,14 +206,13 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
   /// the first scenario is opened.
   String? _pool;
 
-  /// Memoised because [testConfigFolderFor] stats the disk and the answer
-  /// changes only when a config file is added.
-  final _poolCache = <(String, String), String>{};
-
-  String _poolFor(String package, String file) =>
-      _poolCache.putIfAbsent((package, file), () {
-        return testConfigFolderFor(_core.packageRootFor(package), file) ?? '';
-      });
+  /// From the scan, which records every governing config folder — so this
+  /// is a lookup and not a stat, and null until the scan has landed.
+  String? _poolFor(String package, String file) =>
+      switch (_core.scanResultFor(package)) {
+        null => null,
+        var scan => scan.testConfigFolderOf(file) ?? '',
+      };
 
   /// Swaps the remembered device when the opened scenario belongs to another
   /// pool: what was on screen is kept under the pool being left, and the pool
@@ -201,7 +224,8 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
   void _followPool(ScenarioPlace place) {
     if (place.file case var file?) {
       var pool = _poolFor(place.package, file);
-      if (pool == _pool) return;
+      // Not known yet: the panel rebuilds when the scan lands and asks again.
+      if (pool == null || pool == _pool) return;
       var current = AddressScope.param(context, 'device');
       if (_pool case var leaving?) {
         _deviceByPool[leaving] = current;
@@ -333,6 +357,9 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
     return ListenableBuilder(
       listenable: widget.plugin,
       builder: (context, _) {
+        // Again on every core change, not only when the address moved: the
+        // pool is read off the scan, and the scan lands after the page does.
+        _followPool(place);
         Widget detail;
         if ((place.file, place.scenario) case (var file?, var scenario?)) {
           detail = _ScenarioPage(
@@ -342,6 +369,7 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
             scenario: scenario,
             step: place.step,
             axes: axes,
+            appIcon: widget.plugin.appIcon,
             key: ValueKey('${place.package}/$file#$scenario'),
           );
         } else if (place.help ||
@@ -370,7 +398,9 @@ class _ScenariosPanelState extends State<_ScenariosPanel> {
         // they are files in the worktree the harness just wrote them into; on
         // the exported page the same widgets read the same steps over HTTP.
         return ScenarioArtifactsScope(
-          artifacts: FileScenarioArtifacts(_core.host.worktree.path),
+          artifacts:
+              widget.plugin.artifacts ??
+              FileScenarioArtifacts(_core.host.worktree.path),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -1089,6 +1119,7 @@ class _ScenarioPage extends StatefulWidget {
     required this.file,
     required this.scenario,
     required this.axes,
+    required this.appIcon,
     this.step,
     super.key,
   });
@@ -1097,6 +1128,7 @@ class _ScenarioPage extends StatefulWidget {
   final String package;
   final String file;
   final String scenario;
+  final ScenarioAppIcon appIcon;
 
   /// The axis assignment the address asks for.
   final ScenarioAxes axes;
@@ -1281,15 +1313,12 @@ class _ScenarioPageState extends State<_ScenarioPage> {
   /// the package is the closest thing to the project's own name here.
   String get _appLabel => p.basename(widget.package);
 
-  /// The project's own launcher icon for the banner tile, found the way the
-  /// icon plugin finds it. Once per page: a directory listing plus image
-  /// headers, and the page is already keyed by scenario.
-  late final ImageProvider? _appIcon = switch (representativeIconPath(
-    packageRoot: widget.core.packageRootFor(widget.package),
-  )) {
-    var path? => FileImage(File(path)),
-    null => null,
-  };
+  /// The project's own launcher icon for the banner tile. Once per page: the
+  /// live lookup is a directory listing plus image headers, and the page is
+  /// already keyed by scenario.
+  late final ImageProvider? _appIcon = widget.appIcon(
+    widget.core.packageRootFor(widget.package),
+  );
 
   @override
   Widget build(BuildContext context) {

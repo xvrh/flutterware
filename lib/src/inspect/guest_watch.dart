@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 import 'package:flutter/widgets.dart';
 
 import 'guest_inspect.dart';
@@ -48,7 +50,7 @@ class GuestWatch {
   static int _scrollTicks() => GuestScrolls.instance.ticks;
 
   static void _post(WatchPush push) =>
-      developer.postEvent(eventKind, push.toJson());
+      GuestExtensions.post(eventKind, push.toJson());
 
   /// Where a push goes. Injectable for one reason: [developer.postEvent] is a
   /// no-op with no VM service attached, so a test that could not substitute
@@ -312,9 +314,11 @@ class GuestWatch {
       return null;
     }
     // Through the transform as one rect — see `_layoutOf` in guest_inspect.dart
-    // for why an origin plus a raw size is two different spaces.
+    // for why an origin plus a raw size is two different spaces. Relative to
+    // the demo's root, not the window: the two coincide in an embedder guest
+    // and differ for a guest drawn inside its host.
     return MatrixUtils.transformRect(
-      render.getTransformTo(null),
+      render.getTransformTo(rootOf()?.renderObject),
       Offset.zero & render.size,
     );
   }
@@ -369,7 +373,7 @@ class GuestWatch {
 
   /// Registers the extension. Call once, before `runApp`.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.watch', (_, args) async {
+    GuestExtensions.register('ext.flutterware.watch', (_, args) async {
       // Absent means "leave it alone", which is what lets a caller change the
       // node without restating the interval and the other way round.
       if (args['on'] case var on?) {

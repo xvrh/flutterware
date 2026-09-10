@@ -46,6 +46,18 @@ jobs:
       # other half, a floor lower than what the code needs, is a claim only
       # running an older SDK could disprove, and nothing here does.
       - run: dart tool/bump_flutter.dart --check
+      # `examples/brewline` is not a workspace member: it is the demo a stranger
+      # clones, so its pubspec names the published `flutterware`. Analyzed here
+      # against this checkout instead — the code under review is what the
+      # demo's snippets have to compile against, published or not — through
+      # the same gitignored override a laptop writes (see CLAUDE.md). Without
+      # it `flutter analyze` walks into an unresolved package and reports its
+      # every import as an error.
+      - name: Resolve the demo app against this checkout
+        working-directory: examples/brewline
+        run: |
+          printf 'dependency_overrides:\n  flutterware:\n    path: ../..\n' > pubspec_overrides.yaml
+          flutter pub get
       - run: flutter analyze
       - run: flutter test
         working-directory: app
@@ -119,7 +131,7 @@ jobs:
         # is what lets this step block: a check nobody can fail is not a check,
         # and the step it replaces was `continue-on-error` from the day it was
         # written to the day it was deleted.
-        run: dart test integration_test --exclude-tags gpu
+        run: dart test integration_test --exclude-tags gpu,browser
         working-directory: app
 
 
@@ -272,6 +284,14 @@ jobs:
         working-directory: app
       - run: flutter test test/previews/phone_rig_probe_test.dart
         working-directory: app
+      # The probe writes every frame of every walk; when a walk is not
+      # order-free on this runner and nowhere else, the pictures are the
+      # only way to see what differed.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: phone-rig-probe-frames
+          path: app/build/phone_rig_probe
 
   studio_demo:
     name: Studio demo
@@ -308,25 +328,55 @@ jobs:
       - name: "the recording is what the tool records today"
         # Re-records and expects no diff. The recorder pins every mtime to the
         # project clock, so a fresh checkout records the same bytes as the
-        # laptop that committed them.
+        # laptop that committed them. The launcher-icon half only: the
+        # scenario half is rendered pixels, which are not byte-stable across
+        # operating systems, and is recorded from one machine on purpose —
+        # see the spec's "facts and pictures".
         run: |
-          dart run tool/demo/record.dart
+          dart run tool/demo/record.dart --only=launcher-icon
           git diff --exit-code --stat -- demo/fixture \
-            || (echo "##[error] app/demo/fixture is stale. Run 'cd app && fvm dart run tool/demo/record.dart' and commit the result." \
+            || (echo "##[error] app/demo/fixture is stale. Run 'cd app && fvm dart run tool/demo/record.dart --only=launcher-icon' and commit the result." \
                 && exit 1)
         working-directory: app
       - name: "the studio's own scenario, under the harness"
         # `flutter test` in the macOS job already runs this file as a widget
         # test; this is the harness lane — the shots, the walk, the run report
         # — which is the thing a scenario exists for.
-        run: dart run app/bin/fw.dart run scenarios run --package=app --device=window --steps=none
-      - name: "the shell compiles for the web"
+        run: |
+          dart run app/bin/fw.dart run scenarios run --package=app --device=window --steps=none
+          dart run app/bin/fw.dart run scenarios run --package=web_demo --device=window --steps=none
+      - name: "the page is built, with the recording beside it"
+        # `tool/demo/build_web.dart` is `flutter build web` on the demo entry
+        # point plus the recording copied next to `index.html`, which is where
+        # the page fetches it from — the recording is deliberately not an
+        # asset of the app (see `app/lib/src/demo/recording.dart`).
         # `--base-href` is the repository's Pages path, which is where the
-        # deploy job below puts it; `--pwa-strategy=none` leaves out the
-        # service worker Flutter is retiring, which only ever showed up as a
-        # console error on this page.
-        run: flutter build web -t lib/main_demo_web.dart --base-href "/${{ github.event.repository.name }}/" --pwa-strategy=none
+        # deploy job below puts it.
+        run: dart run tool/demo/build_web.dart --base-href "/${{ github.event.repository.name }}/"
         working-directory: app
+      # puppeteer's Chrome, ~150 MB, keyed on the lockfile so a puppeteer bump
+      # fetches the browser it wants and nothing else does.
+      - uses: actions/cache@v4
+        with:
+          path: .dart_tool/puppeteer
+          key: puppeteer-chrome-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+      - name: "the page opens in a browser and walks to a recorded panel"
+        # The compile above proves the shell builds without a filesystem;
+        # this proves it *runs* without one. Chrome opens the directory the
+        # deploy job is about to publish, served under the same path, and
+        # walks the rail through the semantics tree. A JavaScript error, a
+        # failed request or a panel that never draws fails it with the list.
+        run: dart test integration_test/web_demo_test.dart
+        env:
+          FW_WEB_DEMO_BUILD: build/web
+        working-directory: app
+      - uses: actions/upload-artifact@v4
+        # One screenshot per step the browser took, green or red.
+        if: always()
+        with:
+          name: studio-demo-shots
+          path: app/build/web_demo/shots
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: studio-demo

@@ -1,6 +1,6 @@
 import 'package:flutterware/devices.dart';
 
-import '../embedder/guest_vm_service.dart';
+import '../embedder/guest_channel.dart';
 
 /// The framework's own debug switches, named for a command line.
 ///
@@ -130,7 +130,7 @@ const debugFlags = <DebugFlag>[
 /// framework accepts, so a name it does not know is an error listing the ones
 /// it does rather than a flag that quietly did nothing.
 Future<void> applyDebugFlags(
-  GuestVmService service,
+  GuestChannel service,
   Map<String, String> values,
 ) async {
   for (var entry in values.entries) {
@@ -183,7 +183,7 @@ Future<void> applyDebugFlags(
 /// implies it — and the reset has no value to check against, because the guest answers with the
 /// platform it is really running on.
 Future<void> stageGuestPlatform(
-  GuestVmService service,
+  GuestChannel service,
   DevicePlatform? platform,
 ) async {
   var wanted = switch (platform) {

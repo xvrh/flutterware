@@ -276,24 +276,18 @@ Widget avatarTileEmpty() => const Placeholder();
     });
   });
 
-  test('keys the rendered subtree by entry, so switching remounts state', () {
-    generator.select(members);
-    // The id the *switch* resolved, not the file's: a runtime switch remounts
-    // for the same reason a reload does, and keying on the file would leave
-    // one entry's State under the next entry's widgets.
-    expect(entrypoint(), contains('ValueKey<String>(entryId)'));
-    expect(entrypoint(), contains('CatalogGuest(\n      entryId: entryId,'));
-  });
-
-  test('the file outranks a runtime switch, and only when it moves', () {
-    // A reload does not re-run `main`, so the guest's current entry survives
-    // one. The regenerated file is the panel saying "show that one", so the
-    // build rebases on it — see CatalogEntries.
+  test('runs the published root over its own entry table', () {
+    // Keying the subtree by entry, letting the file outrank a runtime switch,
+    // calling the wrapper the one way — all of it lives in `CatalogHost`
+    // now, the same widget an in-process guest puts in its tree, so the
+    // generated file only has to hand it the table and the file's entry.
     generator.select(members);
     expect(
       entrypoint(),
-      contains('CatalogEntries.instance.build(\n    fromFile: _fileEntryId,'),
+      contains('CatalogHost(fileEntryId: _fileEntryId, entryOf: _entry)'),
     );
+    expect(entrypoint(), contains('const _fileEntryId ='));
+    expect(entrypoint(), isNot(contains('class _CatalogHost')));
   });
 
   group('carried imports', () {
@@ -380,7 +374,6 @@ Widget avatarTileMembers() => const Placeholder();
       // be named here; they are declared inside the shell now, so this file has
       // no reason to know one exists.
       generator.select(wrapped);
-      expect(entrypoint(), contains('var wrapper = entry.preview.wrapper ??'));
       expect(entrypoint(), isNot(contains('fwShellWrap')));
       expect(entrypoint(), isNot(contains('CatalogAxesScope')));
       expect(wrapper(0), isNot(contains('CatalogAxes')));

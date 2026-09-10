@@ -5,8 +5,8 @@
 /// Everything the shell would learn from the machine is answered here instead
 /// — the worktree list git would report, the manifest `tool/flutterware.dart`
 /// would produce, the facts the explorer would probe — and every plugin's core
-/// is either the live core over a recorded reader (launcher icon) or a quiet
-/// [RecordedCore] whose panel says so. Nothing below runs a process, opens a
+/// is either the live core over recorded readers (launcher icon, scenarios)
+/// or a quiet [RecordedCore] whose panel says so. Nothing below runs a process, opens a
 /// socket or walks a directory; the one filesystem touch left, the facts
 /// store, points at a path that is not there and is built to shrug.
 ///
@@ -27,6 +27,10 @@ import 'package:flutterware/src/log_client.dart';
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/icon_plugin.dart';
+import '../plugins/native/previews_plugin.dart';
+import '../plugins/native/scenarios_plugin.dart';
+import '../previews/discovery.dart' show ScanResult;
+import '../previews/inline_guest.dart';
 import '../plugins/native_plugin.dart';
 import '../plugins/plugin_core.dart';
 import '../plugins/registry.dart';
@@ -44,25 +48,25 @@ import '../worktrees/providers/git.dart';
 import '../worktrees/providers/stack.dart';
 import '../worktrees/watchers.dart';
 import '../plugins/native/dev_stack_results.dart';
+import 'recorded_scenarios.dart';
 import 'recording.dart';
-
-/// Where the recorded project pretends to be. Never read from disk; it is what
-/// the address bar shows and what the facts store is keyed by.
-const recordedProjectRoot = '/recording';
 
 /// What the recorded project's `tool/flutterware.dart` would declare.
 ///
 /// Written with the same classes a project writes its config with, so the
-/// recording's rail is a rail a real config could produce. Only the launcher
-/// icon has a recording behind it today; the rest are declared so the rail
-/// reads as a project rather than as one plugin, and their panels say what
-/// they are.
+/// recording's rail is a rail a real config could produce. The launcher icon
+/// and the scenarios have a recording behind them; the rest are declared so
+/// the rail reads as a project rather than as two plugins, and their panels
+/// say what they are.
 PluginManifest recordedManifest() {
   const root = Pkg('.');
   var fw = FlutterwareConfig();
   fw.use(Dependencies(packages: const [DependenciesPackage(root)]));
   fw.use(Assets(packages: const [AssetsPackage(root)]));
-  fw.use(Previews(packages: const [PreviewsPackage(root)]));
+  // A phone app: its previews open on a phone, as the root manifest says.
+  fw.use(
+    Previews(packages: const [PreviewsPackage(root, device: Devices.iphone16)]),
+  );
   fw.use(Scenarios(packages: const [ScenariosPackage(root)]));
   fw.use(LauncherIcon(packages: const [LauncherIconPackage(root)]));
   fw.use(NativeSplash(packages: const [NativeSplashPackage(root)]));
@@ -76,6 +80,7 @@ PluginManifest recordedManifest() {
 /// a label and the app-tool directory is never listed.
 ShellController recordedShell({
   required Recording recording,
+  InlinePreviews? previews,
   AppContext? appContext,
   FlutterSdkPath? flutterSdk,
   PluginManifest? manifest,
@@ -92,21 +97,11 @@ ShellController recordedShell({
     flutterSdk: flutterSdk ?? FlutterSdkPath('$recordedProjectRoot/flutter'),
     registry: PluginRegistry({
       for (var plugin in declared.plugins)
-        plugin.id: plugin.id == launcherIconPluginId
-            ? panelFor<LauncherIconCore>(
-                (core) => LauncherIconPlugin(
-                  core,
-                  image: recordedIconImage(recording),
-                ),
-              )
-            : panelFor<RecordedCore>(NotRecordedPlugin.new),
+        plugin.id: _recordedPanel(plugin.id, recording, previews),
     }),
     coreRegistry: PluginCoreRegistry({
       for (var plugin in declared.plugins)
-        plugin.id: plugin.id == launcherIconPluginId
-            ? (host) =>
-                  LauncherIconCore(host, scan: recordedIconScanner(recording))
-            : RecordedCore.new,
+        plugin.id: _recordedCore(plugin.id, recording, previews),
     }),
     manifestLoader: RecordedManifestLoader(declared),
     discovery: WorktreeDiscovery(runProcess: _recordedGit),
@@ -153,6 +148,67 @@ Future<ProcessResult> _recordedGit(
   }
   return ProcessResult(0, 1, '', 'not available in a recording');
 }
+
+/// The live core over the recording, for a plugin with one behind it; a
+/// quiet [RecordedCore] for the rest.
+PluginCoreFactory _recordedCore(
+  String pluginId,
+  Recording recording,
+  InlinePreviews? previews,
+) => switch (pluginId) {
+  launcherIconPluginId => (host) => LauncherIconCore(
+    host,
+    scan: recordedIconScanner(recording),
+  ),
+  scenariosPluginId => (host) => ScenariosCore(
+    host,
+    scan: recordedScenarioScan(recording),
+    runner: recordedScenarioRunner(recording),
+  ),
+  // Previews is not recorded: its entries are compiled into this program
+  // and the scan is the table of them.
+  uiCatalogPluginId when previews != null => (host) => PreviewsCore(
+    host,
+    scan: ({
+      required projectRoot,
+      required roots,
+      required previewAnnotations,
+    }) async => ScanResult(entries: previews.entries, diagnostics: const []),
+  ),
+  _ => RecordedCore.new,
+};
+
+/// The live panel, reading its pictures from the recording; [NotRecordedPlugin]
+/// for a plugin with nothing behind it.
+NativePluginFactory _recordedPanel(
+  String pluginId,
+  Recording recording,
+  InlinePreviews? previews,
+) => switch (pluginId) {
+  launcherIconPluginId => panelFor<LauncherIconCore>(
+    (core) => LauncherIconPlugin(core, image: recordedIconImage(recording)),
+  ),
+  scenariosPluginId => panelFor<ScenariosCore>(
+    (core) => ScenariosPlugin(
+      core,
+      // Nothing on disk to watch, and no disk.
+      watchSources: (path, {required recursive}) => const Stream.empty(),
+      artifacts: recording,
+      appIcon: recordedScenarioAppIcon(recording),
+    ),
+  ),
+  uiCatalogPluginId when previews != null => panelFor<PreviewsCore>((core) {
+    var inline = InlinePreviewsGuest(previews);
+    return PreviewsPlugin(
+      core,
+      connectToDaemon: inline.connect,
+      launchGuest: inline.launch,
+      // Rendered by `flutter_tester`, which this host cannot spawn.
+      thumbnails: false,
+    );
+  }),
+  _ => panelFor<RecordedCore>(NotRecordedPlugin.new),
+};
 
 /// The manifest, without running anything.
 class RecordedManifestLoader implements ManifestLoader {

@@ -213,7 +213,25 @@ const _liveDoc =
 /// supplies and a CLI leaves null — correctly, since there is no session in a
 /// CLI to be busy.
 class PreviewsCore extends PluginCore {
-  PreviewsCore(super.host);
+  /// [scan] answers a package's syntactic scan — a parse of the disk
+  /// off-isolate by default, and the door a catalog compiled into the host
+  /// comes in through: the same core over a table of entries. See
+  /// `lib/src/previews/inline_guest.dart`.
+  PreviewsCore(super.host, {CatalogScan? scan}) : _scanner = scan ?? _liveScan;
+
+  final CatalogScan _scanner;
+
+  static Future<ScanResult> _liveScan({
+    required String projectRoot,
+    required List<String> roots,
+    required List<String> previewAnnotations,
+  }) => Isolate.run(
+    () => CatalogScanner(
+      projectRoot: projectRoot,
+      roots: roots,
+      previewAnnotations: previewAnnotations,
+    ).scan(),
+  );
 
   /// Declared packages, filtered to those the workspace knows about, so a typo
   /// cannot make the plugin scan a directory that is not there.
@@ -464,12 +482,10 @@ class PreviewsCore extends PluginCore {
       // Off the calling isolate: a large catalog is tens of milliseconds of
       // file reads and parsing, which is a dropped frame if it runs on the UI
       // isolate.
-      var result = await Isolate.run(
-        () => CatalogScanner(
-          projectRoot: root,
-          roots: [entryRoot],
-          previewAnnotations: annotations,
-        ).scan(),
+      var result = await _scanner(
+        projectRoot: root,
+        roots: [entryRoot],
+        previewAnnotations: annotations,
       );
       if (_scanTokens[path] != token) {
         overtaking = _scanRuns[path];
@@ -3443,3 +3459,10 @@ class _InspectRequest {
   /// that the reasons sit beside the flags they are about.
   final bool mayAttach;
 }
+
+/// A package's syntactic scan — see [PreviewsCore.new].
+typedef CatalogScan = Future<ScanResult> Function({
+  required String projectRoot,
+  required List<String> roots,
+  required List<String> previewAnnotations,
+});

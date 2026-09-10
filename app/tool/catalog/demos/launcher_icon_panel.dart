@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/plugins.dart';
@@ -11,12 +13,13 @@ import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:path/path.dart' as p;
 
 import 'app_theme.dart';
 
 /// The **whole** launcher-icon panel, over the recording `tool/demo/record.dart`
 /// wrote from `examples/example` — a real project's icons, every role and
-/// every flavor, drawn from assets rather than from a scan of the disk.
+/// every flavor, read from the recording rather than from a scan of the disk.
 ///
 /// The entries in `launcher_icon.dart` show the pieces: a plate, a stage, the
 /// chips. This is the panel a user sees, which until the recording existed
@@ -56,7 +59,11 @@ class _RecordedPanel extends StatefulWidget {
 }
 
 class _RecordedPanelState extends State<_RecordedPanel> {
-  static const _recording = AssetRecording();
+  // The previews guest runs with the package as its working directory, which
+  // is what makes the file end reachable from a demo.
+  static final _recording = FileScenarioArtifacts(
+    p.join(Directory.current.path, 'demo', 'fixture'),
+  );
 
   late final LauncherIconCore _core = _build();
 

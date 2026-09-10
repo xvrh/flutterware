@@ -53,6 +53,14 @@ fvm install && fvm flutter pub get
 
 `fvm install` is a no-op (~0.2s) when the version is already in `~/fvm/versions`; on a new machine it downloads it, which takes minutes.
 
+`examples/brewline` is the demo app a stranger clones, not a workspace member, and its pubspec names the *published* `flutterware`. To analyze or run it against this checkout, write the gitignored override once and resolve it:
+
+```sh
+printf 'dependency_overrides:\n  flutterware:\n    path: ../..\n' > examples/brewline/pubspec_overrides.yaml && (cd examples/brewline && fvm flutter pub get)
+```
+
+Without it a root `fvm flutter analyze` reports every import in `examples/brewline/demo/` as an error. CI's analyze job writes the same file.
+
 **The one rule: the SDK is whichever one the invocation names.** `fvm dart run flutterware` says which SDK to use by choosing the `dart` that runs it. Nothing in this repo discovers an SDK from a pin file, a cache or `FLUTTER_HOME` — `test/ambient_sdk_test.dart` fails the build if any source spawns a bare `dart` or `flutter`. So do not reach for the `flutter`/`dart` on PATH: measured 2026-08-14 on this machine, PATH Dart is **3.12.1 stable** against a `^3.13.0-0` floor, and `dart run flutterware` there fails with *"The language version 3.13 … is too high"*.
 
 If the MCP server is what you need up, `tool/mcp_server.sh` performs this setup itself on first connect — measured **5s** on a worktree with a stale resolution and the SDK already cached. See the drive section below.

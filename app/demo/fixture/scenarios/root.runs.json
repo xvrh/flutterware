@@ -1,0 +1,6 @@
+{
+  "files": [
+    "test/scenarios/mobile/shop_test.dart",
+    "test/scenarios/desktop/shop_window_test.dart"
+  ]
+}

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 // `rendering` as well as `widgets`, for the layout half: `widgets.dart`
 // re-exports a curated slice of rendering that has `RenderFlex` in it and not
 // `FlexParentData`, and the parent data is where a child's flex actually
@@ -45,12 +47,12 @@ class GuestInspector {
   /// Registers the extensions. Call once, before `runApp`, beside the knobs and
   /// axes ones — an extension has to outlive every entry switch.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.tree', (_, _) async {
+    GuestExtensions.register('ext.flutterware.tree', (_, _) async {
       return developer.ServiceExtensionResponse.result(
         jsonEncode(read().toJson()),
       );
     });
-    developer.registerExtension('ext.flutterware.semantics', (_, args) async {
+    GuestExtensions.register('ext.flutterware.semantics', (_, args) async {
       switch (args['on']) {
         case 'true':
           enableSemantics(true);
@@ -61,7 +63,7 @@ class GuestInspector {
         jsonEncode(readSemantics().toJson()),
       );
     });
-    developer.registerExtension('ext.flutterware.hitTest', (_, args) async {
+    GuestExtensions.register('ext.flutterware.hitTest', (_, args) async {
       var x = double.tryParse(args['x'] ?? '');
       var y = double.tryParse(args['y'] ?? '');
       if (x == null || y == null) {
@@ -157,8 +159,11 @@ class GuestInspector {
     var root = rootOf()?.renderObject;
     if (root is! RenderBox || !root.hasSize) return const [];
 
+    // In the demo root's own coordinates — the window's for an embedder
+    // guest, whose root is the window, and the picture's for a guest drawn
+    // inside its host. The boxes the tree reports are in the same space.
     var result = BoxHitTestResult();
-    root.hitTest(result, position: root.globalToLocal(Offset(x, y)));
+    root.hitTest(result, position: Offset(x, y));
 
     // Innermost first out of the framework, and reversed on the way out: a
     // caller reading a chain wants it the way the tree reads.
@@ -439,7 +444,7 @@ class GuestInspector {
         ),
         _ => null,
       },
-      layout: _layoutOf(render),
+      layout: _layoutOf(render, within: rootOf()?.renderObject),
       label: _labelOf(render),
       selected: _selectedOf(render),
       children: [
@@ -1001,7 +1006,12 @@ bool? _selectedOf(RenderObject? render) {
 /// Null rather than zeroes for a widget with no box of its own, and null for
 /// one that has not been laid out: a size read before layout is not a size, it
 /// is whatever was there last time.
-InspectLayout? _layoutOf(RenderObject? render) {
+///
+/// Relative to [within] — the demo's root — rather than to the window. The
+/// two coincide in an embedder guest, whose root *is* the window, and differ
+/// for a guest drawn inside its host, where a box in window coordinates
+/// would be a box on the studio.
+InspectLayout? _layoutOf(RenderObject? render, {RenderObject? within}) {
   if (render is! RenderBox || !render.hasSize) return null;
   // The whole rect through the transform, not an origin from `localToGlobal`
   // beside a raw `render.size`. Those two are in different spaces the moment
@@ -1011,7 +1021,7 @@ InspectLayout? _layoutOf(RenderObject? render) {
   // number a reader compares (a centre against `at "x,y"`, a width against the
   // screenshot) then quietly disagrees with the picture.
   var bounds = MatrixUtils.transformRect(
-    render.getTransformTo(null),
+    render.getTransformTo(within),
     Offset.zero & render.size,
   );
   return InspectLayout(

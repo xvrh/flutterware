@@ -112,10 +112,12 @@ void main() {
       greaterThan(dependencies.directs.length),
     );
 
-    // Reachability, live: `file_picker` is flutterware_app's, not this
-    // member's, even though both resolve from the same lockfile.
+    // Reachability, live: `process_runner` is the root package's own dev
+    // dependency, not this member's, even though both resolve from the same
+    // lockfile. (It used to be `file_picker`, the studio's — until the
+    // example's web demo made the example depend on the studio.)
     var names = dependencies.dependencies.map((d) => d.name).toSet();
-    expect(names, isNot(contains('file_picker')));
+    expect(names, isNot(contains('process_runner')));
 
     service.dispose();
   }, timeout: const Timeout(Duration(minutes: 2)));

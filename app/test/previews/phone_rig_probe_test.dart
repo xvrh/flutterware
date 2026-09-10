@@ -190,10 +190,12 @@ Future<void> _probe(String entryId, {bool screen = true}) async {
       var backwards = (await walk(stops.reversed.toList())).reversed.toList();
       _report('backwards', backwards);
 
-      // A picture of each stop of each walk, for looking at.
+      // A picture of each stop of each walk, for looking at — under the
+      // app's build directory, which CI uploads when this goes red.
       var out = Directory(
         p.join(
-          Directory.systemTemp.path,
+          Directory.current.path,
+          'build',
           'phone_rig_probe',
           entryId.split('#').last,
         ),
@@ -232,10 +234,14 @@ Future<void> _probe(String entryId, {bool screen = true}) async {
       var repeats = <double>[];
       var orderFree = <double>[];
       for (var i = 0; i < stops.length; i++) {
-        if (!_same(again[i].pixels, first[i].pixels)) repeats.add(stops[i]);
-        if (!_same(backwards[i].pixels, first[i].pixels)) {
-          orderFree.add(stops[i]);
+        var repeat = _diff(first[i], again[i]);
+        if (repeat.pixels > 0) print('  again t=${stops[i]}: ${repeat.report}');
+        if (repeat.pixels > edgeNoiseBudget) repeats.add(stops[i]);
+        var reversed = _diff(first[i], backwards[i]);
+        if (reversed.pixels > 0) {
+          print('  backwards t=${stops[i]}: ${reversed.report}');
         }
+        if (reversed.pixels > edgeNoiseBudget) orderFree.add(stops[i]);
       }
       print("stops whose screen is not the stop's own: $lagging");
       print('stops that differed on a repeated walk: $repeats');
@@ -249,6 +255,22 @@ Future<void> _probe(String entryId, {bool screen = true}) async {
     }
   }
 }
+
+/// How many pixels two frames of one stop may differ by and still count as
+/// the same picture.
+///
+/// On macOS and Linux they never differ: every walk is byte-identical. On
+/// `windows-latest` they do, by a little — measured 2026-09-10 over two runs,
+/// between 1 and 11 pixels of 630 000 per stop, by up to 78/255, in one- to
+/// three-pixel boxes on the model's silhouette; and which walk is the odd one
+/// changes from run to run (the first in one run, the backwards one in the
+/// next), while the other two agree to the byte. That is the runner's
+/// software rasterizer settling edge coverage differently per process, not
+/// the walk: the centre hue is right at every stop, and a frame carrying
+/// another stop's screen moves the whole model, thousands of pixels. The
+/// budget is the hue patch — 9 × 9 — which a wrong screen cannot leave
+/// untouched, and any difference at all is still printed above.
+const edgeNoiseBudget = 81;
 
 /// Mirrors `phoneRigHueAt` in the demo; kept here so the test reads no
 /// Flutter-side code of the example.
@@ -304,6 +326,45 @@ void _report(String label, List<WalkFrame> frames) {
 double _hueDistance(double a, double b) {
   var d = (a - b).abs() % 360;
   return d > 180 ? 360 - d : d;
+}
+
+/// How two frames of one stop differ: how many pixels, by how much at most,
+/// and where — the difference between a renderer that is off by a rounding
+/// step somewhere and a walk that drew another stop's screen.
+({int pixels, String report}) _diff(WalkFrame a, WalkFrame b) {
+  if (a.width != b.width || a.height != b.height) {
+    return (
+      pixels: a.width * a.height,
+      report: 'sizes differ: ${a.width}×${a.height} vs ${b.width}×${b.height}',
+    );
+  }
+  var pixels = 0;
+  var maxDelta = 0;
+  var left = a.width, top = a.height, right = -1, bottom = -1;
+  for (var y = 0; y < a.height; y++) {
+    for (var x = 0; x < a.width; x++) {
+      var at = (y * a.width + x) * 4;
+      var delta = 0;
+      for (var c = 0; c < 4; c++) {
+        var d = (a.pixels[at + c] - b.pixels[at + c]).abs();
+        if (d > delta) delta = d;
+      }
+      if (delta == 0) continue;
+      pixels++;
+      if (delta > maxDelta) maxDelta = delta;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  return (
+    pixels: pixels,
+    report: pixels == 0
+        ? 'identical'
+        : '$pixels of ${a.width * a.height} pixels differ, by at most '
+              '$maxDelta/255, within ($left,$top)–($right,$bottom)',
+  );
 }
 
 bool _same(List<int> a, List<int> b) {

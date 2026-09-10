@@ -15,8 +15,22 @@ void main() => Flutterware.configure((fw) {
   fw.use(NativeSplash(packages: [.new(app)]));
   fw.use(LauncherIcon(packages: [.new(app)]));
   // No `directory:` — the ordinary case, where the whole package is scanned
-  // and previews are found wherever they were written.
-  fw.use(Previews(packages: [.new(app)]));
+  // and previews are found wherever they were written. A phone app, so its
+  // previews open on a phone rather than on the plain rectangle — but for
+  // `home_page.dart`, the unframed half of a pair (see the file).
+  fw.use(
+    Previews(
+      packages: [
+        .new(
+          app,
+          canvases: [
+            PreviewCanvas('', devices: [Devices.iphone16]),
+            PreviewCanvas('demo/home_page.dart'),
+          ],
+        ),
+      ],
+    ),
+  );
   // Zero config: servers announce themselves at runtime — see
   // bin/example_server.dart.
   fw.use(ServerInspection());

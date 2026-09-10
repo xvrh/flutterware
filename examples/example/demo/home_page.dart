@@ -4,10 +4,11 @@ import 'package:flutterware_example/main.dart';
 
 import 'shell.dart';
 
-/// The unframed half of the `Home page` group. Its phone-canvas counterpart is
-/// `home_page_mobile.dart`, which is a separate file so that the canvas
-/// declared for it in `tool/flutterware.dart` does not catch this one too — the
-/// group is derived from the shared `group:`, not from the file.
+/// The unframed half of the `Home page` group. Its phone counterpart is
+/// `home_page_mobile.dart`, a separate file so that this one can opt out: the
+/// package opens everything on a phone, and `tool/flutterware.dart` declares
+/// an empty canvas for this file alone. The group is derived from the shared
+/// `group:`, not from the file.
 
 @Preview(name: 'Default', group: 'Home page', wrapper: wrapInApp)
 Widget homePageDefault() => const MyHomePage(title: 'Flutter Demo Home Page');

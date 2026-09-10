@@ -13,6 +13,7 @@ environment:
 workspace:
   - app
   - examples/example
+  - web_demo
 
 # **No `web:` here, and it is load-bearing — see the `pub_score` CI job.**
 #
