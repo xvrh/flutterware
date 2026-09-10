@@ -109,9 +109,14 @@ enum SceneTextDecoration { none, underline, overline, lineThrough }
 /// bridge indexes it.
 enum SceneTextDecorationStyle { solid, double, dotted, dashed, wavy }
 
-/// A number off the wire, or [fallback] when it is missing or not a number —
-/// every numeric `fromWire` in this file goes through here so none of them
-/// throws on a payload that is present but the wrong shape.
+/// A number off the wire, or [fallback] when it is missing or not a number,
+/// so a payload that is present but the wrong shape does not throw.
+/// [ScenePaint.fromWire] (a radial's radius, a sweep's angles) and
+/// [TextLayer.fromWire] read their numbers through it; the decoders that take
+/// a list or a word where a number may be — [SceneAlignment.fromWire],
+/// [SceneEdges.fromWire], [SceneCorners.fromWire], a gradient's colours and
+/// stops, [sizeFromWire] — match `num` in patterns of their own, to the same
+/// effect.
 double _wireDouble(Object? v, double fallback) =>
     v is num ? v.toDouble() : fallback;
 
