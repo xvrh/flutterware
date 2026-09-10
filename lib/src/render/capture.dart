@@ -386,7 +386,12 @@ class _RecordingCanvas implements ui.Canvas {
 
   /// A layer that blends onto what is beneath it, or holds a draw that
   /// blends into the layer, becomes one [VgEffectKind.layer] span: written
-  /// op by op, every draw would land source-over on the page instead.
+  /// op by op, every draw would land source-over on the page instead. A
+  /// stock `Text(overflow: TextOverflow.fade)` that overflows draws exactly
+  /// this — a saveLayer with a modulate rect blended inside it — so such a
+  /// paragraph now exports as a raster patch instead of vector text (it used
+  /// to export as vector text with an opaque gradient rect laid over it);
+  /// that trade is deliberate, not a regression to chase.
   bool _closeAsPatch(({int index, int saveCount, Rect? fallback}) open) {
     var layer = _ops[open.index] as VgSaveLayer;
     if (layer.blendMode == ui.BlendMode.srcOver &&
