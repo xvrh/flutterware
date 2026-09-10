@@ -36,7 +36,7 @@ void main() {
     );
   }
 
-  SceneNumberField _field(WidgetTester tester, String label) =>
+  SceneNumberField field(WidgetTester tester, String label) =>
       tester.widget<SceneNumberField>(
         find.byWidgetPredicate(
           (w) => w is SceneNumberField && w.label == label,
@@ -47,9 +47,9 @@ void main() {
     tester,
   ) async {
     await pump(tester, const RadialPaint(colors: [_red, _blue]));
-    _field(tester, 'Centre X').onCommit(33);
+    field(tester, 'Centre X').onCommit(33);
     expect((result! as RadialPaint).center.x, -0.34);
-    _field(tester, 'Centre X').onCommit(50);
+    field(tester, 'Centre X').onCommit(50);
     expect((result! as RadialPaint).center.x, 0);
     expect((result! as RadialPaint).center.x.isNegative, isFalse);
   });
@@ -58,7 +58,7 @@ void main() {
     tester,
   ) async {
     await pump(tester, const SweepPaint(colors: [_red, _blue]));
-    _field(tester, 'From').onCommit(90);
+    field(tester, 'From').onCommit(90);
     var turned = result! as SweepPaint;
     expect(turned.startAngle, 90);
     expect(turned.endAngle, 450);
