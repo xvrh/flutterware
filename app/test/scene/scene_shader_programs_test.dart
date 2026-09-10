@@ -1,6 +1,7 @@
 // The program cache and the per-draw shader pool. Plain `test()`s with real
 // async: `FragmentProgram.fromAsset` never completes under `testWidgets`'
-// FakeAsync without `runAsync`.
+// FakeAsync without `runAsync`. The one `testWidgets` asks under fake time on
+// purpose.
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -47,11 +48,7 @@ void main() {
     test(
       'a missing asset stays null, says why, and is not asked for again',
       () async {
-        var printed = <String?>[];
-        var original = debugPrint;
-        debugPrint = (message, {wrapWidth}) => printed.add(message);
-        addTearDown(() => debugPrint = original);
-
+        var printed = captureDebugPrint();
         await programs.load('no/such.frag');
         expect(programs.program('no/such.frag'), isNull);
         expect(programs.errorFor('no/such.frag'), isNotNull);
@@ -70,6 +67,85 @@ void main() {
       gate.complete(await ui.FragmentProgram.fromAsset(probe));
       expect(await slow.settle(timeout: const Duration(seconds: 1)), isEmpty);
     });
+
+    test(
+      'a loader that throws at once is a failed load, not a throw',
+      () async {
+        var printed = captureDebugPrint();
+        var throwing = SceneShaderPrograms(
+          loader: (_) => throw StateError('no'),
+        );
+        expect(throwing.program('x.frag'), isNull);
+        await throwing.load('x.frag');
+        expect(throwing.errorFor('x.frag'), isA<StateError>());
+        expect(throwing.pending, isEmpty);
+        expect(printed, hasLength(1));
+      },
+    );
+
+    test('listeners hear a failed load land too', () async {
+      captureDebugPrint();
+      var heard = 0;
+      programs.addListener(() => heard++);
+      await programs.load('no/such.frag');
+      expect(heard, 1);
+    });
+
+    test('a caller joining a load in flight is announced too', () async {
+      var gate = Completer<ui.FragmentProgram>();
+      var slow = SceneShaderPrograms(loader: (_) => gate.future);
+      var before = RealWork.pending;
+      var first = slow.load('slow.frag');
+      var second = slow.load('slow.frag');
+      expect(RealWork.pending, before + 2);
+      gate.complete(await ui.FragmentProgram.fromAsset(probe));
+      await Future.wait([first, second]);
+      expect(RealWork.pending, before);
+    });
+
+    test('pending is a snapshot a landing load does not change', () async {
+      var gate = Completer<ui.FragmentProgram>();
+      var slow = SceneShaderPrograms(loader: (_) => gate.future);
+      slow.program('slow.frag');
+      var pending = slow.pending;
+      gate.complete(await ui.FragmentProgram.fromAsset(probe));
+      await slow.load('slow.frag');
+      expect(pending, ['slow.frag']);
+      expect(slow.pending, isEmpty);
+    });
+
+    test('a forgotten failure is asked for again', () async {
+      captureDebugPrint();
+      var calls = 0;
+      var flaky = SceneShaderPrograms(
+        loader: (_) async {
+          if (calls++ == 0) throw StateError('not yet');
+          return ui.FragmentProgram.fromAsset(probe);
+        },
+      );
+      await flaky.load('flaky.frag');
+      expect(flaky.program('flaky.frag'), isNull);
+      expect(flaky.pending, isEmpty);
+
+      var heard = 0;
+      flaky.addListener(() => heard++);
+      flaky.forgetFailures();
+      expect(heard, 1);
+      expect(flaky.errorFor('flaky.frag'), isNull);
+
+      expect(flaky.program('flaky.frag'), isNull);
+      expect(flaky.pending, ['flaky.frag']);
+      await flaky.load('flaky.frag');
+      expect(flaky.program('flaky.frag'), isNotNull);
+      expect(calls, 2);
+    });
+
+    test('forgetting with nothing failed tells nobody', () {
+      var heard = 0;
+      programs.addListener(() => heard++);
+      programs.forgetFailures();
+      expect(heard, 0);
+    });
   });
 
   group('slots', () {
@@ -78,10 +154,7 @@ void main() {
 
     late List<String?> printed;
     setUp(() {
-      printed = [];
-      var original = debugPrint;
-      debugPrint = (message, {wrapWidth}) => printed.add(message);
-      addTearDown(() => debugPrint = original);
+      printed = captureDebugPrint();
       SceneShaderPrograms.instance.reset();
     });
 
@@ -230,4 +303,38 @@ void main() {
     expect(SceneShaderPrograms.instance.program(probe), isNotNull);
     expect(sceneShaderAssets(doc), {probe});
   });
+
+  // A widget test that pumps a shader scene without precaching asks for the
+  // program under fake time, then ends before the load lands. The load must
+  // still land for whoever asks next.
+  group('a load asked for by a test that ends before it lands', () {
+    const asset = 'late.frag';
+    // Created by the loader, so in whatever zone the load runs in.
+    late Completer<ui.FragmentProgram> gate;
+    var programs = SceneShaderPrograms(
+      loader: (_) => (gate = Completer()).future,
+    );
+
+    testWidgets('a paint asks for the program under fake time', (tester) async {
+      expect(programs.program(asset), isNull);
+      await tester.pump();
+    });
+
+    test('lands for the next test, on the real loop', () async {
+      gate.complete(await ui.FragmentProgram.fromAsset(probe));
+      await programs.load(asset).timeout(const Duration(seconds: 5));
+      expect(programs.program(asset), isNotNull);
+      expect(programs.pending, isEmpty);
+    });
+  });
+}
+
+/// Swallows `debugPrint` for the rest of the test and hands back what it
+/// was given.
+List<String?> captureDebugPrint() {
+  var printed = <String?>[];
+  var original = debugPrint;
+  debugPrint = (message, {wrapWidth}) => printed.add(message);
+  addTearDown(() => debugPrint = original);
+  return printed;
 }

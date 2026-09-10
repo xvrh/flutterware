@@ -38,40 +38,55 @@ class SceneShaderPrograms extends ChangeNotifier {
   }
 
   /// Completes when [asset] has loaded or failed; never throws. A failed
-  /// asset is not asked for again.
+  /// asset is not asked for again until [forgetFailures].
   ///
-  /// Through [RealWork.run], not `track`: this cache outlives any one
-  /// scenario, and a load started in one scenario's zone would never complete
-  /// for the next.
+  /// The load itself is built in the root zone, through [RealWork.run]: this
+  /// cache outlives any one test or scenario, and a load whose bookkeeping
+  /// lived in the zone that first asked would be stranded when that zone's
+  /// fake clock stopped. Each call is announced on its own, so a caller
+  /// joining a load already in flight has its harness wait for it too.
   Future<void> load(String asset) {
     if (_loaded.containsKey(asset) || _failed.containsKey(asset)) {
       return Future.value();
     }
-    return _loading[asset] ??=
-        RealWork.run(
-              () => Future.sync(() => _loader(asset)),
-              label: 'shader $asset',
-            )
-            .then<void>(
-              (program) => _loaded[asset] = program,
-              onError: (Object error, StackTrace _) {
-                _failed[asset] = error;
-                debugPrint('flutterware: shader $asset did not load — $error');
-              },
-            )
-            .whenComplete(() {
-              _loading.remove(asset);
-              notifyListeners();
-            });
+    return RealWork.run(
+      () => _loading[asset] ??= _start(asset),
+      label: 'shader $asset',
+    );
   }
 
-  /// The assets whose load is in flight.
-  Iterable<String> get pending => _loading.keys;
+  Future<void> _start(String asset) =>
+      Future.sync(() => _loader(asset))
+          .then<void>(
+            (program) => _loaded[asset] = program,
+            onError: (Object error, StackTrace _) {
+              _failed[asset] = error;
+              debugPrint('flutterware: shader $asset did not load — $error');
+            },
+          )
+          .whenComplete(() {
+            _loading.remove(asset);
+            notifyListeners();
+          });
+
+  /// The assets whose load is in flight, as they stand now.
+  List<String> get pending => _loading.keys.toList();
 
   Object? errorFor(String asset) => _failed[asset];
 
+  /// Forgets every asset that failed, so the next [program] asks for it
+  /// again — after a reload, a shader first seen broken may be fixed.
+  void forgetFailures() {
+    if (_failed.isEmpty) return;
+    _failed.clear();
+    notifyListeners();
+  }
+
   /// Waits up to [timeout] for every load in flight, loads started meanwhile
   /// included, and returns the assets still pending.
+  ///
+  /// [timeout] is measured on the caller's clock: under fake time it never
+  /// runs out, so call this from a zone with a real one.
   Future<List<String>> settle({required Duration timeout}) async {
     var deadline = DateTime.now().add(timeout);
     while (_loading.isNotEmpty) {
@@ -129,7 +144,7 @@ class SceneShaderSlots {
   }
 
   /// After a reassemble — which follows a shader reload — every cached
-  /// uniform handle may point at a slot the reload dropped. Forgotten, not
+  /// uniform handle may point at a uniform the reload dropped. Forgotten, not
   /// disposed: a capture taken before may still hold the shaders.
   void clear() => _slots.clear();
 
