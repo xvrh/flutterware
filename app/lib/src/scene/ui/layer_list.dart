@@ -317,7 +317,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
             Text('a gradient, from the file', style: caption),
             const Gap(FwSpacing.xs),
             Tappable(
-              onTap: () => _replace(i, _withPaint(layer, null)),
+              onTap: () => _replace(i, layer.withPaint(null)),
               child: Text(
                 'make it the text colour',
                 style: caption.copyWith(color: context.colors.accent),
@@ -331,27 +331,19 @@ class _SceneLayerListState extends State<SceneLayerList> {
               },
               onPick: (c) => _replace(
                 i,
-                _withPaint(layer, c == null ? null : SolidPaint(c)),
+                layer.withPaint(c == null ? null : SolidPaint(c)),
               ),
             ),
           const Gap(FwSpacing.sm),
-          if (layer case StrokeLayer(:var width))
+          if (layer case StrokeLayer stroke)
             _number(
               context,
               'Width',
-              width,
+              stroke.width,
               const SceneNumberShape(perPixel: 0.2, decimals: 1, min: 0),
               (v) => _replace(
                 i,
-                StrokeLayer(
-                  width: v,
-                  join: layer.join,
-                  paint: layer.paint,
-                  blur: layer.blur,
-                  dx: layer.dx,
-                  dy: layer.dy,
-                  opacity: layer.opacity,
-                ),
+                stroke.copyWith(width: v),
                 mergeKey: 'layer:$i:width',
               ),
             ),
@@ -365,7 +357,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   const SceneNumberShape(perPixel: 0.2, decimals: 1),
                   (v) => _replace(
                     i,
-                    _withOffset(layer, dx: v),
+                    layer.copyWith(dx: v),
                     mergeKey: 'layer:$i:dx',
                   ),
                 ),
@@ -379,7 +371,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   const SceneNumberShape(perPixel: 0.2, decimals: 1),
                   (v) => _replace(
                     i,
-                    _withOffset(layer, dy: v),
+                    layer.copyWith(dy: v),
                     mergeKey: 'layer:$i:dy',
                   ),
                 ),
@@ -397,7 +389,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   const SceneNumberShape(perPixel: 0.2, decimals: 1, min: 0),
                   (v) => _replace(
                     i,
-                    _withBlur(layer, v),
+                    layer.copyWith(blur: v),
                     mergeKey: 'layer:$i:blur',
                   ),
                 ),
@@ -421,7 +413,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   ),
                   (v) => _replace(
                     i,
-                    _withOpacity(layer, v),
+                    layer.copyWith(opacity: v),
                     mergeKey: 'layer:$i:opacity',
                   ),
                 ),
@@ -447,81 +439,3 @@ class _SceneLayerListState extends State<SceneLayerList> {
     onCommit: apply,
   );
 }
-
-// A layer is a value, so every edit is a new one. These say which field
-// changed without every call site respelling the constructor.
-TextLayer _withPaint(TextLayer l, ScenePaint? paint) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width,
-    join: join,
-    paint: paint,
-    blur: l.blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: l.opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: paint,
-    blur: l.blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: l.opacity,
-  ),
-};
-
-TextLayer _withOffset(TextLayer l, {double? dx, double? dy}) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width,
-    join: join,
-    paint: l.paint,
-    blur: l.blur,
-    dx: dx ?? l.dx,
-    dy: dy ?? l.dy,
-    opacity: l.opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: l.paint,
-    blur: l.blur,
-    dx: dx ?? l.dx,
-    dy: dy ?? l.dy,
-    opacity: l.opacity,
-  ),
-};
-
-TextLayer _withBlur(TextLayer l, double blur) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width,
-    join: join,
-    paint: l.paint,
-    blur: blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: l.opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: l.paint,
-    blur: blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: l.opacity,
-  ),
-};
-
-TextLayer _withOpacity(TextLayer l, double opacity) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width,
-    join: join,
-    paint: l.paint,
-    blur: l.blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: l.paint,
-    blur: l.blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: opacity,
-  ),
-};

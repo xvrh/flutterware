@@ -320,6 +320,17 @@ sealed class TextLayer {
 
   Map<String, Object?> toWire();
 
+  /// This pass painted with [paint] instead — null included, which is "the
+  /// text's own colour" and the one value [copyWith] cannot say, because
+  /// there a null means "not given".
+  TextLayer withPaint(ScenePaint? paint);
+
+  /// This pass with the fields given changed and the rest kept. Every edit
+  /// and every rescale goes through here, so a field added to a pass is
+  /// carried by all of them rather than dropped by whichever call site
+  /// respelled the constructor and forgot it.
+  TextLayer copyWith({double? blur, double? dx, double? dy, double? opacity});
+
   Map<String, Object?> get _common => {
     'paint': ?paint?.toWire(),
     if (blur != 0) 'blur': blur,
@@ -367,6 +378,20 @@ class FillLayer extends TextLayer {
   Map<String, Object?> toWire() => {'k': 'fill', ..._common};
 
   @override
+  FillLayer withPaint(ScenePaint? paint) =>
+      FillLayer(paint: paint, blur: blur, dx: dx, dy: dy, opacity: opacity);
+
+  @override
+  FillLayer copyWith({double? blur, double? dx, double? dy, double? opacity}) =>
+      FillLayer(
+        paint: paint,
+        blur: blur ?? this.blur,
+        dx: dx ?? this.dx,
+        dy: dy ?? this.dy,
+        opacity: opacity ?? this.opacity,
+      );
+
+  @override
   bool operator ==(Object other) =>
       other is FillLayer &&
       other.paint == paint &&
@@ -405,6 +430,35 @@ class StrokeLayer extends TextLayer {
     if (join != SceneStrokeJoin.round) 'j': join.index,
     ..._common,
   };
+
+  @override
+  StrokeLayer withPaint(ScenePaint? paint) => StrokeLayer(
+    width: width,
+    join: join,
+    paint: paint,
+    blur: blur,
+    dx: dx,
+    dy: dy,
+    opacity: opacity,
+  );
+
+  @override
+  StrokeLayer copyWith({
+    double? blur,
+    double? dx,
+    double? dy,
+    double? opacity,
+    double? width,
+    SceneStrokeJoin? join,
+  }) => StrokeLayer(
+    width: width ?? this.width,
+    join: join ?? this.join,
+    paint: paint,
+    blur: blur ?? this.blur,
+    dx: dx ?? this.dx,
+    dy: dy ?? this.dy,
+    opacity: opacity ?? this.opacity,
+  );
 
   @override
   bool operator ==(Object other) =>

@@ -36,24 +36,17 @@ class LayerPreset {
   }
 }
 
-TextLayer _scaled(TextLayer l, double k) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: _round(width * k),
-    join: join,
-    paint: l.paint,
+TextLayer _scaled(TextLayer l, double k) {
+  var scaled = l.copyWith(
     blur: _round(l.blur * k),
     dx: _round(l.dx * k),
     dy: _round(l.dy * k),
-    opacity: l.opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: l.paint,
-    blur: _round(l.blur * k),
-    dx: _round(l.dx * k),
-    dy: _round(l.dy * k),
-    opacity: l.opacity,
-  ),
-};
+  );
+  return switch (scaled) {
+    StrokeLayer s => s.copyWith(width: _round(s.width * k)),
+    FillLayer f => f,
+  };
+}
 
 /// A preset authored at one size, retold at another: a stroke of 3 on a
 /// 21-point face becomes `21.9486607142857` at 54 unless somebody says

@@ -709,25 +709,17 @@ class _SceneLibraryViewState extends State<SceneLibraryView> {
     return SceneTextStyle.fromValues(values);
   }
 
-  static TextLayer _scaledLayer(TextLayer layer, double scale) =>
-      switch (layer) {
-        StrokeLayer l => StrokeLayer(
-          width: l.width * scale,
-          join: l.join,
-          paint: l.paint,
-          dx: l.dx * scale,
-          dy: l.dy * scale,
-          blur: l.blur * scale,
-          opacity: l.opacity,
-        ),
-        FillLayer l => FillLayer(
-          paint: l.paint,
-          dx: l.dx * scale,
-          dy: l.dy * scale,
-          blur: l.blur * scale,
-          opacity: l.opacity,
-        ),
-      };
+  static TextLayer _scaledLayer(TextLayer layer, double scale) {
+    var scaled = layer.copyWith(
+      dx: layer.dx * scale,
+      dy: layer.dy * scale,
+      blur: layer.blur * scale,
+    );
+    return switch (scaled) {
+      StrokeLayer s => s.copyWith(width: s.width * scale),
+      FillLayer f => f,
+    };
+  }
 
   // --- The app's own -------------------------------------------------------
 
