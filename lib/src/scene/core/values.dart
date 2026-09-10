@@ -449,6 +449,15 @@ bool _sameList<T>(List<T>? a, List<T>? b) {
 /// the bridge indexes it.
 enum SceneStrokeJoin { miter, round, bevel }
 
+/// What a pass's paint is laid across. A solid colour is the same either
+/// way; a gradient is not — a two-line title in gold wants the gold to run
+/// down EACH line, not once down the paragraph with the second line in its
+/// darker half.
+///
+/// On the pass rather than on the paint, because a paint is shaped to be a
+/// frame's fill one day (master plan §6), and a frame has no lines.
+enum SceneLayerBox { text, line }
+
 /// One pass over a laid-out paragraph.
 ///
 /// A text's paint stack is an ordered list of these, painted back to front,
@@ -466,15 +475,6 @@ enum SceneStrokeJoin { miter, round, bevel }
 /// **A pass may change paint, never layout.** Every field here is paint; a
 /// metric one would give the passes two layouts to register against, and
 /// every effect would drift by a subpixel that grows along the line.
-/// What a pass's paint is laid across. A solid colour is the same either
-/// way; a gradient is not — a two-line title in gold wants the gold to run
-/// down EACH line, not once down the paragraph with the second line in its
-/// darker half.
-///
-/// On the pass rather than on the paint, because a paint is shaped to be a
-/// frame's fill one day (master plan §6), and a frame has no lines.
-enum SceneLayerBox { text, line }
-
 sealed class TextLayer {
   const TextLayer({
     this.paint,
