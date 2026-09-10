@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:yaml/yaml.dart';
 
 void main(List<String> args) {
-  print(args);
   var pubspec = File('pubspec.yaml');
   var content = loadYaml(pubspec.readAsStringSync()) as YamlMap;
 
@@ -17,8 +16,11 @@ void main(List<String> args) {
   }
 
   if (pubspecVersion != tagVersion) {
-    throw Exception(
-      'pubspec version ($pubspecVersion) and tag version ($tagVersion) are different',
+    stderr.writeln(
+      '::error::pubspec says $pubspecVersion, the tag says $tagVersion. '
+      'A published version is permanent — fix the tag or the pubspec before '
+      'publishing.',
     );
+    exit(1);
   }
 }
