@@ -114,6 +114,8 @@ List<String> frameworkShaderSources(FlutterCache cache) {
 /// through the same scratch and is renamed in **before** the binary, so a
 /// caller that takes the binary's existence to mean "done" never finds a
 /// binary without its reflection.
+///
+/// Whatever it throws, it leaves no scratch behind.
 Future<void> compileShader({
   required FlutterCache cache,
   required String source,
@@ -122,33 +124,48 @@ Future<void> compileShader({
   String? reflection,
 }) async {
   var scratch = '$destination.$pid.${_scratchSerial++}';
-  var result = await Process.run(cache.impellerc, [
-    ...stages,
-    '--iplr',
-    '--sl=$scratch',
-    '--spirv=$scratch.spirv',
-    if (reflection != null) '--reflection-json=$scratch.json',
-    '--input=$source',
-    '--input-type=frag',
-    '--include=${p.dirname(source)}',
-    '--include=${cache.shaderLib}',
-  ]);
-  if (result.exitCode != 0) {
-    throw StateError('impellerc failed on $source:\n${result.stderr}');
+  try {
+    var result = await Process.run(cache.impellerc, [
+      ...stages,
+      '--iplr',
+      '--sl=$scratch',
+      '--spirv=$scratch.spirv',
+      if (reflection != null) '--reflection-json=$scratch.json',
+      '--input=$source',
+      '--input-type=frag',
+      '--include=${p.dirname(source)}',
+      '--include=${cache.shaderLib}',
+    ]);
+    if (result.exitCode != 0) {
+      throw StateError('impellerc failed on $source:\n${result.stderr}');
+    }
+    // A by-product nothing reads; the tool deletes it too.
+    File('$scratch.spirv').deleteSync();
+    if (reflection != null) File('$scratch.json').renameSync(reflection);
+    File(scratch).renameSync(destination);
+  } finally {
+    // Only a throw leaves any of these: a success renamed or deleted each.
+    for (var leftover in [scratch, '$scratch.spirv', '$scratch.json']) {
+      var file = File(leftover);
+      if (file.existsSync()) file.deleteSync();
+    }
   }
-  // A by-product nothing reads; the tool deletes it too.
-  File('$scratch.spirv').deleteSync();
-  if (reflection != null) File('$scratch.json').renameSync(reflection);
-  File(scratch).renameSync(destination);
 }
 
-/// Project shaders whose compile failure has been written to `stderr`, by
-/// content key — so a broken `.frag` is reported once per edit rather than
+/// Project shader failures already written to `stderr`: the cache entry a
+/// compile failed for, or the key and error of a failure that was not the
+/// compiler's — so a broken `.frag` is reported once per edit rather than
 /// once per rebundle.
 final _reportedShaderFailures = <String>{};
 
 /// Project shader keys already reported as shadowing a framework shader.
 final _reportedShaderCollisions = <String>{};
+
+@visibleForTesting
+void resetShaderReportsForTesting() {
+  _reportedShaderFailures.clear();
+  _reportedShaderCollisions.clear();
+}
 
 /// Assembles the asset directory the embedder guest reads, without invoking
 /// `flutter build bundle`.
@@ -561,10 +578,14 @@ class AssetBundleBuilder {
   ///
   /// A shader that does not compile is left out rather than failing the
   /// build. The bundle serves every preview, and a `.frag` mid-edit is broken
-  /// most of the time it is being written; what a missing key costs is the
-  /// one pass that loads it, which paints nothing until the program loads.
-  /// Leaving it out also prunes the link to its last good bytes, so no pass
-  /// goes on drawing a program that disagrees with the file.
+  /// most of the time it is being written. Left out, its key is pruned, so a
+  /// load that has not happened yet finds nothing and its pass paints
+  /// nothing. A guest that already holds the program is not told — the key
+  /// is not in [BundleSync.shaders], and `dart:ui` keeps what it loaded — so
+  /// it goes on drawing the last good program until the file compiles again,
+  /// when the key is linked afresh and reported. [compileProjectShader]
+  /// remembers the failure, so a file that stays broken costs a hash per
+  /// rebundle rather than a compile.
   ///
   /// A key the framework's shaders already hold is not linked: the framework
   /// loads `shaders/ink_sparkle.frag` by that exact name, and a project file
@@ -605,31 +626,32 @@ class AssetBundleBuilder {
         cache: cache,
         source: shader.source,
       );
-    } on StateError catch (error) {
-      if (_reportedShaderFailures.add(_failureKey(shader))) {
+    } on ProjectShaderError catch (error) {
+      if (_reportedShaderFailures.add(error.entry)) {
         stderr.writeln(
           'flutterware: ${shader.key} does not compile, so it is left out of '
           'the bundle until it does.\n${error.message.trimRight()}',
         );
       }
       return;
-    } on FileSystemException {
+    } on FileSystemException catch (error) {
       // Deleted or renamed since the catalog read it; the next build's
       // catalog will not list it.
+      if (!File(shader.source).existsSync()) return;
+      // The file is there, so this is the cache or the compiler's output:
+      // not the project's to fix, and not remembered, so the next rebundle
+      // tries again.
+      var reason = error.osError?.message ?? error.message;
+      if (_reportedShaderFailures.add('${shader.key}\n$reason')) {
+        stderr.writeln(
+          'flutterware: ${shader.key} could not be compiled, so it is left '
+          'out of the bundle.\n$error',
+        );
+      }
       return;
     }
     if (_link(output, shader.key, compiled.binary, sync)) {
       sync.shaders.add(shader.key);
-    }
-  }
-
-  /// What a failure is reported once per: the content, or failing a reading
-  /// of it, the file.
-  String _failureKey(ResolvedShader shader) {
-    try {
-      return projectShaderHash(shader.source);
-    } on FileSystemException {
-      return shader.source;
     }
   }
 

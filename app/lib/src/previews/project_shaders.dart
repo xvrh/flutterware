@@ -12,6 +12,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../embedder/flutter_cache.dart';
@@ -74,38 +75,130 @@ String projectShaderHash(String source) {
   return sha1.convert(input.takeBytes()).toString();
 }
 
+/// `impellerc` refused a project shader; [message] is what it said.
+class ProjectShaderError extends StateError {
+  ProjectShaderError(super.message, {required this.entry});
+
+  /// The cache directory the failure belongs to — the content, the engine and
+  /// the stage list — so a caller can report it once per entry, as it is
+  /// compiled once per entry.
+  final String entry;
+}
+
+/// What `impellerc` said about each cache entry it refused.
+///
+/// A failure is as deterministic as a success — the entry names the content,
+/// the engine and the stage list — and remembering it is what keeps a `.frag`
+/// that stays broken from spawning the compiler on every rebundle, which the
+/// daemon runs every few seconds for as long as previews are open.
+final _failures = <String, String>{};
+
+@visibleForTesting
+void resetProjectShaderFailuresForTesting() => _failures.clear();
+
+/// Called between hashing a shader and compiling it, so a test can edit the
+/// source in exactly the window a save can.
+@visibleForTesting
+void Function(String source)? beforeProjectShaderCompileForTesting;
+
+/// How many compiles one call makes of a source that changes under each of
+/// them before it returns one that is not cached.
+const _attempts = 3;
+
+var _stagingSerial = 0;
+
 /// The compiled form of the shader at [source], and its reflection.
 ///
 /// Compiles once per content: a warm call hashes the files and finds the
-/// binary already there. [compileShader] renames the binary into place after
-/// the reflection, so the binary existing is the whole of "done".
+/// binary already there. The binary is renamed into place after the
+/// reflection, so the binary existing is the whole of "done".
 ///
-/// Throws [StateError] carrying `impellerc`'s own message when the shader does
-/// not compile, and leaves no binary behind, so a later call for the same
-/// content runs the compiler again.
+/// The hash is taken before `impellerc` reads the files, and a save can land
+/// between the two — which would file the new text's program under the old
+/// text's key, served for good the day the old text comes back. So the
+/// compile goes to a staging directory of its own, the files are hashed
+/// again, and only bytes whose content held still for the whole compile are
+/// renamed into the entry. One that moved is compiled again as what it now
+/// is; after [_attempts] of those the last compile is returned from outside
+/// the cache, and the next call, the file at rest, files it properly.
+///
+/// Throws [ProjectShaderError] carrying `impellerc`'s own message when the
+/// shader does not compile. The failure is remembered for the process, so
+/// asking again for the same content throws the same message without running
+/// the compiler.
 Future<CompiledShader> compileProjectShader({
   required FlutterCache cache,
   required String source,
 }) async {
-  var dir = p.join(
+  var root = p.join(
     flutterwareDir(),
     'shaders',
     'project',
     '${cache.engineRevision}-$shaderStagesKey',
-    projectShaderHash(source),
   );
-  var compiled = CompiledShader(
-    binary: p.join(dir, 'shader.iplr'),
-    reflection: p.join(dir, 'reflection.json'),
-  );
-  if (File(compiled.binary).existsSync()) return compiled;
-  Directory(dir).createSync(recursive: true);
-  await compileShader(
-    cache: cache,
-    source: source,
-    destination: compiled.binary,
-    stages: shaderStages,
-    reflection: compiled.reflection,
-  );
-  return compiled;
+  for (var attempt = 1; ; attempt++) {
+    var entry = p.join(root, projectShaderHash(source));
+    var compiled = _compiledAt(entry);
+    if (File(compiled.binary).existsSync()) return compiled;
+    if (_failures[entry] case var message?) {
+      throw ProjectShaderError(message, entry: entry);
+    }
+
+    var staging = p.join(root, 'staging', '$pid.${_stagingSerial++}');
+    Directory(staging).createSync(recursive: true);
+    var staged = _compiledAt(staging);
+    try {
+      beforeProjectShaderCompileForTesting?.call(source);
+      String? failure;
+      try {
+        await compileShader(
+          cache: cache,
+          source: source,
+          destination: staged.binary,
+          stages: shaderStages,
+          reflection: staged.reflection,
+        );
+      } on StateError catch (error) {
+        failure = error.message;
+      }
+      var held = p.join(root, projectShaderHash(source)) == entry;
+      if (held && failure != null) {
+        _failures[entry] = failure;
+        throw ProjectShaderError(failure, entry: entry);
+      }
+      if (held) {
+        Directory(entry).createSync(recursive: true);
+        return _moveInto(staged, compiled);
+      }
+      if (attempt == _attempts) {
+        // Whose text a failure here is about is not known, so it is not
+        // remembered; the next call compiles again.
+        if (failure != null) throw ProjectShaderError(failure, entry: entry);
+        // One place per source rather than per call, so a file that keeps
+        // moving does not leave a directory per rebundle behind.
+        var unsettled = p.join(
+          root,
+          'unsettled',
+          sha1.convert(utf8.encode(p.absolute(source))).toString(),
+        );
+        Directory(unsettled).createSync(recursive: true);
+        return _moveInto(staged, _compiledAt(unsettled));
+      }
+    } finally {
+      Directory(staging).deleteSync(recursive: true);
+    }
+  }
+}
+
+CompiledShader _compiledAt(String dir) => CompiledShader(
+  binary: p.join(dir, 'shader.iplr'),
+  reflection: p.join(dir, 'reflection.json'),
+);
+
+/// Renames [from]'s two files onto [to]'s, the binary last: its existence is
+/// what [compileProjectShader] takes to mean the reflection is there too.
+CompiledShader _moveInto(CompiledShader from, CompiledShader to) {
+  File(from.reflection).renameSync(to.reflection);
+  File(from.binary).renameSync(to.binary);
+  return to;
 }

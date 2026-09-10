@@ -344,6 +344,8 @@ void main(List<String> args) {
     setUp(() {
       saved = flutterwareDirOverride;
       flutterwareDirOverride = p.join(root.path, 'flutterware');
+      resetShaderReportsForTesting();
+      resetProjectShaderFailuresForTesting();
       write('project/pubspec.yaml', '''
 name: project
 flutter:
@@ -352,7 +354,10 @@ flutter:
 ''');
       write('project/shaders/glow.frag', glow());
     });
-    tearDown(() => flutterwareDirOverride = saved);
+    tearDown(() {
+      flutterwareDirOverride = saved;
+      beforeProjectShaderCompileForTesting = null;
+    });
 
     /// The real SDK, as for the framework shaders: what is under test is what
     /// `impellerc` makes of the project's GLSL.
@@ -373,6 +378,14 @@ flutter:
     String source() => p.join(projectRoot(), 'shaders', 'glow.frag');
     File entry([String name = 'glow.frag']) =>
         File(p.join(output(), 'shaders', name));
+
+    /// Where [compileProjectShader] keeps its entries for this SDK.
+    String cacheRoot() => p.join(
+      flutterwareDirOverride!,
+      'shaders',
+      'project',
+      '${cache.engineRevision}-$shaderStagesKey',
+    );
 
     test('a declared shader lands at its key, compiled', () async {
       var sync = await shaderBuilder().build(output());
@@ -460,14 +473,33 @@ flutter:
         expect(entry('broken.frag').existsSync(), isTrue);
 
         // Broken after it once compiled, so what is asserted is also that the
-        // link to its last good bytes goes: a stale program would be a pass
-        // that silently disagrees with the file on screen.
+        // link to its last good bytes goes, and goes unreported: a load not
+        // yet made finds nothing, and a guest already holding the program
+        // keeps drawing it until the file compiles again.
         write('project/shaders/broken.frag', 'void main() { this is not glsl');
-        var sync = await shaderBuilder().build(output());
+        var compiles = 0;
+        beforeProjectShaderCompileForTesting = (source) {
+          if (p.basename(source) == 'broken.frag') compiles++;
+        };
+        var err = StringBuffer();
+        var sync = await capturingStderr(
+          err,
+          () => shaderBuilder().build(output()),
+        );
 
         expect(entry().existsSync(), isTrue);
         expect(FileSystemEntity.isLinkSync(entry('broken.frag').path), isFalse);
         expect(sync.changed, isTrue);
+        expect(sync.shaders, isEmpty);
+
+        // The daemon rebundles every few seconds while previews are open; a
+        // file that stays broken is neither compiled nor reported again.
+        await capturingStderr(err, () => shaderBuilder().build(output()));
+        expect(compiles, 1);
+        expect(
+          'broken.frag does not compile'.allMatches(err.toString()),
+          hasLength(1),
+        );
       },
       timeout: const Timeout(Duration(minutes: 2)),
     );
@@ -483,7 +515,12 @@ flutter:
 ''');
         write('project/shaders/ink_sparkle.frag', glow());
 
-        var sync = await shaderBuilder().build(output());
+        var err = StringBuffer();
+        var sync = await capturingStderr(
+          err,
+          () => shaderBuilder().build(output()),
+        );
+        await capturingStderr(err, () => shaderBuilder().build(output()));
 
         expect(
           Link(p.join(output(), 'shaders', 'ink_sparkle.frag')).targetSync(),
@@ -491,6 +528,80 @@ flutter:
           reason: 'every Material ripple loads this key',
         );
         expect(sync.shaders, isEmpty);
+        expect(
+          'shaders/ink_sparkle.frag is the name'.allMatches(err.toString()),
+          hasLength(1),
+        );
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    test(
+      'a save during a compile does not file its bytes under the old content',
+      () async {
+        var before = projectShaderHash(source());
+        var saves = 0;
+        beforeProjectShaderCompileForTesting = (_) {
+          // Once: hashed as the old text, compiled as the new.
+          if (saves++ == 0) {
+            write('project/shaders/glow.frag', glow(tint: 'uTint * 0.5'));
+          }
+        };
+
+        var raced = await compileProjectShader(cache: cache, source: source());
+
+        expect(
+          p.dirname(raced.binary),
+          p.join(cacheRoot(), projectShaderHash(source())),
+        );
+        expect(
+          File(p.join(cacheRoot(), before, 'shader.iplr')).existsSync(),
+          isFalse,
+        );
+
+        // The old text back, and it compiles as itself rather than being
+        // served the program the race would have filed under it.
+        write('project/shaders/glow.frag', glow());
+        var restored = await compileProjectShader(
+          cache: cache,
+          source: source(),
+        );
+        expect(p.dirname(restored.binary), p.join(cacheRoot(), before));
+        expect(
+          File(restored.binary).readAsBytesSync(),
+          isNot(File(raced.binary).readAsBytesSync()),
+        );
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    test(
+      'a source that will not hold still is compiled but not cached',
+      () async {
+        var saves = 0;
+        beforeProjectShaderCompileForTesting = (_) => write(
+          'project/shaders/glow.frag',
+          glow(tint: 'uTint * 0.${++saves}'),
+        );
+
+        var compiled = await compileProjectShader(
+          cache: cache,
+          source: source(),
+        );
+
+        expect(saves, 3, reason: 'a bounded number of attempts');
+        expect(File(compiled.binary).existsSync(), isTrue);
+        expect(File(compiled.reflection).existsSync(), isTrue);
+        expect(
+          Directory(cacheRoot())
+              .listSync(recursive: true)
+              .whereType<File>()
+              .map((file) => p.split(p.relative(file.path, from: cacheRoot())))
+              .map((parts) => parts.first)
+              .toSet(),
+          {'unsettled'},
+          reason: 'no content entry holds bytes of other content',
+        );
       },
       timeout: const Timeout(Duration(minutes: 2)),
     );
@@ -535,6 +646,88 @@ flutter:
       );
     }, timeout: const Timeout(Duration(minutes: 2)));
   });
+
+  group('a compiler that exits 0 without its outputs', () {
+    late String? saved;
+    late FlutterCache cache;
+
+    setUp(() {
+      saved = flutterwareDirOverride;
+      flutterwareDirOverride = p.join(root.path, 'flutterware');
+      resetShaderReportsForTesting();
+      resetProjectShaderFailuresForTesting();
+      cache = FlutterCache(p.join(root.path, 'cache'));
+      write('cache/engine.stamp', 'fake');
+      // Writes the binary and nothing else: no `.spirv`, no reflection.
+      var impellerc = p.relative(cache.impellerc, from: root.path);
+      write(impellerc, r'''
+#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in --sl=*) printf half > "${arg#--sl=}";; esac
+done
+''');
+      Process.runSync('chmod', ['+x', cache.impellerc]);
+      write('project/pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/glow.frag
+''');
+      write('project/shaders/glow.frag', glow());
+    });
+    tearDown(() => flutterwareDirOverride = saved);
+
+    test('leaves no scratch beside the destination', () async {
+      var destination = p.join(root.path, 'out', 'glow.iplr');
+      Directory(p.dirname(destination)).createSync(recursive: true);
+
+      await expectLater(
+        compileShader(
+          cache: cache,
+          source: p.join(projectRoot(), 'shaders', 'glow.frag'),
+          destination: destination,
+          stages: shaderStages,
+          reflection: p.join(root.path, 'out', 'glow.json'),
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(Directory(p.dirname(destination)).listSync(), isEmpty);
+    });
+
+    test('is reported, once, and not taken for a vanished source', () async {
+      var err = StringBuffer();
+      var builder = AssetBundleBuilder(
+        cache: cache,
+        rootPackageRoot: projectRoot(),
+        packageConfigPath: p.join(
+          projectRoot(),
+          '.dart_tool',
+          'package_config.json',
+        ),
+        nativeAssetsForTesting: [],
+      );
+
+      var sync = await capturingStderr(err, () => builder.build(output()));
+      await capturingStderr(err, () => builder.build(output()));
+
+      expect(
+        File(p.join(output(), 'shaders', 'glow.frag')).existsSync(),
+        isFalse,
+      );
+      expect(sync.shaders, isEmpty);
+      expect(
+        'shaders/glow.frag could not be compiled'.allMatches(err.toString()),
+        hasLength(1),
+      );
+      expect(
+        Directory(flutterwareDirOverride!)
+            .listSync(recursive: true)
+            .whereType<File>(),
+        isEmpty,
+        reason: 'neither a scratch nor a half-made entry is left',
+      );
+    });
+  }, skip: Platform.isWindows ? 'the fake compiler is a shell script' : false);
 
   group('native libraries', () {
     late File lib;
@@ -615,6 +808,26 @@ flutter:
       expect(manifestEntry(), ['absolute', lib.path]);
     });
   });
+}
+
+/// Runs [body] with what it writes to `stderr` going to [into], so a test of
+/// a reported failure keeps the run's own output quiet and can count it.
+Future<T> capturingStderr<T>(StringBuffer into, Future<T> Function() body) =>
+    IOOverrides.runZoned(body, stderr: () => _CapturedStderr(into));
+
+class _CapturedStderr implements Stdout {
+  _CapturedStderr(this.into);
+
+  final StringBuffer into;
+
+  @override
+  void write(Object? object) => into.write(object);
+
+  @override
+  void writeln([Object? object = '']) => into.writeln(object);
+
+  @override
+  Object? noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// A fragment shader with two uniforms, one of them unused.
