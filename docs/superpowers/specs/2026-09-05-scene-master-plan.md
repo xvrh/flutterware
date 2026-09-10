@@ -425,7 +425,9 @@ radius, or a centre and two angles), the "Laid across" picker and the blend
 picker — and a Gloss preset demonstrates the per-line gradient with a sheen
 that fades to nothing over the top half of each line. Shaders are Phase 3 of
 `docs/superpowers/plans/2026-09-10-scene-text-layer-gradients.md`, planned
-separately after a spike.
+separately after a spike. *Shipped 2026-09-10:* a pass can paint with a
+project's own fragment shader, animated by scene time and reloaded in place —
+`docs/superpowers/specs/2026-09-10-scene-shader-paint-design.md`.
 
 **M10c — variable axes.**
 `axes` as a tag → number map, discovered from the font's `fvar` table so the

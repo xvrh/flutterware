@@ -1,15 +1,18 @@
 # Scene shader paint — design, from the spike
 
-Status: spike done 2026-09-10 on `claude/scene-shader-spike`; this document is
-its output and the input to the implementation plan. It answers the five
+Status: implemented 2026-09-10 on `claude/scene-shader-spike`, by
+`docs/superpowers/plans/2026-09-10-scene-shader-paint.md`. The spike's
+measurements below are unchanged; the decisions read as built, with what the
+plan corrected and what building it found folded in. It answers the five
 questions left open by Phase 3 of
 `docs/superpowers/plans/2026-09-10-scene-text-layer-gradients.md`, each by
-measurement, then decides the shape.
+measurement, then decides the shape. `examples/example` carries the result: a
+foil headline, `demo/foil_title.scene.dart`, painted by `shaders/foil.frag`.
 
 ## The goal
 
 A text pass can be painted with a project's own fragment shader —
-`ShaderPaint('shaders/foil.frag', uniforms: {'uAngle': 0.4, 'uTint': [1, 0.8, 0.2]})`
+`ShaderPaint('shaders/foil.frag', uniforms: {'uAngle': [0.4], 'uTint': [1, 0.8, 0.2]})`
 — as one more `ScenePaint`, so a shader composes with everything a pass
 already has: strokes, blur, offset, `box: SceneLayerBox.line`, blend, stacking.
 The inspector draws real controls for its uniforms, the editor scrubs it with
@@ -17,9 +20,10 @@ the playhead, and a reel renders the same frame twice.
 
 ## What the spike measured
 
-Pinned SDK 3.48.0-0.2.pre, macOS. Spike code is uncommitted under
-`examples/example` (`shaders/spike_foil*.frag`, `demo/spike_shader_*.dart`,
-`test/spike_*_test.dart`).
+Pinned SDK 3.48.0-0.2.pre, macOS. The spike code was never committed: it
+lived under `examples/example` (`shaders/spike_foil*.frag`,
+`demo/spike_shader_*.dart`, `test/spike_*_test.dart`) and was deleted when the
+example scene replaced it.
 
 ### 1. A foreground shader renders text on every engine — but no flutterware lane can load one
 
@@ -117,12 +121,23 @@ comments on the uniform's line without disturbing anything.
    gles3, vulkan, metal), links each under its declared key, and caches by
    content (source, resolved includes, engine revision, stages). The same step
    writes `--reflection-json` beside it. This alone fixes user shaders in every
-   flutterware lane and is worth landing even with no scene work.
+   flutterware lane and is worth landing even with no scene work. A shader
+   that does not compile is left out of the bundle, reported once per
+   content, and not recompiled until its content changes; a compile whose
+   source changed underneath it is not filed under the old content. A live
+   guest that already holds the program goes on drawing the last good one
+   until the file compiles again — `dart:ui` keeps what it loaded — while the
+   inspector shows impellerc's error and every fresh process draws the pass
+   blank.
 
 2. **The value.** `ShaderPaint(String asset, {Map<String, List<double>>
    uniforms})` in the pure core, a `ScenePaint` beside `SolidPaint` and
-   `SceneGradient`. The file spells a float bare and a vector as a list:
-   `ShaderPaint('shaders/foil.frag', uniforms: {'uAngle': 0.4, 'uTint': [1, 0.8, 0.2]})`.
+   `SceneGradient`. The file spells every value as a list, a float's too:
+   `ShaderPaint('shaders/foil.frag', uniforms: {'uAngle': [0.4], 'uTint': [1, 0.8, 0.2]})`.
+   *Corrected while building the example:* this said a float was spelled
+   bare, which is not Dart — a scene file compiles, since its group's
+   generated arguments file builds the class, and `{'uAngle': 0.4}` is no
+   `Map<String, List<double>>`. The grammar refuses a bare number, saying so.
    The wire: `{'k': 'shader', 'asset': …, 'u': {name: [floats]}}`, total like
    every other decoder. A sampler uniform is out of scope for v1.
 
@@ -135,6 +150,9 @@ comments on the uniform's line without disturbing anything.
    the pass's blend and its opacity. Cost: one offscreen per shader pass, the
    same price a per-line gradient already pays. Vector export needs nothing
    new: a layer holding an `srcIn` draw already exports as one raster patch.
+   Nothing about a uniform is cached across a reload: `reinitializeShader`
+   zeroes every uniform of a live shader, so the painter sets all of them on
+   every paint and `LayeredText` drops its shader slots on reassemble.
 
 4. **Coordinates by transform, not by uniform.** Before drawing a rect or a
    band the painter translates to that box's top-left and draws at zero, so
@@ -150,9 +168,13 @@ comments on the uniform's line without disturbing anything.
 
 6. **Programs load once per process and paint nothing until they have.**
    A program cache in `lib/src/scene/` (it needs `dart:ui`, so not the core)
-   loads by asset path, wraps each load in `RealWork.track` so every
-   flutter_tester lane waits for it, and exposes a `Listenable` the text
-   painter repaints on when a load lands. Before that, a shader pass draws
+   loads by asset path and exposes a `Listenable` the text painter repaints
+   on when a load lands. Loads run in the root zone through `RealWork.run`, so
+   every flutter_tester lane waits for them — not `RealWork.track`, because
+   the cache outlives any one scenario, and a load first asked for inside a
+   FakeAsync zone that has since finished would otherwise never land. A
+   failed load is forgotten on reassemble, so a shader first seen broken is
+   asked for again once it is fixed. Before a load lands, a shader pass draws
    nothing: a blank pass is an honest "not yet", where a stand-in colour is a
    wrong frame that looks right.
 
@@ -166,13 +188,23 @@ comments on the uniform's line without disturbing anything.
    pool, reused across frames, gives each draw its own object. The painter
    step pins this with a capture test.
 
-7. **Scene time is an input.** `Playable` records the `position` it was last
-   applied at; `SceneView` reads `motion?.position`, or an explicit `time`
-   when given, and hands scene seconds to `LayeredText`. Time stays out of the
-   layout cache key; `shouldRepaint` compares it only when the stack holds a
-   shader pass, so text without one never repaints for time. The editor canvas,
-   which has no `Playable`, gets `time` as a new wire field from
-   `editor.playhead`. When nothing plays, time is 0 everywhere.
+7. **Scene time is a clock the painter listens to.** `Playable` keeps its
+   position in a `SceneValue<Duration> clock` (and `position` reads it);
+   `SceneView` and `LayeredText` take a `ValueListenable<Duration>? time`,
+   the view defaulting to its motion's clock; and the stack painter lists
+   that clock in its repaint listenable **only when the stack holds a shader
+   pass**, so text without one never repaints for time. *Corrected by the
+   plan:* this first said a value `shouldRepaint` compares, but a seek that
+   changes no track writes no fx, the scene never notifies, and a value
+   handed down at build would stay where it was — a motion that animates
+   nothing but `uTime` would never move. Time stays out of the layout cache
+   key. When nothing plays, time is 0: a stop that returns the scene to its
+   authored values also returns the clock to zero, and the studio's playhead
+   is zero when no motion is open. Scene reels and scene video hand the
+   stage's motion clock to the view. The editor canvas, which has no
+   `Playable`, gets `time` as a wire field from `editor.playhead`, and a
+   document that paints with a shader is pushed when only the playhead
+   moved.
 
 8. **The editor waits for programs and reloads shaders in place.**
    `SceneCanvasHost._apply` awaits pending program loads (bounded) before it
@@ -180,7 +212,16 @@ comments on the uniform's line without disturbing anything.
    load is pending, so `fw capture` and drive `observe` wait. When a `.frag`
    changes, the daemon recompiles it, relinks it, and every live guest session
    calls `ext.ui.window.reinitializeShader` for that key beside the manifest
-   eviction it already does — a reload in ~0.1s, not a 7–9s restart.
+   eviction it already does — a reload in ~0.1s, not a 7–9s restart. *As
+   built,* the editor settles by the reply rather than by polling the guest:
+   `ext.fw.scene.apply` answers with `pendingShaders`, naming only the
+   scene's own assets, and the studio is busy while a push is out, until the
+   host first answers, or while the last reply named pending programs,
+   re-pushing every 250ms while any are. The daemon has no watcher of its
+   own — it rebuilds the bundle only when a client asks it something — so
+   the scene editor asks once a second while a shader paints the open
+   document. Measured driving the studio: a saved `.frag` is on the canvas in
+   about 1.5s, with the guest not restarted.
 
 9. **Uniform controls come from reflection plus annotations.** The studio reads
    the reflection JSON the bundle step wrote: names, sizes, declaration order.
@@ -189,7 +230,14 @@ comments on the uniform's line without disturbing anything.
    uniforms (by name and type), draws a slider for a ranged float, a colour
    field for a `@color` vec4, number fields otherwise, and offers the
    project's declared `shaders:` in the asset picker. A CI test pins that the
-   reflection JSON still carries the fields read, on the pinned SDK.
+   reflection JSON still carries the fields read, on the pinned SDK. The
+   inspector shows what renders: a uniform the file does not set reads 0,
+   which is what the shader gets, and `@default` is written into the file when
+   a shader is picked. Every declared shader is compiled in the background
+   when the package's view is made, so the defaults are there by the first
+   pick, and a view somebody is looking at re-stats its files once a second,
+   so a save, a break and its fix reach the panel on their own. The renderer's
+   names — `uSize`, `uColor`, `uTime` — are never editable, at any size.
 
 10. **Plain `flutter test` gets an explicit door.** A public
     `precacheSceneShaders(scene)` loads every program a scene uses; a
@@ -226,9 +274,16 @@ comments on the uniform's line without disturbing anything.
 ## Risks
 
 - **Editor playback cadence.** The editor canvas gets time at the wire push's
-  pace (10–300ms a round trip), so a shader may step while other motion looks
-  smooth during editor playback. Harness lanes apply time in-process. Measure
-  once built; if it reads badly, the guest can run its own clock between pushes.
+  pace, so a shader may step while other motion looks smooth during editor
+  playback. Harness lanes apply time in-process. *Measured* 2026-09-10 on the
+  foil example, in a studio window the drive had to force frames for: a
+  round trip is 5–75ms idle and 100–250ms during playback, and the canvas
+  took a new frame every 100–250ms. Every canvas change rides the same push —
+  the opacity track as much as `uTime`, since the guest is the only renderer —
+  so the shader steps no more than the other motion does: the editor canvas
+  as a whole moves at the push's pace. A visible window at 60Hz was not
+  measured. If that reads badly, the guest can still run its own clock
+  between pushes.
 - **Reflection JSON is tooling output, not API.** Pinned by a CI test; a
   missing field degrades the inspector to raw name-and-number fields, never
   crashes it.
