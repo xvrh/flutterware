@@ -244,8 +244,8 @@ void main() {
     });
 
     test('a multiplied per-line pass multiplies the pass beneath it', () async {
-      // A different path from the direct paint: the blend is applied at
-      // the per-line saveLayer's restore, not on the pass's own Paint.
+      // Same mechanism as a direct blended pass: the blend is applied at
+      // the layer's restore, not on the pass's own Paint.
       var image = await _paint(
         const [
           FillLayer(paint: SolidPaint(SceneColor(0xFF00FFFF))),
