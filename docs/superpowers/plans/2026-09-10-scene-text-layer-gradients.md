@@ -17,7 +17,7 @@
 - Lints: `var` for locals (`omit_local_variable_types`), single quotes, no `final` parameters, `unawaited(...)` for fire-and-forget, raw strings where they apply. Do not add `const` beyond what the code around it already uses.
 - **Nothing written here may name a client, their repository, their people or their product** — code, comments, tests, commit messages, PR text.
 - `lib/src/scene/core/` stays pure Dart: no `package:flutter` import there (a test guards the import graph).
-- Wire decoding is total: an unreadable payload decodes to null or the default, never throws.
+- Wire decoding is total: an unreadable payload decodes to null or the default, never throws. That is the aim, not yet the fact everywhere: `values.dart` and `props.dart` decode numbers with `as num?` casts, which throw on a payload that is present but not a number (the studio is the only writer, so this has not bitten in practice). New fields this plan adds decode totally.
 - The file grammar omits every default, `emit ∘ parse` is the identity, and anything off the allowlist is refused **by name, with what to write instead** — never dropped silently.
 - **A pass may change paint, never layout** (master plan §4.5). Nothing in this plan adds a metric property to a pass.
 - Angles are degrees, clockwise from twelve o'clock — the unit `rotate` uses and the convention `SceneAngleDial` already draws (`atan2(dx, -dy)`).
@@ -32,7 +32,7 @@ These answer what §4.5 left open. Each is argued once here; the code comments c
 1. **A radial is stretched to the box.** `RadialPaint.radius` is in half-box units: at `1` it reaches the edge from the middle on *both* axes, so on a wide headline it is an ellipse. Flutter's `RadialGradient` measures against the shortest side, and on a 600×80 title that is a dot in the middle. Built with a local matrix on `ui.Gradient.radial`.
 2. **A sweep is in degrees from twelve o'clock, and circular.** The engine takes radians from three o'clock and misbehaves on negative or wrapped angles, so the renderer hands it `[0, end − start]` and rotates the shader to `start`. Not stretched: an angle in a stretched box is not the angle that was typed.
 3. **"Laid across" lives on the pass, not on the paint.** `TextLayer.box` is `SceneLayerBox.text` or `.line`. On the paint it would make `ScenePaint` text-only, and master plan §6 warns that `fill` will adopt the same paint value; a frame has no lines. On the pass it also applies unchanged to a shader later.
-4. **Per line is a mask plus one band per line.** One gradient cannot restart per line, so a line-box pass paints its glyphs (stroke and blur included) in opaque black into a layer, then draws each line's gradient over it with `BlendMode.srcIn`. One layout still; the cost is one `saveLayer` per line-box pass, paid only by passes that ask. Bands run to the midpoints between lines and far past the box, so spill from a stroke or blur takes its own line's colours.
+4. **Per line is a mask plus one band per line.** One gradient cannot restart per line, so a line-box pass paints its glyphs (stroke and blur included) in opaque black into a layer, then draws each line's gradient over it with `BlendMode.srcIn`. One layout still; the cost is one `saveLayer` per line-box pass, paid only by passes that ask. Bands run to the midpoints between lines, and at the outer ends to a margin derived from the pass — stroke width, three blur sigmas, and the resolved font size for glyph overhang — which also bounds the `saveLayer` itself (the box inflated by that margin, not `null`). A fixed spill past the box, reaching whatever the cull rect did, first sized a vector capture's raster patch from the unsupported shader's rect and then failed to rasterize it outright; the margin is what a stroke or blur can actually reach, nothing more.
 5. **A linear gradient is edited as an angle; the model keeps begin/end.** The angle field re-centres the line through the middle of the box and out to its edge (45° is corner to corner). A hand-written off-centre begin/end is shown as its angle and re-centred only when edited.
 6. **The grammar is strict, the renderer tolerant.** The file refuses a gradient of fewer than two colours and stops that do not give one position per colour. The renderer, which also receives wire data, paints fewer than two colours as a solid and mismatched stops as the even spread — and computes the even spread itself, because `dart:ui` throws on a gradient with no stops unless it has exactly two colours (a live bug today: a three-colour `LinearPaint` without stops throws mid-paint).
 7. **Blend is the designer's sixteen modes, on the pass,** bridged to Flutter's `BlendMode` by name (`normal` → `srcOver`).
@@ -1864,26 +1864,33 @@ In `lib/src/scene/layered_text.dart`, replace `paint`:
   /// gradient is drawn over it keeping only where the mask is (`srcIn`).
   /// Still one layout; the price is a layer save, paid only by passes that
   /// ask for it. A band runs to the midpoint of the gap to its neighbours
-  /// and far past the box at the ends, so a stroke or a blur that spills
-  /// out of its line still takes that line's colours.
+  /// and, at the ends, to a margin sized off the pass itself, so a stroke
+  /// or a blur that spills out of its line still takes that line's colours.
   void _paintPerLine(Canvas canvas, TextLayer layer, Size size) {
     var gradient = layer.paint! as SceneGradient;
     var mask = _painterFor(layer, size, mask: true);
     var lines = mask.computeLineMetrics();
-    canvas.saveLayer(null, Paint());
+    // How far past the box this pass's own spill can reach: a stroke
+    // widens the outline by its width, a blur by roughly three sigmas, and
+    // the glyphs themselves can overhang their line by about a font size.
+    // Bounds the saveLayer too — a null bound, or one wide enough for a
+    // fixed 1e4 spill, sized a vector capture's raster patch from the
+    // unsupported shader's rect and made `Picture.toImage` fail outright.
+    var margin = _spillMargin(layer);
+    canvas.saveLayer((Offset.zero & size).inflate(margin), Paint());
     mask.paint(canvas, Offset.zero);
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       var top = line.baseline - line.ascent;
       var bottom = line.baseline + line.descent;
       var bandTop = i == 0
-          ? -_spill
+          ? -margin
           : (lines[i - 1].baseline + lines[i - 1].descent + top) / 2;
       var bandBottom = i == lines.length - 1
-          ? size.height + _spill
+          ? size.height + margin
           : (bottom + lines[i + 1].baseline - lines[i + 1].ascent) / 2;
       canvas.drawRect(
-        Rect.fromLTRB(-_spill, bandTop, size.width + _spill, bandBottom),
+        Rect.fromLTRB(-margin, bandTop, size.width + margin, bandBottom),
         Paint()
           ..blendMode = BlendMode.srcIn
           ..shader = sceneGradientShader(
@@ -1895,6 +1902,11 @@ In `lib/src/scene/layered_text.dart`, replace `paint`:
     }
     canvas.restore();
   }
+
+  double _spillMargin(TextLayer layer) =>
+      (layer is StrokeLayer ? layer.width : 0) +
+      3 * layer.blur +
+      (style.fontSize ?? 14.0);
 ```
 
 Change `_painterFor` to take the mask flag and key on it:
@@ -1951,12 +1963,7 @@ Change `_paintFor`'s signature to `ui.Paint _paintFor(TextLayer layer, Size size
 
 The stroke setup before it and the `maskFilter` blur after it stay as they are, so a mask carries the pass's stroke and blur.
 
-In `_PainterKey`, add a trailing constructor parameter `this.mask`, the field `final bool mask;`, `other.mask == mask &&` to `==`, and `mask` to the `Object.hash` in `hashCode`. Add to the file's constants:
-
-```dart
-/// Far enough past the box that no stroke or blur reaches the end of a band.
-const _spill = 1e4;
-```
+In `_PainterKey`, add a trailing constructor parameter `this.mask`, the field `final bool mask;`, `other.mask == mask &&` to `==`, and `mask` to the `Object.hash` in `hashCode`. `_spillMargin` above is the file's answer for how far a band and its `saveLayer` reach past the box — no separate constant.
 
 - [ ] **Step 6: Run the tests to see them pass**
 
