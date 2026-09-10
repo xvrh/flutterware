@@ -24,3 +24,12 @@ docs/
 # Scratch space for unwritten ideas. `.gitignore` says so too, but a
 # `.pubignore` replaces `.gitignore` wholesale rather than adding to it.
 doc/ideas/
+
+# Tests. Both packages' suites — the root's and the studio's, unit and
+# integration — run in this repo's CI and nowhere else: a hosted install
+# copies `app/` to build the GUI from it, and nothing there compiles, reads or
+# lists a test. Measured 2026-09-11: 548 files, 4.4 MB uncompressed, half of
+# the archive's file count.
+test/
+app/test/
+app/integration_test/
