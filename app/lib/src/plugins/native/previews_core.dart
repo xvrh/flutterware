@@ -1514,6 +1514,22 @@ class PreviewsCore extends PluginCore {
                 'per frame. Serve it over HTTP.',
           ),
           const ActionParameter(
+            'frames',
+            'Frames',
+            kind: ActionParameterKind.choice,
+            required: false,
+            description:
+                'Which pictures the exported page carries. `changed` writes '
+                "the findings' frames only — the verdict is untouched, but an "
+                'unchanged entry has no picture beside it and says so. On a '
+                'run where the skip rule did not earn its keep that is most of '
+                'the page.',
+            options: [
+              ActionOption('all', label: 'all'),
+              ActionOption('changed', label: 'findings only'),
+            ],
+          ),
+          const ActionParameter(
             'base-href',
             'Base href',
             required: false,

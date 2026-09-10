@@ -27,6 +27,7 @@ class StepPage extends StatelessWidget {
     required this.mode,
     required this.onMode,
     required this.onBack,
+    this.framesWithheld = false,
     this.onRule,
   });
 
@@ -35,6 +36,12 @@ class StepPage extends StatelessWidget {
   final StageMode mode;
   final ValueChanged<StageMode> onMode;
   final VoidCallback onBack;
+
+  /// Whether this step's pictures were left out of the page it is being read
+  /// from — see [ComparisonIndex.framesWithheldFor]. A step of a flow that is
+  /// a finding always has them; a step of a flow that came out identical does
+  /// not, on a page written with `--frames=changed`.
+  final bool framesWithheld;
 
   /// See [ChannelLines.onRule].
   final ValueChanged<ComparisonRule>? onRule;
@@ -90,6 +97,9 @@ class StepPage extends StatelessWidget {
           mode: mode,
           onMode: onMode,
           onRule: onRule,
+          whenNotRendered: framesWithheld
+              ? FindingBody.framesWithheld(context)
+              : null,
         ),
       ],
     );

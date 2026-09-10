@@ -53,7 +53,7 @@ comparison:
         path: ~/.flutterware/shots
         key: fw-shots-${{ runner.os }}
     - name: Compare
-      run: dart run flutterware compare --report=comparison-report
+      run: dart run flutterware compare --report=comparison-report --frames=changed
     - name: Host the report
       env: { PR: ${{ github.event.number }} }
       run: |
@@ -131,6 +131,25 @@ guests, and a runner sized for one build will not hold four of those at once;
 since the scenario half stopped building harnesses it does not need, a package
 a branch did not touch costs milliseconds anyway.
 
+## Why `--frames=changed`
+
+The page has to carry every picture it shows, because it is read where nobody
+has the shot cache — and on a run where the skip rule did not earn its keep,
+almost all of them are pictures of rows that came out **identical**. Measured
+on one export: 18.1MB of frames for 220 unchanged entries against 1.5MB for
+the 24 findings.
+
+`--frames=changed` writes the findings' frames only. The verdict is untouched
+— every row is still in `index.json` with its state and its channels, and a
+script over the file sees exactly what it saw before — and an unchanged entry
+opens on a sentence saying its picture was left out rather than pretending
+nothing rendered. A scenario that *is* a finding keeps every one of its steps,
+holes and all being worse than weight.
+
+Leave it off for a page somebody browses rather than gates on: without the
+frames it cannot show you what a branch did not touch, which is a real thing
+to want to see. That is why the default is `all`.
+
 ## What to know before turning it on
 
 - **The shot cache is the whole performance story, and CI starts cold.**
@@ -146,3 +165,8 @@ a branch did not touch costs milliseconds anyway.
   cannot run the page — it has to be served, and the branch is the serving.
 - **Old directories are just directories.** A closed pull request's `pr-N/`
   on the branch is linked by nothing; delete whenever the branch feels heavy.
+- **The page fetches its rendering engine from `www.gstatic.com`**, so a
+  runner behind a firewall that blocks it gets a blank page. The engine is
+  ~38MB and is *not* copied into the export for exactly that reason; there is
+  no flag here that changes it, and the scenario export's *Offline* toggle is
+  the one place that does.

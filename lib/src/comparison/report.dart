@@ -21,6 +21,30 @@ const comparisonReportFile = 'index.json';
 /// anything" is a question about the branch.
 enum ComparedHalfKind { previews, scenarios }
 
+/// Which of a report's frames were written beside it.
+///
+/// An export is read where nobody has the shot cache, so every frame it wants
+/// to show has to be encoded into it — and on a run where the skip rule did
+/// not earn its keep, that is overwhelmingly frames of rows that came out
+/// **identical**. Measured on one export 2026-09-10: 18.1MB of preview frames
+/// for 220 unchanged entries, against 1.5MB for the 24 findings.
+///
+/// So an export can carry the findings' frames alone. The verdict is
+/// untouched either way — every row is still in the file with its state and
+/// its channels — and this is how a reader tells a row whose picture was left
+/// out from a row that never had one. Without it the page says "neither side
+/// rendered" over an entry both sides rendered perfectly well.
+enum ExportedFrames {
+  /// Every frame the report names.
+  all,
+
+  /// The findings' frames only — rows that are neither `same` nor `skipped`.
+  findings;
+
+  static ExportedFrames fromName(Object? name) =>
+      name == 'findings' ? ExportedFrames.findings : ExportedFrames.all;
+}
+
 /// Where the frames a report names actually are.
 ///
 /// The one thing that separates the two files both called `index.json`, and
@@ -306,6 +330,7 @@ class ComparisonIndex {
     this.ms = 0,
     this.counts = const {},
     this.frames = ComparisonFrames.local,
+    this.exported = ExportedFrames.all,
     this.narrowed = false,
     this.previewsHalf = const ComparedHalf(),
     this.scenariosHalf,
@@ -346,6 +371,20 @@ class ComparisonIndex {
 
   /// Whether the frames this file names can be opened from beside it.
   final ComparisonFrames frames;
+
+  /// Which of them were written there — see [ExportedFrames]. Always
+  /// [ExportedFrames.all] for a report that was never exported, whose frames
+  /// are wherever the run left them.
+  final ExportedFrames exported;
+
+  /// Whether a row in [state] is one whose frames this report chose not to
+  /// carry.
+  ///
+  /// The question a stage has to ask before it says a side drew nothing: on a
+  /// findings-only export an unchanged row has no frames beside the file and
+  /// had two perfectly good ones on the machine that ran it.
+  bool framesWithheldFor(ComparedState state) =>
+      exported == ExportedFrames.findings && !isComparedFinding(state);
 
   /// Whether the run was narrowed to named entries (`--entry`).
   ///
@@ -409,6 +448,7 @@ class ComparisonIndex {
       frames: json['frames'] == 'relative'
           ? ComparisonFrames.relative
           : ComparisonFrames.local,
+      exported: ExportedFrames.fromName(json['exported']),
       narrowed: json['narrowed'] == true,
       previewsHalf: ComparedHalf.fromJson(previews),
       scenariosHalf: scenarios == null

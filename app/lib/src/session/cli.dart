@@ -232,7 +232,8 @@ const fwCommands = [
     'compare',
     usage:
         'compare [--base=<ref>] [--package=<path>] [--entry=<id>] '
-        '[--export[=<dir>]] [--base-href=<path>] [--report=<dir>] [--json]',
+        '[--export[=<dir>]] [--frames=all|changed] [--base-href=<path>] '
+        '[--report=<dir>] [--json]',
     summary: 'what this worktree did to the pictures, against its base',
     details:
         'Renders previews and replays scenarios on both sides of the branch '
@@ -275,6 +276,13 @@ const fwCommands = [
         '— without\nbeing told. Pass `--base-href=/comparisons/42/` only for '
         'a host that\nserves the directory without redirecting to a trailing '
         'slash.\n'
+        '\n'
+        "`--frames=changed` puts only the findings' pictures in the page. "
+        'The\nverdict is untouched — every row is still there with its state '
+        'and its\nchannels — but an unchanged entry has no picture beside it '
+        'and says so.\nOn a run where the skip rule did not earn its keep '
+        'that is most of the\npage: measured at 18.1MB of unchanged frames '
+        'against 1.5MB of findings.\n'
         '\n'
         '`--report` writes what a pull-request comment needs: `comment.md`, '
         'a\n`mosaic.png` of the changed entries, and the exported page under '
@@ -612,6 +620,7 @@ class FwCli {
     String? exportDir;
     var baseHref = defaultBaseHref;
     String? reportDir;
+    var frames = ExportedFrames.all;
     for (var argument in arguments) {
       if (argument.startsWith('--base=')) {
         baseRef = argument.substring('--base='.length);
@@ -626,6 +635,14 @@ class FwCli {
       } else if (argument.startsWith('--export=')) {
         export = true;
         exportDir = argument.substring('--export='.length);
+      } else if (argument.startsWith('--frames=')) {
+        var named = argument.substring('--frames='.length);
+        if (named != 'all' && named != 'changed') {
+          return fail('--frames takes `all` or `changed`, not "$named".');
+        }
+        frames = named == 'changed'
+            ? ExportedFrames.findings
+            : ExportedFrames.all;
       } else if (argument.startsWith('--base-href=')) {
         baseHref = argument.substring('--base-href='.length);
       } else if (argument.startsWith('--report=')) {
@@ -652,6 +669,7 @@ class FwCli {
             exportDir: exportDir,
             baseHref: baseHref,
             reportDir: reportDir,
+            frames: frames,
           ),
           // Progress belongs to a terminal, not to a document: a `--json` run
           // has to be one parseable object from its first byte.

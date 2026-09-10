@@ -35,10 +35,20 @@ class PreviewsTab extends StatefulWidget {
     required this.selected,
     required this.onSelect,
     this.header,
+    this.framesWithheld = _noneWithheld,
   });
 
   final ComparisonHalf half;
   final ShotStore store;
+
+  /// Whether a row in this state has no pictures *here* — because the page
+  /// being read carries the findings' frames only.
+  ///
+  /// A predicate rather than a bool because the answer is per row: the
+  /// findings on a trimmed page still have theirs. The panel passes nothing;
+  /// it reads the machine's own cache, where every frame a run made is still
+  /// filed.
+  final bool Function(ComparedState state) framesWithheld;
 
   /// Where the frame decode declares itself, so a capture waits for it.
   final SettleRegistry settle;
@@ -54,6 +64,8 @@ class PreviewsTab extends StatefulWidget {
   @override
   State<PreviewsTab> createState() => _PreviewsTabState();
 }
+
+bool _noneWithheld(ComparedState state) => false;
 
 class _PreviewsTabState extends State<PreviewsTab> {
   late final _shots = ShotPair(widget.store);
@@ -162,6 +174,7 @@ class _PreviewsTabState extends State<PreviewsTab> {
                   shots: _shots,
                   mode: _mode,
                   onMode: (mode) => setState(() => _mode = mode),
+                  framesWithheld: widget.framesWithheld(current.state),
                   onRule: widget.half.toggleRule,
                 ),
         ),
@@ -448,6 +461,7 @@ class _Detail extends StatelessWidget {
     required this.shots,
     required this.mode,
     required this.onMode,
+    required this.framesWithheld,
     this.onRule,
   });
 
@@ -455,6 +469,10 @@ class _Detail extends StatelessWidget {
   final ShotPair shots;
   final StageMode mode;
   final ValueChanged<StageMode> onMode;
+
+  /// Whether this row's pictures were left out of the page it is being read
+  /// from — see [ComparisonIndex.framesWithheldFor].
+  final bool framesWithheld;
 
   /// See [ChannelLines.onRule].
   final ValueChanged<ComparisonRule>? onRule;
@@ -501,9 +519,11 @@ class _Detail extends StatelessWidget {
           // A skipped entry has no pictures and never will: nothing was
           // rendered *on purpose*, which is not a failed decode and owes the
           // reader a sentence rather than a spinner.
-          whenNotRendered: item.state == ComparedState.skipped
-              ? const _NotRendered()
-              : null,
+          whenNotRendered: switch (item.state) {
+            ComparedState.skipped => const _NotRendered(),
+            _ when framesWithheld => FindingBody.framesWithheld(context),
+            _ => null,
+          },
         ),
       ],
     );

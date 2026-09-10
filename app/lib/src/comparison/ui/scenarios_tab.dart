@@ -46,11 +46,17 @@ class ScenariosTab extends StatefulWidget {
     required this.selected,
     required this.onSelect,
     this.header,
+    this.framesWithheld = _noneWithheld,
   });
 
   final ComparisonHalf half;
   final ShotStore store;
   final SettleRegistry settle;
+
+  /// Whether a flow in this state has no pictures *here* — the twin of
+  /// `PreviewsTab.framesWithheld`, asked of the flow rather than of the step,
+  /// because an export keeps or drops a scenario whole.
+  final bool Function(ComparedState state) framesWithheld;
 
   /// `<file>#<scenario>/<step path>` as the address names it, or null.
   final String? selected;
@@ -63,6 +69,8 @@ class ScenariosTab extends StatefulWidget {
   @override
   State<ScenariosTab> createState() => _ScenariosTabState();
 }
+
+bool _noneWithheld(ComparedState state) => false;
 
 class _ScenariosTabState extends State<ScenariosTab> {
   late final _shots = ShotPair(widget.store);
@@ -209,6 +217,7 @@ class _ScenariosTabState extends State<ScenariosTab> {
         mode: _mode,
         onMode: (mode) => setState(() => _mode = mode),
         onBack: () => widget.onSelect(scenario.scenario),
+        framesWithheld: widget.framesWithheld(scenario.state),
         onRule: widget.half.toggleRule,
       );
     }

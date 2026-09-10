@@ -268,6 +268,7 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
             selected: _selected,
             onSelect: _selectRow,
             header: ComparisonVerdict.ofHalf(_previews!),
+            framesWithheld: index.framesWithheldFor,
           )
         : ScenariosTab(
             half: _scenarios!,
@@ -276,6 +277,7 @@ class _ComparisonWebViewerState extends State<ComparisonWebViewer> {
             selected: _selected,
             onSelect: _selectRow,
             header: ComparisonVerdict.ofHalf(_scenarios!),
+            framesWithheld: index.framesWithheldFor,
           );
   }
 

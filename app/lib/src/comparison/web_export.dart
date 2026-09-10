@@ -74,6 +74,7 @@ class ComparisonWebExporter {
     required String output,
     String baseHref = defaultBaseHref,
     bool offline = false,
+    ExportedFrames frames = ExportedFrames.all,
     void Function(String line)? onOutput,
   }) async {
     var stopwatch = Stopwatch()..start();
@@ -88,12 +89,16 @@ class ComparisonWebExporter {
     outputDir.createSync(recursive: true);
 
     onOutput?.call('[export] copying the viewer');
-    _bundle.copyTo(output);
+    _bundle.copyTo(output, offline: offline);
     setBaseHrefIn(p.join(output, 'index.html'), baseHref);
 
     onOutput?.call('[export] encoding the frames');
     index['against'] = against;
-    var frames = _collect(index, cache: cache, output: output);
+    // Said before the frames are collected, because the collection reads it:
+    // a reader has to be able to tell a row whose picture was left out from a
+    // row that never had one.
+    if (frames != ExportedFrames.all) index['exported'] = frames.name;
+    var encoded = _collect(index, cache: cache, output: output, only: frames);
     // Every reference has just been rewritten to a PNG beside this file, so
     // the dialect the artifact declared is no longer true of the copy being
     // written. Stamped after `_collect` rather than before, because a reader
@@ -106,7 +111,7 @@ class ComparisonWebExporter {
     return ComparisonWebExport(
       output: output,
       indexHtml: p.join(output, 'index.html'),
-      frames: frames,
+      frames: encoded,
       duration: stopwatch.elapsed,
     );
   }
@@ -123,8 +128,16 @@ class ComparisonWebExporter {
     Map<String, Object?> index, {
     required ShotCache cache,
     required String output,
+    ExportedFrames only = ExportedFrames.all,
   }) {
     var encoded = 0;
+
+    /// Whether a row in [state] gets its pictures written into the page.
+    bool wanted(Object? state) =>
+        only == ExportedFrames.all ||
+        isComparedFinding(
+          ComparedState.values.asNameMap()['$state'] ?? ComparedState.skipped,
+        );
 
     // The same key twice — the unchanged side of two rows, say — is one file.
     var byKey = <String, String?>{};
@@ -146,6 +159,10 @@ class ComparisonWebExporter {
     for (var item in previews['items'] as List? ?? const []) {
       var shots = (item as Map)['shots'] as Map?;
       if (shots == null) continue;
+      // The keys stay in the file even when the pictures do not: they are what
+      // a run *on this machine* would open them with, and `exported` above is
+      // what tells a page reading this copy that they are not beside it.
+      if (!wanted(item['state'])) continue;
       for (var side in const ['base', 'head']) {
         var key = shots[side];
         if (key is! String) continue;
@@ -163,7 +180,12 @@ class ComparisonWebExporter {
     for (var scenario in scenarios?['items'] as List? ?? const []) {
       var into = 's${scenarioIndex++}';
       var taken = <String>{};
-      for (var step in (scenario as Map)['steps'] as List? ?? const []) {
+      // Whole flows, not whole *steps*. A scenario is a picture per step laid
+      // out as one graph, and dropping the unchanged steps out of a flow that
+      // is a finding would leave the reader panning across holes — so the
+      // question is asked of the scenario and answered for all of it.
+      if (!wanted((scenario as Map)['state'])) continue;
+      for (var step in scenario['steps'] as List? ?? const []) {
         var frames = (step as Map)['frames'] as Map?;
         if (frames == null) continue;
         for (var side in const ['base', 'head']) {

@@ -46,6 +46,7 @@ class CompareOptions {
     this.exportDir,
     this.baseHref = defaultBaseHref,
     this.reportDir,
+    this.frames = ExportedFrames.all,
   });
 
   /// Overrides the base — anything git can name. Null resolves the project's
@@ -80,6 +81,14 @@ class CompareOptions {
   /// Write `comment.md` + `mosaic.png` here. Implies the page under
   /// `<reportDir>/web`.
   final String? reportDir;
+
+  /// Which frames the exported page carries — see [ExportedFrames].
+  ///
+  /// [ExportedFrames.all] by default, and deliberately: an export that leaves
+  /// out the unchanged rows' pictures cannot show them, and somebody browsing
+  /// what a branch *did not* touch is a real reader. A pull-request page has
+  /// no such reader, which is why the CI recipe names the other one.
+  final ExportedFrames frames;
 }
 
 /// Everything one comparison concluded, with where it was written.
@@ -302,6 +311,7 @@ Future<CompareOutcome> runComparison({
               ? p.join(options.reportDir!, 'web')
               : p.join(top, 'build', 'comparison', 'web')),
       baseHref: options.baseHref,
+      frames: options.frames,
       onOutput: onProgress,
     );
   }
@@ -384,6 +394,7 @@ Future<ComparisonCompareResult> runCompareAction({
 }) async {
   var entry = arguments['entry'] as String?;
   var export = arguments['export'];
+  var frames = ExportedFrames.fromName(arguments['frames']);
   var baseHref = switch (arguments['base-href'] as String?) {
     var given? when given.isNotEmpty => given,
     _ => defaultBaseHref,
@@ -403,6 +414,7 @@ Future<ComparisonCompareResult> runCompareAction({
       export: export == true || export == 'true',
       baseHref: baseHref,
       reportDir: arguments['report'] as String?,
+      frames: frames,
     ),
   );
 

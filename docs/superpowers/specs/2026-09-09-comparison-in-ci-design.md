@@ -280,7 +280,7 @@ Worst first.
    whose subject is pictures. Every frame the rail would need is already beside
    the page. *Partly answered:* the findings view has them, and the rails
    inside the two halves still do not.
-5. **63 MB per report, and ~95% of it is rows nobody will open.** The
+5. ✅ **63 MB per report, and ~95% of it is rows nobody will open.** The
    breakdown: 36 MB CanvasKit, 18 MB preview shots, 4 MB scenario frames. Only
    11 of 236 rows are findings. `--export=changed` was deferred in the August
    round when the page was mostly read locally; CI hosting is now its main
@@ -288,6 +288,37 @@ Worst first.
    rows whose frames were left out. The CanvasKit third is a hosting question,
    not an export one — identical bytes across every pull request, which git
    deduplicates on the artifact branch and a clone still materialises.
+
+   **Built 2026-09-10, and two of those three sentences were wrong.**
+
+   The CanvasKit third was not a hosting question at all: the page **never
+   loads it**. The viewer is built without `--no-web-resources-cdn`, so the
+   browser fetches the engine from `www.gstatic.com` — checked in the network
+   log of a served page — while `flutter build web` emits a local copy
+   regardless and `copyTo` faithfully copied all 37.9MB of it into every
+   export. It is now copied only for an offline build, which is the only kind
+   that reads it. Nothing was traded for that; it was dead weight.
+
+   And "Not re-rendered" does not cover a trimmed row. That sentence says
+   nothing in the row's inputs changed so it was never rendered, which is
+   **false** of a `same` row: both sides rendered and matched. A page that
+   said it would be contradicting its own verdict. So the index records
+   `exported: findings`, `ComparisonIndex.framesWithheldFor` asks the
+   question, and the row gets its own sentence — *"Identical, and not
+   exported"*.
+
+   The flag is `--frames=changed`, not `--export=changed`: `--export` already
+   takes a directory, so `--export=changed` would have been read as one. The
+   default is `all`, deliberately — a page without the unchanged frames cannot
+   show what a branch did *not* touch, and somebody browsing for that is a
+   real reader. The CI recipe names the other one.
+
+   A scenario is kept or dropped **whole**. Its steps are one graph in a
+   pan-and-zoom canvas, and dropping the unchanged steps out of a flow that is
+   a finding would leave the reader panning across holes.
+
+   Measured on the same export, both changes together: **65MB → 6.5MB**
+   (2.8MB of it `main.dart.js`, 1.6MB fonts, 1.5MB the findings' frames).
 6. ✅ **An added entry has no picture at all.** `ComparisonRunner.plan` settles
    `added` and `removed` without rendering either side, so the row reaches the
    page with no `shots` key and the stage says *"Neither side rendered"*. For
