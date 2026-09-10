@@ -186,6 +186,18 @@ void main() {
       expect(() => bound.group('ghost'), throwsArgumentError);
     });
 
+    test('a playable remembers where it was last applied', () {
+      var scene = coffeeBannerDraft();
+      var bound = BoundMotion.bind(coffeeIntroDraft(scene), scene);
+      expect(bound.position, Duration.zero);
+      var heard = 0;
+      bound.clock.addListener(() => heard++);
+      bound.apply(const Duration(milliseconds: 250));
+      expect(bound.position, const Duration(milliseconds: 250));
+      bound.apply(const Duration(milliseconds: 250));
+      expect(heard, 1); // the same time again is not news
+    });
+
     test('binding against a scene missing the target refuses, named', () {
       // The motion is authored against one scene and bound against another,
       // which is the mistake: a group holds a node, and this one's node is
@@ -235,6 +247,16 @@ void main() {
       expect(cup.fxRendered('opacity'), 1.0); // held at its start
       bound.apply(const Duration(milliseconds: 350));
       expect(cup.fxRendered('opacity'), closeTo(0.5, 1e-9));
+    });
+
+    test("a child's clock is its own time, not the parent's", () {
+      const offset = Duration(milliseconds: 100);
+      var (scene, doc) = pair((a, b) => ParExpr([a, AtExpr(offset, b)]));
+      var bound = BoundMotion.bind(doc, scene);
+      const parentTime = Duration(milliseconds: 250);
+      bound.apply(parentTime);
+      expect(bound.position, parentTime);
+      expect(bound.group('b').position, parentTime - offset);
     });
 
     test('Speed halves or doubles the clock', () {

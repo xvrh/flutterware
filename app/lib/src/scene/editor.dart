@@ -553,9 +553,13 @@ class SceneEditor extends SceneListenable {
   }
 
   /// Where the open motion's playhead is, as the playback last reported it.
-  /// A plain field: it moves sixty times a second while playing, and
-  /// nothing rebuilds on it.
-  Duration playhead = Duration.zero;
+  /// Not a change of the editor: it moves sixty times a second while
+  /// playing, and nothing rebuilds on it. What must follow it — a guest
+  /// whose document a shader draws by the clock — listens to [playheadClock].
+  Duration get playhead => playheadClock.value;
+  set playhead(Duration value) => playheadClock.value = value;
+
+  final playheadClock = SceneValue(Duration.zero);
 
   /// Whether an edit to [prop] of [node] would record a key right now.
   bool records(SceneNode node, String prop) =>

@@ -9,12 +9,14 @@
 // app has no business importing the authoring vocabulary, which is the
 // tool's. That only became true when `MotionPlayer` learned to take a
 // motion: before it, starting one meant reaching for `playTimeline` in
-// `scene_authoring.dart`.
+// `scene_authoring.dart`. The one exception is the shader pass a test puts
+// on a compiled node by hand, which an app would write in its scene file.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
+import 'package:flutterware/scene_authoring.dart' show FillLayer, ShaderPaint;
 
 import 'sample.scene.dart';
 
@@ -155,6 +157,68 @@ void main() {
       player.progress = 0.5;
       expect(ticks, 1);
       expect(player.position, const Duration(milliseconds: 180));
+    });
+  });
+
+  group('scene time', () {
+    late SampleScene scene;
+    late SampleIntro motion;
+    late MotionPlayer player;
+
+    setUp(() {
+      scene = SampleScene();
+      // A pass drawn by the clock rather than by a track: nothing in the
+      // motion writes it, so only the time reaches it.
+      scene.title.layers = [
+        const FillLayer(paint: ShaderPaint('test/scene/shaders/probe.frag')),
+      ];
+      motion = SampleIntro(scene);
+      player = MotionPlayer(motion, vsync: null);
+      addTearDown(player.dispose);
+    });
+
+    Widget mount(Widget view) => MaterialApp(
+      home: Align(alignment: Alignment.topLeft, child: view),
+    );
+
+    LayeredText title(WidgetTester tester) => tester.widget<LayeredText>(
+      find.byWidgetPredicate((w) => w is LayeredText && w.layers.isNotEmpty),
+    );
+
+    testWidgets("a text's time is the motion's position", (tester) async {
+      await tester.pumpWidget(mount(SceneView(scene, motion: motion)));
+      player.position = const Duration(milliseconds: 400);
+      await tester.pump();
+      var text = title(tester);
+      expect(text.time!.value, const Duration(milliseconds: 400));
+    });
+
+    testWidgets('an explicit time wins over the motion', (tester) async {
+      var time = ValueNotifier(const Duration(seconds: 2));
+      addTearDown(time.dispose);
+      await tester.pumpWidget(
+        mount(
+          SceneView.document(scene.scene, motion: player.playable, time: time),
+        ),
+      );
+      player.position = const Duration(milliseconds: 100);
+      await tester.pump();
+      expect(title(tester).time, same(time));
+      expect(title(tester).time!.value, const Duration(seconds: 2));
+    });
+
+    testWidgets('the time listenable is the same object across rebuilds', (
+      tester,
+    ) async {
+      await tester.pumpWidget(mount(SceneView(scene, motion: motion)));
+      var first = title(tester).time;
+      expect(first, isNotNull);
+      // A rebuild from above, and one from the document an fx write flushes.
+      await tester.pumpWidget(mount(SceneView(scene, motion: motion)));
+      player.position = const Duration(milliseconds: 130);
+      await tester.pump();
+      await tester.pump();
+      expect(title(tester).time, same(first));
     });
   });
 

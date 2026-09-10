@@ -14,6 +14,9 @@ import 'package:flutter/painting.dart' show Size;
 import 'package:flutter/foundation.dart';
 import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:flutterware/scene_authoring.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/scene/shader_programs.dart'
+    show sceneShaderAssets;
 
 import '../previews/catalog_session.dart';
 import 'args_codegen.dart';
@@ -34,8 +37,10 @@ const sceneHostEntrySymbol = sceneCanvasHostSymbol;
 /// one and they all share the symbol.
 class SceneGuest {
   SceneGuest(this.session, this.editor, {required this.groupDirectory}) {
+    _paintsWithClock = sceneShaderAssets(editor.doc).isNotEmpty;
     editor.doc.addListener(_push);
-    editor.addListener(_push);
+    editor.addListener(_onEditor);
+    editor.playheadClock.addListener(_onPlayhead);
     session.addListener(_onSession);
     // A session that is already up notifies nobody about it: ask now, or a
     // guest created over a running session shows what it was showing.
@@ -130,6 +135,24 @@ class SceneGuest {
   /// changes.
   void push() => _push();
 
+  /// Whether a shader paints the document, which then changes with the
+  /// playhead alone: a motion that animates nothing but `uTime` writes no
+  /// fx, so no document flush ever pushes it.
+  ///
+  /// Asked when the EDITOR notifies — every edit, undo and redo does —
+  /// rather than when the document does, which is every fx flush and so
+  /// every tick of a playing motion.
+  var _paintsWithClock = false;
+
+  void _onEditor() {
+    _paintsWithClock = sceneShaderAssets(editor.doc).isNotEmpty;
+    _push();
+  }
+
+  void _onPlayhead() {
+    if (_paintsWithClock) _push();
+  }
+
   void _push() {
     if (_inflight) {
       _dirty = true;
@@ -154,6 +177,8 @@ class SceneGuest {
               ]),
               if (artboard case var size?)
                 'artboard': jsonEncode([size.width, size.height]),
+              'time':
+                  '${editor.playhead.inMicroseconds / Duration.microsecondsPerSecond}',
             },
           )
           // A call that never answers would hold `_inflight` for good, and a
@@ -225,7 +250,8 @@ class SceneGuest {
     rendered.dispose();
     _retry?.cancel();
     editor.doc.removeListener(_push);
-    editor.removeListener(_push);
+    editor.removeListener(_onEditor);
+    editor.playheadClock.removeListener(_onPlayhead);
     session.removeListener(_onSession);
     status.dispose();
   }

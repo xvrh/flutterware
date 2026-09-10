@@ -8,6 +8,7 @@
 // External nodes are the seam: a scene names an entry, and the app hands over
 // the real widget for it. Nothing about that widget crosses a wire — its
 // mockup data, its theme, its own animations all live here, on this side.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../previews/playhead.dart';
@@ -70,6 +71,7 @@ class SceneView extends StatefulWidget {
     SceneDefinition definition, {
     super.key,
     SceneMotion? motion,
+    this.time,
     this.selected = const {},
     this.onMeasured,
     this.renderers = const {},
@@ -83,6 +85,7 @@ class SceneView extends StatefulWidget {
     this.scene, {
     super.key,
     this.motion,
+    this.time,
     this.selected = const {},
     this.onMeasured,
     this.renderers = const {},
@@ -106,6 +109,14 @@ class SceneView extends StatefulWidget {
   /// The view never plays it — a clock is the app's business, and a
   /// [MotionPlayer] over the same playable is how a scene plays on screen.
   final Playable? motion;
+
+  /// Scene time for what the clock draws — a shader pass's `uTime`. Null
+  /// reads the motion's; with neither it is zero.
+  ///
+  /// A listenable rather than a value, because a seek that moves no track
+  /// writes no fx: the document never notifies, this view never rebuilds,
+  /// and only something listening to the clock itself hears the time move.
+  final ValueListenable<Duration>? time;
 
   /// Names to outline — editor chrome, and empty in a shipped scene.
   final Set<String> selected;
@@ -150,12 +161,22 @@ class _SceneViewState extends State<SceneView> {
 
   String? _playheadId;
 
+  /// The one time every text of this view is handed. Held, because the
+  /// motion's is a fresh adapter per ask, and a painter compares its time by
+  /// identity: a new object each build would re-subscribe and repaint it for
+  /// a rebuild that moved nothing.
+  ValueListenable<Duration>? _time;
+
+  ValueListenable<Duration>? _timeOf(SceneView w) =>
+      w.time ?? w.motion?.clock.flutter;
+
   @override
   void initState() {
     super.initState();
     installSceneFrameFlush();
     widget.scene.addListener(_onChanged);
     _mountPlayhead();
+    _time = _timeOf(widget);
   }
 
   void _mountPlayhead() {
@@ -180,6 +201,9 @@ class _SceneViewState extends State<SceneView> {
     if (old.motion != widget.motion) {
       _unmountPlayhead();
       _mountPlayhead();
+    }
+    if (old.time != widget.time || old.motion != widget.motion) {
+      _time = _timeOf(widget);
     }
   }
 
@@ -323,6 +347,7 @@ class _SceneViewState extends State<SceneView> {
           layers: t.layers,
           textAlign: t.align.flutter,
           maxLines: t.maxLines,
+          time: _time,
         );
       case ShapeNode _:
         inner = null;
