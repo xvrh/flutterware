@@ -83,6 +83,20 @@ void main() {
     expect(find.textContaining('per line'), findsOneWidget);
   });
 
+  testWidgets('a shader pass laid across each line says so in its row', (
+    tester,
+  ) async {
+    await pump(tester, const [
+      FillLayer(
+        paint: ShaderPaint('shaders/foil.frag'),
+        box: SceneLayerBox.line,
+      ),
+      FillLayer(paint: ShaderPaint('shaders/foil.frag')),
+    ]);
+    expect(find.text('Fill · shader · per line'), findsOneWidget);
+    expect(find.text('Fill · shader'), findsOneWidget);
+  });
+
   testWidgets('a colour pass offers no box: it would change nothing', (
     tester,
   ) async {

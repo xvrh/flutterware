@@ -350,6 +350,25 @@ void main() {
     expect(uniforms()['uA'], [1, 5]);
   });
 
+  // The library says a sampler is in the way and still lists what it
+  // reflected: the controls stay, with the notice above them.
+  testWidgets('a notice beside reflected uniforms keeps their controls', (
+    tester,
+  ) async {
+    var sampled = FixedSceneShaders({
+      'shaders/foil.frag': SceneShaderInfo(
+        key: 'shaders/foil.frag',
+        uniforms: shaders.infos['shaders/foil.frag']!.uniforms,
+        error: 'uses a sampler (uTexture) — a scene cannot feed one yet',
+      ),
+    });
+    addTearDown(sampled.dispose);
+    await pump(tester, _foilDefaults, using: sampled);
+    expect(captionColor(tester, 'uses a sampler'), colors(tester).red);
+    expect(field(tester, 'uAngle').shape.editor, SceneEditorShape.slider);
+    expect(find.byType(SceneColorField), findsOneWidget);
+  });
+
   testWidgets('with no package, it says so and keeps the values in reach', (
     tester,
   ) async {

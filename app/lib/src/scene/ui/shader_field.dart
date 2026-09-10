@@ -97,12 +97,16 @@ class SceneShaderField extends StatelessWidget {
 
   List<Widget> _uniforms(BuildContext context, SceneShaderInfo? info) {
     if (info == null) return [_caption(context, 'Reading uniforms…')];
-    if (info.error case var error?) {
+    // An error with nothing reflected is a shader that did not compile: the
+    // file's own numbers are all there is to show. One that still lists
+    // uniforms — a sampler the scene cannot feed — keeps its controls.
+    if (info.error case var error? when info.uniforms.isEmpty) {
       return [_caption(context, error, red: true), ..._plain(context)];
     }
     var name = p.basename(paint.asset);
     var byName = {for (var u in info.uniforms) u.name: u};
     return [
+      if (info.error case var error?) _caption(context, error, red: true),
       for (var u in info.uniforms)
         if (!u.rendererOwned) ...[
           const Gap(FwSpacing.sm),

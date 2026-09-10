@@ -350,7 +350,8 @@ class _SceneLayerListState extends State<SceneLayerList> {
           SweepPaint() => 'sweep',
         },
       if (layer.paint case ShaderPaint()) 'shader',
-      if (layer.box == SceneLayerBox.line && layer.paint is SceneGradient)
+      if (layer.box == SceneLayerBox.line &&
+          (layer.paint is SceneGradient || layer.paint is ShaderPaint))
         'per line',
       if (layer.blend != SceneBlendMode.normal)
         _blendLabel(layer.blend).toLowerCase(),
