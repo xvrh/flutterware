@@ -166,6 +166,13 @@ void main() {
       );
       expect(layers.single.box, SceneLayerBox.line);
       expect(find.byKey(const ValueKey('layer:box')), findsOneWidget);
+      // A shader is not a gradient: what "each line" means for it is a box.
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('the shader runs once per line'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('whole gradient'), findsNothing);
     },
   );
 

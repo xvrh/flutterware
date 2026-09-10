@@ -419,12 +419,14 @@ class _SceneLayerListState extends State<SceneLayerList> {
               'Laid across',
               FwPicker<SceneLayerBox>(
                 key: const ValueKey('layer:box'),
-                choices: const [
+                choices: [
                   FwChoice(value: SceneLayerBox.text, label: 'The whole text'),
                   FwChoice(
                     value: SceneLayerBox.line,
                     label: 'Each line',
-                    detail: 'every line runs the whole gradient',
+                    detail: layer.paint is ShaderPaint
+                        ? 'the shader runs once per line, sized to it'
+                        : 'every line runs the whole gradient',
                   ),
                 ],
                 selected: layer.box,
