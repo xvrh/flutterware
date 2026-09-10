@@ -171,11 +171,14 @@ void main() {
     // Previews is not recorded: the example's entries are compiled into the
     // page and drawn by the panel as widgets of this very program.
     await screen.tap('Previews');
-    await screen.waitFor('Buttons');
-    await screen.tap('Buttons');
+    await screen.waitFor('Menu');
+    // The list header first: the semantics DOM lags the frame by a beat,
+    // and a "Menu" matched too early is the recorded run's step behind it.
+    await screen.waitFor('All demos');
+    await screen.tap('Menu');
     await screen.settle();
     await screen.shot('previews');
-    await screen.waitFor('Filled');
+    await screen.waitFor('Cappuccino');
 
     // A plugin with nothing recorded says so, rather than reaching for a
     // process or a disk.
@@ -293,11 +296,15 @@ class _Screen {
       if (n.text.isNotEmpty) n.text,
   ];
 
-  /// The smallest visible node whose words contain [label].
+  /// The node whose words are exactly [label], or else the smallest visible
+  /// one whose words contain it — a row's own name before a paragraph that
+  /// happens to mention it.
   Future<_Node?> find(String label) async {
     _Node? best;
     for (var n in await nodes()) {
-      if (!n.text.contains(label) || n.area <= 0) continue;
+      if (n.area <= 0) continue;
+      if (n.text == label) return n;
+      if (!n.text.contains(label)) continue;
       if (best == null || n.area < best.area) best = n;
     }
     return best;

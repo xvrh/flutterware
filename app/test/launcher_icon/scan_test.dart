@@ -671,9 +671,10 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
           'xxxhdpi',
         ]);
         expect(legacy.files.length, greaterThan(1));
-        // Both come from main, because kiosk declares neither.
+        // Both come from main, because kiosk declares neither — the
+        // background is the shop's brown, main's `values/colors.xml`.
         expect(scanned.android!.launcher!.path, contains('src/main/'));
-        expect(scanned.android!.backgroundColor, '#FFFFFFFF');
+        expect(scanned.android!.backgroundColor, '#FF6F4E37');
       });
 
       test('partner is iOS only, and Android is main’s whole', () {

@@ -2,9 +2,7 @@
 // Imports carried from the demo file: the annotation is written in *its* scope,
 // so anything the annotation names has to resolve here too.
 import 'package:flutter/material.dart';
-
-import '../../../examples/example/demo/shell.dart';
-
+import 'package:flutterware/previews.dart';
 // Unconditional: the getters below are typed, and a demo file is not obliged
 // to import widgets itself. `widget_previews.dart` is here for the same reason
 // and for one more — a demo annotated with Flutter's own `@Preview` never
@@ -22,8 +20,8 @@ import 'package:flutterware/ui_catalog.dart';
 // Together these reproduce the demo's own scope, which is the one the
 // annotation was written in. The gap that remains is privacy: a `_kName` in the
 // annotation is visible where it was written and not here.
-import '../../../examples/example/demo/asset_smoke.dart';
-import '../../../examples/example/demo/asset_smoke.dart' as fw0;
+import '../../../examples/example/demo/brand.dart';
+import '../../../examples/example/demo/brand.dart' as fw0;
 
 // The annotation, evaluated as Dart rather than interpreted statically.
 // Kept whole rather than reduced: the entrypoint calls Flutter's own
@@ -42,6 +40,7 @@ import '../../../examples/example/demo/asset_smoke.dart' as fw0;
 // reference against a library it does not contain, and the guest renders
 // `Lookup failed: <wrapper> in @methods in file:...` instead of the demo.
 // Behind a getter there is nothing to inline and nothing to re-resolve.
-Preview get fwPreview => Preview(name: 'Asset smoke', wrapper: wrapInApp);
+Preview get fwPreview =>
+    Preview(name: 'App icon', group: 'Brewline', size: Size(1024, 1024));
 
-Widget Function() get fwBuilder => fw0.assetSmoke;
+Widget Function() get fwBuilder => fw0.appIcon;

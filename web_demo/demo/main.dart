@@ -2,6 +2,7 @@
 // reached the way its own catalog demos reach it.
 // ignore: implementation_imports
 import 'package:flutterware_app/src/demo/web_demo.dart';
+import 'package:flutterware_example/shop/shop_strings.dart';
 
 import 'entries.g.dart';
 
@@ -11,4 +12,9 @@ import 'entries.g.dart';
 /// `app/tool/demo/web_entries.dart` and lists the entries a browser can draw.
 /// Outside `lib/`, because the wrappers beside it reach the example's
 /// previews by relative path.
-void main() => runWebDemo(previews: webDemoPreviews);
+void main() {
+  // The shop's strings are the example's assets, bundled here under its
+  // package name.
+  ShopStrings.assetPackage = 'flutterware_example';
+  runWebDemo(previews: webDemoPreviews);
+}

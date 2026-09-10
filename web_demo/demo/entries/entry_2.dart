@@ -1,12 +1,9 @@
 // GENERATED — do not edit.
 // Imports carried from the demo file: the annotation is written in *its* scope,
 // so anything the annotation names has to resolve here too.
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutterware/real_work.dart';
-
-import '../../../examples/example/demo/shell.dart';
-
+import 'package:flutterware/previews.dart';
+import 'package:flutterware_example/shop/shop_app.dart';
 // Unconditional: the getters below are typed, and a demo file is not obliged
 // to import widgets itself. `widget_previews.dart` is here for the same reason
 // and for one more — a demo annotated with Flutter's own `@Preview` never
@@ -24,8 +21,8 @@ import 'package:flutterware/ui_catalog.dart';
 // Together these reproduce the demo's own scope, which is the one the
 // annotation was written in. The gap that remains is privacy: a `_kName` in the
 // annotation is visible where it was written and not here.
-import '../../../examples/example/demo/compute_probe.dart';
-import '../../../examples/example/demo/compute_probe.dart' as fw2;
+import '../../../examples/example/demo/shop.dart';
+import '../../../examples/example/demo/shop.dart' as fw2;
 
 // The annotation, evaluated as Dart rather than interpreted statically.
 // Kept whole rather than reduced: the entrypoint calls Flutter's own
@@ -44,6 +41,7 @@ import '../../../examples/example/demo/compute_probe.dart' as fw2;
 // reference against a library it does not contain, and the guest renders
 // `Lookup failed: <wrapper> in @methods in file:...` instead of the demo.
 // Behind a getter there is nothing to inline and nothing to re-resolve.
-Preview get fwPreview => Preview(name: 'Compute probe', wrapper: wrapInApp);
+Preview get fwPreview =>
+    Preview(name: 'Menu', group: 'Brewline', wrapper: wrapInShop);
 
-Widget Function() get fwBuilder => fw2.computeProbe;
+Widget Function() get fwBuilder => fw2.shopMenu;

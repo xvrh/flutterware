@@ -719,6 +719,36 @@ is worth writing down: an entry's layout error is the page's. A per-guest
 error sink is possible — `FlutterError.onError` is global, but the details
 name the element chain — and is left until it is needed twice.
 
+### One subject for every fixture (same day): the coffee shop
+
+The demo's three recorded or compiled-in plugins now show one app — the
+example's coffee shop, which the scenarios already walked.
+
+- **Previews are curated, not "everything a browser can compile".** The
+  shop had no previews; `demo/shop.dart` gives it five, one per screen,
+  under a `PreviewShell` that is the shop itself — `ShopApp` takes the
+  screen as its home, so a preview reads the shop's theme, strings and a
+  sample cart, and the two axes are the app's own (dark, and its two
+  languages). `web_entries.dart` takes an explicit list of ids and keeps
+  the fitness check as a guard that fails the script rather than dropping
+  an entry quietly. One packaging fact surfaced: the shop reads its
+  strings from `assets/i18n/` at its own root, and inside another package
+  that asset is addressed under `packages/flutterware_example/` — a knob
+  on `ShopStrings` the demo's entry point and scenario set.
+- **The launcher icon is the shop's, drawn by the studio.** The sets on
+  disk are fixtures with deliberate *shapes* — a partial override, an
+  iOS-only set, a config never generated, a themed layer dropped — that
+  the example's README explains and the panel's cases depend on. So
+  `flutter_launcher_icons` was not put in the loop: it has one mode, and
+  the README already says why a config per set cannot work. Instead
+  `demo/brand.dart` is a preview of the icon with two knobs, the set (told
+  apart by tint) and the role (icon, adaptive foreground, monochrome);
+  `previews screenshot` photographs it at 1024 into `assets/brand/`, and
+  `app/tool/demo/brand_icons.dart` writes those into every existing file at
+  the size it already has, never adding or removing one. The icon preview
+  is also the first entry of the web demo, which is where a reader meets
+  knobs.
+
 ### The recording and the scenario, in that order
 
 The scenario does not record. It opens `app/demo/fixture/` through the file

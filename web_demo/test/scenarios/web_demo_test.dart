@@ -7,6 +7,7 @@ import 'package:flutterware_app/src/demo/recorded_project.dart';
 import 'package:flutterware_app/src/demo/recording.dart';
 // ignore: implementation_imports
 import 'package:flutterware_app/src/shell/shell_view.dart';
+import 'package:flutterware_example/shop/shop_strings.dart';
 import 'package:path/path.dart' as p;
 
 import '../../demo/entries.g.dart';
@@ -18,6 +19,9 @@ import '../../demo/entries.g.dart';
 /// The previews are drawn inline — a guest in this very tree, no process —
 /// which is what lets the walk settle under FakeAsync.
 void main() {
+  // As the page does: the shop's strings are the example's assets, bundled
+  // under its package name in this program.
+  ShopStrings.assetPackage = 'flutterware_example';
   final recording = FileScenarioArtifacts(
     p.normalize(p.join(Directory.current.path, '..', 'app', 'demo', 'fixture')),
   );
@@ -27,14 +31,15 @@ void main() {
     await shell.start(recordedProjectRoot);
     await s.pumpWidget(ShellApp(shell));
     await s.tap('Previews', shot: Shot('The catalog'));
-    await s.tap('Buttons', shot: Shot('An entry, live'));
-    // Staged as a phone before the tree opens: at "Fit" into the
-    // half-height stage the tree leaves, the example's column of buttons
-    // overflows — the example's own finding, which an embedder guest keeps
-    // to itself and a guest drawn inline lands on the studio.
+    await s.tap('Menu', shot: Shot('The menu, live'));
+    // Staged as a phone before the tree opens: the shop is a phone app, and
+    // at "Fit" into the half-height stage the tree leaves, a screen that
+    // does not scroll overflows — the example's own finding, which an
+    // embedder guest keeps to itself and a guest drawn inline lands on the
+    // studio.
     await s.tap('Fit');
     await s.tap('iPhone 16', shot: Shot('Staged as a phone'));
     await s.tap('Elements', shot: Shot('Its tree'));
-    await s.tap('On a phone', shot: Shot('Another entry, on the phone'));
+    await s.tap('Cart', shot: Shot('The cart, on the phone'));
   });
 }

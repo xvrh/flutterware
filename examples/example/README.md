@@ -36,9 +36,13 @@ because it forks nothing. A build of it ships main's icons.
 main's themed icon is still on disk, still inherited, and no longer reachable —
 which is the finding the panel raises on that plate.
 
-The art is main's own icons re-tinted — green for `pro`, red for `kiosk`,
-purple for `partner` — so the sets are told apart at a glance and the iOS ones
-keep the opaque, alpha-free PNGs the App Store insists on.
+The art is the shop's own icon, `demo/brand.dart` — a preview the studio
+photographs, which `app/tool/demo/brand_icons.dart` then writes into every
+file above at the size the file already has (see that script for the two
+commands). Re-tinted per set — brown for main, green for `pro`, red for
+`kiosk`, purple for `partner` — so the sets are told apart at a glance, and
+the iOS ones keep the opaque, alpha-free PNGs the App Store insists on. The
+files' *shapes* are the fixtures; the script never adds or removes one.
 
 The Android half is wired for real, in `android/app/build.gradle.kts`. The iOS
 half stops at the catalogs: pointing a build configuration at
