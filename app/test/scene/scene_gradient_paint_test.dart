@@ -11,6 +11,7 @@ import 'package:flutterware/scene_authoring.dart';
 const _red = SceneColor(0xFFFF0000);
 const _green = SceneColor(0xFF00FF00);
 const _blue = SceneColor(0xFF0000FF);
+const _yellow = SceneColor(0xFFFFFF00);
 
 /// [layers] over [text] at 20px, painted by the stack painter alone into a
 /// [size] picture — no widget tree, so the box is exactly [size]. Ten `M`s
@@ -241,6 +242,52 @@ void main() {
       var topOfSecond = await _mean(lined, _spot(20, 22));
       expect(topOfSecond.r, greaterThan(topOfSecond.b));
     });
+
+    test('a multiplied per-line pass multiplies the pass beneath it', () async {
+      // A different path from the direct paint: the blend is applied at
+      // the per-line saveLayer's restore, not on the pass's own Paint.
+      var image = await _paint(
+        const [
+          FillLayer(paint: SolidPaint(SceneColor(0xFF00FFFF))),
+          FillLayer(
+            paint: LinearPaint(colors: [_yellow, _yellow]),
+            box: SceneLayerBox.line,
+            blend: SceneBlendMode.multiply,
+          ),
+        ],
+        text: twoLines,
+        size: size,
+      );
+      var mixed = await _mean(image, _spot(35, 10));
+      expect(mixed.g, greaterThan(200));
+      expect(mixed.r, lessThan(60));
+      expect(mixed.b, lessThan(60));
+    });
+
+    test(
+      'a per-line pass at half opacity mixes with what is beneath it',
+      () async {
+        var image = await _paint(
+          const [
+            FillLayer(paint: SolidPaint(SceneColor(0xFF000000))),
+            FillLayer(
+              paint: LinearPaint(
+                colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFFFFFFFF)],
+              ),
+              box: SceneLayerBox.line,
+              opacity: 0.5,
+            ),
+          ],
+          text: twoLines,
+          size: size,
+        );
+        var mixed = await _mean(image, _spot(35, 10));
+        // Roughly half-way between black and white, not an exact value.
+        expect(mixed.r, inInclusiveRange(90, 165));
+        expect(mixed.g, inInclusiveRange(90, 165));
+        expect(mixed.b, inInclusiveRange(90, 165));
+      },
+    );
 
     test('changes nothing for a solid pass', () async {
       Future<List<int>> bytes(SceneLayerBox box) async {
