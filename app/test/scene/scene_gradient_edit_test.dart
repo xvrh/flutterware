@@ -115,6 +115,16 @@ void main() {
       expect(identical(removeStop(g, 0).gradient, g), isTrue);
     });
 
+    test(
+      'removing the middle of an even spread leaves an even spread unwritten',
+      () {
+        var three = const LinearPaint(colors: [_red, _green, _blue]);
+        var edit = removeStop(three, 1);
+        expect(edit.gradient.colors, [_red, _blue]);
+        expect(edit.gradient.stops, isNull);
+      },
+    );
+
     test('shape survives every stop edit', () {
       const r = RadialPaint(colors: [_red, _blue], radius: 0.4);
       expect((addStop(r, 0.3).gradient as RadialPaint).radius, 0.4);

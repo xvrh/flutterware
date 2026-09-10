@@ -103,9 +103,23 @@ StopEdit removeStop(SceneGradient g, int index) {
   var colors = [...g.colors]..removeAt(index);
   var stops = [...g.resolvedStops]..removeAt(index);
   return (
-    gradient: g.withStops(colors, stops),
+    gradient: g.withStops(
+      colors,
+      _evenSpread(stops, colors.length) ? null : stops,
+    ),
     index: math.min(index, colors.length - 1),
   );
+}
+
+/// Whether [stops] is exactly the spread [SceneGradient.resolvedStops] would
+/// compute for [count] colours on its own — nothing left for a removal to
+/// say, so nothing is written.
+bool _evenSpread(List<double> stops, int count) {
+  if (stops.length != count) return false;
+  for (var i = 0; i < count; i++) {
+    if (stops[i] != (count == 1 ? 0.0 : i / (count - 1))) return false;
+  }
+  return true;
 }
 
 /// [colors] at [stops], put in order, with [follow] tracked to wherever the
