@@ -63,7 +63,13 @@ class ShotKey {
   /// reasoning about which ones that is true of. Scenario replays are filed
   /// under these keys from here on, so a change to how the scenario harness
   /// is generated or run bumps this too.
-  static const revision = 'v10';
+  /// v11 — a project's own `flutter: shaders:` load in the harness, and each
+  /// declared shader and the local `#include`s it reaches are pixel inputs.
+  /// Every v10 picture that asked for one was taken while its load failed
+  /// with "Asset not found", so a pass it paints is drawn now where it was
+  /// blank then; and a v10 key never read a `.frag`, so a branch that edited
+  /// only a shader was served its base's picture as "same".
+  static const revision = 'v11';
 
   /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the SDK both
   /// sides are rendered with; [axes] and [knobs] are whatever was applied.

@@ -261,6 +261,36 @@ void main() {
     );
   });
 
+  // A project shader is in the bundle every entry renders from, and no
+  // import names it: an edit to it, or to what it includes, must still move
+  // the keys, or the page serves the old program's picture.
+  test('a shader or its include moves the keys, and a stray file does not', () {
+    void write(String relative, String content) =>
+        File(p.join(packageRoot, relative))
+          ..parent.createSync(recursive: true)
+          ..writeAsStringSync(content);
+    write(
+      'pubspec.yaml',
+      'name: pkg\n'
+          'flutter:\n'
+          '  shaders:\n'
+          '    - shaders/foil.frag\n',
+    );
+    write('shaders/foil.frag', '#include "noise.glsl"\nvoid main() {}\n');
+    write('shaders/noise.glsl', 'float k = 1.0;\n');
+    var start = keysOf().keyFor(alpha);
+
+    write('shaders/stray.frag', 'void main() {}\n');
+    expect(keysOf().keyFor(alpha), start, reason: 'nothing declares it');
+
+    write('shaders/foil.frag', '#include "noise.glsl"\nvoid main() { }\n');
+    var edited = keysOf().keyFor(alpha);
+    expect(edited, isNot(start));
+
+    write('shaders/noise.glsl', 'float k = 2.0;\n');
+    expect(keysOf().keyFor(alpha), isNot(edited));
+  });
+
   test('the same source is the same key, twice over', () {
     // The property the whole store rests on. If this ever stopped holding,
     // nothing would be served from disk and nothing would say so — it would
