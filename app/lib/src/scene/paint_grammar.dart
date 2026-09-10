@@ -32,6 +32,12 @@ String _layer(TextLayer l) {
   if (l.dx != 0) args.add('dx: ${_num(l.dx)}');
   if (l.dy != 0) args.add('dy: ${_num(l.dy)}');
   if (l.opacity != 1) args.add('opacity: ${_num(l.opacity)}');
+  if (l.box != SceneLayerBox.text) {
+    args.add('box: SceneLayerBox.${l.box.name}');
+  }
+  if (l.blend != SceneBlendMode.normal) {
+    args.add('blend: SceneBlendMode.${l.blend.name}');
+  }
   return '${l is StrokeLayer ? 'StrokeLayer' : 'FillLayer'}(${args.join(', ')})';
 }
 
@@ -44,6 +50,28 @@ String _paint(ScenePaint p) => switch (p) {
     if (end != SceneAlignment.bottomCenter) ', end: ${_alignment(end)}',
     ')',
   ].join(),
+  RadialPaint(:var colors, :var stops, :var center, :var radius) => [
+    'RadialPaint(colors: [${colors.map(_color).join(', ')}]',
+    if (stops != null) ', stops: [${stops.map(_num).join(', ')}]',
+    if (center != SceneAlignment.center) ', center: ${_alignment(center)}',
+    if (radius != 1) ', radius: ${_num(radius)}',
+    ')',
+  ].join(),
+  SweepPaint(
+    :var colors,
+    :var stops,
+    :var center,
+    :var startAngle,
+    :var endAngle,
+  ) =>
+    [
+      'SweepPaint(colors: [${colors.map(_color).join(', ')}]',
+      if (stops != null) ', stops: [${stops.map(_num).join(', ')}]',
+      if (center != SceneAlignment.center) ', center: ${_alignment(center)}',
+      if (startAngle != 0) ', startAngle: ${_num(startAngle)}',
+      if (endAngle != 360) ', endAngle: ${_num(endAngle)}',
+      ')',
+    ].join(),
 };
 
 const _namedAlignments = {
@@ -121,6 +149,41 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
   var dx = _take(named, 'dx', refuse) ?? 0;
   var dy = _take(named, 'dy', refuse) ?? 0;
   var opacity = _take(named, 'opacity', refuse) ?? 1;
+  var box = SceneLayerBox.text;
+  if (named.remove('box') case var b?) {
+    var read = _enumMember(
+      b,
+      'SceneLayerBox',
+      SceneLayerBox.values.map((v) => v.name),
+    );
+    if (read == null) {
+      refuse(
+        b.offset,
+        'layers',
+        'a box is SceneLayerBox.text or SceneLayerBox.line',
+      );
+      return null;
+    }
+    box = SceneLayerBox.values.byName(read);
+  }
+  var blend = SceneBlendMode.normal;
+  if (named.remove('blend') case var m?) {
+    var read = _enumMember(
+      m,
+      'SceneBlendMode',
+      SceneBlendMode.values.map((v) => v.name),
+    );
+    if (read == null) {
+      refuse(
+        m.offset,
+        'layers',
+        'a blend is SceneBlendMode.multiply, .screen, .overlay or another '
+            'of the sixteen SceneBlendMode names',
+      );
+      return null;
+    }
+    blend = SceneBlendMode.values.byName(read);
+  }
 
   if (name == 'FillLayer') {
     if (!_rest(named, 'FillLayer', refuse)) return null;
@@ -130,6 +193,8 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
       dx: dx,
       dy: dy,
       opacity: opacity,
+      box: box,
+      blend: blend,
     );
   }
   var width = _take(named, 'width', refuse) ?? 1;
@@ -159,6 +224,8 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
     dx: dx,
     dy: dy,
     opacity: opacity,
+    box: box,
+    blend: blend,
   );
 }
 
@@ -171,48 +238,123 @@ ScenePaint? _readPaint(Expression e, Refuse refuse) {
     case ('LinearPaint', var args):
       var named = _named(args, 'a gradient', refuse);
       if (named == null) return null;
-      var colorList = named.remove('colors');
-      if (colorList is! ListLiteral) {
-        refuse(
-          e.offset,
-          'paint',
-          'a gradient names its colours — '
-              'LinearPaint(colors: [SceneColor(0x…), SceneColor(0x…)])',
-        );
-        return null;
-      }
-      var colors = <SceneColor>[];
-      for (var c in colorList.elements) {
-        if (c is! Expression) continue;
-        var color = _readColor(c, refuse);
-        if (color == null) return null;
-        colors.add(color);
-      }
-      List<double>? stops;
-      if (named.remove('stops') case ListLiteral l) {
-        stops = [
-          for (var s in l.elements)
-            if (s is Expression) ?_number(s),
-        ];
-      }
+      var read = _readStops(e, named, 'LinearPaint', refuse);
+      if (read == null) return null;
       var begin = _readAlignment(named.remove('begin'), refuse);
       var end = _readAlignment(named.remove('end'), refuse);
       if (!_rest(named, 'LinearPaint', refuse)) return null;
       return LinearPaint(
-        colors: colors,
-        stops: stops,
+        colors: read.colors,
+        stops: read.stops,
         begin: begin ?? SceneAlignment.topCenter,
         end: end ?? SceneAlignment.bottomCenter,
+      );
+    case ('RadialPaint', var args):
+      var named = _named(args, 'a gradient', refuse);
+      if (named == null) return null;
+      var read = _readStops(e, named, 'RadialPaint', refuse);
+      if (read == null) return null;
+      var center = _readAlignment(named.remove('center'), refuse);
+      var radius = _take(named, 'radius', refuse);
+      if (!_rest(named, 'RadialPaint', refuse)) return null;
+      return RadialPaint(
+        colors: read.colors,
+        stops: read.stops,
+        center: center ?? SceneAlignment.center,
+        radius: radius ?? 1,
+      );
+    case ('SweepPaint', var args):
+      var named = _named(args, 'a gradient', refuse);
+      if (named == null) return null;
+      var read = _readStops(e, named, 'SweepPaint', refuse);
+      if (read == null) return null;
+      var center = _readAlignment(named.remove('center'), refuse);
+      var start = _take(named, 'startAngle', refuse);
+      var end = _take(named, 'endAngle', refuse);
+      if (!_rest(named, 'SweepPaint', refuse)) return null;
+      return SweepPaint(
+        colors: read.colors,
+        stops: read.stops,
+        center: center ?? SceneAlignment.center,
+        startAngle: start ?? 0,
+        endAngle: end ?? 360,
       );
     default:
       refuse(
         e.offset,
         'paint',
-        'a paint is SolidPaint(SceneColor(0x…)) or '
-            'LinearPaint(colors: […]) — nothing else is on the allowlist',
+        'a paint is SolidPaint(SceneColor(0x…)), or LinearPaint, RadialPaint '
+            'or SweepPaint(colors: […]) — nothing else is on the allowlist',
       );
       return null;
   }
+}
+
+/// A gradient's colours and where they sit, taken out of [named].
+///
+/// Shared by the gradients, and where the engine's rules are refused in
+/// words instead of thrown mid-paint: two colours at least — one colour is a
+/// SolidPaint — and, when positions are given, one per colour.
+({List<SceneColor> colors, List<double>? stops})? _readStops(
+  Expression at,
+  Map<String, Expression> named,
+  String kind,
+  Refuse refuse,
+) {
+  var colorList = named.remove('colors');
+  if (colorList is! ListLiteral) {
+    refuse(
+      at.offset,
+      'paint',
+      'a gradient names its colours — '
+          '$kind(colors: [SceneColor(0x…), SceneColor(0x…)])',
+    );
+    return null;
+  }
+  var colors = <SceneColor>[];
+  for (var c in colorList.elements) {
+    if (c is! Expression) {
+      refuse(
+        c.offset,
+        'paint',
+        'a gradient lists its colours one by one as SceneColor(0x…) '
+            'literals',
+      );
+      return null;
+    }
+    var color = _readColor(c, refuse);
+    if (color == null) return null;
+    colors.add(color);
+  }
+  if (colors.length < 2) {
+    refuse(
+      colorList.offset,
+      'paint',
+      'a gradient has two colours at least — one colour is '
+          'SolidPaint(SceneColor(0x…))',
+    );
+    return null;
+  }
+  List<double>? stops;
+  if (named.remove('stops') case var s?) {
+    var read = s is ListLiteral
+        ? [
+            for (var e in s.elements)
+              if (e is Expression) _number(e),
+          ]
+        : null;
+    if (read == null || read.length != colors.length || read.contains(null)) {
+      refuse(
+        s.offset,
+        'paint',
+        'a gradient has one stop per colour — or no stops, which spreads '
+            'the colours evenly',
+      );
+      return null;
+    }
+    stops = [for (var v in read) v!];
+  }
+  return (colors: colors, stops: stops);
 }
 
 SceneAlignment? _readAlignment(Expression? e, Refuse refuse) {
@@ -229,8 +371,7 @@ SceneAlignment? _readAlignment(Expression? e, Refuse refuse) {
   refuse(
     e.offset,
     'paint',
-    'an end of a gradient is SceneAlignment.topCenter or '
-        'SceneAlignment(0, -1)',
+    'a point in the box is SceneAlignment.center or SceneAlignment(0, -1)',
   );
   return null;
 }

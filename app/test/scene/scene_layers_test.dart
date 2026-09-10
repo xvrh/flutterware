@@ -120,6 +120,138 @@ void main() {
         const StrokeLayer(width: 9, join: SceneStrokeJoin.bevel, dy: -3),
       );
     });
+
+    test('refuses a gradient of one colour, and stops that do not fit', () {
+      var parsed = parseSceneFile(
+        _scene(
+          '[FillLayer(paint: LinearPaint(colors: [SceneColor(0xFFFF0000)]))]',
+        ),
+      );
+      expect(parsed.refusals.single.construct, 'paint');
+      expect(parsed.refusals.single.message, contains('two colours'));
+      parsed = parseSceneFile(
+        _scene(
+          '[FillLayer(paint: LinearPaint(colors: '
+          '[SceneColor(0xFFFF0000), SceneColor(0xFF0000FF)], stops: [0]))]',
+        ),
+      );
+      expect(parsed.refusals.single.construct, 'paint');
+      expect(parsed.refusals.single.message, contains('one stop per colour'));
+    });
+
+    test(
+      'refuses a spread among a gradient’s colours, rather than drop it',
+      () {
+        var parsed = parseSceneFile(
+          _scene(
+            '[FillLayer(paint: LinearPaint(colors: '
+            '[SceneColor(0xFFFF0000), ...others]))]',
+          ),
+        );
+        expect(parsed.refusals.single.construct, 'paint');
+        expect(parsed.refusals.single.message, contains('one by one'));
+      },
+    );
+
+    test('a radial gradient round-trips, and writes no default', () {
+      var layers = <TextLayer>[
+        const FillLayer(
+          paint: RadialPaint(
+            colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFFFF2D95)],
+            center: SceneAlignment(0.5, -0.25),
+            radius: 1.2,
+          ),
+        ),
+      ];
+      var out = _emit(layers);
+      expect(_read(out), layers);
+      expect(_emit(_read(out)), out);
+      // The formatter wraps `RadialPaint(colors: […])` onto its own line at
+      // this nesting depth, so the check is by piece rather than one
+      // contiguous substring: the colours are there and no default field is.
+      var plain = _emit(const [
+        FillLayer(
+          paint: RadialPaint(
+            colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFF000000)],
+          ),
+        ),
+      ]);
+      expect(plain, contains('RadialPaint('));
+      expect(
+        plain,
+        contains('colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFF000000)]'),
+      );
+      expect(plain, isNot(contains('stops:')));
+      expect(plain, isNot(contains('center:')));
+      expect(plain, isNot(contains('radius:')));
+    });
+
+    test('a sweep gradient round-trips, and writes no default', () {
+      var layers = <TextLayer>[
+        const StrokeLayer(
+          width: 6,
+          paint: SweepPaint(
+            colors: [SceneColor(0xFFFF2D95), SceneColor(0xFF00E5FF)],
+            startAngle: 45,
+            endAngle: 300,
+          ),
+        ),
+      ];
+      var out = _emit(layers);
+      expect(_read(out), layers);
+      expect(_emit(_read(out)), out);
+      // The formatter wraps `SweepPaint(…)` onto its own lines at this
+      // nesting depth (the same trap as RadialPaint above), so the check is
+      // by piece rather than one contiguous substring: both angles are
+      // written, with their values, and the round-trip identity checks above
+      // already pin the semantics.
+      expect(out, contains('startAngle: 45'));
+      expect(out, contains('endAngle: 300'));
+      expect(
+        _emit(const [
+          FillLayer(
+            paint: SweepPaint(
+              colors: [SceneColor(0xFFFF2D95), SceneColor(0xFF00E5FF)],
+            ),
+          ),
+        ]),
+        isNot(contains('Angle')),
+      );
+    });
+
+    test('a pass laid across each line says so, and nothing otherwise', () {
+      var layers = <TextLayer>[
+        const FillLayer(
+          paint: LinearPaint(
+            colors: [SceneColor(0xFFFFF3B0), SceneColor(0xFFFFB020)],
+          ),
+          box: SceneLayerBox.line,
+        ),
+      ];
+      var out = _emit(layers);
+      expect(out, contains('box: SceneLayerBox.line'));
+      expect(_read(out), layers);
+      expect(_emit(const [FillLayer()]), isNot(contains('box:')));
+      var parsed = parseSceneFile(
+        _scene('[FillLayer(box: SceneLayerBox.glyph)]'),
+      );
+      expect(parsed.refusals.single.message, contains('SceneLayerBox.line'));
+    });
+
+    test('a blended pass says so, and nothing when it is normal', () {
+      var layers = <TextLayer>[
+        const FillLayer(
+          paint: SolidPaint(SceneColor(0x66FFFFFF)),
+          blend: SceneBlendMode.screen,
+        ),
+      ];
+      var out = _emit(layers);
+      expect(out, contains('blend: SceneBlendMode.screen'));
+      expect(_read(out), layers);
+      expect(_emit(const [FillLayer()]), isNot(contains('blend:')));
+      var parsed = parseSceneFile(_scene('[FillLayer(blend: BlendMode.plus)]'));
+      expect(parsed.refusals.single.message, contains('SceneBlendMode'));
+    });
   });
 
   group('a style token', () {

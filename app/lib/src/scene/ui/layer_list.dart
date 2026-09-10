@@ -5,17 +5,20 @@
 // order IS the meaning. The model is back to front (the first layer is
 // painted first, so it sits behind); the list shows it FRONT first, which is
 // what "the top layer" means to everyone who has used one of these.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
+import '../../ui/picker.dart';
 import '../../ui/popover.dart';
 import '../../ui/tappable.dart';
 import '../layer_presets.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
-import 'swatches.dart';
+import 'paint_field.dart';
 
 /// What a change to the stack is: the whole next list, with the words for
 /// the undo entry it makes.
@@ -72,10 +75,15 @@ class _SceneLayerListState extends State<SceneLayerList> {
     widget.onChanged(next, label: label, mergeKey: mergeKey);
   }
 
-  void _replace(int i, TextLayer layer, {String? mergeKey}) {
+  void _replace(
+    int i,
+    TextLayer layer, {
+    String label = 'Layer',
+    String? mergeKey,
+  }) {
     var next = [..._layers];
     next[i] = layer;
-    _write('Layer', next, mergeKey: mergeKey);
+    _write(label, next, mergeKey: mergeKey);
   }
 
   void _add(TextLayer layer) {
@@ -271,17 +279,46 @@ class _SceneLayerListState extends State<SceneLayerList> {
         color: switch (layer.paint) {
           SolidPaint(:var color) => Color(color.argb),
           null => widget.color,
-          LinearPaint() => null,
+          SceneGradient(:var colors) when colors.length < 2 =>
+            colors.isEmpty ? widget.color : Color(colors.first.argb),
+          SceneGradient() => null,
         },
         gradient: switch (layer.paint) {
-          LinearPaint(:var colors, :var stops) => LinearGradient(
-            colors: [for (var c in colors) Color(c.argb)],
-            stops: stops,
-          ),
+          SceneGradient g when g.colors.length >= 2 => _swatch(g),
           _ => null,
         },
       ),
     );
+  }
+
+  /// A gradient as a swatch draws it — Flutter's own gradient classes, since
+  /// a swatch is a decoration; the pass itself goes through the scene's
+  /// shader.
+  static Gradient _swatch(SceneGradient g) {
+    var colors = [for (var c in g.colors) Color(c.argb)];
+    return switch (g) {
+      LinearPaint(:var begin, :var end) => LinearGradient(
+        colors: colors,
+        stops: g.resolvedStops,
+        begin: Alignment(begin.x, begin.y),
+        end: Alignment(end.x, end.y),
+      ),
+      RadialPaint(:var center, :var radius) => RadialGradient(
+        colors: colors,
+        stops: g.resolvedStops,
+        center: Alignment(center.x, center.y),
+        // A swatch is square, so the box-stretched radius is Flutter's
+        // shortest-side one at half the number.
+        radius: radius / 2,
+      ),
+      SweepPaint(:var center, :var startAngle, :var endAngle) => SweepGradient(
+        colors: colors,
+        stops: g.resolvedStops,
+        center: Alignment(center.x, center.y),
+        endAngle: (endAngle - startAngle).clamp(0.01, 360) * math.pi / 180,
+        transform: GradientRotation((startAngle - 90) * math.pi / 180),
+      ),
+    };
   }
 
   String _describe(TextLayer layer) {
@@ -291,6 +328,16 @@ class _SceneLayerListState extends State<SceneLayerList> {
     };
     var notes = [
       if (layer.paint == null) 'text colour',
+      if (layer.paint case SceneGradient g)
+        switch (g) {
+          LinearPaint() => 'linear',
+          RadialPaint() => 'radial',
+          SweepPaint() => 'sweep',
+        },
+      if (layer.box == SceneLayerBox.line && layer.paint is SceneGradient)
+        'per line',
+      if (layer.blend != SceneBlendMode.normal)
+        _blendLabel(layer.blend).toLowerCase(),
       if (layer.blur > 0) 'blur ${_short(layer.blur)}',
       if (layer.dx != 0 || layer.dy != 0)
         '${_short(layer.dx)},${_short(layer.dy)}',
@@ -302,8 +349,28 @@ class _SceneLayerListState extends State<SceneLayerList> {
   static String _short(double v) =>
       v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
 
+  /// A mode in the words a design tool uses — Flutter's names are camel-case
+  /// identifiers, and this panel spells colour the British way throughout.
+  static String _blendLabel(SceneBlendMode m) => switch (m) {
+    SceneBlendMode.normal => 'Normal',
+    SceneBlendMode.multiply => 'Multiply',
+    SceneBlendMode.screen => 'Screen',
+    SceneBlendMode.overlay => 'Overlay',
+    SceneBlendMode.darken => 'Darken',
+    SceneBlendMode.lighten => 'Lighten',
+    SceneBlendMode.colorDodge => 'Colour dodge',
+    SceneBlendMode.colorBurn => 'Colour burn',
+    SceneBlendMode.hardLight => 'Hard light',
+    SceneBlendMode.softLight => 'Soft light',
+    SceneBlendMode.difference => 'Difference',
+    SceneBlendMode.exclusion => 'Exclusion',
+    SceneBlendMode.hue => 'Hue',
+    SceneBlendMode.saturation => 'Saturation',
+    SceneBlendMode.color => 'Colour',
+    SceneBlendMode.luminosity => 'Luminosity',
+  };
+
   Widget _detail(BuildContext context, int i, TextLayer layer) {
-    var caption = context.type.caption.copyWith(color: context.colors.mut2);
     return Padding(
       padding: const EdgeInsets.only(
         left: FwSpacing.xl,
@@ -313,45 +380,52 @@ class _SceneLayerListState extends State<SceneLayerList> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (layer.paint case LinearPaint _) ...[
-            Text('a gradient, from the file', style: caption),
-            const Gap(FwSpacing.xs),
-            Tappable(
-              onTap: () => _replace(i, _withPaint(layer, null)),
-              child: Text(
-                'make it the text colour',
-                style: caption.copyWith(color: context.colors.accent),
+          ScenePaintField(
+            paint: layer.paint,
+            own: SceneColor(widget.color.toARGB32()),
+            onChanged: (next, {required label, mergeKey}) => _replace(
+              i,
+              // "Laid across" has no control once the paint is not a
+              // gradient, so a hidden box: line would otherwise survive
+              // in the file with nothing left to change it back.
+              next is SceneGradient
+                  ? layer.withPaint(next)
+                  : layer.withPaint(next).copyWith(box: SceneLayerBox.text),
+              label: label,
+              mergeKey: mergeKey == null ? null : 'layer:$i:paint:$mergeKey',
+            ),
+          ),
+          if (layer.paint is SceneGradient) ...[
+            const Gap(FwSpacing.sm),
+            _labelled(
+              context,
+              'Laid across',
+              FwPicker<SceneLayerBox>(
+                key: const ValueKey('layer:box'),
+                choices: const [
+                  FwChoice(value: SceneLayerBox.text, label: 'The whole text'),
+                  FwChoice(
+                    value: SceneLayerBox.line,
+                    label: 'Each line',
+                    detail: 'every line runs the whole gradient',
+                  ),
+                ],
+                selected: layer.box,
+                onChanged: (b) =>
+                    _replace(i, layer.copyWith(box: b), label: 'Layer box'),
               ),
             ),
-          ] else
-            SceneColorField(
-              current: switch (layer.paint) {
-                SolidPaint(:var color) => color,
-                _ => null,
-              },
-              onPick: (c) => _replace(
-                i,
-                _withPaint(layer, c == null ? null : SolidPaint(c)),
-              ),
-            ),
+          ],
           const Gap(FwSpacing.sm),
-          if (layer case StrokeLayer(:var width))
+          if (layer case StrokeLayer stroke)
             _number(
               context,
               'Width',
-              width,
+              stroke.width,
               const SceneNumberShape(perPixel: 0.2, decimals: 1, min: 0),
               (v) => _replace(
                 i,
-                StrokeLayer(
-                  width: v,
-                  join: layer.join,
-                  paint: layer.paint,
-                  blur: layer.blur,
-                  dx: layer.dx,
-                  dy: layer.dy,
-                  opacity: layer.opacity,
-                ),
+                stroke.copyWith(width: v),
                 mergeKey: 'layer:$i:width',
               ),
             ),
@@ -365,7 +439,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   const SceneNumberShape(perPixel: 0.2, decimals: 1),
                   (v) => _replace(
                     i,
-                    _withOffset(layer, dx: v),
+                    layer.copyWith(dx: v),
                     mergeKey: 'layer:$i:dx',
                   ),
                 ),
@@ -379,7 +453,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   const SceneNumberShape(perPixel: 0.2, decimals: 1),
                   (v) => _replace(
                     i,
-                    _withOffset(layer, dy: v),
+                    layer.copyWith(dy: v),
                     mergeKey: 'layer:$i:dy',
                   ),
                 ),
@@ -397,7 +471,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   const SceneNumberShape(perPixel: 0.2, decimals: 1, min: 0),
                   (v) => _replace(
                     i,
-                    _withBlur(layer, v),
+                    layer.copyWith(blur: v),
                     mergeKey: 'layer:$i:blur',
                   ),
                 ),
@@ -421,12 +495,27 @@ class _SceneLayerListState extends State<SceneLayerList> {
                   ),
                   (v) => _replace(
                     i,
-                    _withOpacity(layer, v),
+                    layer.copyWith(opacity: v),
                     mergeKey: 'layer:$i:opacity',
                   ),
                 ),
               ),
             ],
+          ),
+          const Gap(FwSpacing.sm),
+          _labelled(
+            context,
+            'Blend',
+            FwPicker<SceneBlendMode>(
+              key: const ValueKey('layer:blend'),
+              choices: [
+                for (var m in SceneBlendMode.values)
+                  FwChoice(value: m, label: _blendLabel(m)),
+              ],
+              selected: layer.blend,
+              onChanged: (m) =>
+                  _replace(i, layer.copyWith(blend: m), label: 'Layer blend'),
+            ),
           ),
         ],
       ),
@@ -446,82 +535,21 @@ class _SceneLayerListState extends State<SceneLayerList> {
     onChanged: apply,
     onCommit: apply,
   );
+
+  /// A control under a caption, the way [SceneNumberField] labels itself —
+  /// so a picker in this column reads as the same kind of row as a number.
+  Widget _labelled(BuildContext context, String label, Widget control) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+            child: Text(
+              label,
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            ),
+          ),
+          control,
+        ],
+      );
 }
-
-// A layer is a value, so every edit is a new one. These say which field
-// changed without every call site respelling the constructor.
-TextLayer _withPaint(TextLayer l, ScenePaint? paint) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width,
-    join: join,
-    paint: paint,
-    blur: l.blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: l.opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: paint,
-    blur: l.blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: l.opacity,
-  ),
-};
-
-TextLayer _withOffset(TextLayer l, {double? dx, double? dy}) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width,
-    join: join,
-    paint: l.paint,
-    blur: l.blur,
-    dx: dx ?? l.dx,
-    dy: dy ?? l.dy,
-    opacity: l.opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: l.paint,
-    blur: l.blur,
-    dx: dx ?? l.dx,
-    dy: dy ?? l.dy,
-    opacity: l.opacity,
-  ),
-};
-
-TextLayer _withBlur(TextLayer l, double blur) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width,
-    join: join,
-    paint: l.paint,
-    blur: blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: l.opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: l.paint,
-    blur: blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: l.opacity,
-  ),
-};
-
-TextLayer _withOpacity(TextLayer l, double opacity) => switch (l) {
-  StrokeLayer(:var width, :var join) => StrokeLayer(
-    width: width,
-    join: join,
-    paint: l.paint,
-    blur: l.blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: opacity,
-  ),
-  FillLayer() => FillLayer(
-    paint: l.paint,
-    blur: l.blur,
-    dx: l.dx,
-    dy: l.dy,
-    opacity: opacity,
-  ),
-};

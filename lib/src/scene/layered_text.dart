@@ -25,6 +25,7 @@ import 'package:flutter/widgets.dart';
 
 import 'core/values.dart';
 import 'flutter_bridge.dart';
+import 'gradient_shader.dart';
 
 /// A text node's paragraph, painted once per layer.
 ///
@@ -134,19 +135,98 @@ class SceneTextStackPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (var layer in layers) {
-      var painter = _painterFor(layer, size);
-      if (layer.dx == 0 && layer.dy == 0) {
-        painter.paint(canvas, Offset.zero);
-        continue;
+      var moved = layer.dx != 0 || layer.dy != 0;
+      if (moved) {
+        canvas.save();
+        canvas.translate(layer.dx, layer.dy);
       }
-      canvas.save();
-      canvas.translate(layer.dx, layer.dy);
-      painter.paint(canvas, Offset.zero);
-      canvas.restore();
+      if (_perLine(layer)) {
+        _paintPerLine(canvas, layer, size);
+      } else if (layer.blend != SceneBlendMode.normal) {
+        // On the layer's paint, not the paragraph's: a blend there is
+        // visible to anything recording the canvas (a vector export).
+        canvas.saveLayer(
+          (Offset.zero & size).inflate(_spillMargin(layer)),
+          Paint()..blendMode = layer.blend.flutter,
+        );
+        _painterFor(layer, size).paint(canvas, Offset.zero);
+        canvas.restore();
+      } else {
+        _painterFor(layer, size).paint(canvas, Offset.zero);
+      }
+      if (moved) canvas.restore();
     }
   }
 
-  TextPainter _painterFor(TextLayer layer, Size size) {
+  /// Whether [layer]'s paint restarts on every line. Only a gradient can
+  /// tell the difference, so a solid pass never pays for it.
+  static bool _perLine(TextLayer layer) =>
+      layer.box == SceneLayerBox.line &&
+      layer.paint is SceneGradient &&
+      (layer.paint! as SceneGradient).colors.length >= 2;
+
+  /// A pass whose gradient is laid across each line rather than the text.
+  ///
+  /// One gradient cannot restart per line, so the pass is painted as a MASK
+  /// — the same glyphs, stroke and blur, in opaque black — and each line's
+  /// gradient is drawn over it keeping only where the mask is (`srcIn`).
+  /// Still one layout; the price is a layer save, paid only by passes that
+  /// ask for it. A band runs to the midpoint of the gap to its neighbours
+  /// and, at the ends, to a margin sized off the pass itself (see
+  /// [_spillMargin]), so a stroke or a blur that spills out of its line
+  /// still takes that line's colours.
+  void _paintPerLine(Canvas canvas, TextLayer layer, Size size) {
+    var gradient = layer.paint! as SceneGradient;
+    // Keyed on coverage alone — paint, opacity and blend never change which
+    // pixels are ink, so dragging a stop must not cost a relayout.
+    var coverage = layer
+        .withPaint(null)
+        .copyWith(opacity: 1, blend: SceneBlendMode.normal);
+    var mask = _painterFor(coverage, size, mask: true);
+    var lines = mask.computeLineMetrics();
+    // How far past the box this pass's own spill can still reach: a stroke
+    // widens the outline by its width, a blur by roughly three sigmas, and
+    // the glyphs themselves can overhang their line by about a font size. A
+    // fixed 1e4 used to stand in for this — reachable by nothing a text pass
+    // actually paints — which sized the offscreen layer to the whole cull
+    // rect and, worse, sized a vector capture's raster patch from a band
+    // that ran to it: `Picture.toImage` on a patch that size fails outright.
+    var margin = _spillMargin(layer);
+    canvas.saveLayer(
+      (Offset.zero & size).inflate(margin),
+      Paint()..blendMode = layer.blend.flutter,
+    );
+    mask.paint(canvas, Offset.zero);
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var top = line.baseline - line.ascent;
+      var bottom = line.baseline + line.descent;
+      var bandTop = i == 0
+          ? -margin
+          : (lines[i - 1].baseline + lines[i - 1].descent + top) / 2;
+      var bandBottom = i == lines.length - 1
+          ? size.height + margin
+          : (bottom + lines[i + 1].baseline - lines[i + 1].ascent) / 2;
+      canvas.drawRect(
+        Rect.fromLTRB(-margin, bandTop, size.width + margin, bandBottom),
+        Paint()
+          ..blendMode = BlendMode.srcIn
+          ..shader = sceneGradientShader(
+            gradient,
+            Rect.fromLTRB(line.left, top, line.left + line.width, bottom),
+            opacity: layer.opacity,
+          ),
+      );
+    }
+    canvas.restore();
+  }
+
+  double _spillMargin(TextLayer layer) =>
+      (layer is StrokeLayer ? layer.width : 0) +
+      3 * layer.blur +
+      (style.fontSize ?? 14.0);
+
+  TextPainter _painterFor(TextLayer layer, Size size, {bool mask = false}) {
     var key = _PainterKey(
       span.toPlainText(),
       style,
@@ -158,6 +238,7 @@ class SceneTextStackPainter extends CustomPainter {
       scaler,
       widthBasis,
       heightBehavior,
+      mask,
     );
     return _cache.putIfAbsent(key, () {
       var painter = TextPainter(
@@ -166,7 +247,7 @@ class SceneTextStackPainter extends CustomPainter {
           style: style.copyWith(
             // `foreground` and `color` are mutually exclusive in a TextStyle,
             // and this is the one that carries a stroke or a gradient.
-            foreground: _paintFor(layer, size, style.color),
+            foreground: _paintFor(layer, size, style.color, mask: mask),
           ),
         ),
         textAlign: textAlign,
@@ -184,7 +265,12 @@ class SceneTextStackPainter extends CustomPainter {
     });
   }
 
-  ui.Paint _paintFor(TextLayer layer, Size size, Color? own) {
+  ui.Paint _paintFor(
+    TextLayer layer,
+    Size size,
+    Color? own, {
+    bool mask = false,
+  }) {
     var paint = ui.Paint();
     if (layer case StrokeLayer(:var width, :var join)) {
       paint
@@ -195,18 +281,31 @@ class SceneTextStackPainter extends CustomPainter {
         // means by an outline, and is the default the model spells.
         ..strokeCap = StrokeCap.round;
     }
-    switch (layer.paint) {
-      case SolidPaint(:var color):
-        paint.color = color.flutter.withValues(
-          alpha: color.flutter.a * layer.opacity,
-        );
-      case LinearPaint g:
-        paint.shader = _shader(g, size, layer.opacity);
-      case null:
-        // No paint of its own: the text's colour, which is what lets one
-        // stack serve several colours.
-        var color = own ?? const Color(0xFF000000);
-        paint.color = color.withValues(alpha: color.a * layer.opacity);
+    if (mask) {
+      // Coverage only: the colours arrive per line, and opacity with them.
+      paint.color = const Color(0xFF000000);
+    } else {
+      switch (layer.paint) {
+        case SolidPaint(:var color):
+          paint.color = _faded(color.flutter, layer.opacity);
+        case SceneGradient(:var colors) when colors.length < 2:
+          // One colour is that colour, and none is the text's: the engine
+          // refuses both as gradients.
+          paint.color = _faded(
+            colors.firstOrNull?.flutter ?? own ?? const Color(0xFF000000),
+            layer.opacity,
+          );
+        case SceneGradient g:
+          paint.shader = sceneGradientShader(
+            g,
+            Offset.zero & size,
+            opacity: layer.opacity,
+          );
+        case null:
+          // No paint of its own: the text's colour, which is what lets one
+          // stack serve several colours.
+          paint.color = _faded(own ?? const Color(0xFF000000), layer.opacity);
+      }
     }
     if (layer.blur > 0) {
       // On the pass's own paint, so the glyph OUTLINE is blurred. Compositing
@@ -215,21 +314,6 @@ class SceneTextStackPainter extends CustomPainter {
       paint.maskFilter = MaskFilter.blur(BlurStyle.normal, layer.blur);
     }
     return paint;
-  }
-
-  ui.Shader _shader(LinearPaint g, Size size, double opacity) {
-    var rect = Offset.zero & size;
-    return ui.Gradient.linear(
-      Alignment(g.begin.x, g.begin.y).withinRect(rect),
-      Alignment(g.end.x, g.end.y).withinRect(rect),
-      [
-        for (var c in g.colors)
-          opacity == 1
-              ? c.flutter
-              : c.flutter.withValues(alpha: c.flutter.a * opacity),
-      ],
-      g.stops,
-    );
   }
 
   @override
@@ -244,6 +328,9 @@ class SceneTextStackPainter extends CustomPainter {
       old.widthBasis != widthBasis ||
       old.heightBehavior != heightBehavior;
 }
+
+Color _faded(Color c, double opacity) =>
+    opacity == 1 ? c : c.withValues(alpha: c.a * opacity);
 
 bool _sameLayers(List<TextLayer> a, List<TextLayer> b) {
   if (a.length != b.length) return false;
@@ -269,6 +356,7 @@ class _PainterKey {
     this.scaler,
     this.widthBasis,
     this.heightBehavior,
+    this.mask,
   );
 
   final String text;
@@ -281,6 +369,7 @@ class _PainterKey {
   final TextScaler scaler;
   final TextWidthBasis widthBasis;
   final TextHeightBehavior? heightBehavior;
+  final bool mask;
 
   @override
   bool operator ==(Object other) =>
@@ -294,7 +383,8 @@ class _PainterKey {
       other.direction == direction &&
       other.scaler == scaler &&
       other.widthBasis == widthBasis &&
-      other.heightBehavior == heightBehavior;
+      other.heightBehavior == heightBehavior &&
+      other.mask == mask;
 
   @override
   int get hashCode => Object.hash(
@@ -308,6 +398,7 @@ class _PainterKey {
     scaler,
     widthBasis,
     heightBehavior,
+    mask,
   );
 }
 

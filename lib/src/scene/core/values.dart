@@ -109,6 +109,17 @@ enum SceneTextDecoration { none, underline, overline, lineThrough }
 /// bridge indexes it.
 enum SceneTextDecorationStyle { solid, double, dotted, dashed, wavy }
 
+/// A number off the wire, or [fallback] when it is missing or not a number,
+/// so a payload that is present but the wrong shape does not throw.
+/// [ScenePaint.fromWire] (a radial's radius, a sweep's angles) and
+/// [TextLayer.fromWire] read their numbers through it; the decoders that take
+/// a list or a word where a number may be — [SceneAlignment.fromWire],
+/// [SceneEdges.fromWire], [SceneCorners.fromWire], a gradient's colours and
+/// stops, [sizeFromWire] — match `num` in patterns of their own, to the same
+/// effect.
+double _wireDouble(Object? v, double fallback) =>
+    v is num ? v.toDouble() : fallback;
+
 /// A point in a box, in the -1..1 space Flutter's `Alignment` uses — where a
 /// gradient starts and ends.
 class SceneAlignment {
@@ -129,12 +140,12 @@ class SceneAlignment {
 
   List<double> toWire() => [x, y];
 
+  // A non-number element makes the whole value fall back — a point is
+  // meaningless with only one of its two numbers.
   static SceneAlignment fromWire(Object? raw, SceneAlignment fallback) =>
       switch (raw) {
-        List l when l.length == 2 => SceneAlignment(
-          (l[0] as num).toDouble(),
-          (l[1] as num).toDouble(),
-        ),
+        List l when l.length == 2 && l[0] is num && l[1] is num =>
+          SceneAlignment((l[0] as num).toDouble(), (l[1] as num).toDouble()),
         _ => fallback,
       };
 
@@ -153,9 +164,9 @@ class SceneAlignment {
 ///
 /// Built for text layers, and shaped for `fill` to adopt the day a frame's
 /// fill becomes a list of paints (master plan §6) — a second notion of paint
-/// is the thing to avoid, not a second user of this one. Radial and sweep are
-/// the same shape with a different geometry and are not built yet; the wire
-/// tags the kind so adding one is additive.
+/// is the thing to avoid, not a second user of this one. Linear, radial and
+/// sweep share [SceneGradient]; the wire tags the kind, so a new one is
+/// additive.
 sealed class ScenePaint {
   const ScenePaint();
 
@@ -168,16 +179,23 @@ sealed class ScenePaint {
     // colour already travels as everywhere else.
     num argb => SolidPaint(SceneColor(argb.toInt())),
     Map m when m['k'] == 'linear' => LinearPaint(
-      colors: [
-        for (var c in (m['colors'] as List? ?? const []))
-          SceneColor((c as num).toInt()),
-      ],
-      stops: switch (m['stops']) {
-        List l => [for (var s in l) (s as num).toDouble()],
-        _ => null,
-      },
+      colors: _wireColors(m),
+      stops: _wireStops(m),
       begin: SceneAlignment.fromWire(m['begin'], SceneAlignment.topCenter),
       end: SceneAlignment.fromWire(m['end'], SceneAlignment.bottomCenter),
+    ),
+    Map m when m['k'] == 'radial' => RadialPaint(
+      colors: _wireColors(m),
+      stops: _wireStops(m),
+      center: SceneAlignment.fromWire(m['center'], SceneAlignment.center),
+      radius: _wireDouble(m['r'], 1),
+    ),
+    Map m when m['k'] == 'sweep' => SweepPaint(
+      colors: _wireColors(m),
+      stops: _wireStops(m),
+      center: SceneAlignment.fromWire(m['center'], SceneAlignment.center),
+      startAngle: _wireDouble(m['a0'], 0),
+      endAngle: _wireDouble(m['a1'], 360),
     ),
     _ => null,
   };
@@ -201,26 +219,83 @@ class SolidPaint extends ScenePaint {
   String toString() => 'SolidPaint($color)';
 }
 
+// A non-number element is SKIPPED rather than failing the whole list — a
+// gradient with one bad colour still has the rest of its colours.
+List<SceneColor> _wireColors(Map m) => [
+  for (var c in switch (m['colors']) {
+    List l => l,
+    _ => const [],
+  })
+    if (c is num) SceneColor(c.toInt()),
+];
+
+// Same rule as colours: a bad stop is skipped. A stops list left shorter
+// than colors falls back to the even spread through SceneGradient.resolvedStops.
+List<double>? _wireStops(Map m) => switch (m['stops']) {
+  List l => [
+    for (var s in l)
+      if (s is num) s.toDouble(),
+  ],
+  _ => null,
+};
+
+/// The three gradients, and what they share: colours, where each one sits,
+/// and the even spread a missing position means.
+sealed class SceneGradient extends ScenePaint {
+  const SceneGradient({required this.colors, this.stops});
+
+  final List<SceneColor> colors;
+
+  /// One position per colour, 0..1 along the gradient. Null spreads the
+  /// colours evenly — what the file omits, and what the editor writes out
+  /// the first time a stop is moved.
+  final List<double>? stops;
+
+  /// [stops] when they give one position per colour, otherwise the even
+  /// spread. The engine refuses any other shape, so this is what reaches it.
+  List<double> get resolvedStops {
+    if (stops case var s? when s.length == colors.length) return s;
+    var n = colors.length;
+    return [for (var i = 0; i < n; i++) n == 1 ? 0.0 : i / (n - 1)];
+  }
+
+  /// This gradient with other colours at other positions, its shape kept —
+  /// what every stop edit is.
+  SceneGradient withStops(List<SceneColor> colors, List<double>? stops);
+
+  Map<String, Object?> get _stopsWire => {
+    'colors': [for (var c in colors) c.argb],
+    'stops': ?stops,
+  };
+
+  bool _sameStops(SceneGradient other) =>
+      _sameList(other.colors, colors) && _sameList(other.stops, stops);
+
+  int get _stopsHash =>
+      Object.hash(Object.hashAll(colors), Object.hashAll(stops ?? const []));
+}
+
 /// A gradient down the box by default, which is what a metal or a sunset
-/// face wants. [stops] null spreads the colours evenly.
-class LinearPaint extends ScenePaint {
+/// face wants.
+class LinearPaint extends SceneGradient {
   const LinearPaint({
-    required this.colors,
-    this.stops,
+    required super.colors,
+    super.stops,
     this.begin = SceneAlignment.topCenter,
     this.end = SceneAlignment.bottomCenter,
   });
 
-  final List<SceneColor> colors;
-  final List<double>? stops;
   final SceneAlignment begin;
   final SceneAlignment end;
 
   @override
+  LinearPaint withStops(List<SceneColor> colors, List<double>? stops) =>
+      LinearPaint(colors: colors, stops: stops, begin: begin, end: end);
+
+  @override
   Object toWire() => {
     'k': 'linear',
-    'colors': [for (var c in colors) c.argb],
-    'stops': ?stops,
+    ..._stopsWire,
     'begin': begin.toWire(),
     'end': end.toWire(),
   };
@@ -228,21 +303,136 @@ class LinearPaint extends ScenePaint {
   @override
   bool operator ==(Object other) =>
       other is LinearPaint &&
-      _sameList(other.colors, colors) &&
-      _sameList(other.stops, stops) &&
+      _sameStops(other) &&
       other.begin == begin &&
       other.end == end;
 
   @override
-  int get hashCode => Object.hash(
-    Object.hashAll(colors),
-    Object.hashAll(stops ?? []),
-    begin,
-    end,
-  );
+  int get hashCode => Object.hash(_stopsHash, begin, end);
 
   @override
   String toString() => 'LinearPaint($colors)';
+}
+
+/// A gradient out from a point, STRETCHED TO THE BOX: at [radius] 1 it
+/// reaches the edges on both axes, so on a wide headline it is an ellipse.
+/// Flutter's `RadialGradient` measures its radius against the shortest side
+/// instead, and on a 600×80 title that is a dot in the middle.
+class RadialPaint extends SceneGradient {
+  const RadialPaint({
+    required super.colors,
+    super.stops,
+    this.center = SceneAlignment.center,
+    this.radius = 1,
+  });
+
+  final SceneAlignment center;
+
+  /// In half-box units: 1 reaches the edge from the middle, on each axis.
+  final double radius;
+
+  @override
+  RadialPaint withStops(List<SceneColor> colors, List<double>? stops) =>
+      RadialPaint(colors: colors, stops: stops, center: center, radius: radius);
+
+  RadialPaint copyWith({SceneAlignment? center, double? radius}) => RadialPaint(
+    colors: colors,
+    stops: stops,
+    center: center ?? this.center,
+    radius: radius ?? this.radius,
+  );
+
+  @override
+  Object toWire() => {
+    'k': 'radial',
+    ..._stopsWire,
+    if (center != SceneAlignment.center) 'center': center.toWire(),
+    if (radius != 1) 'r': radius,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is RadialPaint &&
+      _sameStops(other) &&
+      other.center == center &&
+      other.radius == radius;
+
+  @override
+  int get hashCode => Object.hash(_stopsHash, center, radius);
+
+  @override
+  String toString() => 'RadialPaint($colors)';
+}
+
+/// A gradient around a point, the way a clock hand sweeps: 0° is twelve
+/// o'clock and angles run clockwise, in degrees — the unit `rotate` uses.
+/// Flutter's `SweepGradient` starts at three o'clock in radians; the
+/// renderer turns it, so the file never has to.
+///
+/// Not stretched to the box the way [RadialPaint] is: an angle in a
+/// stretched box is not the angle that was typed.
+class SweepPaint extends SceneGradient {
+  const SweepPaint({
+    required super.colors,
+    super.stops,
+    this.center = SceneAlignment.center,
+    this.startAngle = 0,
+    this.endAngle = 360,
+  });
+
+  final SceneAlignment center;
+
+  /// Where the first colour sits.
+  final double startAngle;
+
+  /// Where the last colour sits; past it the last colour holds. 360 more
+  /// than [startAngle] is a full turn.
+  final double endAngle;
+
+  @override
+  SweepPaint withStops(List<SceneColor> colors, List<double>? stops) =>
+      SweepPaint(
+        colors: colors,
+        stops: stops,
+        center: center,
+        startAngle: startAngle,
+        endAngle: endAngle,
+      );
+
+  SweepPaint copyWith({
+    SceneAlignment? center,
+    double? startAngle,
+    double? endAngle,
+  }) => SweepPaint(
+    colors: colors,
+    stops: stops,
+    center: center ?? this.center,
+    startAngle: startAngle ?? this.startAngle,
+    endAngle: endAngle ?? this.endAngle,
+  );
+
+  @override
+  Object toWire() => {
+    'k': 'sweep',
+    ..._stopsWire,
+    if (center != SceneAlignment.center) 'center': center.toWire(),
+    if (startAngle != 0) 'a0': startAngle,
+    if (endAngle != 360) 'a1': endAngle,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SweepPaint &&
+      _sameStops(other) &&
+      other.center == center &&
+      other.startAngle == startAngle &&
+      other.endAngle == endAngle;
+
+  @override
+  int get hashCode => Object.hash(_stopsHash, center, startAngle, endAngle);
+
+  @override
+  String toString() => 'SweepPaint($colors)';
 }
 
 /// Whether two property values are the same value.
@@ -280,6 +470,38 @@ bool _sameList<T>(List<T>? a, List<T>? b) {
 /// the bridge indexes it.
 enum SceneStrokeJoin { miter, round, bevel }
 
+/// What a pass's paint is laid across. A solid colour is the same either
+/// way; a gradient is not — a two-line title in gold wants the gold to run
+/// down EACH line, not once down the paragraph with the second line in its
+/// darker half.
+///
+/// On the pass rather than on the paint, because a paint is shaped to be a
+/// frame's fill one day (master plan §6), and a frame has no lines.
+enum SceneLayerBox { text, line }
+
+/// How a pass lands on what is already there — the modes a design tool
+/// offers on a layer, by Flutter's names. `normal` is the engine's
+/// `srcOver`; the rest are spelled the same on both sides, which the bridge
+/// test pins name by name.
+enum SceneBlendMode {
+  normal,
+  multiply,
+  screen,
+  overlay,
+  darken,
+  lighten,
+  colorDodge,
+  colorBurn,
+  hardLight,
+  softLight,
+  difference,
+  exclusion,
+  hue,
+  saturation,
+  color,
+  luminosity,
+}
+
 /// One pass over a laid-out paragraph.
 ///
 /// A text's paint stack is an ordered list of these, painted back to front,
@@ -304,6 +526,8 @@ sealed class TextLayer {
     this.dx = 0,
     this.dy = 0,
     this.opacity = 1,
+    this.box = SceneLayerBox.text,
+    this.blend = SceneBlendMode.normal,
   });
 
   /// Null paints the text's own colour — which is what lets one stack serve
@@ -318,7 +542,32 @@ sealed class TextLayer {
   final double dy;
   final double opacity;
 
+  /// What [paint] is measured against: the whole text, or each line.
+  final SceneLayerBox box;
+
+  /// How this pass lands on the passes beneath it and on what is behind the
+  /// text.
+  final SceneBlendMode blend;
+
   Map<String, Object?> toWire();
+
+  /// This pass painted with [paint] instead — null included, which is "the
+  /// text's own colour" and the one value [copyWith] cannot say, because
+  /// there a null means "not given".
+  TextLayer withPaint(ScenePaint? paint);
+
+  /// This pass with the fields given changed and the rest kept. Every edit
+  /// and every rescale goes through here, so a field added to a pass is
+  /// carried by all of them rather than dropped by whichever call site
+  /// respelled the constructor and forgot it.
+  TextLayer copyWith({
+    double? blur,
+    double? dx,
+    double? dy,
+    double? opacity,
+    SceneLayerBox? box,
+    SceneBlendMode? blend,
+  });
 
   Map<String, Object?> get _common => {
     'paint': ?paint?.toWire(),
@@ -326,18 +575,25 @@ sealed class TextLayer {
     if (dx != 0) 'dx': dx,
     if (dy != 0) 'dy': dy,
     if (opacity != 1) 'o': opacity,
+    if (box != SceneLayerBox.text) 'box': box.name,
+    if (blend != SceneBlendMode.normal) 'blend': blend.name,
   };
 
   static TextLayer? fromWire(Object? raw) {
     if (raw is! Map) return null;
     var paint = ScenePaint.fromWire(raw['paint']);
-    var blur = (raw['blur'] as num?)?.toDouble() ?? 0;
-    var dx = (raw['dx'] as num?)?.toDouble() ?? 0;
-    var dy = (raw['dy'] as num?)?.toDouble() ?? 0;
-    var opacity = (raw['o'] as num?)?.toDouble() ?? 1;
+    var blur = _wireDouble(raw['blur'], 0);
+    var dx = _wireDouble(raw['dx'], 0);
+    var dy = _wireDouble(raw['dy'], 0);
+    var opacity = _wireDouble(raw['o'], 1);
+    var box =
+        SceneLayerBox.values.asNameMap()[raw['box']] ?? SceneLayerBox.text;
+    var blend =
+        SceneBlendMode.values.asNameMap()[raw['blend']] ??
+        SceneBlendMode.normal;
     return switch (raw['k']) {
       'stroke' => StrokeLayer(
-        width: (raw['w'] as num?)?.toDouble() ?? 1,
+        width: _wireDouble(raw['w'], 1),
         join: switch (raw['j']) {
           num i when i >= 0 && i < SceneStrokeJoin.values.length =>
             SceneStrokeJoin.values[i.toInt()],
@@ -348,6 +604,8 @@ sealed class TextLayer {
         dx: dx,
         dy: dy,
         opacity: opacity,
+        box: box,
+        blend: blend,
       ),
       _ => FillLayer(
         paint: paint,
@@ -355,16 +613,55 @@ sealed class TextLayer {
         dx: dx,
         dy: dy,
         opacity: opacity,
+        box: box,
+        blend: blend,
       ),
     };
   }
 }
 
 class FillLayer extends TextLayer {
-  const FillLayer({super.paint, super.blur, super.dx, super.dy, super.opacity});
+  const FillLayer({
+    super.paint,
+    super.blur,
+    super.dx,
+    super.dy,
+    super.opacity,
+    super.box,
+    super.blend,
+  });
 
   @override
   Map<String, Object?> toWire() => {'k': 'fill', ..._common};
+
+  @override
+  FillLayer withPaint(ScenePaint? paint) => FillLayer(
+    paint: paint,
+    blur: blur,
+    dx: dx,
+    dy: dy,
+    opacity: opacity,
+    box: box,
+    blend: blend,
+  );
+
+  @override
+  FillLayer copyWith({
+    double? blur,
+    double? dx,
+    double? dy,
+    double? opacity,
+    SceneLayerBox? box,
+    SceneBlendMode? blend,
+  }) => FillLayer(
+    paint: paint,
+    blur: blur ?? this.blur,
+    dx: dx ?? this.dx,
+    dy: dy ?? this.dy,
+    opacity: opacity ?? this.opacity,
+    box: box ?? this.box,
+    blend: blend ?? this.blend,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -373,10 +670,12 @@ class FillLayer extends TextLayer {
       other.blur == blur &&
       other.dx == dx &&
       other.dy == dy &&
-      other.opacity == opacity;
+      other.opacity == opacity &&
+      other.box == box &&
+      other.blend == blend;
 
   @override
-  int get hashCode => Object.hash(paint, blur, dx, dy, opacity);
+  int get hashCode => Object.hash(paint, blur, dx, dy, opacity, box, blend);
 
   @override
   String toString() => 'FillLayer($paint)';
@@ -393,6 +692,8 @@ class StrokeLayer extends TextLayer {
     super.dx,
     super.dy,
     super.opacity,
+    super.box,
+    super.blend,
   });
 
   final double width;
@@ -407,6 +708,41 @@ class StrokeLayer extends TextLayer {
   };
 
   @override
+  StrokeLayer withPaint(ScenePaint? paint) => StrokeLayer(
+    width: width,
+    join: join,
+    paint: paint,
+    blur: blur,
+    dx: dx,
+    dy: dy,
+    opacity: opacity,
+    box: box,
+    blend: blend,
+  );
+
+  @override
+  StrokeLayer copyWith({
+    double? blur,
+    double? dx,
+    double? dy,
+    double? opacity,
+    SceneLayerBox? box,
+    SceneBlendMode? blend,
+    double? width,
+    SceneStrokeJoin? join,
+  }) => StrokeLayer(
+    width: width ?? this.width,
+    join: join ?? this.join,
+    paint: paint,
+    blur: blur ?? this.blur,
+    dx: dx ?? this.dx,
+    dy: dy ?? this.dy,
+    opacity: opacity ?? this.opacity,
+    box: box ?? this.box,
+    blend: blend ?? this.blend,
+  );
+
+  @override
   bool operator ==(Object other) =>
       other is StrokeLayer &&
       other.width == width &&
@@ -415,10 +751,13 @@ class StrokeLayer extends TextLayer {
       other.blur == blur &&
       other.dx == dx &&
       other.dy == dy &&
-      other.opacity == opacity;
+      other.opacity == opacity &&
+      other.box == box &&
+      other.blend == blend;
 
   @override
-  int get hashCode => Object.hash(width, join, paint, blur, dx, dy, opacity);
+  int get hashCode =>
+      Object.hash(width, join, paint, blur, dx, dy, opacity, box, blend);
 
   @override
   String toString() => 'StrokeLayer($width, $paint)';
@@ -758,10 +1097,12 @@ class SceneEdges implements SceneQuad {
   @override
   Object toWire() => isUniform ? left : [left, top, right, bottom];
 
-  /// Reads [toWire], and the plain number older payloads carried.
+  /// Reads [toWire], and the plain number older payloads carried. A list
+  /// with a non-number element falls back to [zero] — the whole value, the
+  /// same rule [SceneAlignment.fromWire] uses.
   static SceneEdges fromWire(Object? value) => switch (value) {
     num n => SceneEdges.all(n.toDouble()),
-    List l when l.length == 4 => SceneEdges(
+    List l when l.length == 4 && l.every((e) => e is num) => SceneEdges(
       left: (l[0] as num).toDouble(),
       top: (l[1] as num).toDouble(),
       right: (l[2] as num).toDouble(),
@@ -848,9 +1189,11 @@ class SceneCorners implements SceneQuad {
   Object toWire() =>
       isUniform ? topLeft : [topLeft, topRight, bottomRight, bottomLeft];
 
+  // A list with a non-number element falls back to zero — same rule as
+  // SceneEdges.fromWire.
   static SceneCorners fromWire(Object? value) => switch (value) {
     num n => SceneCorners.all(n.toDouble()),
-    List l when l.length == 4 => SceneCorners(
+    List l when l.length == 4 && l.every((e) => e is num) => SceneCorners(
       topLeft: (l[0] as num).toDouble(),
       topRight: (l[1] as num).toDouble(),
       bottomRight: (l[2] as num).toDouble(),

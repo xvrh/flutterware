@@ -34,6 +34,25 @@ Object? sample(SceneProp p) => switch (p.kind) {
         begin: SceneAlignment.centerLeft,
         end: SceneAlignment.centerRight,
       ),
+      box: SceneLayerBox.line,
+    ),
+    FillLayer(
+      paint: RadialPaint(
+        colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFFFF2D95)],
+        stops: [0, 0.8],
+        center: SceneAlignment(0.2, -0.4),
+        radius: 1.5,
+      ),
+      blend: SceneBlendMode.screen,
+    ),
+    StrokeLayer(
+      width: 3,
+      paint: SweepPaint(
+        colors: [SceneColor(0xFFFF2D95), SceneColor(0xFF00E5FF)],
+        center: SceneAlignment(-0.5, 0),
+        startAngle: 45,
+        endAngle: 300,
+      ),
     ),
     FillLayer(),
   ],
@@ -204,6 +223,20 @@ void main() {
       expect(p.read(parsed.doc!.root.children.single), sample(p));
     });
   }
+
+  test('every wire decoder is total: garbage input does not throw', () {
+    const garbage = ['not a value', true];
+    for (var p in sceneProps) {
+      for (var g in garbage) {
+        expect(() => p.fromWire(g), returnsNormally, reason: '${p.name}: $g');
+      }
+    }
+  });
+
+  test('SceneEdges and SceneCorners fall back to zero on a malformed list', () {
+    expect(SceneEdges.fromWire([1, 'x', 3, 4]), SceneEdges.zero);
+    expect(SceneCorners.fromWire([1, 2, 'x', 4]), SceneCorners.zero);
+  });
 
   test(
     'a property bound at its default is still written, as the reference',

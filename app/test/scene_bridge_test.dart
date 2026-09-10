@@ -70,6 +70,13 @@ void main() {
     expect(rect.flutter.scene, rect);
   });
 
+  test('blend modes convert by name, and normal is source-over', () {
+    expect(SceneBlendMode.normal.flutter, BlendMode.srcOver);
+    for (var m in SceneBlendMode.values.skip(1)) {
+      expect(m.flutter.name, m.name);
+    }
+  });
+
   test('all 13 curves evaluate exactly as Flutter does', () {
     var flutterCurves = <String, Curve>{
       'linear': Curves.linear,
