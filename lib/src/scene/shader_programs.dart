@@ -5,7 +5,8 @@
 // "not yet", where a stand-in colour is a wrong frame that looks right. Every
 // load is real work (`RealWork`), so each flutter_tester lane waits for it
 // with no plumbing of its own; a plain `flutter test` has no such wait, and
-// awaits [precacheSceneShaders] instead.
+// loads them with [precacheSceneShaders] instead — inside `tester.runAsync`
+// in a `testWidgets`, whose fake clock never lets a load land.
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -242,7 +243,15 @@ Set<String> sceneShaderAssets(SceneDocument scene) => {
 ///
 /// A flutterware lane waits for these loads by itself. A plain `flutter
 /// test` does not — `pumpAndSettle` never asks — so a test that pumps a scene
-/// with a shader pass awaits this first, or the pass is blank.
+/// with a shader pass loads them first, or the pass is blank. In a
+/// `testWidgets` that is on the real clock, because a program's load never
+/// completes under the fake one and awaiting it directly hangs the test:
+///
+/// ```dart
+/// await tester.runAsync(() => precacheSceneShaders(scene));
+/// ```
+///
+/// A plain `test()` runs on the real clock already, and awaits it directly.
 Future<void> precacheSceneShaders(SceneDocument scene) => Future.wait([
   for (var asset in sceneShaderAssets(scene))
     SceneShaderPrograms.instance.load(asset),

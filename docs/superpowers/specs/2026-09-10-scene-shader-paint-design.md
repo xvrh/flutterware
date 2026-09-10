@@ -162,9 +162,10 @@ comments on the uniform's line without disturbing anything.
 5. **Three uniforms the renderer owns**, each set only when the shader
    declares it with the right type: `uSize` (vec2, the box's logical size: the
    whole text, or one line), `uColor` (vec4, the text's own colour, straight
-   RGBA 0–1), `uTime` (float, scene seconds). The renderer probes a program's
-   names once and caches the answer. A user uniform the shader does not declare
-   is skipped and reported, never thrown in `paint`.
+   RGBA 0–1), `uTime` (float, scene seconds). The renderer probes each name
+   once per draw slot (see decision 6: a slot is a pass × line) and caches
+   the answer. A user uniform the shader does not declare is skipped and
+   reported, never thrown in `paint`.
 
 6. **Programs load once per process and paint nothing until they have.**
    A program cache in `lib/src/scene/` (it needs `dart:ui`, so not the core)
@@ -241,8 +242,11 @@ comments on the uniform's line without disturbing anything.
 
 10. **Plain `flutter test` gets an explicit door.** A public
     `precacheSceneShaders(scene)` loads every program a scene uses; a
-    consumer's test awaits it before pumping. The docs say so, because that
-    lane has no report to catch a blank pass.
+    consumer's test loads them before pumping. In a `testWidgets` that is
+    `await tester.runAsync(() => precacheSceneShaders(scene));` — awaited
+    directly, the load never lands under the fake clock and the test hangs;
+    a plain `test()` awaits it directly. The docs say so, because that lane
+    has no report to catch a blank pass.
 
 11. **Deferred:** `ImageFilter.shader` (the glyph-reading filter kind) — it
     throws under default `flutter test` and speaks physical pixels; sampler
@@ -257,7 +261,7 @@ comments on the uniform's line without disturbing anything.
    `reinitializeShader` in every live guest session.
 3. **The value** — `ShaderPaint` in the core, wire, file grammar, props-test
    sample.
-4. **The program cache** — load, `RealWork.track`, `Listenable`, name probe,
+4. **The program cache** — load, `RealWork.run`, `Listenable`, name probe,
    the per-slot shader pool; `precacheSceneShaders`.
 5. **The painter** — mask path for shader passes, coordinates by transform,
    renderer-owned uniforms, nothing painted until loaded. Pixel tests on both
