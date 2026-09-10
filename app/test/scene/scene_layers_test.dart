@@ -252,6 +252,11 @@ void main() {
         ),
       ];
       var out = _emit(layers);
+      expect(
+        out,
+        contains("'uAngle': [0.4]"),
+        reason: 'the file is Dart: a float is a List<double> there too',
+      );
       expect(_read(out), layers);
       expect(_emit(_read(out)), out, reason: 'emit ∘ parse is the identity');
     });
@@ -281,11 +286,10 @@ void main() {
 
     test('refuses a bare float where a shader uniform wants a list', () {
       var parsed = parseSceneFile(
-        _scene(
-          "[FillLayer(paint: ShaderPaint('a.frag', uniforms: {'u': [1]}))]",
-        ),
+        _scene("[FillLayer(paint: ShaderPaint('a.frag', uniforms: {'u': 1}))]"),
       );
       expect(parsed.refusals.single.construct, "uniform 'u'");
+      expect(parsed.refusals.single.message, contains('[0.4] for a float'));
     });
 
     test('refuses a shader uniform with too many components', () {

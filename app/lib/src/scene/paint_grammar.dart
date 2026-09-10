@@ -75,15 +75,10 @@ String _paint(ScenePaint p) => switch (p) {
   ShaderPaint(:var asset, :var uniforms) => [
     'ShaderPaint(${_string(asset)}',
     if (uniforms.isNotEmpty)
-      ', uniforms: {${[for (var e in uniforms.entries) '${_string(e.key)}: ${_floats(e.value)}'].join(', ')}}',
+      ', uniforms: {${[for (var e in uniforms.entries) '${_string(e.key)}: [${e.value.map(_num).join(', ')}]'].join(', ')}}',
     ')',
   ].join(),
 };
-
-// A float is spelled bare and a vector as a list — the shape the shader
-// declares it in.
-String _floats(List<double> v) =>
-    v.length == 1 ? _num(v.single) : '[${v.map(_num).join(', ')}]';
 
 String _string(String s) =>
     "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'\$')}'";
@@ -341,7 +336,7 @@ Map<String, List<double>>? _readUniforms(Expression e, Refuse refuse) {
     refuse(
       e.offset,
       'uniforms',
-      "a map of uniform names to values — {'uAngle': 0.4, 'uTint': [1, 0.8, 0.2]}",
+      "a map of uniform names to values — {'uAngle': [0.4], 'uTint': [1, 0.8, 0.2]}",
     );
     return null;
   }
@@ -361,8 +356,8 @@ Map<String, List<double>>? _readUniforms(Expression e, Refuse refuse) {
       refuse(
         entry.value.offset,
         "uniform '$name'",
-        'a number for a float, or a list of two to four numbers for a vec2, '
-            'vec3 or vec4',
+        'a list of one to four numbers, one per component — [0.4] for a '
+            'float, [1, 0.8, 0.2] for a vec3',
       );
       return null;
     }
@@ -371,9 +366,10 @@ Map<String, List<double>>? _readUniforms(Expression e, Refuse refuse) {
   return out;
 }
 
+// Every value is a list, a float's too: the file is Dart, and a uniform is a
+// List<double> there — a bare number would not compile.
 List<double>? _uniformValue(Expression e) {
-  if (_number(e) case var v?) return [v];
-  if (e is! ListLiteral || e.elements.length < 2 || e.elements.length > 4) {
+  if (e is! ListLiteral || e.elements.isEmpty || e.elements.length > 4) {
     return null;
   }
   var out = <double>[];
