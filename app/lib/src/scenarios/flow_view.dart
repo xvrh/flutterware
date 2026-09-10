@@ -59,11 +59,15 @@ class ScenarioFlowView extends StatefulWidget {
   /// find one — the panel can, an exported page cannot.
   final ImageProvider? appIcon;
 
-  /// The transform a fresh page starts from: zoomed out and a little inset,
-  /// like dev_studio's run view — the first glance is the whole flow rather
-  /// than one giant phone.
-  static Matrix4 initialTransform() =>
-      (Matrix4.identity() * 0.5 as Matrix4)
+  /// Where the canvas opens: zoomed out and a little inset, so the first
+  /// glance is the flow rather than one giant phone.
+  ///
+  /// Half size by default, which fits a short flow and shows the first two or
+  /// three steps of a long one. [scale] is what the address's `?zoom=` sets:
+  /// there is no fit-to-content here, so a run that fans out at a `split` is
+  /// only legible as a *shape* when somebody says how far back to stand.
+  static Matrix4 initialTransform({double scale = 0.5}) =>
+      (Matrix4.identity() * scale as Matrix4)
         ..translateByDouble(50.0, 100.0, 0, 1);
 
   @override

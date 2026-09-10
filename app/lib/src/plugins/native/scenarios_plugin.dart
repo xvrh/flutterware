@@ -1115,6 +1115,25 @@ class _ScenarioPageState extends State<_ScenarioPage> {
     ScenarioFlowView.initialTransform(),
   );
 
+  /// `?zoom=` applies once, on arrival, and then the canvas is the user's.
+  ///
+  /// A flow has no fit-to-content — it opens at half size wherever it is — so
+  /// how far back to stand is a property of the link rather than of the run.
+  /// Written down here because it is also how a screenshot of a wide flow is
+  /// taken twice and comes out the same.
+  bool _zoomApplied = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_zoomApplied) return;
+    var zoom = double.tryParse(AddressScope.param(context, 'zoom') ?? '');
+    if (zoom != null && zoom > 0) {
+      _flowTransform.value = ScenarioFlowView.initialTransform(scale: zoom);
+    }
+    _zoomApplied = true;
+  }
+
   ScenarioPanelRun? get _run => widget.core.panelRunFor(
     widget.package,
     file: widget.file,
