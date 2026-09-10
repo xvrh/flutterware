@@ -1,6 +1,11 @@
 # Scenarios
 
-A scenario is a `flutter_test` that screenshots itself.
+A scenario is a widget test that takes a screenshot at every step. Write the
+test you'd write anyway, and you also get a picture of every screen it went
+through, on every device and in every language you declare.
+
+![A scenario run drawn as a flow: the demo's shop, one phone screenshot per
+step, branching at the menu into a row per drink](screenshots/scenarios.png)
 
 ```dart
 import 'package:flutterware/flutter_test.dart';
@@ -11,33 +16,53 @@ void main() {
     await s.tap(ShopKeys.getStarted);
     await s.tap('Cappuccino');
     await s.tap(ShopKeys.addToCart);
-    await s.enterText(ShopKeys.cupName, 'Xavier');
+    await s.enterText(ShopKeys.cupName, 'Ada');
     await s.tap(ShopKeys.placeOrder);
   });
 }
 ```
 
-`flutter test` runs it like any other test. The flutterware runner runs the
-same file and keeps what happened: a picture, a widget tree, the visible
-texts and the semantics tree — what a screen reader gets — for **every
-step**, in a flow you can walk in the GUI, from the CLI, or from an agent.
+`flutter test` runs it like any other test. Under flutterware, every step also
+keeps a screenshot, the widget tree, the visible text and the semantics tree
+(what a screen reader gets). The studio draws the run as a flow you can walk
+through, and the same results are there from the command line and for an agent.
 
-`package:flutterware/flutter_test.dart` re-exports `package:flutter_test` 1:1,
-so a file that imports it keeps `expect`, `find`, `testWidgets` and everything
-else. Changing the import is the whole migration.
+The same runs feed [store screenshots](store_screenshots.md), the pictures in
+the translations table, and branch comparisons.
 
-Scenarios are discovered anywhere under `test/` — next to ordinary tests, in a
-file that mixes both, wherever. `test/scenarios/` is only the convention `new`
-writes to, and a `directory:` in `tool/flutterware.dart` narrows discovery to
-one folder if you want the fence back.
+## Turn it on
 
-Discovery is **syntactic**: it matches a literal `scenario('name', …)` call,
-in the file, with a literal string name — it never runs the file. A name built
-at runtime is reported ("scenario name is not a string literal"), but a
-helper that calls `scenario` *internally* — `runScenario(name, body)`, a
-registry walked in a loop — leaves no `scenario(` call in the file and is
-invisible with nothing said. If you wrap, keep the call and its name in the
-scenario file.
+```dart
+// tool/flutterware.dart
+fw.use(Scenarios(packages: [.new(app, languages: ['en', 'fr'])]));
+```
+
+`package:flutterware/flutter_test.dart` is `package:flutter_test` with the
+scenario API added, so an existing test file keeps `expect`, `find`,
+`testWidgets` and the rest. Changing the import is the whole migration.
+
+Scenarios are found anywhere under `test/`, next to ordinary tests or mixed
+into the same file. `test/scenarios/` is only where `fw run scenarios new`
+writes; set `directory:` to look in one folder only.
+
+Discovery reads the source, it never runs it: it looks for a literal
+`scenario('name', …)` call. A name built at run time is reported. A helper that
+calls `scenario` for you, like `runScenario(name, body)`, leaves no such call
+in the file and is not found, so keep the `scenario(` call and its name in the
+test file.
+
+## Run them
+
+```shell
+fw run scenarios run                     # every scenario, on each folder's default device
+fw run scenarios run --file=test/scenarios/shop_test.dart --language=fr
+fw run scenarios run --matrix=declared   # every device and language the folders declare
+fw run scenarios read                    # the step the last run failed on
+```
+
+In the studio, pick a scenario and press **Run**. The flow shows one frame per
+step, with the action that led to it on the arrow. Open a step to see its
+screenshot next to its widget tree and texts.
 
 ## The verbs
 
@@ -346,94 +371,7 @@ an iOS-profile scenario measures its default text as Roboto — close, not SF.
 and measures the real thing; treat its captures as the authoritative ones,
 and bare `flutter test` as the assertion lane it is.
 
-## Shadows: real, unlike every other test
-
-`flutter_test` sets `debugDisableShadows` in its binding's constructor, for
-every test it runs. A `BoxShadow` then paints with its blur dropped — a solid,
-hard-edged copy of the shape, offset — and a Material `elevation:` stops being
-a shadow at all: `RenderPhysicalShape` strokes the outline at `elevation * 2`
-in the shadow colour instead. Both are stand-ins, and both look like a bug in
-your design system rather than a property of the lane.
-
-The default is right where it comes from. Shadow rasterisation is not promised
-pixel-identical from one engine version to the next, so a golden that carried
-one would break on a Flutter bump for no reason anybody wrote. It is wrong
-here: every picture a scenario or a preview takes is looked at, and the
-comparisons this harness makes — `drift` between two runs, `previews compare`
-across a branch — are on one machine and one SDK, where a blur is
-deterministic.
-
-So scenarios and previews render shadows for real. A folder that would rather
-have upstream's back — a suite whose pictures are gated across Flutter
-versions — says so once, and gets them byte for byte:
-
-```dart
-Future<void> testExecutable(FutureOr<void> Function() testMain) =>
-    runScenarios(testMain, shadows: false);
-```
-
-## 3D and Flutter GPU: the lane decides which backend
-
-A scenario can render `package:flutter_gpu` — and a whole 3D engine on top of
-it, `flutter_scene` included. A glTF model loads, lights and captures like any
-other frame.
-
-Two things have to be true, and the second is the one that bites.
-
-**Impeller has to be on**, with Flutter GPU on beside it: the engine wants
-`--enable-impeller` *and* `--enable-flutter-gpu` and refuses if it has one
-without the other. Flutterware passes both in every lane it spawns.
-`FW_SOFTWARE_RENDERING=1` puts the old software rasterizer back, and Flutter
-GPU stops working when you do.
-
-**The backend has to match the shaders.** A package that ships shaders compiles
-them in a build hook, for the backend of the machine the hook ran on — Metal on
-macOS, SPIR-V and GLES on Linux and Windows. Handed `--enable-impeller` and
-nothing else, `flutter_tester` picks **Vulkan on every host**, so on macOS a
-shader bundle a hook has just produced cannot be read at all and you get
-`Failed to initialize ShaderLibrary:` with nothing after the colon.
-
-`fw run scenarios run` spawns the tester itself and names
-`--impeller-backend=metal` there. **`flutter test` has no such flag**, so on
-macOS it cannot render anything whose shaders came from a build hook. On Linux
-and Windows a hook emits SPIR-V and GLES, which is what the tester's default
-reads, so this particular mismatch does not arise there.
-
-A scenario that hits this says so, in the failure, rather than leaving you with
-the engine's empty sentence.
-
-**The hook itself is run for you.** A package that generates part of itself at
-build time used to work in a preview only if something *else* on the machine had
-already built the app — a clean checkout rendered nothing, a machine that had
-run the app once rendered everything, and neither could tell which it was.
-Flutterware now runs those hooks before it assembles a bundle. The first run on
-a machine pays for it, once: measured 49.9s for a package that compiles a whole
-engine's worth of shaders, and 110–125ms every run after. A project with no such
-dependency pays 30ms, which is the cost of asking.
-
-That first run is also why `tool/flutterware.dart` may take a minute on a fresh
-checkout. `dart run` resolves the workspace and runs those same hooks before
-your config's own few milliseconds; if it is ever killed for taking too long,
-the message says which of the two it was likely doing.
-
-### Load models outside `runAsync`
-
-```dart
-// Yes — the load runs from initState, and the scenario's pump lands it.
-class _Model extends StatefulWidget { … }
-
-await s.pumpWidget(const _Model());
-await s.screen('The model');
-```
-
-Not inside `s.runAsync`. A model load reads several assets and waits on frames,
-and no pump can run while `runAsync` is open — so it waits for something only a
-pump could deliver, and the scenario sits there. The `runAsync` watchdog names
-this after eight real seconds rather than letting it look like slowness, but
-the shape above never gets there. A load too big for the guessed turns is
-announced with `RealWork.track` — see *Work on the real event loop* above.
-
-## Running them
+## What a run leaves behind
 
 In the GUI, opening a scenario runs it and draws the flow. From the CLI or an
 agent — the same actions, the same shapes:
@@ -508,7 +446,11 @@ and it is where the strings for `Target.label(…)` come from.
 Runs share a warm harness, so the second one skips the compile. `restart`
 drops it when you want a cold start.
 
-## Store screenshots
+## Named shots, as files
+
+For finished store images, framed and sized for each store, use
+[Store screenshots](store_screenshots.md). This is the raw material: the named
+shots of a run, written as plain PNGs.
 
 ```sh
 fw run scenarios shots --languages=en,fr --tag=store
