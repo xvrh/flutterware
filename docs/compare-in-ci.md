@@ -47,11 +47,14 @@ comparison:
     - uses: actions/checkout@v4
       with: { fetch-depth: 0 } # the base is the merge base; a shallow clone has none
     - uses: subosito/flutter-action@v2
-    - name: Cache the shot cache
+    - name: Cache the pictures and the seed kernel
       uses: actions/cache@v4
       with:
-        path: ~/.flutterware/shots
-        key: fw-shots-${{ runner.os }}
+        path: |
+          ~/.flutterware/shots
+          ~/.flutterware/kernels
+        key: fw-${{ runner.os }}-${{ hashFiles('**/pubspec.lock') }}
+        restore-keys: fw-${{ runner.os }}-
     - name: Compare
       run: dart run flutterware compare --report=comparison-report --frames=changed
     - name: Host the report
@@ -152,11 +155,21 @@ to want to see. That is why the default is `all`.
 
 ## What to know before turning it on
 
-- **The shot cache is the whole performance story, and CI starts cold.**
-  Locally the skip rule plus a warm `~/.flutterware/shots` answers most
-  entries in milliseconds; a runner without the cache renders *both sides of
-  every entry, every run*. Cache `~/.flutterware/shots` (as above) and the
-  second run is back to skip-rule speed.
+- **The two caches, and what each buys.** `~/.flutterware/shots` holds the
+  rendered pictures, content-addressed: without it a runner renders *both
+  sides of every entry, every run*, and with it the skip rule answers most
+  entries in milliseconds. `~/.flutterware/kernels` holds the **seed kernel** —
+  a compiled kernel of the half of the program no checkout owns, the SDK and
+  the pub cache — and it is what a cold harness compile starts from instead of
+  starting from nothing. Measured on this repository, a scenario harness
+  compiled cold took 60s and the same one starting from a seed came up inside
+  a 9s half. The `restore-keys` line matters: a lockfile change should reuse
+  the previous run's cache and write a new one, not start empty.
+- **Do not cache `~/.flutterware/bases`.** The base checkout is a real
+  `git worktree`, registered inside the repository's own `.git` — which a
+  fresh CI checkout does not have, so a restored one is a directory git does
+  not believe in. It is also disposable by design: it gets checked out again
+  in seconds, and the pictures that took the time are in the shot cache.
 - **`fetch-depth: 0`.** The base is the merge base with the default branch; a
   shallow clone has no common commit and the compare refuses, naming the ref.
 - **The very first comment of a repository may briefly 404 its page link**:

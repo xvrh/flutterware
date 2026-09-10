@@ -158,6 +158,7 @@ class ScenariosRunner {
     required this.source,
     required this.cache,
     this.pixels,
+    this.locks,
     this.only,
     this.onScenario,
     this.onPlan,
@@ -174,6 +175,11 @@ class ScenariosRunner {
   /// parameter rather than derived here because [source] deliberately hides
   /// where the package lives.
   final PixelInputs? pixels;
+
+  /// Both sides' lockfiles, read per package — see [LockSides]. Passed for
+  /// the same reason [pixels] is, and used the same way: a scenario carries
+  /// the resolution of the packages it reaches and no others.
+  final LockSides? locks;
 
   /// Compare only these scenario ids.
   final List<String>? only;
@@ -293,7 +299,8 @@ class ScenariosRunner {
         );
         continue;
       }
-      cache.memo.remember(id, imports.closureOf(source.fileOf(id)));
+      var file = source.fileOf(id);
+      cache.memo.remember(id, imports.closureOf(file));
       var decision = SkipDecision.of(
         entryId: id,
         memo: cache.memo,
@@ -301,6 +308,7 @@ class ScenariosRunner {
         headRoot: headRoot,
         pixels: pixels,
         digests: digests,
+        lock: locks?.forPackages(imports.packagesOf(file)),
       );
       if (decision.skip) {
         settled.add(

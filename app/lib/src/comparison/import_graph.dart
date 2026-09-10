@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
+import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:path/path.dart' as p;
 
 /// What each entry reads, worked out by following its imports.
@@ -45,7 +46,7 @@ class ImportGraph {
   /// `package:flutter` is not.
   final Map<String, String> _packages;
 
-  final _directives = <String, List<String>>{};
+  final _read = <String, _FileReads>{};
 
   /// Reads [packageConfig] and keeps the packages that live inside [root].
   ///
@@ -83,32 +84,54 @@ class ImportGraph {
   ///
   /// This is what [ClosureMemo] stores, and what the skip rule hashes on both
   /// sides.
-  List<String> closureOf(String file) {
+  List<String> closureOf(String file) => [
+    for (var path in _walk(file))
+      if (p.isWithin(root, path)) p.relative(path, from: root),
+  ]..sort();
+
+  /// Every **package** [file] reaches, transitively — the names, not the
+  /// files.
+  ///
+  /// The other half of [closureOf], and the half it could never carry: a
+  /// closure is paths inside the checkout, and a dependency lives in the pub
+  /// cache, where nothing is hashed and a version bump moves the whole
+  /// directory. What identifies one is its entry in `pubspec.lock`, and what
+  /// says whether *this* entry cares is whether its closure names it.
+  ///
+  /// Over-approximates in the same direction everything else here does: both
+  /// branches of a conditional import, an unused import, a package named in a
+  /// file the entry merely parts in.
+  Set<String> packagesOf(String file) {
+    var packages = <String>{};
+    for (var path in _walk(file)) {
+      packages.addAll(_readsOf(path).packages);
+    }
+    return packages;
+  }
+
+  /// The files [file] reads, transitively, including itself — absolute and
+  /// unfiltered, which is what both public walks are built on.
+  Set<String> _walk(String file) {
     var start = p.canonicalize(p.isAbsolute(file) ? file : p.join(root, file));
     var seen = <String>{};
     var queue = <String>[start];
-
     while (queue.isNotEmpty) {
       var current = queue.removeLast();
       if (!seen.add(current)) continue;
-      for (var target in _targetsOf(current)) {
+      for (var target in _readsOf(current).targets) {
         if (!seen.contains(target)) queue.add(target);
       }
     }
-
-    return [
-      for (var path in seen)
-        if (p.isWithin(root, path)) p.relative(path, from: root),
-    ]..sort();
+    return seen;
   }
 
   /// Parsed once per file: an entry's closure overlaps its neighbours' almost
   /// entirely, so a catalog of 200 entries parses a package once rather than
   /// 200 times.
-  List<String> _targetsOf(String file) =>
-      _directives.putIfAbsent(file, () => _parse(file));
+  _FileReads _readsOf(String file) =>
+      _read.putIfAbsent(file, () => _parse(file));
 
-  List<String> _parse(String file) {
+  _FileReads _parse(String file) {
     String source;
     try {
       source = File(file).readAsStringSync();
@@ -116,7 +139,7 @@ class ImportGraph {
       // A path an import names that is not there. The compiler will say so;
       // this is not the place, and a missing file still belongs to the
       // closure — its *absence* is what the digest records.
-      return const [];
+      return const _FileReads(targets: [], packages: {});
     }
 
     CompilationUnit unit;
@@ -125,10 +148,11 @@ class ImportGraph {
     } on Object {
       // Unparseable Dart. It is still a file this entry reads, so it stays in
       // the closure through its digest; what it imports is simply unknown.
-      return const [];
+      return const _FileReads(targets: [], packages: {});
     }
 
     var targets = <String>[];
+    var packages = <String>{};
     for (var directive in unit.directives) {
       // Imports, exports **and parts**: a part is not an import but it is
       // unquestionably read, and a change to one changes the library.
@@ -140,18 +164,37 @@ class ImportGraph {
       if (uri != null) {
         var resolved = _resolve(uri, from: file);
         if (resolved != null) targets.add(resolved);
+        if (_packageIn(uri) case var named?) packages.add(named);
       }
       // Both branches of a conditional import. Which one the compiler takes
       // depends on the platform being built for, and guessing wrong here
       // drops a real dependency.
       if (directive is NamespaceDirective) {
         for (var configuration in directive.configurations) {
-          var resolved = _resolve(configuration.uri.stringValue, from: file);
+          var uri = configuration.uri.stringValue;
+          var resolved = _resolve(uri, from: file);
           if (resolved != null) targets.add(resolved);
+          if (_packageIn(uri) case var named?) packages.add(named);
         }
       }
     }
-    return targets;
+    // The assets half, and it is not an import: a package's *pictures* are
+    // reached by naming it in a string — `Image.asset(…, package: 'icons')`,
+    // `AssetImage('packages/icons/x.png')`, a font family spelled
+    // `packages/icons/Inter`. A bump to that package changes what an entry
+    // draws while its import graph says nothing at all.
+    var strings = _PackageStrings();
+    unit.accept(strings);
+    packages.addAll(strings.names);
+    return _FileReads(targets: targets, packages: packages);
+  }
+
+  /// The package a `package:name/…` URI names, or null for anything else.
+  static String? _packageIn(String? uri) {
+    if (uri == null || !uri.startsWith('package:')) return null;
+    var rest = uri.substring('package:'.length);
+    var slash = rest.indexOf('/');
+    return slash < 0 ? null : rest.substring(0, slash);
   }
 
   /// A directive's URI as an absolute path inside [root], or null for anything
@@ -170,5 +213,52 @@ class ImportGraph {
     if (uri.contains(':')) return null;
     var resolved = p.canonicalize(p.join(p.dirname(from), p.fromUri(uri)));
     return p.isWithin(root, resolved) ? resolved : null;
+  }
+}
+
+/// What one file was found to read: the files, and the packages it names.
+class _FileReads {
+  const _FileReads({required this.targets, required this.packages});
+
+  final List<String> targets;
+  final Set<String> packages;
+}
+
+/// The two ways a Dart file names a package it does not import.
+///
+/// Deliberately these two and not "every string that happens to be a package
+/// name": `path`, `collection`, `clock`, `http` and `image` are all packages
+/// *and* ordinary words, and matching them anywhere would put half a catalog
+/// back inside every lockfile bump — which is the thing the narrowing exists
+/// to stop.
+class _PackageStrings extends RecursiveAstVisitor<void> {
+  final names = <String>{};
+
+  @override
+  void visitArgumentList(ArgumentList node) {
+    // `package: 'icons'` — Flutter's own spelling, on `Image.asset`,
+    // `AssetImage`, `SvgPicture.asset` and everything shaped like them.
+    for (var argument in node.arguments) {
+      if (argument is! NamedArgument) continue;
+      if (argument.name.lexeme != 'package') continue;
+      if (argument.argumentExpression case StringLiteral literal) {
+        if (literal.stringValue case var value?) names.add(value);
+      }
+    }
+    super.visitArgumentList(node);
+  }
+
+  @override
+  void visitSimpleStringLiteral(SimpleStringLiteral node) {
+    // `packages/icons/x.png` — what the bundle calls another package's asset,
+    // and what a font family from one is spelled as.
+    const prefix = 'packages/';
+    var value = node.value;
+    if (value.startsWith(prefix)) {
+      var rest = value.substring(prefix.length);
+      var slash = rest.indexOf('/');
+      if (slash > 0) names.add(rest.substring(0, slash));
+    }
+    super.visitSimpleStringLiteral(node);
   }
 }

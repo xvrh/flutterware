@@ -55,6 +55,17 @@ class BaseCheckout {
   static bool isReady(String sha, {String? cacheRoot}) =>
       File(p.join(cacheRoot ?? defaultRoot, sha, _marker)).existsSync();
 
+  /// How long a base survives without a comparison asking for it.
+  ///
+  /// Age alone, with no size budget, and that is the one difference from the
+  /// other two caches under `~/.flutterware`. A base is a whole checkout —
+  /// measured on this repository at 553MB — so pricing the directory means
+  /// walking half a gigabyte to decide whether to keep it, on every run. The
+  /// shot cache can afford a budget because its entries are files it already
+  /// has the size of; this one cannot, and does not need one: a base is
+  /// disposable by construction, and what survives it is the shot cache.
+  static const forget = Duration(days: 14);
+
   /// The checkout of [sha], creating it if nothing has yet.
   ///
   /// [resolve] is called once per fresh checkout and is where `pub get` goes.
@@ -73,6 +84,17 @@ class BaseCheckout {
   }) async {
     var path = p.join(cacheRoot, sha);
     Directory(cacheRoot).createSync(recursive: true);
+    // Swept here rather than on a schedule, for the reason
+    // `claimBuildDirectory` gives about its own siblings: a schedule needs a
+    // caller wired up and remembered, and this one cannot be forgotten. It is
+    // a listing and a stat per base — the directories are never opened, and
+    // only an expired one costs a `git worktree remove`.
+    //
+    // Awaited, before the lock: a base old enough to sweep is one no
+    // comparison has asked for in a fortnight, so nothing is waiting on it,
+    // and doing it here rather than in the background keeps the disk claim
+    // and its release in one order a test can drive.
+    await sweep(repoRoot: repoRoot, cacheRoot: cacheRoot, keep: path);
     // One creator per sha at a time, across processes — the directory is
     // shared by every worktree on the machine by design, and without the
     // lock a second comparison arriving mid-`resolve` saw a directory with
@@ -123,6 +145,18 @@ class BaseCheckout {
     // the winner just wrote it.
     var marker = File(p.join(path, _marker));
     if (marker.existsSync()) {
+      // Touched on the way past, which is what makes [sweep] an LRU rather
+      // than a first-in-first-out — the same move `ShotCache.read` makes, and
+      // for the same reason. A base branched off master is written once and
+      // then reused by every comparison against it for weeks; on the mtime it
+      // was *created* at, that is exactly what an age sweep would take first.
+      try {
+        marker.setLastModifiedSync(DateTime.now());
+      } on FileSystemException {
+        // A read-only store, or one another process is sweeping. The checkout
+        // is usable either way, and refreshing an age is not worth an
+        // exception.
+      }
       return BaseCheckout(path: path, sha: sha, created: false);
     }
     // A directory with no marker is a checkout that died between `worktree
@@ -177,12 +211,56 @@ class BaseCheckout {
   }
 
   /// Removes this checkout and its registration.
-  ///
-  /// Nothing calls this on a schedule yet. It exists because the class is built
-  /// on the claim that a base is disposable, and a claim with no way to dispose
-  /// cannot be checked.
   Future<void> dispose({required String repoRoot}) =>
       _remove(repoRoot: repoRoot, path: path);
+
+  /// Drops every base nothing has asked for in [forget], and returns how many.
+  ///
+  /// **This directory is shared by every repository on the machine**, so a
+  /// sweep run from one project will meet another's bases and take them if
+  /// they are old enough. That is correct — a base is disposable and this is
+  /// the one place that knows they exist — and the cost of it is a stale
+  /// entry in the *other* repository's `.git/worktrees`, which that
+  /// repository's own next `ensure` already recovers from: `worktree add`
+  /// fails, it prunes, and it retries. Pruning here instead would mean
+  /// knowing which repository each base came from, which nothing records.
+  ///
+  /// [keep] is the base this run is about to use, whatever its age.
+  ///
+  /// Every failure is swallowed per checkout, as housekeeping should be.
+  static Future<int> sweep({
+    required String repoRoot,
+    String? cacheRoot,
+    String? keep,
+    Duration forget = BaseCheckout.forget,
+    DateTime? now,
+  }) async {
+    var root = Directory(cacheRoot ?? defaultRoot);
+    if (!root.existsSync()) return 0;
+    var expiry = (now ?? DateTime.now()).subtract(forget);
+    var swept = 0;
+    for (var entity in root.listSync()) {
+      if (entity is! Directory) continue;
+      if (keep != null && p.equals(entity.path, keep)) continue;
+      try {
+        var marker = File(p.join(entity.path, _marker));
+        // No marker is a checkout that died between `worktree add` and
+        // `resolve`, and `_ensureLocked` already throws those away when it
+        // meets them. Left alone here: it is somebody's half-built base until
+        // the run that is building it says otherwise.
+        if (!marker.existsSync()) continue;
+        if (!marker.statSync().modified.isBefore(expiry)) continue;
+        await _remove(repoRoot: repoRoot, path: entity.path);
+        var lock = File('${entity.path}.lock');
+        if (lock.existsSync()) lock.deleteSync();
+        swept++;
+      } on FileSystemException {
+        // A base another process is removing at the same moment. The sweep is
+        // a courtesy, not a guarantee.
+      }
+    }
+    return swept;
+  }
 
   static Future<void> _remove({
     required String repoRoot,
@@ -198,7 +276,9 @@ class BaseCheckout {
     ]);
     if (removed.exitCode == 0) return;
     // git refuses a path it never registered, which is exactly the state a
-    // half-created checkout is in. The directory still has to go.
+    // half-created checkout is in — and the state every base belonging to
+    // *another* repository is in, as far as this one is concerned. The
+    // directory still has to go.
     var directory = Directory(path);
     if (directory.existsSync()) directory.deleteSync(recursive: true);
     await runGit(['-C', repoRoot, 'worktree', 'prune']);

@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
 import 'closure.dart';
+import 'lock_inputs.dart';
 
 /// The pixel inputs no compile ever names, for the package at [packagePath].
 ///
@@ -27,17 +28,20 @@ import 'closure.dart';
 /// between two checkouts whose resolution is identical, and hashing it would
 /// turn every skip into a render. The lockfiles carry the same information
 /// with stable bytes.
+///
+/// **The lockfiles are not here either, and that is the one exception to
+/// "everything here decides every entry".** They decide every entry that
+/// *reaches* the package that moved and no others, so they are read per
+/// package by [LockInputs] and folded in per entry rather than once per
+/// checkout. Everything else in this list — the asset tree, the manifest, the
+/// `.arb` bundles — really is the same answer for all of them.
 List<String> pixelInputsOf({
   required String packagePath,
   required List<String> roots,
 }) {
   var paths = <String>{
     p.join(packagePath, 'pubspec.yaml'),
-    p.join(packagePath, 'pubspec.lock'),
     p.join(packagePath, 'l10n.yaml'),
-    // A workspace member resolves at the workspace root, so the lock that
-    // records its resolution can be at the top rather than beside it.
-    'pubspec.lock',
   };
   for (var root in roots) {
     paths.addAll(_declaredAssets(root, packagePath));
@@ -193,8 +197,10 @@ class SkipDecision {
   /// Decides for one entry, given the paths it was last compiled from.
   ///
   /// [pixels] are the inputs the compiler's own list does not name and that
-  /// still decide pixels: `pubspec.lock`, the asset manifest and every asset
-  /// it points at, the l10n bundles. **The bias is deliberate.** A path
+  /// still decide pixels: the asset manifest and every asset it points at,
+  /// the l10n bundles. [lock] is the resolution of the packages *this* entry
+  /// reaches — see [LockInputs], which is why it is per entry where [pixels]
+  /// is per checkout. **The bias is deliberate.** A path
   /// wrongly included costs one render; a path wrongly left out reports a
   /// regression as clean, and nothing downstream can detect it. When in
   /// doubt, include.
@@ -213,6 +219,7 @@ class SkipDecision {
     required String headRoot,
     PixelInputs? pixels,
     DigestCache? digests,
+    LockReach? lock,
   }) {
     var remembered = memo.recall(entryId);
     if (remembered == null) {
@@ -231,12 +238,12 @@ class SkipDecision {
       remembered,
       root: baseRoot,
       digests: digests,
-    ).merge(pixels?.inRoot(baseRoot));
+    ).merge(pixels?.inRoot(baseRoot)).merge(lock?.inRoot(baseRoot));
     var head = SourceClosure.of(
       remembered,
       root: headRoot,
       digests: digests,
-    ).merge(pixels?.inRoot(headRoot));
+    ).merge(pixels?.inRoot(headRoot)).merge(lock?.inRoot(headRoot));
     if (base.fingerprint == head.fingerprint) {
       return const SkipDecision(skip: true, changed: [], reason: null);
     }
@@ -292,4 +299,50 @@ Map<String, int> foldReasons(Iterable<String> reasons) {
       return byCount != 0 ? byCount : a.key.compareTo(b.key);
     }),
   );
+}
+
+/// One entry's slice of both checkouts' lockfiles.
+///
+/// The per-entry half of [LockInputs]: the packages the entry reaches, closed
+/// over their own dependencies, resolved against whichever side is being
+/// hashed. Built once per entry and asked twice, because the reach is a fact
+/// about the entry and the digests are facts about the checkouts.
+class LockReach {
+  const LockReach(this._byRoot, this._packages);
+
+  final Map<String, LockInputs> _byRoot;
+  final Set<String> _packages;
+
+  /// What this entry's reach contributes to a closure read from [root].
+  SourceClosure? inRoot(String root) {
+    var inputs = _byRoot[root];
+    return inputs == null ? null : SourceClosure(inputs.forPackages(_packages));
+  }
+}
+
+/// Both checkouts' lockfiles and their dependency graphs, read once.
+///
+/// The twin of [PixelInputs] and split for the same reason: a lockfile is the
+/// same file for every entry, and only the *slice* of it an entry carries
+/// differs. Reading it per entry would be one YAML parse of a thousand-line
+/// file per row.
+class LockSides {
+  LockSides({required this.packagePath, required List<String> roots})
+    : _inputs = {
+        for (var root in roots)
+          root: LockInputs.of(root: root, packagePath: packagePath),
+      },
+      // The reach is closed over the **head** graph, like every other shape
+      // the plan takes from one side: a branch that added a dependency should
+      // have the entry that uses it rendered, and the base has never heard of
+      // it.
+      _reach = ReachableLock.of(roots.first);
+
+  final String packagePath;
+  final Map<String, LockInputs> _inputs;
+  final ReachableLock _reach;
+
+  /// The slice an entry naming [packages] carries.
+  LockReach forPackages(Set<String> packages) =>
+      LockReach(_inputs, _reach.from(packages));
 }

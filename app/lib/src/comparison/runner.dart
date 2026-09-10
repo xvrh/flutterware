@@ -751,6 +751,12 @@ class _PlanInputs {
       packagePath: packagePath,
       roots: [headRoot, baseRoot],
     );
+    // Head first: the reach is closed over the head's dependency graph. See
+    // [LockSides].
+    var locks = LockSides(
+      packagePath: packagePath,
+      roots: [headRoot, baseRoot],
+    );
 
     var skipped = <String>[];
     var toRender = <String>[];
@@ -758,15 +764,20 @@ class _PlanInputs {
     var keys = <String, ({String base, String head})>{};
     for (var id in oneSided) {
       var file = files[id]!;
+      var lock = locks.forPackages(headGraph.packagesOf(file));
       keys[id] = (
-        base: _keyFor(id, baseGraph, baseRoot, file, pixels, digests),
-        head: _keyFor(id, headGraph, headRoot, file, pixels, digests),
+        base: _keyFor(id, baseGraph, baseRoot, file, pixels, lock, digests),
+        head: _keyFor(id, headGraph, headRoot, file, pixels, lock, digests),
       );
     }
     for (var id in ids) {
       var file = files[id]!;
       memo.remember(id, headGraph.closureOf(file));
 
+      // Which dependencies this entry could possibly be changed by. Taken
+      // from the head graph, like the closure above it and for the same
+      // reason.
+      var lock = locks.forPackages(headGraph.packagesOf(file));
       var decision = SkipDecision.of(
         entryId: id,
         memo: memo,
@@ -774,10 +785,11 @@ class _PlanInputs {
         headRoot: headRoot,
         pixels: pixels,
         digests: digests,
+        lock: lock,
       );
       keys[id] = (
-        base: _keyFor(id, baseGraph, baseRoot, file, pixels, digests),
-        head: _keyFor(id, headGraph, headRoot, file, pixels, digests),
+        base: _keyFor(id, baseGraph, baseRoot, file, pixels, lock, digests),
+        head: _keyFor(id, headGraph, headRoot, file, pixels, lock, digests),
       );
 
       if (decision.skip) {
@@ -812,6 +824,7 @@ class _PlanInputs {
     String root,
     String file,
     PixelInputs pixels,
+    LockReach lock,
     DigestCache digests,
   ) => ShotKey.of(
     kind: 'preview',
@@ -820,7 +833,7 @@ class _PlanInputs {
       graph.closureOf(file),
       root: root,
       digests: digests,
-    ).merge(pixels.inRoot(root)).fingerprint,
+    ).merge(pixels.inRoot(root)).merge(lock.inRoot(root)).fingerprint,
     sdk: sdkKey,
   );
 }

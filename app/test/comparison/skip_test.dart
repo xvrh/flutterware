@@ -311,7 +311,7 @@ void main() {
     // The inputs no compile names, and the leak they closed: a worktree that
     // changed only an asset computed its base's key, `has()` said yes, and
     // the comparison served the base's picture back as "same".
-    test('names the pubspec, the lockfiles and the declared assets', () {
+    test('names the pubspec and the declared assets', () {
       var head = checkout('head', {
         'pkg/pubspec.yaml':
             'name: pkg\n'
@@ -329,13 +329,16 @@ void main() {
         paths,
         containsAll([
           'pkg/pubspec.yaml',
-          'pkg/pubspec.lock',
-          'pubspec.lock',
           'pkg/assets/logo.png',
           'pkg/assets/icons/a.png',
           'pkg/assets/icons/b.png',
         ]),
       );
+      // **Not the lockfiles.** They are the one input here that does not
+      // decide every entry — only the entries that reach the package that
+      // moved — so they are read per package by `LockInputs` and folded in
+      // per entry instead. See `LockSides`.
+      expect(paths, isNot(contains('pubspec.lock')));
     });
 
     test('a directory asset is listed on every side and unioned', () {
@@ -414,10 +417,10 @@ void main() {
       expect(paths, isNot(contains('pkg/assets/.DS_Store')));
     });
 
-    test('a package with no flutter section still hashes its lockfiles', () {
+    test('a package with no flutter section still hashes its pubspec', () {
       var head = checkout('head4', {'pkg/pubspec.yaml': 'name: pkg\n'});
       var paths = pixelInputsOf(packagePath: 'pkg', roots: [head]);
-      expect(paths, containsAll(['pkg/pubspec.lock', 'pubspec.lock']));
+      expect(paths, contains('pkg/pubspec.yaml'));
     });
   });
 

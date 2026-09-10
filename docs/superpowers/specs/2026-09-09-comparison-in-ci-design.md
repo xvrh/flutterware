@@ -96,7 +96,7 @@ Measured 2026-09-09, the same two runs as the table above:
 The 295ms starts no process at all, so unlike run B's 2.6s it is the same
 number on a cold machine — which is the only column CI has.
 
-**(b) The CI cache list is short by two directories.**
+**(b) ✅ The CI cache list is short by two directories.**
 `docs/compare-in-ci.md` caches `~/.flutterware/shots` and stops. Run A → run C
 is the measurement that matters: a *brand new* base sha's harness came up
 inside an 8.9s scenario half in run C, against 60.5s in run A, because run A
@@ -111,6 +111,14 @@ had left a seed kernel behind. Add:
   base with the default branch, which is the same sha for every pull request
   open against it.
 
+**Built 2026-09-10, and the second bullet is wrong.** `kernels` is cached, with
+`restore-keys` so a lockfile change reuses the previous run's rather than
+starting empty. `bases` is **not**, and must not be: a base checkout is a real
+`git worktree` registered inside the repository's own `.git`, which a fresh CI
+checkout does not have — a restored one is a directory git does not believe in.
+The doc says so now, because it is exactly the optimisation somebody reads this
+section and tries.
+
 **(c) Scenario frames are not content-addressed.** `ScenariosRunner` takes a
 `ShotCache` and uses it for `cache.memo` — the closure memo — and nothing else.
 It never reads or writes a frame. So the base side of every scenario is
@@ -120,7 +128,7 @@ this since the beginning; it is what makes "five agents branched off one master
 sha share one set of pictures" true of one half only. With (a) and (c)
 together, the base side of a warm CI run disappears: no harness, no replay.
 
-**(d) `pubspec.lock` invalidates everything, by design, and the design can be
+**(d) ✅ `pubspec.lock` invalidates everything, by design, and the design can be
 narrowed.** `pixelInputsOf` folds the package lockfile and the workspace
 lockfile into a `PixelInputs` shared by every row, so one changed byte in a
 lockfile re-renders and re-replays the entire project. Run C, unedited from the
@@ -145,6 +153,45 @@ deliberately does not resolve them), close that set transitively over
 bump to a package nothing in the entry reaches then costs nothing, and a bump
 to one it does reach costs exactly what it costs today.
 
+**Built 2026-09-10.** `LockInputs` hashes each package's lock entry on its own,
+`ImportGraph.packagesOf` answers which packages an entry's closure names, and
+`ReachableLock` closes that over `.dart_tool/package_graph.json`. Measured on
+the same comparison the terminal above came from:
+
+| | rendered | skipped |
+|---|---|---|
+| before | 478 | 0 |
+| after | **188** | **145** |
+
+59.1s → 29.1s, and `because pubspec.lock differs` is gone from the reasons
+entirely. Where the lock *is* the reason it now says which dependency moved:
+`pubspec.lock#flutter_svg differs`.
+
+The reach is over-approximated at every step, because the bias is unchanged:
+both branches of a conditional import, unused imports, and — the part an
+import graph cannot see at all — packages named only in a **string**, which is
+how a dependency's *pictures* are reached. `Image.asset(…, package: 'icons')`
+and `'packages/icons/logo.png'` are both collected, and deliberately only
+those two shapes: `path`, `collection`, `clock`, `http` and `image` are all
+packages *and* ordinary words, and matching a bare literal anywhere would put
+half a catalog back inside every bump. Anything the split cannot answer — an
+unparseable lock, a checkout with no package graph — falls back to hashing the
+lockfiles whole, which is the old behaviour exactly.
+
+**One input was included and then measured out.** The lock's `sdks:` constraint
+belongs to no package, so "when in doubt, include" said every entry should
+carry it — and on a base whose Dart floor had moved, that one line put 145 of
+244 entries straight back into the render pass. It also cannot decide a pixel:
+a constraint is not a resolution, and both sides of a comparison render with
+the *same* SDK, the one the invocation named, which `ShotKey` already carries.
+What a raised floor really changes is the package's own language version, and
+that is declared in `pubspec.yaml` — which is a pixel input and stays one.
+
+`ShotKey.revision` moves to **v9**: a v8 key hashed the whole lockfile into
+every entry and a v9 key hashes a slice of it, so the two disagree for any
+project with more than one dependency. The pictures did not change; what a key
+*means* did.
+
 **(e) The halves are serialised.** `runComparison` awaits the previews half in
 full, then starts the scenarios half. They share a base checkout and nothing
 else. Overlap them — with the caveat in §2c about how many processes may be in
@@ -162,6 +209,21 @@ of them 553 MB. `BaseCheckout.dispose` carries its own confession —
 `shots` (2.7 GB) and `kernels` (2.0 GB) both sweep. `bases` should too: it is
 the largest of the three by four times, and a base whose sha nothing has
 compared against in a fortnight is a base nobody wants.
+
+**Built 2026-09-10.** `BaseCheckout.sweep` drops a base whose marker has not
+been touched in a fortnight, and `ensure` calls it — swept on use rather than
+on a schedule, for the reason `claimBuildDirectory` gives about its own
+siblings: a schedule needs a caller wired up and remembered, and this one
+cannot be forgotten. Reuse *touches* the marker, so the age is a last-used and
+not a created — without that, a base off master, written once and reused for
+weeks, is the first thing an age sweep takes.
+
+Age alone, no size budget, which is the one difference from the other two: a
+base is half a gigabyte, so pricing it means walking half a gigabyte to decide
+whether to keep it. It also crosses repositories — the directory is shared, so
+a sweep from one project takes another's expired bases, leaving a stale entry
+in that repository's `.git/worktrees` that its own next `ensure` already
+recovers from (`worktree add` fails, it prunes, it retries).
 
 ## 2. ✅ Several packages in one verdict
 
@@ -388,10 +450,11 @@ underlying cause turns out to be.
    trimming the export is about what the page weighs, and the rest of this was
    about what it says. It is the next one, with §3.3 (the scenario flow's
    pane) and the rails' own thumbnails.
-4. **The lockfile narrowing** (§1b d). Its own piece — it touches the skip rule,
-   which is the part of this feature least forgiving of a mistake.
-5. The cache-list documentation (§1b b), the base sweep (§1c) and the comment
-   table fix (§3.7) are independent of all of the above and of each other.
+4. ✅ **The lockfile narrowing** (§1b d). Its own piece — it touches the skip
+   rule, which is the part of this feature least forgiving of a mistake.
+   478 rendered → 188, on a comparison whose lockfile really had moved.
+5. ✅ The cache-list documentation (§1b b), the base sweep (§1c) and the comment
+   table fix (§3.7) — independent of all of the above and of each other.
 
 Deliberately not scheduled: caching scenario frames by `ShotKey` (§1b c). It is
 right, but with (1) landed the base harness mostly does not start at all, and
