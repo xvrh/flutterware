@@ -13,6 +13,7 @@ import 'package:flutterware/scene_authoring.dart';
 export 'package:flutterware/scene_authoring.dart' show videoStops;
 
 import '../../previews/catalog_render.dart';
+import '../../session/job.dart';
 
 /// Encodes a sequence of rendered frames into a video file, through `ffmpeg`.
 ///
@@ -108,7 +109,7 @@ class VideoEncoder {
         output,
       ]);
     } on ProcessException catch (error) {
-      throw StateError(
+      throw ActionRefusal(
         'video export needs `$executable` on PATH, and starting it failed: '
         '${error.message}',
       );

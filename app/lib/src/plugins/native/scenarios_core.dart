@@ -33,6 +33,7 @@ import '../../scenarios/runner.dart';
 import '../../scene/export/video.dart' show VideoEncoder;
 import '../../scenarios/web_export.dart';
 import '../../scenarios/web_report.dart';
+import '../../session/job.dart';
 import '../../utils/base_href.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -3831,7 +3832,7 @@ class ScenariosCore extends PluginCore {
     // and two of them pointed at the same one would each delete the other's
     // page halfway through copying it.
     if (_export != null) {
-      throw StateError(
+      throw ActionRefusal(
         'An export is already running. Wait for it, or close the worktree to '
         'stop it.',
       );
@@ -3928,7 +3929,9 @@ class ScenariosCore extends PluginCore {
   }) async {
     // Before anything is compiled or rendered. Learning that ffmpeg is absent
     // after a minute of rendering is a bad way to learn it.
-    if (!await VideoEncoder.available) throw StateError(VideoEncoder.missing);
+    if (!await VideoEncoder.available) {
+      throw ActionRefusal(VideoEncoder.missing);
+    }
 
     var paths = _requested(arguments);
     if (paths.length > 1) {
@@ -4026,7 +4029,7 @@ class ScenariosCore extends PluginCore {
       // mid-flow and looks like the app failing. The failure is the news.
       if (_filmFailure(report) case var failed?) {
         File(output).deleteSync();
-        throw StateError(
+        throw ActionRefusal(
           '`$scenario` did not finish, so there is no film:\n\n$failed',
         );
       }

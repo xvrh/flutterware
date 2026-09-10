@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../launcher_icon/model/role.dart';
 import '../../launcher_icon/model/scan.dart';
+import '../../session/job.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 import '../scan_cache.dart';
@@ -372,7 +373,7 @@ class LauncherIconCore extends PluginCore {
 
     await _cache.load((path, wanted));
     var failure = _cache.failureFor((path, wanted));
-    if (failure != null) throw StateError(failure);
+    if (failure != null) throw ActionRefusal(failure);
 
     return switch (actionId) {
       'inventory' => _inventory(path, wanted),
@@ -397,7 +398,7 @@ class LauncherIconCore extends PluginCore {
       return given;
     }
     if (packages.isEmpty) {
-      throw StateError('No packages are configured for $id.');
+      throw ActionRefusal('No packages are configured for $id.');
     }
     return packages.first;
   }
@@ -423,11 +424,13 @@ class LauncherIconCore extends PluginCore {
     var packageRoot = host.workspace.packageFor(path).absolutePath;
 
     if (flavor != null && !scan.flavors.any((f) => f.name == flavor)) {
-      throw StateError(
-        'No icon set "$flavor" in "$path" — nothing names it: no '
-        'flutter_launcher_icons-$flavor.yaml, no android/app/src/$flavor/ and '
-        'no AppIcon-$flavor.appiconset. '
-        'Found: ${scan.flavors.isEmpty ? 'none' : scan.flavors.map((f) => f.name).join(', ')}',
+      throw ArgumentError.value(
+        flavor,
+        'flavor',
+        'no icon set "$flavor" in "$path" — nothing names it: no '
+            'flutter_launcher_icons-$flavor.yaml, no android/app/src/$flavor/ '
+            'and no AppIcon-$flavor.appiconset. '
+            'Found: ${scan.flavors.isEmpty ? 'none' : scan.flavors.map((f) => f.name).join(', ')}',
       );
     }
 

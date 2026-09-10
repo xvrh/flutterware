@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 // nothing about what drew them — so a film uses the one the scene export
 // already has rather than a second copy of `ffmpeg`.
 import '../scene/export/video.dart';
+import '../session/job.dart';
 
 /// Encodes a film **while the harness is still drawing it**.
 ///
@@ -112,7 +113,7 @@ class ScenarioFilmEncode {
         if (timeline != null) {
           if (fed >= timeline.frames) break;
         } else if (over) {
-          throw StateError(
+          throw ActionRefusal(
             'the render ended without writing ${ScenarioFilmNames.timeline} — '
             'it wrote $fed frames and then stopped, so there is no film to '
             'encode. The scenario failed; its own error says why.',
@@ -145,7 +146,7 @@ class ScenarioFilmEncode {
     var file = File(p.join(directory, ScenarioFilmNames.head));
     while (!file.existsSync()) {
       if (over()) {
-        throw StateError(
+        throw ActionRefusal(
           'the render drew no frames at all, so there is nothing to encode. '
           'The scenario failed before its first screen; its own error says '
           'why.',

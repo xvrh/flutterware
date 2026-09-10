@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterware/render_client.dart';
 
+import '../../session/job.dart';
 import '../../ui/action_button.dart';
 import '../../ui/design/design.dart';
 import '../../ui/empty_state.dart';
@@ -135,7 +136,7 @@ class _RendersPanelState extends State<_RendersPanel> {
   RenderSize _requireSize() {
     var size = _size;
     if (size == null) {
-      throw StateError('size takes numbers, as 400 x 300');
+      throw ActionRefusal('size takes numbers, as 400 x 300');
     }
     return size;
   }

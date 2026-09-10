@@ -603,7 +603,7 @@ flutter_native_splash:
       // for whichever config sorted first.
       await expectLater(
         c.invoke('artifacts', arguments: {'flavor': 'nope'}),
-        throwsA(isA<StateError>()),
+        throwsA(isA<ArgumentError>()),
       );
     });
 

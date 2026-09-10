@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../../embedder/flutter_cache.dart';
 import '../../render_bundle/bundle_builder.dart';
+import '../../session/job.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
 
@@ -101,14 +102,14 @@ class RendersCore extends PluginCore {
     var pool = await laneFor(package).ensureStarted();
     var info = pool.points.where((info) => info.name == point).firstOrNull;
     if (info == null) {
-      throw StateError(
+      throw ActionRefusal(
         'no render point named "$point"; ${targetFor(package)} declares: '
         '${pool.points.map((info) => info.name).join(', ')}',
       );
     }
     if (info.kind == RenderPointKind.document) {
       if (format != 'pdf') {
-        throw StateError(
+        throw ActionRefusal(
           '"$point" is a document render, which only produces pdf',
         );
       }
@@ -116,7 +117,7 @@ class RendersCore extends PluginCore {
       return (text: '', bytes: result.bytes, warnings: result.warnings);
     }
     if (size == null) {
-      throw StateError('a widget render needs a size');
+      throw ActionRefusal('a widget render needs a size');
     }
     switch (format) {
       case 'svg':
@@ -148,7 +149,7 @@ class RendersCore extends PluginCore {
         );
         return (text: '', bytes: result.bytes, warnings: result.warnings);
       default:
-        throw StateError('format is svg, png or pdf, not "$format"');
+        throw ActionRefusal('format is svg, png or pdf, not "$format"');
     }
   }
 
@@ -361,7 +362,7 @@ class RendersCore extends PluginCore {
 
   Future<Artifact> _renderAction(Map<String, Object?> arguments) async {
     if (packages.isEmpty) {
-      throw StateError(
+      throw ActionRefusal(
         'this plugin has no packages; add them in tool/flutterware.dart',
       );
     }

@@ -7,6 +7,7 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/server.dart';
 import 'package:meta/meta.dart';
 
+import '../../session/job.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -837,7 +838,7 @@ String? curlCommand(
 String _shellQuote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 
 /// Sends a `sql` command — `explain`, `requery` — into a live server, which
-/// runs it on its own connection and answers. Throws [StateError] when not
+/// runs it on its own connection and answers. Throws [ActionRefusal] when not
 /// attached and [ServerRequestException] when the server has no such handler
 /// or the handler failed; the panel shows both as text, not as crashes.
 ///
@@ -856,7 +857,7 @@ Future<Map<String, Object?>> sqlCommand(
 ) {
   var client = server.client;
   if (client == null) {
-    throw StateError('Not attached to ${server.handle.name}.');
+    throw ActionRefusal('Not attached to ${server.handle.name}.');
   }
   return client.request('sql', method, {
     'query': occurrence.payload['query'],

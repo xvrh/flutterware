@@ -13,6 +13,7 @@ import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:flutterware_app/src/session/job.dart';
 import 'package:path/path.dart' as p;
 
 /// Everything asserted here is read through [PluginReport] — the same data the
@@ -900,7 +901,7 @@ Widget added() => const Placeholder();
       await expectLater(
         subject.buildWeb(),
         throwsA(
-          isA<StateError>().having(
+          isA<ActionRefusal>().having(
             (e) => e.message,
             'message',
             contains('already running'),
@@ -915,7 +916,7 @@ Widget added() => const Placeholder();
       await expectLater(
         first,
         throwsA(
-          isA<StateError>().having(
+          isA<ActionRefusal>().having(
             (e) => e.message,
             'message',
             contains('cancelled'),
@@ -933,7 +934,7 @@ Widget added() => const Placeholder();
       await expectLater(
         subject.invoke('build-web'),
         throwsA(
-          isA<StateError>().having(
+          isA<ActionRefusal>().having(
             (e) => e.message,
             'message',
             allOf(

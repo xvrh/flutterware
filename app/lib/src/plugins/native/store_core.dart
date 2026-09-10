@@ -10,6 +10,7 @@ import 'package:yaml/yaml.dart';
 import '../../scenarios/axes.dart';
 import '../../scenarios/opaque_png.dart';
 import '../../scenarios/runner.dart';
+import '../../session/job.dart';
 import '../../store/frame_runner.dart';
 import '../../store/tree.dart';
 import '../plugin_core.dart';
@@ -547,7 +548,7 @@ class StoreCore extends PluginCore {
           ? outputOf(app)
           : p.join(redirect, nameOf(app));
       if (!Directory(output).existsSync()) {
-        throw StateError(
+        throw ActionRefusal(
           'nothing exported to "$output" yet. Run `store export` first — '
           'opening a directory that is not there would look like an export '
           'that produced nothing.',

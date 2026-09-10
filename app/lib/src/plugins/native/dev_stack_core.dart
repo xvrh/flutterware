@@ -6,6 +6,7 @@ import 'package:flutterware/plugins.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../../session/job.dart';
 import '../../ui/age.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
@@ -535,12 +536,12 @@ class DevStackCore extends PluginCore {
   /// it.
   Future<DevStackRunResult> _transition(StackRun? run, String what) async {
     if (run == null) {
-      throw StateError(
+      throw ActionRefusal(
         'No `$what` is declared for this stack, so flutterware can only watch '
         'it. Add one to tool/flutterware.dart, or run it yourself.',
       );
     }
-    if (_problemWith(run) case var problem?) throw StateError(problem);
+    if (_problemWith(run) case var problem?) throw ActionRefusal(problem);
     return _run(_argvFor(run), busy: what, thenProbe: true);
   }
 
@@ -557,7 +558,9 @@ class DevStackCore extends PluginCore {
             : 'no such command. Declared: ${declared.join(', ')}',
       );
     }
-    if (_problemWith(command.run) case var problem?) throw StateError(problem);
+    if (_problemWith(command.run) case var problem?) {
+      throw ActionRefusal(problem);
+    }
     return _run(
       [
         ..._argvFor(command.run),
@@ -591,7 +594,9 @@ class DevStackCore extends PluginCore {
     bool thenProbe = false,
   }) async {
     if (_busy != null) {
-      throw StateError('The stack is already $_busy. Wait for it to finish.');
+      throw ActionRefusal(
+        'The stack is already $_busy. Wait for it to finish.',
+      );
     }
     _busy = busy;
     _busySince = DateTime.now();

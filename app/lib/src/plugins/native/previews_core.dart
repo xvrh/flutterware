@@ -41,6 +41,7 @@ import '../../delta/branch_delta_controller.dart';
 import '../../delta/delta_painting.dart';
 import '../../inspect/lens.dart';
 import '../../inspect/screen_read.dart';
+import '../../session/job.dart';
 import '../../utils/base_href.dart';
 import '../plugin_core.dart';
 import 'previews_address.dart';
@@ -1941,7 +1942,7 @@ class PreviewsCore extends PluginCore {
     var packagePath = _requireOnePackage(package);
     await _scan(packagePath);
     if (_failures[packagePath] case var failure?) {
-      throw StateError('$packagePath could not be scanned: $failure');
+      throw ActionRefusal('$packagePath could not be scanned: $failure');
     }
 
     // One at a time per package. Two builds share a generated source directory,
@@ -1950,7 +1951,7 @@ class PreviewsCore extends PluginCore {
     // sources out from under it, and the first fails pointing at files that no
     // longer exist.
     if (_builds.containsKey(packagePath)) {
-      throw StateError(
+      throw ActionRefusal(
         'A web build is already running for $packagePath. Wait for it, or '
         'close the worktree to stop it.',
       );
@@ -2030,7 +2031,7 @@ class PreviewsCore extends PluginCore {
     }
     if (packages.length == 1) return packages.single;
     if (packages.isEmpty) {
-      throw StateError('No packages are declared for Previews.');
+      throw ActionRefusal('No packages are declared for Previews.');
     }
     throw ArgumentError.value(
       null,

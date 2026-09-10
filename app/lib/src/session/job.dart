@@ -213,12 +213,6 @@ class JobResult {
   bool get ok => error == null;
 }
 
-/// A failed job, as a line a person or a model can act on.
-///
-/// One function because both renderers need it and they had a copy each — and
-/// the copies agreed on dropping the most useful part. `ArgumentError` keeps
-/// the offending value in `invalidValue`, and "expected red or blue" without
-/// "you said purple" is half an error message.
 /// A failure that is a fact about the project, not a fault in flutterware.
 ///
 /// The marker decides whether a stack is printed, and that is all it is for.
@@ -234,6 +228,33 @@ class JobResult {
 /// Implement this on the exceptions that say so.
 abstract interface class ProjectFault implements Exception {}
 
+/// A plugin action declining, in a sentence written to be read.
+///
+/// For the conditions a caller is expected to meet: a package with no splash
+/// config, a still scene asked for a clip, a build already running. Those are
+/// answers, not faults. A `StateError` put *"Bad state:"* in front of them on
+/// every surface that prints the error as it is — `fw`, an MCP reply, a
+/// panel's error text — and `fw` printed a stack out of this package after.
+///
+/// A malformed or unknown *argument* is still an `ArgumentError`, which `fw`
+/// answers with the usage exit code. This is for everything else the user can
+/// fix and flutterware cannot: exit 1, no stack. Keep `StateError` for what
+/// only a bug in this package could reach.
+class ActionRefusal implements ProjectFault {
+  ActionRefusal(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// A failed job, as a line a person or a model can act on.
+///
+/// One function because both renderers need it and they had a copy each — and
+/// the copies agreed on dropping the most useful part. `ArgumentError` keeps
+/// the offending value in `invalidValue`, and "expected red or blue" without
+/// "you said purple" is half an error message.
 String describeJobError(Object error) {
   if (error is! ArgumentError) return '$error';
   var named = error.name == null

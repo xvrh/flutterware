@@ -18,6 +18,7 @@ import 'package:flutterware_app/src/scene/tokens_file.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:flutterware_app/src/session/job.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -170,7 +171,7 @@ final brandTokens = [
           arguments: {'file': fixture, 'library': 'demo/broken.tokens.dart'},
         ),
         throwsA(
-          isA<StateError>().having(
+          isA<ActionRefusal>().having(
             (e) => e.message,
             'message',
             contains('refused by the library reader'),
@@ -328,7 +329,7 @@ final brandTokens = [
     );
     expect(
       () => core().invoke('newGroup', arguments: {'folder': 'lib/scenes/m'}),
-      throwsA(isA<StateError>()),
+      throwsA(isA<ActionRefusal>()),
     );
   });
 
@@ -466,7 +467,7 @@ final brandTokens = [
     expect(
       () => core().invoke('video', arguments: {'scene': 'StillScene'}),
       throwsA(
-        isA<StateError>().having(
+        isA<ActionRefusal>().having(
           (e) => e.message,
           'message',
           contains('has no motion'),
@@ -592,7 +593,7 @@ final ${tokensSymbolFor(libraryPath)} = [
     expect(
       () => core().invoke('video', arguments: {'scene': 'BannerScene'}),
       throwsA(
-        isA<StateError>().having(
+        isA<ActionRefusal>().having(
           (e) => e.message,
           'message',
           allOf(contains('no scene player'), contains('demo/')),

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/scene/export/video.dart';
 import 'package:flutterware_app/src/scenarios/film_encode.dart';
+import 'package:flutterware_app/src/session/job.dart';
 import 'package:path/path.dart' as p;
 
 /// Encoding a film while the harness is still writing it. The producer here is
@@ -130,7 +131,7 @@ void main() {
         poll: const Duration(milliseconds: 5),
       ).drain(render),
       throwsA(
-        isA<StateError>().having(
+        isA<ActionRefusal>().having(
           (e) => e.message,
           'message',
           contains('ended without writing'),
@@ -149,7 +150,7 @@ void main() {
         poll: const Duration(milliseconds: 5),
       ).drain(Future<void>.value()),
       throwsA(
-        isA<StateError>().having(
+        isA<ActionRefusal>().having(
           (e) => e.message,
           'message',
           contains('drew no frames at all'),

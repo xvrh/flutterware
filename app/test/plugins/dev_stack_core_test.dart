@@ -13,6 +13,7 @@ import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
+import 'package:flutterware_app/src/session/job.dart';
 import 'package:path/path.dart' as p;
 
 /// The core against a scripted `runProcess`, which is the seam that keeps this
@@ -385,7 +386,7 @@ void main() {
       core.runProcess = (command, {workingDirectory}) => completer.future;
       var first = core.start();
       expect(core.busy, 'start');
-      await expectLater(core.stop(), throwsStateError);
+      await expectLater(core.stop(), throwsA(isA<ActionRefusal>()));
       completer.complete(ProcessResult(0, 0, '', ''));
       await first;
       expect(core.busy, isNull);
@@ -433,7 +434,7 @@ void main() {
           ).config,
         );
         expect(core.canControl, isFalse);
-        await expectLater(core.start(), throwsStateError);
+        await expectLater(core.start(), throwsA(isA<ActionRefusal>()));
         expect([for (var a in core.report.actions) a.id], ['status']);
         core.dispose();
       },

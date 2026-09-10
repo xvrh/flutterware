@@ -12,6 +12,7 @@ import 'package:meta/meta.dart';
 
 import '../embedder/build_directory.dart';
 import '../embedder/tester_host.dart';
+import '../session/job.dart';
 import 'axes.dart';
 import 'discovery.dart';
 import 'harness_entrypoint.dart';
@@ -117,7 +118,7 @@ class _ScenarioProgram extends TesterProgram {
     ).scan();
     var files = {for (var ref in scan.scenarios) ref.file}.toList()..sort();
     if (files.isEmpty) {
-      throw StateError(
+      throw ActionRefusal(
         'No scenarios found under $directory. '
         "Write one with scenario('…', (s) async { … }).",
       );

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
+import '../../session/job.dart';
 import '../../splash/model/color.dart';
 import '../../splash/model/fingerprint.dart';
 import '../../splash/model/generated.dart';
@@ -531,7 +532,7 @@ class SplashCore extends PluginCore {
 
     await _cache.load(path);
     var failure = _cache.failureFor(path);
-    if (failure != null) throw StateError(failure);
+    if (failure != null) throw ActionRefusal(failure);
 
     return switch (actionId) {
       'describe' => _describe(path, arguments),
@@ -556,7 +557,7 @@ class SplashCore extends PluginCore {
       return given;
     }
     if (packages.isEmpty) {
-      throw StateError('No packages are configured for $id.');
+      throw ActionRefusal('No packages are configured for $id.');
     }
     return packages.first;
   }
@@ -569,13 +570,16 @@ class SplashCore extends PluginCore {
     var flavor = arguments['flavor'];
     var wanted = flavor is String && flavor.isNotEmpty ? flavor : null;
     var config = scan.forFlavor(wanted);
-    if (config == null) {
-      throw StateError(
-        wanted == null
-            ? 'No flutter_native_splash config in "$path".'
-            : 'No flutter_native_splash-$wanted.yaml in "$path". '
-                  'Found: ${scan.flavors.isEmpty ? 'none' : scan.flavors.join(', ')}',
+    if (config == null && wanted != null) {
+      throw ArgumentError.value(
+        wanted,
+        'flavor',
+        'no flutter_native_splash-$wanted.yaml in "$path". '
+            'Found: ${scan.flavors.isEmpty ? 'none' : scan.flavors.join(', ')}',
       );
+    }
+    if (config == null) {
+      throw ActionRefusal('No flutter_native_splash config in "$path".');
     }
     return config;
   }
@@ -643,7 +647,7 @@ class SplashCore extends PluginCore {
     await _cache.reload(path);
 
     var failure = _cache.failureFor(path);
-    if (failure != null) throw StateError(failure);
+    if (failure != null) throw ActionRefusal(failure);
     return before != _fingerprints[path];
   }
 

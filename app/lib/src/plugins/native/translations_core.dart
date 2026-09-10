@@ -5,6 +5,7 @@ import 'package:flutterware/plugins.dart';
 import 'package:flutterware/translations.dart';
 import 'package:path/path.dart' as p;
 
+import '../../session/job.dart';
 import '../../translations/max_length.dart';
 import '../../translations/exporter.dart';
 import '../../translations/loader.dart';
@@ -609,11 +610,11 @@ class TranslationsCore extends PluginCore {
     var stopwatch = Stopwatch()..start();
     var path = _requested(arguments);
     await _cache.load(path);
-    if (_cache.failureFor(path) case var failure?) throw StateError(failure);
+    if (_cache.failureFor(path) case var failure?) throw ActionRefusal(failure);
 
     var catalogs = _cache[path] ?? const <String, LoadedCatalog>{};
     if (catalogs.isEmpty) {
-      throw StateError(
+      throw ActionRefusal(
         'Package "$path" declares no translation catalogs. Add them to its '
         'TranslationsPackage in tool/flutterware.dart.',
       );
@@ -638,7 +639,7 @@ class TranslationsCore extends PluginCore {
       _ => [templateFor(path)],
     };
     if (languages.isEmpty) {
-      throw StateError(
+      throw ActionRefusal(
         'No locales to run. The declared catalogs matched no files — check '
         'their `files:` globs, which are relative to the package.',
       );
@@ -951,7 +952,7 @@ class TranslationsCore extends PluginCore {
     if (requested == null) {
       if (packages.length == 1) return packages.single;
       if (packages.isEmpty) {
-        throw StateError(
+        throw ActionRefusal(
           'No packages are declared for this plugin. Add one to '
           'Translations(packages: …) in tool/flutterware.dart.',
         );

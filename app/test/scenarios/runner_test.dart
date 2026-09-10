@@ -9,6 +9,7 @@ import 'package:flutterware_app/src/scenarios/authoring.dart';
 import 'package:flutterware_app/src/scenarios/axes.dart';
 import 'package:flutterware_app/src/scenarios/harness_entrypoint.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
+import 'package:flutterware_app/src/session/job.dart';
 import 'package:path/path.dart' as p;
 
 /// End-to-end: the real `examples/example` package, a real `flutter_tester`,
@@ -1007,7 +1008,7 @@ void main() {
       flutterSdkRoot: flutterRoot,
     );
     try {
-      await expectLater(runner.list(), throwsA(isA<StateError>()));
+      await expectLater(runner.list(), throwsA(isA<ActionRefusal>()));
 
       // The fix: writing the scenario the runner complained about and asking
       // again starts it, rather than replaying the old complaint forever.
