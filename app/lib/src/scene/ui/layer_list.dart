@@ -12,12 +12,13 @@ import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
 import '../../ui/menu.dart';
+import '../../ui/picker.dart';
 import '../../ui/popover.dart';
 import '../../ui/tappable.dart';
 import '../layer_presets.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
-import 'swatches.dart';
+import 'paint_field.dart';
 
 /// What a change to the stack is: the whole next list, with the words for
 /// the undo entry it makes.
@@ -74,10 +75,15 @@ class _SceneLayerListState extends State<SceneLayerList> {
     widget.onChanged(next, label: label, mergeKey: mergeKey);
   }
 
-  void _replace(int i, TextLayer layer, {String? mergeKey}) {
+  void _replace(
+    int i,
+    TextLayer layer, {
+    String label = 'Layer',
+    String? mergeKey,
+  }) {
     var next = [..._layers];
     next[i] = layer;
-    _write('Layer', next, mergeKey: mergeKey);
+    _write(label, next, mergeKey: mergeKey);
   }
 
   void _add(TextLayer layer) {
@@ -322,6 +328,14 @@ class _SceneLayerListState extends State<SceneLayerList> {
     };
     var notes = [
       if (layer.paint == null) 'text colour',
+      if (layer.paint case SceneGradient g)
+        switch (g) {
+          LinearPaint() => 'linear',
+          RadialPaint() => 'radial',
+          SweepPaint() => 'sweep',
+        },
+      if (layer.box == SceneLayerBox.line && layer.paint is SceneGradient)
+        'per line',
       if (layer.blur > 0) 'blur ${_short(layer.blur)}',
       if (layer.dx != 0 || layer.dy != 0)
         '${_short(layer.dx)},${_short(layer.dy)}',
@@ -334,7 +348,6 @@ class _SceneLayerListState extends State<SceneLayerList> {
       v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
 
   Widget _detail(BuildContext context, int i, TextLayer layer) {
-    var caption = context.type.caption.copyWith(color: context.colors.mut2);
     return Padding(
       padding: const EdgeInsets.only(
         left: FwSpacing.xl,
@@ -344,27 +357,37 @@ class _SceneLayerListState extends State<SceneLayerList> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (layer.paint case SceneGradient _) ...[
-            Text('a gradient, from the file', style: caption),
-            const Gap(FwSpacing.xs),
-            Tappable(
-              onTap: () => _replace(i, layer.withPaint(null)),
-              child: Text(
-                'make it the text colour',
-                style: caption.copyWith(color: context.colors.accent),
+          ScenePaintField(
+            paint: layer.paint,
+            own: SceneColor(widget.color.toARGB32()),
+            onChanged: (next, {required label, mergeKey}) => _replace(
+              i,
+              layer.withPaint(next),
+              label: label,
+              mergeKey: mergeKey == null ? null : 'layer:$i:paint:$mergeKey',
+            ),
+          ),
+          if (layer.paint is SceneGradient) ...[
+            const Gap(FwSpacing.sm),
+            _labelled(
+              context,
+              'Laid across',
+              FwPicker<SceneLayerBox>(
+                key: const ValueKey('layer:box'),
+                choices: const [
+                  FwChoice(value: SceneLayerBox.text, label: 'The whole text'),
+                  FwChoice(
+                    value: SceneLayerBox.line,
+                    label: 'Each line',
+                    detail: 'every line runs the whole gradient',
+                  ),
+                ],
+                selected: layer.box,
+                onChanged: (b) =>
+                    _replace(i, layer.copyWith(box: b), label: 'Layer box'),
               ),
             ),
-          ] else
-            SceneColorField(
-              current: switch (layer.paint) {
-                SolidPaint(:var color) => color,
-                _ => null,
-              },
-              onPick: (c) => _replace(
-                i,
-                layer.withPaint(c == null ? null : SolidPaint(c)),
-              ),
-            ),
+          ],
           const Gap(FwSpacing.sm),
           if (layer case StrokeLayer stroke)
             _number(
@@ -469,4 +492,21 @@ class _SceneLayerListState extends State<SceneLayerList> {
     onChanged: apply,
     onCommit: apply,
   );
+
+  /// A control under a caption, the way [SceneNumberField] labels itself —
+  /// so a picker in this column reads as the same kind of row as a number.
+  Widget _labelled(BuildContext context, String label, Widget control) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: FwSpacing.xs),
+            child: Text(
+              label,
+              style: context.type.caption.copyWith(color: context.colors.mut2),
+            ),
+          ),
+          control,
+        ],
+      );
 }
