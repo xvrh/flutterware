@@ -70,7 +70,7 @@ class ScenePlugin extends NativePlugin<SceneCore> {
           flutterSdkRoot: host.workspace.flutterSdk.root,
           projectRoot: p.join(host.worktree.path, package),
           worktreeRoot: host.worktree.path,
-          connectToDaemon: CompilerDaemonClient.connect,
+          connectToDaemon: CompilerDaemonClient.connector,
         );
         unawaitedStart(session);
         return session;

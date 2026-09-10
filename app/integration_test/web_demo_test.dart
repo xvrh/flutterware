@@ -42,7 +42,7 @@ void main() {
   setUpAll(() async {
     packageRoot = Directory.current.path;
     expect(
-      File(p.join(packageRoot, 'lib', 'main_demo_web.dart')).existsSync(),
+      File(p.join(packageRoot, 'tool', 'demo', 'build_web.dart')).existsSync(),
       isTrue,
       reason: 'run from app/: cd app && fvm dart test integration_test',
     );
@@ -167,6 +167,15 @@ void main() {
       what: 'the zoom readout to move off ${before.text} after cmd+wheel',
     );
     await screen.shot('zoomed-with-the-wheel');
+
+    // Previews is not recorded: the example's entries are compiled into the
+    // page and drawn by the panel as widgets of this very program.
+    await screen.tap('Previews');
+    await screen.waitFor('Buttons');
+    await screen.tap('Buttons');
+    await screen.settle();
+    await screen.shot('previews');
+    await screen.waitFor('Filled');
 
     // A plugin with nothing recorded says so, rather than reaching for a
     // process or a disk.

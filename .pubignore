@@ -10,6 +10,9 @@ examples/
 # studio's own tests and web page, never of a consumer's install. It grows
 # with every plugin recorded, and nothing in the archive reads it.
 app/demo/
+# The studio's web demo package: built by CI, deployed to Pages, never
+# installed by anyone.
+web_demo/
 
 # `docs/` is the repo's own tree: 4 MB of design specs that produced the code,
 # plus the generated capability reference. The README links it by relative path

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:path/path.dart' as p;
 
-/// Builds the studio's web demo: `lib/main_demo_web.dart` compiled for the
+/// Builds the studio's web demo: `web_demo/demo/main.dart` compiled for the
 /// web, with the recording copied beside it.
 ///
 /// ```sh
@@ -32,6 +32,7 @@ Future<void> main(List<String> args) async {
     }
   }
   var packageRoot = p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
+  var demo = p.join(p.dirname(packageRoot), 'web_demo');
   var out = p.join(packageRoot, 'build', 'web');
   var sdk = await FlutterSdkPath.findSdk();
   if (sdk == null) {
@@ -40,20 +41,34 @@ Future<void> main(List<String> args) async {
     );
     exit(1);
   }
+  // The example's previews, as a table the page compiles in — regenerated
+  // on every build so the page never ships a stale one.
+  var generated = await Process.start(
+    sdk.dart,
+    ['run', 'tool/demo/web_entries.dart'],
+    workingDirectory: packageRoot,
+    mode: ProcessStartMode.inheritStdio,
+  );
+  if (await generated.exitCode case var code when code != 0) exit(code);
+  // Built from the demo's own package, which imports both this one and the
+  // example's previews. The output lands here, where the deploy and the
+  // browser test expect it.
   var result = await Process.start(
     sdk.flutter,
     [
       'build',
       'web',
       '-t',
-      'lib/main_demo_web.dart',
+      'demo/main.dart',
+      '--output',
+      out,
       '--base-href',
       baseHref,
       // Leaves out the service worker Flutter is retiring, which only ever
       // showed up as a console error on this page.
       '--pwa-strategy=none',
     ],
-    workingDirectory: packageRoot,
+    workingDirectory: demo,
     mode: ProcessStartMode.inheritStdio,
   );
   var code = await result.exitCode;

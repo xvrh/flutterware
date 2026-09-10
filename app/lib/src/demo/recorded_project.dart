@@ -27,7 +27,10 @@ import 'package:flutterware/src/log_client.dart';
 import '../context.dart';
 import '../plugins/manifest_loader.dart';
 import '../plugins/native/icon_plugin.dart';
+import '../plugins/native/previews_plugin.dart';
 import '../plugins/native/scenarios_plugin.dart';
+import '../previews/discovery.dart' show ScanResult;
+import '../previews/inline_guest.dart';
 import '../plugins/native_plugin.dart';
 import '../plugins/plugin_core.dart';
 import '../plugins/registry.dart';
@@ -74,6 +77,7 @@ PluginManifest recordedManifest() {
 /// a label and the app-tool directory is never listed.
 ShellController recordedShell({
   required Recording recording,
+  InlinePreviews? previews,
   AppContext? appContext,
   FlutterSdkPath? flutterSdk,
   PluginManifest? manifest,
@@ -90,11 +94,11 @@ ShellController recordedShell({
     flutterSdk: flutterSdk ?? FlutterSdkPath('$recordedProjectRoot/flutter'),
     registry: PluginRegistry({
       for (var plugin in declared.plugins)
-        plugin.id: _recordedPanel(plugin.id, recording),
+        plugin.id: _recordedPanel(plugin.id, recording, previews),
     }),
     coreRegistry: PluginCoreRegistry({
       for (var plugin in declared.plugins)
-        plugin.id: _recordedCore(plugin.id, recording),
+        plugin.id: _recordedCore(plugin.id, recording, previews),
     }),
     manifestLoader: RecordedManifestLoader(declared),
     discovery: WorktreeDiscovery(runProcess: _recordedGit),
@@ -144,38 +148,64 @@ Future<ProcessResult> _recordedGit(
 
 /// The live core over the recording, for a plugin with one behind it; a
 /// quiet [RecordedCore] for the rest.
-PluginCoreFactory _recordedCore(String pluginId, Recording recording) =>
-    switch (pluginId) {
-      launcherIconPluginId => (host) => LauncherIconCore(
-        host,
-        scan: recordedIconScanner(recording),
-      ),
-      scenariosPluginId => (host) => ScenariosCore(
-        host,
-        scan: recordedScenarioScan(recording),
-        runner: recordedScenarioRunner(recording),
-      ),
-      _ => RecordedCore.new,
-    };
+PluginCoreFactory _recordedCore(
+  String pluginId,
+  Recording recording,
+  InlinePreviews? previews,
+) => switch (pluginId) {
+  launcherIconPluginId => (host) => LauncherIconCore(
+    host,
+    scan: recordedIconScanner(recording),
+  ),
+  scenariosPluginId => (host) => ScenariosCore(
+    host,
+    scan: recordedScenarioScan(recording),
+    runner: recordedScenarioRunner(recording),
+  ),
+  // Previews is not recorded: its entries are compiled into this program
+  // and the scan is the table of them.
+  uiCatalogPluginId when previews != null => (host) => PreviewsCore(
+    host,
+    scan: ({
+      required projectRoot,
+      required roots,
+      required previewAnnotations,
+    }) async => ScanResult(entries: previews.entries, diagnostics: const []),
+  ),
+  _ => RecordedCore.new,
+};
 
 /// The live panel, reading its pictures from the recording; [NotRecordedPlugin]
 /// for a plugin with nothing behind it.
-NativePluginFactory _recordedPanel(String pluginId, Recording recording) =>
-    switch (pluginId) {
-      launcherIconPluginId => panelFor<LauncherIconCore>(
-        (core) => LauncherIconPlugin(core, image: recordedIconImage(recording)),
-      ),
-      scenariosPluginId => panelFor<ScenariosCore>(
-        (core) => ScenariosPlugin(
-          core,
-          // Nothing on disk to watch, and no disk.
-          watchSources: (path, {required recursive}) => const Stream.empty(),
-          artifacts: recording,
-          appIcon: recordedScenarioAppIcon(recording),
-        ),
-      ),
-      _ => panelFor<RecordedCore>(NotRecordedPlugin.new),
-    };
+NativePluginFactory _recordedPanel(
+  String pluginId,
+  Recording recording,
+  InlinePreviews? previews,
+) => switch (pluginId) {
+  launcherIconPluginId => panelFor<LauncherIconCore>(
+    (core) => LauncherIconPlugin(core, image: recordedIconImage(recording)),
+  ),
+  scenariosPluginId => panelFor<ScenariosCore>(
+    (core) => ScenariosPlugin(
+      core,
+      // Nothing on disk to watch, and no disk.
+      watchSources: (path, {required recursive}) => const Stream.empty(),
+      artifacts: recording,
+      appIcon: recordedScenarioAppIcon(recording),
+    ),
+  ),
+  uiCatalogPluginId when previews != null => panelFor<PreviewsCore>((core) {
+    var inline = InlinePreviewsGuest(previews);
+    return PreviewsPlugin(
+      core,
+      connectToDaemon: inline.connect,
+      launchGuest: inline.launch,
+      // Rendered by `flutter_tester`, which this host cannot spawn.
+      thumbnails: false,
+    );
+  }),
+  _ => panelFor<RecordedCore>(NotRecordedPlugin.new),
+};
 
 /// The manifest, without running anything.
 class RecordedManifestLoader implements ManifestLoader {

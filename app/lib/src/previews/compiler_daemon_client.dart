@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'daemon_address.dart';
 import 'protocol.dart';
+import 'catalog_source.dart';
 
 /// Talks to the compiler daemon, which runs as a separate plain-Dart process.
 ///
@@ -27,14 +28,18 @@ import 'protocol.dart';
 /// bug is gone and no longer the reason for anything here.)
 /// The shape of [CompilerDaemonClient.connect], for callers that take the
 /// connect as a parameter so a test can hold it open.
-typedef DaemonConnector = Future<(CompilerDaemonClient, DaemonReady)> Function({
+///
+/// The config is a thunk: building one reads the project's package config off
+/// the disk, and a connector that answers a catalog compiled into the host
+/// never needs it — nor has a disk to read it from.
+typedef DaemonConnector = Future<(CatalogSource, DaemonReady)> Function({
   required String dartExecutable,
-  required DaemonConfig config,
+  required DaemonConfig Function() config,
   void Function(String)? onLog,
   void Function(DaemonProgress)? onProgress,
 });
 
-class CompilerDaemonClient {
+class CompilerDaemonClient implements CatalogSource {
   CompilerDaemonClient._(
     this._socket,
     this.address,
@@ -120,6 +125,7 @@ class CompilerDaemonClient {
   /// `integration_test/compiler_daemon_test.dart` are what stand there now. A
   /// stream that is only a stream, and a value that is only a value, has no such
   /// window.
+  @override
   CatalogChanged? get lastChange => _lastChange;
   CatalogChanged? _lastChange;
 
@@ -129,6 +135,19 @@ class CompilerDaemonClient {
   /// Connects to the daemon for [config], starting one if none is serving.
   ///
   /// [dartExecutable] must be a real Dart VM — pass the Flutter SDK's `dart`.
+  /// [connect], in the shape of a [DaemonConnector].
+  static Future<(CatalogSource, DaemonReady)> connector({
+    required String dartExecutable,
+    required DaemonConfig Function() config,
+    void Function(String)? onLog,
+    void Function(DaemonProgress)? onProgress,
+  }) => connect(
+    dartExecutable: dartExecutable,
+    config: config(),
+    onLog: onLog,
+    onProgress: onProgress,
+  );
+
   static Future<(CompilerDaemonClient, DaemonReady)> connect({
     required String dartExecutable,
     required DaemonConfig config,
@@ -350,10 +369,12 @@ class CompilerDaemonClient {
   /// A plain broadcast stream, so listening subscribes synchronously and there
   /// is no window between the two. For what landed *before* a caller got here,
   /// read [lastChange] once after subscribing.
+  @override
   Stream<CatalogChanged> get catalogChanges => _changes.stream;
 
   /// Fires when a refresh rebuilt the shared asset bundle and it differed —
   /// the notice a session turns into evicting its guest's caches.
+  @override
   Stream<AssetsChanged> get assetsChanges => _assetsChanges.stream;
 
   /// Makes [id] the active entry and compiles it into the entrypoint.
@@ -369,6 +390,7 @@ class CompilerDaemonClient {
   /// this one. What it rules out is the case it exists for — a daemon that is
   /// alive, holding the queue, and never going to answer — which without it hangs
   /// the caller, and with it hangs the GUI's catalog panel forever.
+  @override
   Future<DaemonCompiled> select(
     String id, {
     bool full = false,
@@ -423,6 +445,7 @@ class CompilerDaemonClient {
   /// second build.
   ///
   /// [timeout] covers a cold framework download as well as the build.
+  @override
   Future<String> hostPath({Duration timeout = const Duration(minutes: 5)}) =>
       _hostPath ??= _hostOnce(timeout);
 
@@ -477,6 +500,7 @@ class CompilerDaemonClient {
   ///
   /// Fire and forget: what it finds arrives on [catalogChanges], to every
   /// client, which is also how this client hears about somebody else's.
+  @override
   void refresh() {
     try {
       _socket.writeln(encodeLine(const RefreshRequest()));
@@ -491,6 +515,7 @@ class CompilerDaemonClient {
   /// Fire and forget, like [refresh], and tolerant of a daemon that has never
   /// heard of it: an older one logs the line as unreadable and carries on, and
   /// all that costs is the compile and reload this exists to avoid.
+  @override
   void shown(String id) {
     try {
       _socket.writeln(encodeLine(ShownRequest(id)));
@@ -501,6 +526,7 @@ class CompilerDaemonClient {
   }
 
   /// Leaves the daemon running for whoever else wants it.
+  @override
   Future<void> close() async {
     _onGone();
     await _lines.cancel();

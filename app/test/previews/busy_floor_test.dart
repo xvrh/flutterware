@@ -21,7 +21,7 @@ void main() {
   /// going busy and stops there — which is the whole state under test.
   Future<(CompilerDaemonClient, DaemonReady)> hangs({
     required String dartExecutable,
-    required DaemonConfig config,
+    required DaemonConfig Function() config,
     void Function(String)? onLog,
     void Function(DaemonProgress)? onProgress,
   }) => Completer<(CompilerDaemonClient, DaemonReady)>().future;

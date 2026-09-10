@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 import 'pub_deps.dart';
 import 'pubspec_lock.dart';
@@ -37,9 +38,13 @@ import 'pubspec_lock.dart';
 /// request and hold nothing, so an in-memory cache never sees them twice.
 ///
 /// The disk key can be *exact* rather than a plausible guess: `pub deps` reads
-/// the lockfile and the package config and nothing else, and reaches no
-/// network. Both are in the stamp, so a `pub get` invalidates the entry and
-/// nothing else has to.
+/// the lockfile, the package config and the pubspecs of the workspace, and
+/// reaches no network. All of them are in the stamp. The pubspecs matter
+/// because a dependency between two workspace members is in neither the
+/// lockfile nor the package config — a member is not locked — so an edge
+/// added to one member's pubspec moved nothing the stamp used to read, and a
+/// `pub get` served the answer from before it (measured: the example gaining
+/// a dev dependency on the app, and the panel not seeing it).
 class PubDepsStore {
   PubDepsStore({this.runProcess});
 
@@ -55,7 +60,7 @@ class PubDepsStore {
 
   /// Bumped when the shape of what is cached changes, so an old file is a miss
   /// rather than a misread.
-  static const _format = 1;
+  static const _format = 2;
 
   final _inFlight = <String, Future<PubDeps>>{};
 
@@ -194,10 +199,29 @@ class PubDepsStore {
         flutterExecutable,
         '${sha1.convert(lock.readAsBytesSync())}',
         '${sha1.convert(packageConfig.readAsBytesSync())}',
+        for (var pubspec in _workspacePubspecs(root))
+          '${sha1.convert(pubspec.readAsBytesSync())}',
       ];
       return '${sha1.convert(utf8.encode(parts.join('\n')))}';
     } on FileSystemException {
       return null;
     }
+  }
+
+  /// The root's pubspec and every workspace member's, in the root's order —
+  /// the files whose edges the lockfile does not carry.
+  static List<File> _workspacePubspecs(String root) {
+    var rootPubspec = File(p.join(root, 'pubspec.yaml'));
+    if (!rootPubspec.existsSync()) return const [];
+    var files = [rootPubspec];
+    if (loadYaml(rootPubspec.readAsStringSync()) case YamlMap yaml) {
+      if (yaml['workspace'] case YamlList members) {
+        for (var member in members) {
+          var pubspec = File(p.join(root, '$member', 'pubspec.yaml'));
+          if (pubspec.existsSync()) files.add(pubspec);
+        }
+      }
+    }
+    return files;
   }
 }

@@ -46,7 +46,9 @@ export 'previews_core.dart' show PreviewsCore, uiCatalogPluginId;
 class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   PreviewsPlugin(
     super.core, {
-    this.connectToDaemon = CompilerDaemonClient.connect,
+    this.connectToDaemon = CompilerDaemonClient.connector,
+    this.launchGuest = launchEmbeddedGuest,
+    this.thumbnails = true,
   }) {
     core
       ..busyStatusFor = _busyStatusFor
@@ -64,6 +66,16 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   /// without a seam the only way to exercise the panel's own wiring is not to
   /// exercise it.
   final DaemonConnector connectToDaemon;
+
+  /// How each session's guest is brought up — see
+  /// [CatalogSession.launchGuest]. The embedder process by default; a guest
+  /// drawn inline where none can be spawned.
+  final GuestLauncher launchGuest;
+
+  /// Whether the landing page gets pictures. They are rendered by
+  /// `flutter_tester`, which a host with no processes cannot run; off, the
+  /// landing shows the guest itself.
+  final bool thumbnails;
 
   final _sessions = <String, CatalogSession>{};
 
@@ -95,24 +107,29 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
   /// the same store a comparison files under and for the same reason: a key
   /// says everything about a picture, so five worktrees off one commit render
   /// the catalog once between them and a restart re-renders nothing at all.
-  PreviewThumbnails thumbnailsFor(String path) => _thumbnails.putIfAbsent(
-    path,
-    () => PreviewThumbnails.of(
-      core.testRunnerFor(path),
-      cache: _shots,
-      keys: ThumbnailKeys(
-        packageRoot: p.join(core.host.worktree.path, path),
-        // Two SDKs lay text out differently, so a picture is only ever this
-        // one's — the same thing `ComparisonRunner` puts in its own keys.
-        sdkKey: core.host.workspace.flutterSdk.root,
-        // What this caller does to a frame that its source does not say. The
-        // capture is whole-size PNG and the decode is bounded by
-        // [PreviewThumbnails.longestSide]; a caller that changed either would
-        // want its own pictures, not these.
-        extra: {'format': 'png', 'longest': '${PreviewThumbnails.longestSide}'},
-      ),
-    ),
-  );
+  PreviewThumbnails? thumbnailsFor(String path) => !thumbnails
+      ? null
+      : _thumbnails.putIfAbsent(
+          path,
+          () => PreviewThumbnails.of(
+            core.testRunnerFor(path),
+            cache: _shots,
+            keys: ThumbnailKeys(
+              packageRoot: p.join(core.host.worktree.path, path),
+              // Two SDKs lay text out differently, so a picture is only ever this
+              // one's — the same thing `ComparisonRunner` puts in its own keys.
+              sdkKey: core.host.workspace.flutterSdk.root,
+              // What this caller does to a frame that its source does not say. The
+              // capture is whole-size PNG and the decode is bounded by
+              // [PreviewThumbnails.longestSide]; a caller that changed either would
+              // want its own pictures, not these.
+              extra: {
+                'format': 'png',
+                'longest': '${PreviewThumbnails.longestSide}',
+              },
+            ),
+          ),
+        );
 
   late final _shots = ShotCache(p.join(flutterwareDir(), 'shots'));
 
@@ -194,6 +211,7 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
       // without it the panel shows an empty list for the whole cold compile.
       scannedEntries: core.entriesFor(path),
       connectToDaemon: connectToDaemon,
+      launchGuest: launchGuest,
       startup: startupFor(path),
     )..addListener(core.notifyChanged);
     // The daemon is the only thing here watching the files, so its word is how

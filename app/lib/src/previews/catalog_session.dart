@@ -17,6 +17,7 @@ import 'catalog_params.dart';
 import 'devices.dart';
 import 'catalog_entry.dart';
 import '../ui/startup_progress.dart';
+import 'catalog_source.dart';
 import 'compiler_daemon_client.dart';
 import 'daemon_phase.dart';
 import 'inspect_client.dart';
@@ -373,7 +374,7 @@ class CatalogSession extends ChangeNotifier {
     this.canvases = const [],
     this.scannedEntries = const [],
     this.clock,
-    this.connectToDaemon = CompilerDaemonClient.connect,
+    this.connectToDaemon = CompilerDaemonClient.connector,
     this.launchGuest = launchEmbeddedGuest,
     StartupProgress? startup,
   }) : startup = startup ?? StartupProgress() {
@@ -564,36 +565,6 @@ class CatalogSession extends ChangeNotifier {
   /// process by default, or — for a browser, or a test over a real entry —
   /// one drawn inline. See [GuestLauncher].
   final GuestLauncher launchGuest;
-
-  /// Installs a guest without [start]: [surface] and [channel] stand where
-  /// a launched guest's would, [entry] is what it is showing, and the
-  /// session is ready. What a test of the panel over an inline guest needs,
-  /// and what the catalog source's own seam will make unnecessary.
-  @visibleForTesting
-  void debugInstallGuest(
-    GuestSurface surface,
-    GuestChannel channel, {
-    required CatalogEntry entry,
-  }) {
-    _surface = surface;
-    surface.addListener(_onEngineChanged);
-    _channel = channel;
-    _inspect = InspectClient(
-      channel,
-      patience: InspectPatience.live,
-      abandoned: () => _disposed,
-    );
-    if (_panelOpen) {
-      _startWatch();
-      _startLogs();
-    }
-    _keyboardStream = _inspect!.keyboards.listen(_onKeyboard);
-    selected = entry;
-    active = entry;
-    phase = CatalogSessionPhase.ready;
-    _afterSwitch(entry);
-    notifyListeners();
-  }
 
   /// What a path shown in the panel is measured against.
   String get displayRoot => worktreeRoot ?? projectRoot;
@@ -1481,7 +1452,7 @@ class CatalogSession extends ChangeNotifier {
     Map<String, String> args = const {},
   }) async => _channel?.callExtension(method, args: args);
 
-  CompilerDaemonClient? _daemon;
+  CatalogSource? _daemon;
   GuestChannel? _channel;
 
   /// The inspection reads and writes, shared with the headless path that `fw`
@@ -1588,7 +1559,7 @@ class CatalogSession extends ChangeNotifier {
         // Through the shared builder, so this panel and `fw run previews`
         // arrive at the same socket. See [DaemonConfig.forPackage] for what
         // happened when each side built its own.
-        config: DaemonConfig.forPackage(
+        config: () => DaemonConfig.forPackage(
           appToolDirectory: appPackageRoot,
           packageRoot: projectRoot,
           flutterSdkRoot: flutterSdkRoot,
@@ -2109,7 +2080,7 @@ class CatalogSession extends ChangeNotifier {
   CatalogEntry? compilingSwitch;
 
   Future<void> _switchOnce(
-    CompilerDaemonClient daemon,
+    CatalogSource daemon,
     GuestChannel vmService,
     CatalogEntry entry, {
     required bool reloaded,
