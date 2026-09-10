@@ -165,6 +165,15 @@ void main() {
     });
   });
 
+  test('a pass says its blend on the wire only when it is not normal', () {
+    expect(const FillLayer().toWire().containsKey('blend'), isFalse);
+    const multiplied = FillLayer(blend: SceneBlendMode.multiply);
+    expect(multiplied.toWire()['blend'], 'multiply');
+    expect(TextLayer.fromWire(multiplied.toWire()), multiplied);
+    expect(multiplied.copyWith(dx: 2).blend, SceneBlendMode.multiply);
+    expect(multiplied.withPaint(null).blend, SceneBlendMode.multiply);
+  });
+
   test('the gloss preset keeps its sheen per line when scaled', () {
     var gloss = layerPresets.firstWhere((p) => p.name == 'Gloss');
     var small = gloss.forSize(27);

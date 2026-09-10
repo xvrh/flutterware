@@ -43,6 +43,7 @@ Object? sample(SceneProp p) => switch (p.kind) {
         center: SceneAlignment(0.2, -0.4),
         radius: 1.5,
       ),
+      blend: SceneBlendMode.screen,
     ),
     StrokeLayer(
       width: 3,

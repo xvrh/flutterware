@@ -458,6 +458,29 @@ enum SceneStrokeJoin { miter, round, bevel }
 /// frame's fill one day (master plan §6), and a frame has no lines.
 enum SceneLayerBox { text, line }
 
+/// How a pass lands on what is already there — the modes a design tool
+/// offers on a layer, by Flutter's names. `normal` is the engine's
+/// `srcOver`; the rest are spelled the same on both sides, which the bridge
+/// test pins name by name.
+enum SceneBlendMode {
+  normal,
+  multiply,
+  screen,
+  overlay,
+  darken,
+  lighten,
+  colorDodge,
+  colorBurn,
+  hardLight,
+  softLight,
+  difference,
+  exclusion,
+  hue,
+  saturation,
+  color,
+  luminosity,
+}
+
 /// One pass over a laid-out paragraph.
 ///
 /// A text's paint stack is an ordered list of these, painted back to front,
@@ -483,6 +506,7 @@ sealed class TextLayer {
     this.dy = 0,
     this.opacity = 1,
     this.box = SceneLayerBox.text,
+    this.blend = SceneBlendMode.normal,
   });
 
   /// Null paints the text's own colour — which is what lets one stack serve
@@ -499,6 +523,10 @@ sealed class TextLayer {
 
   /// What [paint] is measured against: the whole text, or each line.
   final SceneLayerBox box;
+
+  /// How this pass lands on the passes beneath it and on what is behind the
+  /// text.
+  final SceneBlendMode blend;
 
   Map<String, Object?> toWire();
 
@@ -517,6 +545,7 @@ sealed class TextLayer {
     double? dy,
     double? opacity,
     SceneLayerBox? box,
+    SceneBlendMode? blend,
   });
 
   Map<String, Object?> get _common => {
@@ -526,6 +555,7 @@ sealed class TextLayer {
     if (dy != 0) 'dy': dy,
     if (opacity != 1) 'o': opacity,
     if (box != SceneLayerBox.text) 'box': box.name,
+    if (blend != SceneBlendMode.normal) 'blend': blend.name,
   };
 
   static TextLayer? fromWire(Object? raw) {
@@ -537,6 +567,9 @@ sealed class TextLayer {
     var opacity = (raw['o'] as num?)?.toDouble() ?? 1;
     var box =
         SceneLayerBox.values.asNameMap()[raw['box']] ?? SceneLayerBox.text;
+    var blend =
+        SceneBlendMode.values.asNameMap()[raw['blend']] ??
+        SceneBlendMode.normal;
     return switch (raw['k']) {
       'stroke' => StrokeLayer(
         width: (raw['w'] as num?)?.toDouble() ?? 1,
@@ -551,6 +584,7 @@ sealed class TextLayer {
         dy: dy,
         opacity: opacity,
         box: box,
+        blend: blend,
       ),
       _ => FillLayer(
         paint: paint,
@@ -559,6 +593,7 @@ sealed class TextLayer {
         dy: dy,
         opacity: opacity,
         box: box,
+        blend: blend,
       ),
     };
   }
@@ -572,6 +607,7 @@ class FillLayer extends TextLayer {
     super.dy,
     super.opacity,
     super.box,
+    super.blend,
   });
 
   @override
@@ -585,6 +621,7 @@ class FillLayer extends TextLayer {
     dy: dy,
     opacity: opacity,
     box: box,
+    blend: blend,
   );
 
   @override
@@ -594,6 +631,7 @@ class FillLayer extends TextLayer {
     double? dy,
     double? opacity,
     SceneLayerBox? box,
+    SceneBlendMode? blend,
   }) => FillLayer(
     paint: paint,
     blur: blur ?? this.blur,
@@ -601,6 +639,7 @@ class FillLayer extends TextLayer {
     dy: dy ?? this.dy,
     opacity: opacity ?? this.opacity,
     box: box ?? this.box,
+    blend: blend ?? this.blend,
   );
 
   @override
@@ -611,10 +650,11 @@ class FillLayer extends TextLayer {
       other.dx == dx &&
       other.dy == dy &&
       other.opacity == opacity &&
-      other.box == box;
+      other.box == box &&
+      other.blend == blend;
 
   @override
-  int get hashCode => Object.hash(paint, blur, dx, dy, opacity, box);
+  int get hashCode => Object.hash(paint, blur, dx, dy, opacity, box, blend);
 
   @override
   String toString() => 'FillLayer($paint)';
@@ -632,6 +672,7 @@ class StrokeLayer extends TextLayer {
     super.dy,
     super.opacity,
     super.box,
+    super.blend,
   });
 
   final double width;
@@ -655,6 +696,7 @@ class StrokeLayer extends TextLayer {
     dy: dy,
     opacity: opacity,
     box: box,
+    blend: blend,
   );
 
   @override
@@ -664,6 +706,7 @@ class StrokeLayer extends TextLayer {
     double? dy,
     double? opacity,
     SceneLayerBox? box,
+    SceneBlendMode? blend,
     double? width,
     SceneStrokeJoin? join,
   }) => StrokeLayer(
@@ -675,6 +718,7 @@ class StrokeLayer extends TextLayer {
     dy: dy ?? this.dy,
     opacity: opacity ?? this.opacity,
     box: box ?? this.box,
+    blend: blend ?? this.blend,
   );
 
   @override
@@ -687,11 +731,12 @@ class StrokeLayer extends TextLayer {
       other.dx == dx &&
       other.dy == dy &&
       other.opacity == opacity &&
-      other.box == box;
+      other.box == box &&
+      other.blend == blend;
 
   @override
   int get hashCode =>
-      Object.hash(width, join, paint, blur, dx, dy, opacity, box);
+      Object.hash(width, join, paint, blur, dx, dy, opacity, box, blend);
 
   @override
   String toString() => 'StrokeLayer($width, $paint)';

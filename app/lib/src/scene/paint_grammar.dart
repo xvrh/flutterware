@@ -35,6 +35,9 @@ String _layer(TextLayer l) {
   if (l.box != SceneLayerBox.text) {
     args.add('box: SceneLayerBox.${l.box.name}');
   }
+  if (l.blend != SceneBlendMode.normal) {
+    args.add('blend: SceneBlendMode.${l.blend.name}');
+  }
   return '${l is StrokeLayer ? 'StrokeLayer' : 'FillLayer'}(${args.join(', ')})';
 }
 
@@ -163,6 +166,24 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
     }
     box = SceneLayerBox.values.byName(read);
   }
+  var blend = SceneBlendMode.normal;
+  if (named.remove('blend') case var m?) {
+    var read = _enumMember(
+      m,
+      'SceneBlendMode',
+      SceneBlendMode.values.map((v) => v.name),
+    );
+    if (read == null) {
+      refuse(
+        m.offset,
+        'layers',
+        'a blend is SceneBlendMode.multiply, .screen, .overlay or another '
+            'of the sixteen SceneBlendMode names',
+      );
+      return null;
+    }
+    blend = SceneBlendMode.values.byName(read);
+  }
 
   if (name == 'FillLayer') {
     if (!_rest(named, 'FillLayer', refuse)) return null;
@@ -173,6 +194,7 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
       dy: dy,
       opacity: opacity,
       box: box,
+      blend: blend,
     );
   }
   var width = _take(named, 'width', refuse) ?? 1;
@@ -203,6 +225,7 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
     dy: dy,
     opacity: opacity,
     box: box,
+    blend: blend,
   );
 }
 

@@ -169,7 +169,7 @@ class SceneTextStackPainter extends CustomPainter {
     var gradient = layer.paint! as SceneGradient;
     var mask = _painterFor(layer, size, mask: true);
     var lines = mask.computeLineMetrics();
-    canvas.saveLayer(null, Paint());
+    canvas.saveLayer(null, Paint()..blendMode = layer.blend.flutter);
     mask.paint(canvas, Offset.zero);
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
@@ -275,6 +275,7 @@ class SceneTextStackPainter extends CustomPainter {
           // stack serve several colours.
           paint.color = _faded(own ?? const Color(0xFF000000), layer.opacity);
       }
+      paint.blendMode = layer.blend.flutter;
     }
     if (layer.blur > 0) {
       // On the pass's own paint, so the glyph OUTLINE is blurred. Compositing

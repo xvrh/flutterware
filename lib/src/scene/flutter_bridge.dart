@@ -70,6 +70,14 @@ extension SceneStrokeJoinToFlutter on SceneStrokeJoin {
   StrokeJoin get flutter => StrokeJoin.values[index];
 }
 
+extension SceneBlendModeToFlutter on SceneBlendMode {
+  /// By name, not by index: the scene's list is the designer's sixteen and
+  /// Flutter's is the engine's twenty-nine, in another order.
+  BlendMode get flutter => this == SceneBlendMode.normal
+      ? BlendMode.srcOver
+      : BlendMode.values.byName(name);
+}
+
 extension SceneEdgesToFlutter on SceneEdges {
   EdgeInsets get flutter => EdgeInsets.fromLTRB(left, top, right, bottom);
 }

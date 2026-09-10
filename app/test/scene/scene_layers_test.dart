@@ -223,6 +223,21 @@ void main() {
       );
       expect(parsed.refusals.single.message, contains('SceneLayerBox.line'));
     });
+
+    test('a blended pass says so, and nothing when it is normal', () {
+      var layers = <TextLayer>[
+        const FillLayer(
+          paint: SolidPaint(SceneColor(0x66FFFFFF)),
+          blend: SceneBlendMode.screen,
+        ),
+      ];
+      var out = _emit(layers);
+      expect(out, contains('blend: SceneBlendMode.screen'));
+      expect(_read(out), layers);
+      expect(_emit(const [FillLayer()]), isNot(contains('blend:')));
+      var parsed = parseSceneFile(_scene('[FillLayer(blend: BlendMode.plus)]'));
+      expect(parsed.refusals.single.message, contains('SceneBlendMode'));
+    });
   });
 
   group('a style token', () {

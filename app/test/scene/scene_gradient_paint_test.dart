@@ -183,6 +183,21 @@ void main() {
     });
   });
 
+  test('a multiplied pass multiplies the pass beneath it', () async {
+    // Cyan times yellow is green; painted normally, yellow is yellow.
+    var image = await _paint(const [
+      FillLayer(paint: SolidPaint(SceneColor(0xFF00FFFF))),
+      FillLayer(
+        paint: SolidPaint(SceneColor(0xFFFFFF00)),
+        blend: SceneBlendMode.multiply,
+      ),
+    ]);
+    var mixed = await _mean(image, _spot(100, 10));
+    expect(mixed.g, greaterThan(200));
+    expect(mixed.r, lessThan(60));
+    expect(mixed.b, lessThan(60));
+  });
+
   group('a pass laid across each line', () {
     // Ten Ms over two: the second line is a fifth as long as the first.
     const twoLines = 'MMMMMMMMMM\nMM';
