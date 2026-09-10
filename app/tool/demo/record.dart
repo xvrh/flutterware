@@ -164,7 +164,17 @@ Future<String> _recordScenarios({
               var destination = '$into/${p.basename(source)}';
               var target = File(p.join(out, destination))
                 ..parent.createSync(recursive: true);
-              File(source).copySync(target.path);
+              if (source.endsWith('.json')) {
+                // A tree names each widget's source file by absolute path,
+                // which is this machine's. Re-rooted so the recorded project
+                // is where it says it is, and nothing of the laptop that
+                // recorded it ships.
+                target.writeAsStringSync(
+                  _reroot(File(source).readAsStringSync(), project),
+                );
+              } else {
+                File(source).copySync(target.path);
+              }
               copied++;
               bytes += target.lengthSync();
               fields[key] = destination;
@@ -172,7 +182,11 @@ Future<String> _recordScenarios({
           }
         }
       }
-      write(recordedScenarioRunPath(packagePath, file), report);
+      write(
+        recordedScenarioRunPath(packagePath, file),
+        (jsonDecode(_reroot(jsonEncode(report), project)) as Map)
+            .cast<String, Object?>(),
+      );
     }
     write(recordedScenarioRunsIndexPath(packagePath), {
       'files': recordedScenarioFiles,
@@ -185,6 +199,13 @@ Future<String> _recordScenarios({
       '$steps steps), $copied artifacts, '
       '${(bytes / 1024).toStringAsFixed(0)} KB';
 }
+
+/// [text] with every absolute path under [project] spelled under the
+/// recorded project's root instead — the workspace above it too, for the
+/// paths that reach into it.
+String _reroot(String text, String project) => text
+    .replaceAll(project, recordedProjectRoot)
+    .replaceAll(p.dirname(p.dirname(project)), '$recordedProjectRoot/..');
 
 /// The step fields that name a file — the ones `ScenarioRunStep.locate`
 /// rewrites, and the ones `RecordedScenarioRunner` puts back under the

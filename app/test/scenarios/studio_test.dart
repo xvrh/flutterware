@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutterware/flutter_test.dart';
 import 'package:flutterware_app/src/demo/recorded_project.dart';
 import 'package:flutterware_app/src/demo/recording.dart';
@@ -45,5 +46,52 @@ void main() {
     await s.tap('shop_test.dart', shot: Shot('A file unfolded'));
     await s.tap('Order a cappuccino', shot: Shot('A recorded run'));
     await s.tap(const Target.containing('1 · Welcome'), shot: Shot('A step'));
+  });
+
+  /// Around the run: the flow zoomed out to the whole walk and back in, and
+  /// the device picker — a pick re-runs, and over a recording the run comes
+  /// back as what was recorded, which the chip says.
+  scenario('Looking around a recorded run', (s) async {
+    var shell = recordedShell(recording: recording);
+    await shell.start(recordedProjectRoot);
+    await s.pumpWidget(ShellApp(shell));
+    await s.tap('Scenarios');
+    await s.tap('mobile');
+    await s.tap('shop_test.dart');
+    await s.tap('Order a cappuccino', shot: Shot('The run'));
+    await s.tap(Icons.zoom_out);
+    await s.tap(Icons.zoom_out);
+    await s.tap(Icons.zoom_out, shot: Shot('Zoomed out to the whole walk'));
+    await s.tap(Icons.zoom_in, shot: Shot('Zoomed back in'));
+    await s.tap('iPhone 16 (default)', shot: Shot('The device picker'));
+    await s.tap(
+      const Target.nth('iPhone SE', 0),
+      shot: Shot('Picked another phone'),
+    );
+  });
+
+  /// A step's page: the inspector over the recorded tree, every tab, the
+  /// next step and the way back.
+  scenario('Inspecting a recorded step', (s) async {
+    var shell = recordedShell(recording: recording);
+    await shell.start(recordedProjectRoot);
+    await s.pumpWidget(ShellApp(shell));
+    await s.tap('Scenarios');
+    await s.tap('mobile');
+    await s.tap('shop_test.dart');
+    await s.tap('Order a cappuccino');
+    await s.tap(const Target.containing('1 · Welcome'), shot: Shot('The step'));
+    await s.tap(
+      const Target.containing('Text("Brewline")'),
+      shot: Shot('A widget picked in the tree'),
+    );
+    await s.tap('Semantics', shot: Shot('Semantics'));
+    await s.tap('Texts', shot: Shot('Texts'));
+    await s.tap('Events', shot: Shot('Events'));
+    await s.tap(
+      const Target.containing('2 · Menu'),
+      shot: Shot('The next step'),
+    );
+    await s.tap(Icons.arrow_back, shot: Shot('Back to the flow'));
   });
 }
