@@ -129,4 +129,24 @@ void main() {
       expect([own.r, own.g, own.b], everyElement(greaterThan(200)));
     });
   });
+
+  test(
+    'a radial gradient is stretched to the box, not its short side',
+    () async {
+      var image = await _paint(const [
+        FillLayer(
+          paint: RadialPaint(
+            colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFF000000)],
+          ),
+        ),
+      ]);
+      // 20px left of the middle of a 200px line is a fifth of the way to the
+      // edge: still light. Measured on the 20px side, the way Flutter's
+      // RadialGradient is, the circle would have ended 10px before it.
+      var near = await _mean(image, _spot(80, 10));
+      expect(near.r, greaterThan(150));
+      var edge = await _mean(image, _spot(195, 10));
+      expect(edge.r, lessThan(40));
+    },
+  );
 }

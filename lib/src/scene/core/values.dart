@@ -173,6 +173,12 @@ sealed class ScenePaint {
       begin: SceneAlignment.fromWire(m['begin'], SceneAlignment.topCenter),
       end: SceneAlignment.fromWire(m['end'], SceneAlignment.bottomCenter),
     ),
+    Map m when m['k'] == 'radial' => RadialPaint(
+      colors: _wireColors(m),
+      stops: _wireStops(m),
+      center: SceneAlignment.fromWire(m['center'], SceneAlignment.center),
+      radius: (m['r'] as num?)?.toDouble() ?? 1,
+    ),
     _ => null,
   };
 }
@@ -278,6 +284,56 @@ class LinearPaint extends SceneGradient {
 
   @override
   String toString() => 'LinearPaint($colors)';
+}
+
+/// A gradient out from a point, STRETCHED TO THE BOX: at [radius] 1 it
+/// reaches the edges on both axes, so on a wide headline it is an ellipse.
+/// Flutter's `RadialGradient` measures its radius against the shortest side
+/// instead, and on a 600×80 title that is a dot in the middle.
+class RadialPaint extends SceneGradient {
+  const RadialPaint({
+    required super.colors,
+    super.stops,
+    this.center = SceneAlignment.center,
+    this.radius = 1,
+  });
+
+  final SceneAlignment center;
+
+  /// In half-box units: 1 reaches the edge from the middle, on each axis.
+  final double radius;
+
+  @override
+  RadialPaint withStops(List<SceneColor> colors, List<double>? stops) =>
+      RadialPaint(colors: colors, stops: stops, center: center, radius: radius);
+
+  RadialPaint copyWith({SceneAlignment? center, double? radius}) => RadialPaint(
+    colors: colors,
+    stops: stops,
+    center: center ?? this.center,
+    radius: radius ?? this.radius,
+  );
+
+  @override
+  Object toWire() => {
+    'k': 'radial',
+    ..._stopsWire,
+    if (center != SceneAlignment.center) 'center': center.toWire(),
+    if (radius != 1) 'r': radius,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is RadialPaint &&
+      _sameStops(other) &&
+      other.center == center &&
+      other.radius == radius;
+
+  @override
+  int get hashCode => Object.hash(_stopsHash, center, radius);
+
+  @override
+  String toString() => 'RadialPaint($colors)';
 }
 
 /// Whether two property values are the same value.

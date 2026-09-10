@@ -36,7 +36,7 @@ void main() {
       var plain = stroke.withPaint(null);
       expect(plain.paint, isNull);
       expect(plain, isA<StrokeLayer>());
-      expect((plain as StrokeLayer).width, 6);
+      expect(plain.width, 6);
     });
 
     test('a fill copies the same way', () {
@@ -87,6 +87,36 @@ void main() {
           begin: SceneAlignment.centerLeft,
           end: SceneAlignment.centerRight,
         ),
+      );
+    });
+  });
+
+  group('a radial gradient', () {
+    const a = SceneColor(0xFFFFFFFF);
+    const b = SceneColor(0xFF000000);
+
+    test('says nothing on the wire that a default already says', () {
+      expect(const RadialPaint(colors: [a, b]).toWire(), {
+        'k': 'radial',
+        'colors': [a.argb, b.argb],
+      });
+    });
+
+    test('round-trips its centre and radius', () {
+      const g = RadialPaint(
+        colors: [a, b],
+        stops: [0, 0.7],
+        center: SceneAlignment(0.2, -0.4),
+        radius: 1.5,
+      );
+      expect(ScenePaint.fromWire(g.toWire()), g);
+    });
+
+    test('changes its shape by copy and keeps its stops', () {
+      const g = RadialPaint(colors: [a, b], stops: [0, 0.7]);
+      expect(
+        g.copyWith(radius: 0.5),
+        const RadialPaint(colors: [a, b], stops: [0, 0.7], radius: 0.5),
       );
     });
   });

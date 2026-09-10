@@ -35,6 +35,14 @@ Object? sample(SceneProp p) => switch (p.kind) {
         end: SceneAlignment.centerRight,
       ),
     ),
+    FillLayer(
+      paint: RadialPaint(
+        colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFFFF2D95)],
+        stops: [0, 0.8],
+        center: SceneAlignment(0.2, -0.4),
+        radius: 1.5,
+      ),
+    ),
     FillLayer(),
   ],
   ScenePropKind.axes => const {'wght': 640.0, 'wdth': 85.0},

@@ -295,6 +295,14 @@ class _SceneLayerListState extends State<SceneLayerList> {
         begin: Alignment(begin.x, begin.y),
         end: Alignment(end.x, end.y),
       ),
+      RadialPaint(:var center, :var radius) => RadialGradient(
+        colors: colors,
+        stops: g.resolvedStops,
+        center: Alignment(center.x, center.y),
+        // A swatch is square, so the box-stretched radius is Flutter's
+        // shortest-side one at half the number.
+        radius: radius / 2,
+      ),
     };
   }
 

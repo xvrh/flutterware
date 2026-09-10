@@ -44,6 +44,13 @@ String _paint(ScenePaint p) => switch (p) {
     if (end != SceneAlignment.bottomCenter) ', end: ${_alignment(end)}',
     ')',
   ].join(),
+  RadialPaint(:var colors, :var stops, :var center, :var radius) => [
+    'RadialPaint(colors: [${colors.map(_color).join(', ')}]',
+    if (stops != null) ', stops: [${stops.map(_num).join(', ')}]',
+    if (center != SceneAlignment.center) ', center: ${_alignment(center)}',
+    if (radius != 1) ', radius: ${_num(radius)}',
+    ')',
+  ].join(),
 };
 
 const _namedAlignments = {
@@ -182,12 +189,26 @@ ScenePaint? _readPaint(Expression e, Refuse refuse) {
         begin: begin ?? SceneAlignment.topCenter,
         end: end ?? SceneAlignment.bottomCenter,
       );
+    case ('RadialPaint', var args):
+      var named = _named(args, 'a gradient', refuse);
+      if (named == null) return null;
+      var read = _readStops(e, named, 'RadialPaint', refuse);
+      if (read == null) return null;
+      var center = _readAlignment(named.remove('center'), refuse);
+      var radius = _take(named, 'radius', refuse);
+      if (!_rest(named, 'RadialPaint', refuse)) return null;
+      return RadialPaint(
+        colors: read.colors,
+        stops: read.stops,
+        center: center ?? SceneAlignment.center,
+        radius: radius ?? 1,
+      );
     default:
       refuse(
         e.offset,
         'paint',
-        'a paint is SolidPaint(SceneColor(0x…)) or '
-            'LinearPaint(colors: […]) — nothing else is on the allowlist',
+        'a paint is SolidPaint(SceneColor(0x…)), LinearPaint(colors: […]) or '
+            'RadialPaint(colors: […]) — nothing else is on the allowlist',
       );
       return null;
   }
@@ -266,8 +287,7 @@ SceneAlignment? _readAlignment(Expression? e, Refuse refuse) {
   refuse(
     e.offset,
     'paint',
-    'an end of a gradient is SceneAlignment.topCenter or '
-        'SceneAlignment(0, -1)',
+    'a point in the box is SceneAlignment.center or SceneAlignment(0, -1)',
   );
   return null;
 }

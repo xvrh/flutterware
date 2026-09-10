@@ -138,6 +138,39 @@ void main() {
       expect(parsed.refusals.single.construct, 'paint');
       expect(parsed.refusals.single.message, contains('one stop per colour'));
     });
+
+    test('a radial gradient round-trips, and writes no default', () {
+      var layers = <TextLayer>[
+        const FillLayer(
+          paint: RadialPaint(
+            colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFFFF2D95)],
+            center: SceneAlignment(0.5, -0.25),
+            radius: 1.2,
+          ),
+        ),
+      ];
+      var out = _emit(layers);
+      expect(_read(out), layers);
+      expect(_emit(_read(out)), out);
+      // The formatter wraps `RadialPaint(colors: […])` onto its own line at
+      // this nesting depth, so the check is by piece rather than one
+      // contiguous substring: the colours are there and no default field is.
+      var plain = _emit(const [
+        FillLayer(
+          paint: RadialPaint(
+            colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFF000000)],
+          ),
+        ),
+      ]);
+      expect(plain, contains('RadialPaint('));
+      expect(
+        plain,
+        contains('colors: [SceneColor(0xFFFFFFFF), SceneColor(0xFF000000)]'),
+      );
+      expect(plain, isNot(contains('stops:')));
+      expect(plain, isNot(contains('center:')));
+      expect(plain, isNot(contains('radius:')));
+    });
   });
 
   group('a style token', () {
