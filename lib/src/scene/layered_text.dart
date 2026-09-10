@@ -142,6 +142,15 @@ class SceneTextStackPainter extends CustomPainter {
       }
       if (_perLine(layer)) {
         _paintPerLine(canvas, layer, size);
+      } else if (layer.blend != SceneBlendMode.normal) {
+        // On the layer's paint, not the paragraph's: a blend there is
+        // visible to anything recording the canvas (a vector export).
+        canvas.saveLayer(
+          (Offset.zero & size).inflate(_spillMargin(layer)),
+          Paint()..blendMode = layer.blend.flutter,
+        );
+        _painterFor(layer, size).paint(canvas, Offset.zero);
+        canvas.restore();
       } else {
         _painterFor(layer, size).paint(canvas, Offset.zero);
       }
@@ -297,7 +306,6 @@ class SceneTextStackPainter extends CustomPainter {
           // stack serve several colours.
           paint.color = _faded(own ?? const Color(0xFF000000), layer.opacity);
       }
-      paint.blendMode = layer.blend.flutter;
     }
     if (layer.blur > 0) {
       // On the pass's own paint, so the glyph OUTLINE is blurred. Compositing
