@@ -214,3 +214,88 @@ jobs:
         working-directory: app
       - run: flutter test test/previews/phone_rig_probe_test.dart
         working-directory: app
+
+  studio_demo:
+    name: Studio demo
+    # The studio over a recording — `docs/superpowers/specs/
+    # 2026-09-10-studio-over-a-fake-project-design.md`. Three things this job
+    # keeps true, each of which broke silently before it existed: the
+    # recording in `app/demo/fixture/` is what `tool/demo/record.dart` produces
+    # from `examples/example` today (a scan format that moved without the
+    # recording moving would otherwise read as a fixture bug); the studio's own
+    # scenario walks the shell under the harness; and the shell still compiles
+    # for the web, which one `dart:ffi` import anywhere in its closure ends.
+    #
+    # Ubuntu, because none of it needs a GPU or a macOS toolchain: the
+    # recording is a directory listing, the scenario runs on `flutter_tester`
+    # (see the Linux audit job for why that is fine here), and the web build
+    # is dart2js.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Read the pinned Flutter version
+        id: pin
+        run: |
+          version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc)"
+          if [ -z "$version" ]; then echo "::error::.fvmrc names no Flutter version"; exit 1; fi
+          case "$version" in *-*) channel=beta ;; *) channel=stable ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.pin.outputs.version }}
+          channel: ${{ steps.pin.outputs.channel }}
+      - run: flutter --version
+      - run: flutter pub get
+      - name: "the recording is what the tool records today"
+        # Re-records and expects no diff. The recorder pins every mtime to the
+        # project clock, so a fresh checkout records the same bytes as the
+        # laptop that committed them.
+        run: |
+          dart run tool/demo/record.dart
+          git diff --exit-code --stat -- demo/fixture \
+            || (echo "##[error] app/demo/fixture is stale. Run 'cd app && fvm dart run tool/demo/record.dart' and commit the result." \
+                && exit 1)
+        working-directory: app
+      - name: "the studio's own scenario, under the harness"
+        # `flutter test` in the macOS job already runs this file as a widget
+        # test; this is the harness lane — the shots, the walk, the run report
+        # — which is the thing a scenario exists for.
+        run: dart run app/bin/fw.dart run scenarios run --package=app --device=window --steps=none
+      - name: "the shell compiles for the web"
+        # `--base-href` is the repository's Pages path, which is where the
+        # deploy job below puts it; `--pwa-strategy=none` leaves out the
+        # service worker Flutter is retiring, which only ever showed up as a
+        # console error on this page.
+        run: flutter build web -t lib/main_demo_web.dart --base-href "/${{ github.event.repository.name }}/" --pwa-strategy=none
+        working-directory: app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-demo
+          path: app/build/web
+          retention-days: 7
+
+  deploy_demo:
+    name: Deploy the studio demo
+    # Every push to master publishes the page the README links to. One-time
+    # setup on the repository: Settings → Pages → Source: GitHub Actions.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: studio_demo
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: studio-demo
+          path: site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

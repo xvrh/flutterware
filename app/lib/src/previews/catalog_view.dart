@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:device_frame/device_frame.dart' hide Devices;
 import 'package:flutterware/previews_guest.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -3021,7 +3021,8 @@ class _StatusBar extends StatelessWidget {
             icon: const Icon(Icons.refresh, size: FwIconSize.md),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-            tooltip: 'Reload (${Platform.isMacOS ? '⌘R' : 'Ctrl+R'})',
+            tooltip:
+                'Reload (${defaultTargetPlatform == TargetPlatform.macOS ? '⌘R' : 'Ctrl+R'})',
           ),
         ],
       ),

@@ -203,7 +203,12 @@ class WorktreeWatcher {
     // entry that nothing can change. It is also what keeps a test that pumps
     // the shell against a fabricated path from watching the developer's home
     // directory.
-    if (!Directory(git).existsSync()) return;
+    // Also nothing on a browser, which cannot even ask.
+    try {
+      if (!Directory(git).existsSync()) return;
+    } on UnsupportedError {
+      return;
+    }
 
     _add('the main checkout', git, recursive: false, kind: WorktreeChange.git);
     _add(

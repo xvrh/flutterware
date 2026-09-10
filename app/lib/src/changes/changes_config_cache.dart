@@ -92,6 +92,9 @@ String? changesConfigKey(String worktreePath) {
     return '${stat.modified.microsecondsSinceEpoch}:${stat.size}';
   } on FileSystemException {
     return null;
+  } on UnsupportedError {
+    // A browser: no file to key on, so no entry is remembered.
+    return null;
   }
 }
 
