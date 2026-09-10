@@ -356,6 +356,30 @@ void main() {
     );
   });
 
+  test('an edit to a new file is served, though no sweep had seen the file '
+      'before it moved', () async {
+    // The compile that brought the file in is the one after the last sweep, so
+    // the first sweep to see it is the one after the edit. Recording the file
+    // there, as a baseline, is what served its first version until something
+    // else touched it.
+    var (file, added) = await addPreview(
+      'unswept',
+      _preview('fixtureUnswept', 'unswept-v1'),
+    );
+    expect((await daemon.select(added.id)).ok, isTrue);
+
+    file.writeAsStringSync(_preview('fixtureUnswept', 'unswept-v2'));
+    // Whole program, so the kernel says which version the compiler holds
+    // rather than only what this compile happened to rebuild.
+    var served = await daemon.select(added.id, full: true);
+    expect(served.ok, isTrue, reason: served.error ?? '');
+    // Booleans rather than `contains`, whose failure prints the whole kernel.
+    var kernel = String.fromCharCodes(File(served.dill!).readAsBytesSync());
+    expect(kernel.contains('unswept-v2'), isTrue, reason: 'edit compiled');
+    expect(kernel.contains('unswept-v1'), isFalse, reason: 'and replaced it');
+    expect(served.editedCount, 1, reason: 'found by the sweep, as an edit');
+  });
+
   test('a demo that stops compiling is dropped, and comes back when '
       'fixed', () async {
     var (file, added) = await addPreview(
@@ -363,12 +387,6 @@ void main() {
       _preview('fixtureBroken', 'fine'),
     );
     expect((await daemon.select(added.id)).ok, isTrue);
-    // The sweep that puts the new file into the invalidator's baseline. A file
-    // seen for the first time is recorded and deliberately *not* reported —
-    // otherwise every compile after a rescan would invalidate the file it just
-    // discovered — so without this the edit below would be the fixture's first
-    // sighting and go unnoticed.
-    expect((await daemon.select(added.id, ifChanged: true)).unchanged, isTrue);
 
     var dropped = announced(
       daemon,

@@ -38,23 +38,38 @@ class SourceInvalidator {
   Duration get lastSweep => _lastSweep;
   var _lastSweep = Duration.zero;
 
-  /// The subset of [sources] whose file changed since the previous sweep.
+  /// When the previous [sweep] began, or null before the first.
+  DateTime? _sweptAt;
+
+  /// The subset of [sources] whose file changed since the compiler read it.
   ///
-  /// A file seen for the first time is recorded and *not* reported: the first
-  /// sweep establishes the baseline that later ones are read against, which is
-  /// why the daemon takes one as soon as the cold compile lands rather than
-  /// waiting for the first request.
+  /// A file already seen is compared against the modification time the last
+  /// sweep recorded for it. A file seen for the first time has no record: it
+  /// entered the program in a compile that ran *after* the previous sweep, so
+  /// it is compared against that sweep's start — no compile since can have
+  /// read it earlier — and reported when it moved later.
   ///
-  /// [compiledAt] is the exception, and it exists because that baseline rule
-  /// assumes the compile it follows was made *from these files*. A compiler
-  /// started with `--initialize-from-dill` holds libraries somebody else
-  /// compiled, possibly before the files on disk were edited — and it will
-  /// serve them forever, because `recompile` only drops what it is told to
-  /// drop and the baseline told it nothing. Pass when that kernel was written
-  /// and a first sighting newer than it is reported rather than recorded, so
-  /// exactly the files the kernel cannot reflect get recompiled.
+  /// Recording a first sighting as the baseline, which is what this used to
+  /// do, lost exactly one edit: a new file compiled, edited, and only then
+  /// swept had its edit taken for the version the compiler held. The catalog
+  /// served that file's first version until something else touched it.
+  ///
+  /// The bound is early rather than exact — a file written between a sweep and
+  /// the compile after it is recompiled for nothing — and it rests on nobody
+  /// sweeping while a compile is in flight, which both callers guarantee by
+  /// doing the two in turn.
+  ///
+  /// [compiledAt] replaces that bound, and the first sweep has no other: pass
+  /// when the compile it follows began, or — for a compiler started with
+  /// `--initialize-from-dill` — when that kernel was written. Such a compiler
+  /// holds libraries somebody else compiled, possibly before the files on disk
+  /// were edited, and serves them forever, because `recompile` only drops what
+  /// it is told to drop. Without either, the first sweep records everything it
+  /// sees as the baseline.
   List<Uri> sweep(Iterable<Uri> sources, {DateTime? compiledAt}) {
     var watch = Stopwatch()..start();
+    var readSince = compiledAt ?? _sweptAt;
+    _sweptAt = DateTime.now();
     var invalidated = <Uri>[];
     var watched = 0;
     for (var uri in sources) {
@@ -74,9 +89,9 @@ class SourceInvalidator {
       _seen[uri] = modified;
       if (known) {
         if (modified != previous) invalidated.add(uri);
-      } else if (compiledAt != null &&
+      } else if (readSince != null &&
           modified != null &&
-          modified.isAfter(compiledAt)) {
+          modified.isAfter(readSince)) {
         invalidated.add(uri);
       }
     }
