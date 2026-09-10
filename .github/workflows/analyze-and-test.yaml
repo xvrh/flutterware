@@ -49,6 +49,10 @@ jobs:
       - run: flutter analyze
       - run: flutter test
         working-directory: app
+      # The shader pixel tests again on Impeller: a paragraph freezing its
+      # shader is engine behaviour, and the mask path has to hold on both.
+      - run: flutter test --enable-impeller test/scene/scene_shader_paint_test.dart test/scene/scene_shader_capture_test.dart
+        working-directory: app
       # The root package's own tests. Separate because a pub workspace does not
       # run its members' suites — without this line `test/` here is analyzed
       # and never executed, which is how the inspection wire format sat
