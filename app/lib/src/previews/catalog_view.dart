@@ -11,10 +11,8 @@ import '../address/address_scope.dart';
 // both reads and writes. See `catalogPlace`.
 import '../plugins/native/previews_address.dart';
 import '../capture/capture_mode.dart';
-import '../embedder/embedded_engine.dart';
-import '../embedder/guest_texture.dart';
-import '../embedder/input_region.dart';
-import '../embedder/protocol.dart';
+import '../embedder/embedded_engine.dart' show EmbeddedEnginePhase;
+import '../embedder/guest_surface.dart';
 import '../inspect/node_highlight.dart';
 import '../inspect/pick_region.dart';
 import '../inspect/semantics_node.dart';
@@ -281,11 +279,11 @@ class _CatalogViewState extends State<CatalogView> {
   /// never settles, a `Draggable` stuck to nothing. Cancel is what a framework
   /// sends when a recognizer loses an arena, and losing an arena is exactly
   /// what has happened here.
-  void _setPanning(EmbeddedEngine engine, bool panning) {
+  void _setPanning(GuestSurface surface, bool panning) {
     if (panning == _panning.value) return;
     _panning.value = panning;
     if (panning) {
-      engine.sendPointer(phaseKind: PointerPhase.cancel, x: 0, y: 0);
+      surface.cancelPointer();
     }
   }
 
@@ -297,7 +295,7 @@ class _CatalogViewState extends State<CatalogView> {
   }
 
   void _maybeResize(
-    EmbeddedEngine engine,
+    GuestSurface surface,
     Size size,
     double dpr, {
     EdgeInsets safeAreas = EdgeInsets.zero,
@@ -331,23 +329,20 @@ class _CatalogViewState extends State<CatalogView> {
     if (!sized) {
       _resizeSettle = Timer(
         const Duration(milliseconds: 150),
-        () => _applyResize(engine, next),
+        () => _applyResize(surface, next),
       );
       return;
     }
-    _applyResize(engine, next);
+    _applyResize(surface, next);
   }
 
-  void _applyResize(
-    EmbeddedEngine engine,
-    (int, int, double, EdgeInsets) next,
-  ) {
+  void _applyResize(GuestSurface surface, (int, int, double, EdgeInsets) next) {
     _resizeSettle = null;
     _lastReported = next;
     var (width, height, dpr, safeAreas) = next;
     // Physical pixels, like the size — the guest turns them back into logical
     // padding on the other side.
-    engine.resize(width, height, dpr, insets: safeAreas * dpr);
+    surface.resize(width, height, dpr, insets: safeAreas * dpr);
   }
 
   /// The trailing edge waiting to resize the guest — see [_maybeResize].
@@ -610,7 +605,7 @@ class _CatalogViewState extends State<CatalogView> {
         // **The daemon's own phase when there is one**, which since it started
         // reporting them there usually is. What this used to say was true and
         // uninformative: every second of the wait reads "Compiling <demo>",
-        // where the demo is the last two percent of it and the engine
+        // where the demo is the last two percent of it and the surface
         // framework, the host build and the whole-catalog compile are the rest.
         // The entry is still named — it is what is being waited *for* — and the
         // phase is what is being waited *on*.
@@ -674,7 +669,7 @@ class _CatalogViewState extends State<CatalogView> {
         } else {
           canvas = _buildTexture(
             context,
-            _session.engine!,
+            _session.surface!,
             device,
             orientation,
             keyboard,
@@ -709,7 +704,7 @@ class _CatalogViewState extends State<CatalogView> {
   /// the texture stays sharp.
   Widget _buildTexture(
     BuildContext context,
-    EmbeddedEngine engine,
+    GuestSurface surface,
     Device? device,
     ScreenOrientation? orientation,
     KeyboardMode keyboard,
@@ -720,7 +715,7 @@ class _CatalogViewState extends State<CatalogView> {
       return StageGround(
         child: ZoomableStage(
           controller: _zoom,
-          onInteracting: (panning) => _setPanning(engine, panning),
+          onInteracting: (panning) => _setPanning(surface, panning),
           // Above the `LayoutBuilder`, so what the guest is told to render is
           // already the inset size — a fitted canvas that measured the whole
           // pane and then got padded would be one inset too wide in each
@@ -730,7 +725,7 @@ class _CatalogViewState extends State<CatalogView> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 _stage = (
-                  engine,
+                  surface,
                   constraints.biggest,
                   hostRatio,
                   EdgeInsets.zero,
@@ -744,7 +739,7 @@ class _CatalogViewState extends State<CatalogView> {
                 // silently discarding it.
                 _keyboardAfterFrame(keyboard, 0, null);
                 return _staged(
-                  _guestInput(engine, const SizedBox.expand(), touch: false),
+                  _guestInput(surface, const SizedBox.expand(), touch: false),
                 );
               },
             ),
@@ -760,7 +755,7 @@ class _CatalogViewState extends State<CatalogView> {
     var effective = device.oriented(orientation);
     var screen = Size(effective.width, effective.height);
     _stage = (
-      engine,
+      surface,
       screen,
       effective.pixelRatio,
       // What the frame draws around the screen, told to the thing rendering
@@ -792,7 +787,7 @@ class _CatalogViewState extends State<CatalogView> {
       band: _session.keyboard?.height ?? 0,
       onDismiss: onDismissKeyboard,
       child: _guestInput(
-        engine,
+        surface,
         SizedBox.fromSize(size: screen),
         touch: deviceIsTouched(effective),
       ),
@@ -805,7 +800,7 @@ class _CatalogViewState extends State<CatalogView> {
     return StageGround(
       child: ZoomableStage(
         controller: _zoom,
-        onInteracting: (panning) => _setPanning(engine, panning),
+        onInteracting: (panning) => _setPanning(surface, panning),
         child: Center(
           child: Padding(
             padding: const EdgeInsets.all(FwSpacing.xl),
@@ -843,7 +838,7 @@ class _CatalogViewState extends State<CatalogView> {
 
   /// What the stage last laid out, so the zoom listener can work out what to
   /// render at without a rebuild.
-  (EmbeddedEngine, Size, double, EdgeInsets)? _stage;
+  (GuestSurface, Size, double, EdgeInsets)? _stage;
 
   /// The guest's ratio follows the magnification — see [guestRatioFor].
   ///
@@ -878,14 +873,14 @@ class _CatalogViewState extends State<CatalogView> {
   }
 
   void _resizeAfterFrame() {
-    if (_stage case (var engine, var logical, var deviceRatio, var insets)) {
+    if (_stage case (var surface, var logical, var deviceRatio, var insets)) {
       var ratio = guestRatioFor(
         logical,
         deviceRatio,
         _zoom.value.getMaxScaleOnAxis(),
       );
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _maybeResize(engine, logical, ratio, safeAreas: insets);
+        if (mounted) _maybeResize(surface, logical, ratio, safeAreas: insets);
       });
     }
   }
@@ -917,7 +912,7 @@ class _CatalogViewState extends State<CatalogView> {
   /// would light the demo's own hover states underneath the thing you are
   /// trying to see.
   Widget _guestInput(
-    EmbeddedEngine engine,
+    GuestSurface surface,
     Widget sizedBox, {
     required bool touch,
   }) {
@@ -925,14 +920,12 @@ class _CatalogViewState extends State<CatalogView> {
     // per-mode it is easy to pass the placeholder to one of them, which is what
     // happened: arming the picker replaced the demo with an empty box, so the
     // preview vanished the moment you went to point at it.
-    var picture = engine.textureId == null
-        ? sizedBox
-        : GuestTexture(textureId: engine.textureId!);
+    var picture = surface.picture();
     return ValueListenableBuilder(
       valueListenable: _picking,
       builder: (context, picking, _) => picking
           ? _pickerInput(context, picture)
-          : _demoInput(engine, picture, touch: touch),
+          : _demoInput(surface, picture, touch: touch),
     );
   }
 
@@ -952,14 +945,13 @@ class _CatalogViewState extends State<CatalogView> {
   }
 
   Widget _demoInput(
-    EmbeddedEngine engine,
+    GuestSurface surface,
     Widget picture, {
     required bool touch,
   }) {
     return ValueListenableBuilder(
       valueListenable: _panning,
-      builder: (context, panning, child) => EmbedderInputRegion(
-        engine: engine,
+      builder: (context, panning, child) => surface.input(
         focusNode: _focusNode,
         touch: touch,
         // Ignored, not handled: an app chord carries on up to whichever
@@ -1630,17 +1622,17 @@ Future<Uint8List?> _capturePreview(
   CatalogSession session, {
   InspectNode? node,
 }) async {
-  var engine = session.engine;
-  if (engine == null || engine.phase != EmbeddedEnginePhase.running) {
+  var surface = session.surface;
+  if (surface == null || surface.phase != EmbeddedEnginePhase.running) {
     return null;
   }
-  return engine.capturePng(
+  return surface.capturePng(
     crop: node?.layout,
     // A crop arrives in the guest's logical coordinates; its pixels are in
-    // whatever ratio the guest is rendering at — the engine's, not a staged
+    // whatever ratio the guest is rendering at — the surface's, not a staged
     // device's, because with no device staged the guest renders at the
     // panel's ratio and a retina display makes that 2.
-    pixelRatio: engine.pixelRatio,
+    pixelRatio: surface.pixelRatio,
   );
 }
 
@@ -1701,7 +1693,7 @@ class _CaptureButtons extends StatelessWidget {
     // a capture would hand back a correct picture of something that was never
     // on screen.
     var running =
-        session.engine?.phase == EmbeddedEnginePhase.running &&
+        session.surface?.phase == EmbeddedEnginePhase.running &&
         session.selected != null;
     var node = _croppedNode(context, session);
     return CaptureButton(

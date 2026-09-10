@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 import 'package:flutter/painting.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -29,7 +31,7 @@ class GuestImages {
 
   /// Registers the extension. Call once, before `runApp`.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.imagesSettled', (_, _) async {
+    GuestExtensions.register('ext.flutterware.imagesSettled', (_, _) async {
       // A frame first, then the count, in that order on purpose. The frame is
       // what *starts* the loads: a fresh guest has built nothing, and a count
       // taken before the first build reads zero for the wrong reason. It is

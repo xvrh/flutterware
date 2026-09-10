@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
@@ -181,12 +183,12 @@ class CatalogAxes implements PreviewAxes {
 
   /// Registers the extensions. Call once, before `runApp`.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.axes', (_, _) async {
+    GuestExtensions.register('ext.flutterware.axes', (_, _) async {
       return developer.ServiceExtensionResponse.result(
         jsonEncode(describe().toJson()),
       );
     });
-    developer.registerExtension('ext.flutterware.setAxes', (_, args) async {
+    GuestExtensions.register('ext.flutterware.setAxes', (_, args) async {
       // A service extension's arguments are strings, so the payload is JSON in
       // one of them rather than a map of typed values.
       var payload = jsonDecode(args['payload'] ?? '{}') as Map<String, dynamic>;

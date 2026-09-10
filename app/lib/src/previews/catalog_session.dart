@@ -8,6 +8,8 @@ import 'package:flutterware/previews_guest.dart';
 import 'package:path/path.dart' as p;
 
 import '../embedder/embedded_engine.dart';
+import '../embedder/guest_channel.dart';
+import '../embedder/guest_surface.dart';
 import '../ui/tree_collapse.dart';
 import '../embedder/guest_vm_service.dart';
 import 'authoring.dart';
@@ -372,6 +374,7 @@ class CatalogSession extends ChangeNotifier {
     this.scannedEntries = const [],
     this.clock,
     this.connectToDaemon = CompilerDaemonClient.connect,
+    this.launchGuest = launchEmbeddedGuest,
     StartupProgress? startup,
   }) : startup = startup ?? StartupProgress() {
     // Forwarded, so a renderer has one thing to listen to.
@@ -556,6 +559,41 @@ class CatalogSession extends ChangeNotifier {
   /// and the dispose-during-connect window can only be held open by a connect
   /// a test controls.
   final DaemonConnector connectToDaemon;
+
+  /// How the guest is brought up once the catalog has compiled: an embedder
+  /// process by default, or — for a browser, or a test over a real entry —
+  /// one drawn inline. See [GuestLauncher].
+  final GuestLauncher launchGuest;
+
+  /// Installs a guest without [start]: [surface] and [channel] stand where
+  /// a launched guest's would, [entry] is what it is showing, and the
+  /// session is ready. What a test of the panel over an inline guest needs,
+  /// and what the catalog source's own seam will make unnecessary.
+  @visibleForTesting
+  void debugInstallGuest(
+    GuestSurface surface,
+    GuestChannel channel, {
+    required CatalogEntry entry,
+  }) {
+    _surface = surface;
+    surface.addListener(_onEngineChanged);
+    _channel = channel;
+    _inspect = InspectClient(
+      channel,
+      patience: InspectPatience.live,
+      abandoned: () => _disposed,
+    );
+    if (_panelOpen) {
+      _startWatch();
+      _startLogs();
+    }
+    _keyboardStream = _inspect!.keyboards.listen(_onKeyboard);
+    selected = entry;
+    active = entry;
+    phase = CatalogSessionPhase.ready;
+    _afterSwitch(entry);
+    notifyListeners();
+  }
 
   /// What a path shown in the panel is measured against.
   String get displayRoot => worktreeRoot ?? projectRoot;
@@ -1418,8 +1456,17 @@ class CatalogSession extends ChangeNotifier {
     return null;
   }
 
-  EmbeddedEngine? get engine => _engine;
-  EmbeddedEngine? _engine;
+  /// The guest's picture — see [GuestSurface]. Null until [start] has one.
+  GuestSurface? get surface => _surface;
+  GuestSurface? _surface;
+
+  /// The embedder process behind [surface], for what only a process can do
+  /// — the scene plugin's own guest rides on it. Null for a guest drawn
+  /// inline.
+  EmbeddedEngine? get engine => switch (_surface) {
+    EmbeddedEngine engine => engine,
+    _ => null,
+  };
 
   /// Calls a service extension on this session's guest, or null when there is
   /// no guest to call.
@@ -1432,10 +1479,10 @@ class CatalogSession extends ChangeNotifier {
   Future<Map<String, dynamic>?> callGuestExtension(
     String method, {
     Map<String, String> args = const {},
-  }) async => _vmService?.callExtension(method, args: args);
+  }) async => _channel?.callExtension(method, args: args);
 
   CompilerDaemonClient? _daemon;
-  GuestVmService? _vmService;
+  GuestChannel? _channel;
 
   /// The inspection reads and writes, shared with the headless path that `fw`
   /// and MCP go through — see [InspectClient]. Impatient compared with that
@@ -1631,48 +1678,44 @@ class CatalogSession extends ChangeNotifier {
       var compiled = await daemon.select(warmUp.id, full: true);
       if (_disposed) return;
 
-      var engine = _engine = EmbeddedEngine(
-        appPackageRoot: appPackageRoot,
-        flutterSdkRoot: flutterSdkRoot,
-        workingDirectory: projectRoot,
-        // Keyed by session, so a second panel — or an agent taking a
-        // screenshot — does not bind over this guest's socket.
-        name: ready.sessionId,
-        // Asked for here rather than read off the handshake: the build happens
-        // on the first panel that opens, and this closure is exactly that
-        // moment. A project that never opens one never builds a host.
-        buildGuest: () async => (
-          hostPath: await daemon.hostPath(),
-          assetsDir: ready.assetsDir,
-          icuData: ready.icuData,
+      var launched = await launchGuest(
+        GuestLaunch(
+          appPackageRoot: appPackageRoot,
+          flutterSdkRoot: flutterSdkRoot,
+          projectRoot: projectRoot,
+          // Keyed by session, so a second panel — or an agent taking a
+          // screenshot — does not bind over this guest's socket.
+          sessionId: ready.sessionId,
+          // Asked for here rather than read off the handshake: the build
+          // happens on the first panel that opens, and this closure is
+          // exactly that moment. A project that never opens one never builds
+          // a host.
+          buildGuest: () async => (
+            hostPath: await daemon.hostPath(),
+            assetsDir: ready.assetsDir,
+            icuData: ready.icuData,
+          ),
+          width: width,
+          height: height,
         ),
+        attach: (surface) {
+          _surface = surface;
+          surface.addListener(_onEngineChanged);
+        },
+        abandoned: () => _disposed,
       );
-      engine.addListener(_onEngineChanged);
-      await engine.start(width: width, height: height);
-      if (_disposed) return;
-
-      var uri = await engine.vmServiceUri;
-      var vmService = await GuestVmService.connect(
-        uri,
-        describeGuest: () => engine.guestOutput,
-      );
-      if (_disposed) {
-        // Same shape as the connect above: [dispose] closed a null, so the
-        // connection this await produced is ours to close.
-        unawaited(vmService.close());
-        return;
-      }
-      _vmService = vmService;
+      if (launched == null) return;
+      var channel = _channel = launched.channel;
       // `dart:developer` logs from the guest, which its stdout never carries;
       // the studio's own output is where every other host line already goes.
       unawaited(
-        vmService
+        channel
             .developerLog()
             .forEach((line) => debugPrint('[guest log] $line'))
             .catchError((Object _) {}),
       );
       _inspect = InspectClient(
-        vmService,
+        channel,
         patience: InspectPatience.live,
         abandoned: () => _disposed,
       );
@@ -1695,10 +1738,12 @@ class CatalogSession extends ChangeNotifier {
       // entry on screen rather than rendering their own copy of it. No await
       // between the disposed check above and this publish, so a session that
       // publishes is one whose [dispose] is still to come and will clear it.
-      LiveSession.publish(
-        LiveSession(projectRoot: projectRoot, vmServiceUri: uri, pid: pid),
-      );
-      _published = true;
+      if (launched.vmServiceUri case var uri?) {
+        LiveSession.publish(
+          LiveSession(projectRoot: projectRoot, vmServiceUri: uri, pid: pid),
+        );
+        _published = true;
+      }
 
       // Only when it was asked for. Nothing selected is a real state — the
       // stage says so and waits — and it is what a panel opened at the bare
@@ -2008,7 +2053,7 @@ class CatalogSession extends ChangeNotifier {
     required bool ifChanged,
   }) async {
     var daemon = _daemon;
-    var vmService = _vmService;
+    var vmService = _channel;
     if (_disposed ||
         phase != CatalogSessionPhase.ready ||
         daemon == null ||
@@ -2065,7 +2110,7 @@ class CatalogSession extends ChangeNotifier {
 
   Future<void> _switchOnce(
     CompilerDaemonClient daemon,
-    GuestVmService vmService,
+    GuestChannel vmService,
     CatalogEntry entry, {
     required bool reloaded,
     required bool ifChanged,
@@ -2264,24 +2309,20 @@ class CatalogSession extends ChangeNotifier {
   /// about losing the user's state, not a cache call, and is deliberately
   /// not taken here.
   void _onAssetsChanged(AssetsChanged change) {
-    var vm = _vmService;
+    var vm = _channel;
     if (vm == null) return;
     _fireAndForget(() async {
-      await vm.service.callServiceExtension(
+      await vm.callExtension(
         'ext.flutter.evict',
-        isolateId: vm.isolateId,
         args: {'value': 'AssetManifest.bin'},
       );
-      await vm.service.callServiceExtension(
-        'ext.flutter.reassemble',
-        isolateId: vm.isolateId,
-      );
+      await vm.callExtension('ext.flutter.reassemble');
     }(), 'refresh assets');
   }
 
   void _onEngineChanged() {
-    if (_engine?.phase == EmbeddedEnginePhase.error) {
-      _fail(_engine!.errorMessage ?? 'the embedder guest failed');
+    if (_surface?.phase == EmbeddedEnginePhase.error) {
+      _fail(engine?.errorMessage ?? 'the embedder guest failed');
     } else {
       notifyListeners();
     }
@@ -2340,17 +2381,86 @@ class CatalogSession extends ChangeNotifier {
     staging
       ..removeListener(notifyListeners)
       ..dispose();
-    _engine?.removeListener(_onEngineChanged);
-    _engine?.dispose();
+    _surface?.removeListener(_onEngineChanged);
+    _surface?.dispose();
     // Withdraw the invitation before the guest goes. A handle left behind is
     // not fatal — the next reader fails to connect and deletes it — but it
     // costs that reader a timeout, and this session is the one thing that
     // knows for certain the guest is going away.
     if (_published) LiveSession.clear(projectRoot);
-    unawaited(_vmService?.close());
+    unawaited(_channel?.close());
     unawaited(_changes?.cancel());
     unawaited(_assetsChanges?.cancel());
     unawaited(_daemon?.close());
     super.dispose();
   }
+}
+
+/// What a guest is launched with — everything an embedder process needs to
+/// be built and started. A guest drawn inline reads none of it.
+class GuestLaunch {
+  const GuestLaunch({
+    required this.appPackageRoot,
+    required this.flutterSdkRoot,
+    required this.projectRoot,
+    required this.sessionId,
+    required this.buildGuest,
+    required this.width,
+    required this.height,
+  });
+
+  final String appPackageRoot;
+  final String flutterSdkRoot;
+  final String projectRoot;
+  final String sessionId;
+  final Future<({String hostPath, String assetsDir, String icuData})> Function()
+  buildGuest;
+  final int width;
+  final int height;
+}
+
+/// A launched guest: how to talk to it, and where its VM service is when it
+/// is a process — null for a guest in this one.
+typedef LaunchedGuest = ({GuestChannel channel, String? vmServiceUri});
+
+/// Brings a guest up. [attach] receives the surface the moment it exists,
+/// before it starts, so the session is listening while it boots; [abandoned]
+/// says the session was disposed meanwhile, in which case the launcher cleans
+/// up what it made and answers null.
+typedef GuestLauncher = Future<LaunchedGuest?> Function(
+  GuestLaunch launch, {
+  required void Function(GuestSurface surface) attach,
+  required bool Function() abandoned,
+});
+
+/// The default: an embedder process, painted into a texture and reached over
+/// its VM service.
+Future<LaunchedGuest?> launchEmbeddedGuest(
+  GuestLaunch launch, {
+  required void Function(GuestSurface surface) attach,
+  required bool Function() abandoned,
+}) async {
+  var engine = EmbeddedEngine(
+    appPackageRoot: launch.appPackageRoot,
+    flutterSdkRoot: launch.flutterSdkRoot,
+    workingDirectory: launch.projectRoot,
+    name: launch.sessionId,
+    buildGuest: launch.buildGuest,
+  );
+  attach(engine);
+  await engine.start(width: launch.width, height: launch.height);
+  if (abandoned()) return null;
+
+  var uri = await engine.vmServiceUri;
+  var vmService = await GuestVmService.connect(
+    uri,
+    describeGuest: () => engine.guestOutput,
+  );
+  if (abandoned()) {
+    // Same shape as the connect above: [dispose] closed a null, so the
+    // connection this await produced is ours to close.
+    unawaited(vmService.close());
+    return null;
+  }
+  return (channel: vmService, vmServiceUri: uri);
 }

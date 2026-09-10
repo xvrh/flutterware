@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 
+import '../guest_extensions.dart';
+
 import 'log.dart';
 
 /// Keeps what the preview printed, where it can be asked for.
@@ -92,7 +94,7 @@ class GuestLogs {
     // Posted from inside the zone's print handler, which is safe only because
     // `postEvent` does not print. If it ever did, this would be a demo that
     // printed once and hung.
-    developer.postEvent(eventKind, line.toJson());
+    GuestExtensions.post(eventKind, line.toJson());
   }
 
   /// The event a console subscribes to.
@@ -126,12 +128,12 @@ class GuestLogs {
 
   /// Registers the extensions. Call once, before `runApp`.
   void registerExtensions() {
-    developer.registerExtension('ext.flutterware.logs', (_, _) async {
+    GuestExtensions.register('ext.flutterware.logs', (_, _) async {
       return developer.ServiceExtensionResponse.result(
         jsonEncode(describe().toJson()),
       );
     });
-    developer.registerExtension('ext.flutterware.clearLogs', (_, _) async {
+    GuestExtensions.register('ext.flutterware.clearLogs', (_, _) async {
       clear();
       return developer.ServiceExtensionResponse.result(
         jsonEncode({'cleared': true}),

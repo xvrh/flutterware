@@ -1,3 +1,5 @@
+import 'guest_channel.dart';
+
 import 'dart:async';
 
 import 'package:meta/meta.dart';
@@ -14,7 +16,7 @@ import 'package:vm_service/vm_service_io.dart';
 /// needs **events** — guest stdout, stderr, and `Extension` streams all arrive
 /// as server-initiated notifications with no request id, which a
 /// request/response-only client drops on the floor.
-class GuestVmService {
+class GuestVmService implements GuestChannel {
   GuestVmService._(
     this.service,
     this.isolateId, {
@@ -51,6 +53,7 @@ class GuestVmService {
   /// a completer nothing will ever complete and writes to a closed sink. The
   /// caller waits forever. Only a call already in flight at the moment of
   /// disposal comes back as an error, which is why both halves are handled.
+  @override
   bool get isGone => _gone;
   var _gone = false;
 
@@ -148,6 +151,7 @@ class GuestVmService {
   /// kernel-compiler isolate, which the embedder guest does not have, and every
   /// reload fails with `Error while starting Kernel isolate task`. It is what
   /// `flutter_tools` does at `run_hot.dart:1272`.
+  @override
   Future<void> reload(String dillPath) async {
     var report = await service.reloadSources(isolateId, rootLibUri: dillPath);
     if (report.success != true) {
@@ -185,6 +189,7 @@ class GuestVmService {
   /// Use it only where "not registered" is genuinely one of the answers. For a
   /// call that has no meaning if it did not land — anything that *writes* —
   /// use [requireExtension], which is the same call without the excuse.
+  @override
   Future<Map<String, dynamic>?> callExtension(
     String method, {
     Map<String, String>? args,
@@ -222,6 +227,7 @@ class GuestVmService {
   /// The strictness is unchanged, only postponed. A renamed extension still
   /// throws, and still lists what the guest does register — it just pays the
   /// wait first, which is only ever paid by a typo.
+  @override
   Future<Map<String, dynamic>?> requireExtension(
     String method, {
     Map<String, String>? args,
@@ -267,6 +273,7 @@ class GuestVmService {
   /// black frame whose cause was one such line.
   ///
   /// The stream subscription is per connection, like [extensionEvents].
+  @override
   Stream<String> developerLog() async* {
     if (_gone) return;
     try {
@@ -293,6 +300,7 @@ class GuestVmService {
         .where((line) => line.isNotEmpty);
   }
 
+  @override
   Stream<Map<String, Object?>> extensionEvents(String kind) async* {
     try {
       await service.streamListen(EventStreams.kExtension);
@@ -367,5 +375,6 @@ class GuestVmService {
     }
   }
 
+  @override
   Future<void> close() => service.dispose();
 }

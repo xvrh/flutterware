@@ -13,6 +13,8 @@ library;
 export 'src/ui_catalog/guest.dart' show CatalogGuest, CatalogKnobs;
 export 'src/ui_catalog/axes.dart' show CatalogAxes;
 export 'src/ui_catalog/entries.dart' show CatalogEntries;
+export 'src/ui_catalog/host.dart' show CatalogEntryBuilder, CatalogHost;
+export 'src/ui_catalog/inline.dart' show installInlineGuest;
 export 'src/ui_catalog/clock.dart' show pinnedClockOrigin, withPreviewClock;
 export 'src/ui_catalog/guest_keyboard.dart' show GuestKeyboard;
 export 'src/ui_catalog/guest_text_input.dart' show GuestTextInput;

@@ -573,6 +573,63 @@ deleted with a narrow catch now goes through the same housekeeping rule the
 sweep already had — a delete that cannot happen is not worth failing a
 finished run over — which is a rule about housekeeping, not about the web.
 
+### Previews, step 1 (same day): the guest drawn inline, two seams
+
+Previews is not recorded. It runs: the entry is a widget, and a widget can
+be drawn inside the studio as well as in an embedder process. The plan's
+four steps ("The cut, in order", decided the same day) start with the two
+seams, proven on the desktop before any web work, and this is them.
+
+Measured first, and the measurement settled the shape. The panel reads
+about forty members of `CatalogSession`, which looked like the interface
+the spec feared. But the session reaches the *guest* through exactly three
+things: seven members of `EmbeddedEngine` (the picture), fourteen
+`ext.flutterware.*` extension calls through one `callGuestExtension` (the
+channel), and the compiler daemon (the catalog). The first two became
+interfaces; the third is step 2.
+
+- **`GuestSurface`** (`app/lib/src/embedder/guest_surface.dart`): phase,
+  pixel ratio, resize, cancel pointer, `picture()`, `input()`, capture.
+  `EmbeddedEngine` implements it — the texture and the input region moved
+  behind two methods — and `InlineGuestSurface` *is* the widget, laid out at
+  the size the stage asks for under the media query an embedder would
+  report, with the same `CatalogHost` root the generated entrypoint runs.
+  `catalog_view.dart` draws either and does not know which.
+- **`GuestChannel`** (`app/lib/src/embedder/guest_channel.dart`): call,
+  require, events, log, reload, close. `GuestVmService` implements it;
+  `InProcessGuestChannel` calls the guest's handlers directly. For that the
+  published half gained `GuestExtensions` (`lib/src/guest_extensions.dart`),
+  a registry every guest handler now registers through — it stores the
+  handler and registers it with the VM service too, so a host in another
+  process notices nothing. `installInlineGuest` sets a guest up in-process:
+  everything a panel asks, minus the key and text-input shims, the error
+  hook and the log zone, which would take over the host's.
+- **The launcher** (`CatalogSession(launchGuest:)`): the session's `start`
+  hands a `GuestLaunch` to a launcher and gets a channel back; the default
+  builds the embedder process as before. `debugInstallGuest` installs a
+  surface and a channel without `start`, which is what the test uses until
+  step 2 puts the catalog behind a seam too.
+
+**Proven by `app/test/previews/inline_guest_test.dart`**: the panel over a
+real entry with a knob, in-process. The stage draws it; the inspector walks
+it and finds `_Alpha` but not `CatalogView` — the walk starts at the demo
+root; a point under the text finds the `Text`; a knob set through the
+address rebuilds it. Four tests, no process.
+
+**What the inline guest found.** The walker measured every box against the
+*window* (`getTransformTo(null)`) and hit-tested in window coordinates.
+In an embedder guest the demo root is the window, so nothing noticed; inline
+the boxes were on the studio. Both now measure against the demo root, which
+is the same answer for a process and the right one inline. Checked the other
+way too: `previews screenshot --engine=guest --node=<id>` through a real
+embedder crops exactly the plate it names.
+
+**Also on the way.** The studio's own scenarios moved to
+`app/test/scenarios/studio/` with a profile that frames them as a window:
+under `flutter test` they ran at 800×600 and the address bar overflowed by
+15px on a step's deep address. That overflow is real at that width and is
+left as a finding.
+
 ### The recording and the scenario, in that order
 
 The scenario does not record. It opens `app/demo/fixture/` through the file
@@ -611,8 +668,10 @@ so is the right answer there.
 1. ~~**Scenarios next, as the go/no-go for the interface.**~~ Built — see
    above. No interface on the core; the runner was the seam. Left for later:
    a whole-panel catalog demo of the scenarios panel over the recording.
-2. **Previews.** The still picture, recorded thumbnails and inspect, read-only
-   knobs. Three to five days.
+2. **Previews, inline.** Step 1 built — see above. Next: the catalog seam
+   (entries, select, changes) so `start` runs without a daemon; the
+   example's web-clean entries generated into the web demo; thumbnails
+   in-process; the studio scenario and the browser walk over the panel.
 3. ~~**The demo entry point, the record script as a documented command, the
    Pages deploy.**~~ Built; the README link remains.
 

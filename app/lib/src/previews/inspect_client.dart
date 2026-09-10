@@ -25,7 +25,7 @@ import 'package:flutterware/src/ui_catalog/keyboard.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/ui_catalog/knob.dart';
 
-import '../embedder/guest_vm_service.dart';
+import '../embedder/guest_channel.dart';
 import 'debug_flags.dart';
 
 /// How patiently a read waits for the guest to be describing the entry it was
@@ -80,9 +80,10 @@ class InspectPatience {
 ///
 /// Pure Dart, like everything it reads. `fw` links it.
 class InspectClient {
-  InspectClient(this.vmService, {required this.patience, this.abandoned});
+  InspectClient(this.channel, {required this.patience, this.abandoned});
 
-  final GuestVmService vmService;
+  /// The guest, over whichever channel reaches it.
+  final GuestChannel channel;
 
   final InspectPatience patience;
 
@@ -120,11 +121,11 @@ class InspectClient {
   /// silently failed to enable would show "no semantics" about an app that
   /// has plenty. Off is tolerant, because it runs from disposes.
   Future<void> setSemantics(bool on) => on
-      ? vmService.requireExtension(
+      ? channel.requireExtension(
           'ext.flutterware.semantics',
           args: const {'on': 'true'},
         )
-      : vmService.callExtension(
+      : channel.callExtension(
           'ext.flutterware.semantics',
           args: const {'on': 'false'},
         );
@@ -177,13 +178,13 @@ class InspectClient {
   /// [InspectLogLine.sequence] — matching on text and time instead would still
   /// be wrong about a demo printing the same word twice in a frame.
   Stream<InspectLogLine> get logLines =>
-      vmService.extensionEvents('flutterware.log').map(InspectLogLine.fromJson);
+      channel.extensionEvents('flutterware.log').map(InspectLogLine.fromJson);
 
   /// Empties the guest's buffer — the console's clear button.
   ///
   /// Tolerant, like [clearErrors]: the cost of it failing is a stale list.
   Future<void> clearLogs() =>
-      vmService.callExtension('ext.flutterware.clearLogs');
+      channel.callExtension('ext.flutterware.clearLogs');
 
   /// Forgets what the entry has reported so far.
   ///
@@ -191,7 +192,7 @@ class InspectClient {
   /// call whose failure costs nothing but a stale list, and a guest from before
   /// the extension existed should still be readable.
   Future<void> clearErrors() =>
-      vmService.callExtension('ext.flutterware.clearErrors');
+      channel.callExtension('ext.flutterware.clearErrors');
 
   /// The node ids under a point, outermost first.
   ///
@@ -200,7 +201,7 @@ class InspectClient {
   /// the same build; settling here would resolve the point against a second
   /// reading the caller was never shown.
   Future<List<String>> hitTest(double x, double y) async {
-    var json = await vmService.callExtension(
+    var json = await channel.callExtension(
       'ext.flutterware.hitTest',
       args: {'x': '$x', 'y': '$y'},
     );
@@ -221,7 +222,7 @@ class InspectClient {
   /// to `setParameters`, applying nothing and reporting success. S0b fixed the
   /// headless caller; the panel's two writes were still tolerant.
   Future<bool> setKnobs(String payload) async {
-    var json = await vmService.requireExtension(
+    var json = await channel.requireExtension(
       'ext.flutterware.setKnobs',
       args: {'payload': payload},
     );
@@ -232,7 +233,7 @@ class InspectClient {
   ///
   /// Required rather than tolerant for the same reason [setKnobs] is.
   Future<AxisReport?> setAxes(String payload) async {
-    var json = await vmService.requireExtension(
+    var json = await channel.requireExtension(
       'ext.flutterware.setAxes',
       args: {'payload': payload},
     );
@@ -251,7 +252,7 @@ class InspectClient {
   /// Through the framework's own `platformOverride` — see [stageGuestPlatform]
   /// for why that one rather than an extension of ours.
   Future<void> setStaging(DevicePlatform? platform) =>
-      stageGuestPlatform(vmService, platform);
+      stageGuestPlatform(channel, platform);
 
   /// Tells the guest how tall its keyboard is and whether to raise it.
   ///
@@ -278,7 +279,7 @@ class InspectClient {
     required double height,
     double? keypadHeight,
   }) async {
-    var json = await vmService.requireExtension(
+    var json = await channel.requireExtension(
       'ext.flutterware.keyboard',
       args: {
         'mode': mode.name,
@@ -295,7 +296,7 @@ class InspectClient {
 
   /// What the guest's keyboard is doing, without changing it.
   Future<KeyboardState?> keyboard() async {
-    var json = await vmService.callExtension('ext.flutterware.keyboard');
+    var json = await channel.callExtension('ext.flutterware.keyboard');
     return json == null ? null : KeyboardState.fromJson(json);
   }
 
@@ -307,7 +308,7 @@ class InspectClient {
   /// keyboard away from outside the app, and it is the one that makes the app
   /// react rather than making artwork disappear.
   Future<KeyboardState?> dismissKeyboard() async {
-    var json = await vmService.requireExtension(
+    var json = await channel.requireExtension(
       'ext.flutterware.keyboard',
       args: const {'dismiss': 'true'},
     );
@@ -320,7 +321,7 @@ class InspectClient {
   /// let go of one — so a host that had to ask would find out a poll late. For
   /// a control drawn over the keyboard band, a poll late means drawn in the
   /// wrong place.
-  Stream<KeyboardState> get keyboards => vmService
+  Stream<KeyboardState> get keyboards => channel
       .extensionEvents('flutterware.keyboard')
       .map(KeyboardState.fromJson);
 
@@ -340,7 +341,7 @@ class InspectClient {
   /// answers with what it is *actually* showing rather than raising, so telling
   /// the two apart costs a comparison instead of an exception path.
   Future<bool> showEntry(String entryId) async {
-    var json = await vmService.callExtension(
+    var json = await channel.callExtension(
       'ext.flutterware.showEntry',
       args: {'id': entryId},
     );
@@ -361,7 +362,7 @@ class InspectClient {
     String? nodeId,
     Duration minInterval = Duration.zero,
   }) async {
-    var json = await vmService.requireExtension(
+    var json = await channel.requireExtension(
       'ext.flutterware.watch',
       args: {
         'on': 'true',
@@ -380,11 +381,11 @@ class InspectClient {
   /// from a dispose, where the guest may already be going away and there is
   /// nothing useful to do about it.
   Future<void> unwatch() =>
-      vmService.callExtension('ext.flutterware.watch', args: {'on': 'false'});
+      channel.callExtension('ext.flutterware.watch', args: {'on': 'false'});
 
   /// What the watch has cost, without subscribing to it.
   Future<WatchStats?> watchStats() async {
-    var json = await vmService.callExtension('ext.flutterware.watch');
+    var json = await channel.callExtension('ext.flutterware.watch');
     return json == null ? null : WatchStats.fromJson(json);
   }
 
@@ -394,7 +395,7 @@ class InspectClient {
   /// that a switch has happened and this reader is behind, so dropping it
   /// silently would throw away the only signal for it.
   Stream<WatchPush> get watches =>
-      vmService.extensionEvents('flutterware.watch').map(WatchPush.fromJson);
+      channel.extensionEvents('flutterware.watch').map(WatchPush.fromJson);
 
   /// Polls [method] until what it decodes names [entryId].
   ///
@@ -415,7 +416,7 @@ class InspectClient {
     String entryId,
   ) async {
     for (var attempt = 0; attempt < patience.attempts; attempt++) {
-      var json = await vmService.callExtension(method);
+      var json = await channel.callExtension(method);
       if (abandoned?.call() ?? false) return null;
       // A guest from before the extension existed.
       if (json == null) return null;

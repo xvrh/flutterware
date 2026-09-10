@@ -1,9 +1,13 @@
+import 'guest_surface.dart';
+import 'guest_texture.dart';
+import 'input_region.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -22,7 +26,7 @@ enum EmbeddedEnginePhase { building, running, error }
 /// frames into a host external texture.
 typedef GuestBuild = ({String hostPath, String assetsDir, String icuData});
 
-class EmbeddedEngine extends ChangeNotifier {
+class EmbeddedEngine extends ChangeNotifier implements GuestSurface {
   EmbeddedEngine({
     required this.appPackageRoot,
     required this.flutterSdkRoot,
@@ -75,6 +79,7 @@ class EmbeddedEngine extends ChangeNotifier {
   /// The engine behind [textureId], or null when nothing here owns it.
   static EmbeddedEngine? withTexture(int textureId) => _byTextureId[textureId];
 
+  @override
   EmbeddedEnginePhase phase = EmbeddedEnginePhase.building;
   String? errorMessage;
   int? textureId;
@@ -93,6 +98,7 @@ class EmbeddedEngine extends ChangeNotifier {
   /// the old frame does not come with it. It goes false the moment the guest
   /// announces the new surfaces and true again on the first frame composited
   /// against them.
+  @override
   bool get hasPainted => _paintedGeneration == _currentGeneration;
 
   /// The generation of the last frame the guest announced. Starts apart from
@@ -384,10 +390,12 @@ class EmbeddedEngine extends ChangeNotifier {
   /// the guest renders at the panel's ratio, 2 on any retina display. The crop
   /// used to guess from the device and fall back to 1, which cut the wrong
   /// quarter of every capture in the default staging.
+  @override
   double get pixelRatio => _pixelRatio;
   var _pixelRatio = 1.0;
 
   /// Forwards a new physical-pixel size to the guest.
+  @override
   void resize(
     int width,
     int height,
@@ -466,6 +474,7 @@ class EmbeddedEngine extends ChangeNotifier {
   /// Pass [crop] to cut it to a node's box, in the guest's logical coordinates:
   /// the space [InspectLayout] reports, which is why a node's rect from the
   /// inspect panel crops its own picture with no transform.
+  @override
   Future<Uint8List> capturePng({
     InspectLayout? crop,
     List<InspectNode> annotate = const [],
@@ -485,6 +494,32 @@ class EmbeddedEngine extends ChangeNotifier {
   /// the host's raster, and encoding a PNG just to decode it again would be the
   /// only step in that path that did nothing.
   Future<img.Image> captureImage() => _capture.capture();
+
+  @override
+  void cancelPointer() =>
+      sendPointer(phaseKind: PointerPhase.cancel, x: 0, y: 0);
+
+  @override
+  Widget picture() => switch (textureId) {
+    var id? => GuestTexture(textureId: id),
+    null => const SizedBox.expand(),
+  };
+
+  @override
+  Widget input({
+    required Widget child,
+    required FocusNode focusNode,
+    required bool touch,
+    bool Function(KeyEvent event)? shouldIgnoreKey,
+    bool Function(PointerEvent event)? shouldIgnorePointer,
+  }) => EmbedderInputRegion(
+    engine: this,
+    focusNode: focusNode,
+    touch: touch,
+    shouldIgnoreKey: shouldIgnoreKey,
+    shouldIgnorePointer: shouldIgnorePointer,
+    child: child,
+  );
 
   @override
   void dispose() {

@@ -386,8 +386,10 @@ void main() => Flutterware.configure((fw) {
         .new(example, languages: ['en', 'fr']),
         // The studio itself, over a recording of the example — see
         // `app/lib/src/demo/`. Narrowed to its own folder: `app/test/` is
-        // hundreds of widget tests, and only these are scenarios.
-        .new(app, directory: 'test/scenarios'),
+        // hundreds of widget tests, and only these are scenarios. The folder
+        // carries the profile that frames them as a window, which is also
+        // what `flutter test` runs them at.
+        .new(app, directory: 'test/scenarios/studio'),
       ],
     ),
   );
