@@ -78,4 +78,52 @@ void main() {
     expect(current.colors, [_red, _blue]);
     expect(labels, ['Remove stop']);
   });
+
+  testWidgets(
+    'a pending edit survives an unrelated rebuild, only the echo clears it',
+    (tester) async {
+      late StateSetter rebuild;
+      var recorded = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme,
+          home: Material(
+            child: Center(
+              child: SizedBox(
+                width: 240,
+                child: StatefulBuilder(
+                  builder: (context, setState) {
+                    rebuild = setState;
+                    return SceneGradientField(
+                      // The parent never feeds the edit back — its echo
+                      // has not arrived yet — so this stays the two-stop
+                      // gradient throughout.
+                      gradient: const LinearPaint(colors: [_red, _blue]),
+                      onChanged: (next, {required label, mergeKey}) =>
+                          recorded.add(label),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(const ValueKey('gradient:bar'))),
+      );
+      await tester.pump();
+
+      // An ancestor rebuild unrelated to the gradient: same value, just a
+      // new SceneGradientField instance for the element to diff against.
+      rebuild(() {});
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('gradient:remove')));
+      await tester.pump();
+
+      expect(recorded, ['Add stop', 'Remove stop']);
+    },
+  );
 }

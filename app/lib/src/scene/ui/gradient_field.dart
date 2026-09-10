@@ -61,7 +61,7 @@ class _SceneGradientFieldState extends State<SceneGradientField> {
   @override
   void didUpdateWidget(SceneGradientField old) {
     super.didUpdateWidget(old);
-    _pending = null;
+    if (widget.gradient != old.gradient) _pending = null;
   }
 
   void _apply(StopEdit edit, String label, {String? mergeKey}) {
