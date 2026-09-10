@@ -171,36 +171,14 @@ ScenePaint? _readPaint(Expression e, Refuse refuse) {
     case ('LinearPaint', var args):
       var named = _named(args, 'a gradient', refuse);
       if (named == null) return null;
-      var colorList = named.remove('colors');
-      if (colorList is! ListLiteral) {
-        refuse(
-          e.offset,
-          'paint',
-          'a gradient names its colours — '
-              'LinearPaint(colors: [SceneColor(0x…), SceneColor(0x…)])',
-        );
-        return null;
-      }
-      var colors = <SceneColor>[];
-      for (var c in colorList.elements) {
-        if (c is! Expression) continue;
-        var color = _readColor(c, refuse);
-        if (color == null) return null;
-        colors.add(color);
-      }
-      List<double>? stops;
-      if (named.remove('stops') case ListLiteral l) {
-        stops = [
-          for (var s in l.elements)
-            if (s is Expression) ?_number(s),
-        ];
-      }
+      var read = _readStops(e, named, 'LinearPaint', refuse);
+      if (read == null) return null;
       var begin = _readAlignment(named.remove('begin'), refuse);
       var end = _readAlignment(named.remove('end'), refuse);
       if (!_rest(named, 'LinearPaint', refuse)) return null;
       return LinearPaint(
-        colors: colors,
-        stops: stops,
+        colors: read.colors,
+        stops: read.stops,
         begin: begin ?? SceneAlignment.topCenter,
         end: end ?? SceneAlignment.bottomCenter,
       );
@@ -213,6 +191,65 @@ ScenePaint? _readPaint(Expression e, Refuse refuse) {
       );
       return null;
   }
+}
+
+/// A gradient's colours and where they sit, taken out of [named].
+///
+/// Shared by the gradients, and where the engine's rules are refused in
+/// words instead of thrown mid-paint: two colours at least — one colour is a
+/// SolidPaint — and, when positions are given, one per colour.
+({List<SceneColor> colors, List<double>? stops})? _readStops(
+  Expression at,
+  Map<String, Expression> named,
+  String kind,
+  Refuse refuse,
+) {
+  var colorList = named.remove('colors');
+  if (colorList is! ListLiteral) {
+    refuse(
+      at.offset,
+      'paint',
+      'a gradient names its colours — '
+          '$kind(colors: [SceneColor(0x…), SceneColor(0x…)])',
+    );
+    return null;
+  }
+  var colors = <SceneColor>[];
+  for (var c in colorList.elements) {
+    if (c is! Expression) continue;
+    var color = _readColor(c, refuse);
+    if (color == null) return null;
+    colors.add(color);
+  }
+  if (colors.length < 2) {
+    refuse(
+      colorList.offset,
+      'paint',
+      'a gradient has two colours at least — one colour is '
+          'SolidPaint(SceneColor(0x…))',
+    );
+    return null;
+  }
+  List<double>? stops;
+  if (named.remove('stops') case var s?) {
+    var read = s is ListLiteral
+        ? [
+            for (var e in s.elements)
+              if (e is Expression) _number(e),
+          ]
+        : null;
+    if (read == null || read.length != colors.length || read.contains(null)) {
+      refuse(
+        s.offset,
+        'paint',
+        'a gradient has one stop per colour, each a number from 0 to 1 — '
+            'or no stops, which spreads the colours evenly',
+      );
+      return null;
+    }
+    stops = [for (var v in read) v!];
+  }
+  return (colors: colors, stops: stops);
 }
 
 SceneAlignment? _readAlignment(Expression? e, Refuse refuse) {

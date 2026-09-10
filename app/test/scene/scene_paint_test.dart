@@ -52,4 +52,42 @@ void main() {
       expect(fill.withPaint(null), const FillLayer(dy: 4));
     });
   });
+
+  group('a gradient', () {
+    const a = SceneColor(0xFFFF0000);
+    const b = SceneColor(0xFF00FF00);
+    const c = SceneColor(0xFF0000FF);
+
+    test('spreads its colours evenly when it names no stops', () {
+      expect(const LinearPaint(colors: [a, b, c]).resolvedStops, [0, 0.5, 1]);
+    });
+
+    test('keeps stops that give one per colour, and ignores any others', () {
+      expect(
+        const LinearPaint(colors: [a, b], stops: [0.2, 0.9]).resolvedStops,
+        [0.2, 0.9],
+      );
+      expect(
+        const LinearPaint(colors: [a, b, c], stops: [0, 1]).resolvedStops,
+        [0, 0.5, 1],
+      );
+    });
+
+    test('changes its stops and keeps its shape', () {
+      const g = LinearPaint(
+        colors: [a, b],
+        begin: SceneAlignment.centerLeft,
+        end: SceneAlignment.centerRight,
+      );
+      expect(
+        g.withStops([a, b, c], [0, 0.3, 1]),
+        const LinearPaint(
+          colors: [a, b, c],
+          stops: [0, 0.3, 1],
+          begin: SceneAlignment.centerLeft,
+          end: SceneAlignment.centerRight,
+        ),
+      );
+    });
+  });
 }

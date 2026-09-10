@@ -120,6 +120,24 @@ void main() {
         const StrokeLayer(width: 9, join: SceneStrokeJoin.bevel, dy: -3),
       );
     });
+
+    test('refuses a gradient of one colour, and stops that do not fit', () {
+      var parsed = parseSceneFile(
+        _scene(
+          '[FillLayer(paint: LinearPaint(colors: [SceneColor(0xFFFF0000)]))]',
+        ),
+      );
+      expect(parsed.refusals.single.construct, 'paint');
+      expect(parsed.refusals.single.message, contains('two colours'));
+      parsed = parseSceneFile(
+        _scene(
+          '[FillLayer(paint: LinearPaint(colors: '
+          '[SceneColor(0xFFFF0000), SceneColor(0xFF0000FF)], stops: [0]))]',
+        ),
+      );
+      expect(parsed.refusals.single.construct, 'paint');
+      expect(parsed.refusals.single.message, contains('one stop per colour'));
+    });
   });
 
   group('a style token', () {

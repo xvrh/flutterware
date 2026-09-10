@@ -25,6 +25,7 @@ import 'package:flutter/widgets.dart';
 
 import 'core/values.dart';
 import 'flutter_bridge.dart';
+import 'gradient_shader.dart';
 
 /// A text node's paragraph, painted once per layer.
 ///
@@ -197,16 +198,24 @@ class SceneTextStackPainter extends CustomPainter {
     }
     switch (layer.paint) {
       case SolidPaint(:var color):
-        paint.color = color.flutter.withValues(
-          alpha: color.flutter.a * layer.opacity,
+        paint.color = _faded(color.flutter, layer.opacity);
+      case SceneGradient(:var colors) when colors.length < 2:
+        // One colour is that colour, and none is the text's: the engine
+        // refuses both as gradients.
+        paint.color = _faded(
+          colors.firstOrNull?.flutter ?? own ?? const Color(0xFF000000),
+          layer.opacity,
         );
-      case LinearPaint g:
-        paint.shader = _shader(g, size, layer.opacity);
+      case SceneGradient g:
+        paint.shader = sceneGradientShader(
+          g,
+          Offset.zero & size,
+          opacity: layer.opacity,
+        );
       case null:
         // No paint of its own: the text's colour, which is what lets one
         // stack serve several colours.
-        var color = own ?? const Color(0xFF000000);
-        paint.color = color.withValues(alpha: color.a * layer.opacity);
+        paint.color = _faded(own ?? const Color(0xFF000000), layer.opacity);
     }
     if (layer.blur > 0) {
       // On the pass's own paint, so the glyph OUTLINE is blurred. Compositing
@@ -215,21 +224,6 @@ class SceneTextStackPainter extends CustomPainter {
       paint.maskFilter = MaskFilter.blur(BlurStyle.normal, layer.blur);
     }
     return paint;
-  }
-
-  ui.Shader _shader(LinearPaint g, Size size, double opacity) {
-    var rect = Offset.zero & size;
-    return ui.Gradient.linear(
-      Alignment(g.begin.x, g.begin.y).withinRect(rect),
-      Alignment(g.end.x, g.end.y).withinRect(rect),
-      [
-        for (var c in g.colors)
-          opacity == 1
-              ? c.flutter
-              : c.flutter.withValues(alpha: c.flutter.a * opacity),
-      ],
-      g.stops,
-    );
   }
 
   @override
@@ -244,6 +238,9 @@ class SceneTextStackPainter extends CustomPainter {
       old.widthBasis != widthBasis ||
       old.heightBehavior != heightBehavior;
 }
+
+Color _faded(Color c, double opacity) =>
+    opacity == 1 ? c : c.withValues(alpha: c.a * opacity);
 
 bool _sameLayers(List<TextLayer> a, List<TextLayer> b) {
   if (a.length != b.length) return false;

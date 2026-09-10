@@ -153,9 +153,9 @@ class SceneAlignment {
 ///
 /// Built for text layers, and shaped for `fill` to adopt the day a frame's
 /// fill becomes a list of paints (master plan §6) — a second notion of paint
-/// is the thing to avoid, not a second user of this one. Radial and sweep are
-/// the same shape with a different geometry and are not built yet; the wire
-/// tags the kind so adding one is additive.
+/// is the thing to avoid, not a second user of this one. Linear, radial and
+/// sweep share [SceneGradient]; the wire tags the kind, so a new one is
+/// additive.
 sealed class ScenePaint {
   const ScenePaint();
 
@@ -168,14 +168,8 @@ sealed class ScenePaint {
     // colour already travels as everywhere else.
     num argb => SolidPaint(SceneColor(argb.toInt())),
     Map m when m['k'] == 'linear' => LinearPaint(
-      colors: [
-        for (var c in (m['colors'] as List? ?? const []))
-          SceneColor((c as num).toInt()),
-      ],
-      stops: switch (m['stops']) {
-        List l => [for (var s in l) (s as num).toDouble()],
-        _ => null,
-      },
+      colors: _wireColors(m),
+      stops: _wireStops(m),
       begin: SceneAlignment.fromWire(m['begin'], SceneAlignment.topCenter),
       end: SceneAlignment.fromWire(m['end'], SceneAlignment.bottomCenter),
     ),
@@ -201,26 +195,73 @@ class SolidPaint extends ScenePaint {
   String toString() => 'SolidPaint($color)';
 }
 
+List<SceneColor> _wireColors(Map m) => [
+  for (var c in (m['colors'] as List? ?? const []))
+    SceneColor((c as num).toInt()),
+];
+
+List<double>? _wireStops(Map m) => switch (m['stops']) {
+  List l => [for (var s in l) (s as num).toDouble()],
+  _ => null,
+};
+
+/// The three gradients, and what they share: colours, where each one sits,
+/// and the even spread a missing position means.
+sealed class SceneGradient extends ScenePaint {
+  const SceneGradient({required this.colors, this.stops});
+
+  final List<SceneColor> colors;
+
+  /// One position per colour, 0..1 along the gradient. Null spreads the
+  /// colours evenly — what the file omits, and what the editor writes out
+  /// the first time a stop is moved.
+  final List<double>? stops;
+
+  /// [stops] when they give one position per colour, otherwise the even
+  /// spread. The engine refuses any other shape, so this is what reaches it.
+  List<double> get resolvedStops {
+    if (stops case var s? when s.length == colors.length) return s;
+    var n = colors.length;
+    return [for (var i = 0; i < n; i++) n == 1 ? 0.0 : i / (n - 1)];
+  }
+
+  /// This gradient with other colours at other positions, its shape kept —
+  /// what every stop edit is.
+  SceneGradient withStops(List<SceneColor> colors, List<double>? stops);
+
+  Map<String, Object?> get _stopsWire => {
+    'colors': [for (var c in colors) c.argb],
+    'stops': ?stops,
+  };
+
+  bool _sameStops(SceneGradient other) =>
+      _sameList(other.colors, colors) && _sameList(other.stops, stops);
+
+  int get _stopsHash =>
+      Object.hash(Object.hashAll(colors), Object.hashAll(stops ?? const []));
+}
+
 /// A gradient down the box by default, which is what a metal or a sunset
-/// face wants. [stops] null spreads the colours evenly.
-class LinearPaint extends ScenePaint {
+/// face wants.
+class LinearPaint extends SceneGradient {
   const LinearPaint({
-    required this.colors,
-    this.stops,
+    required super.colors,
+    super.stops,
     this.begin = SceneAlignment.topCenter,
     this.end = SceneAlignment.bottomCenter,
   });
 
-  final List<SceneColor> colors;
-  final List<double>? stops;
   final SceneAlignment begin;
   final SceneAlignment end;
 
   @override
+  LinearPaint withStops(List<SceneColor> colors, List<double>? stops) =>
+      LinearPaint(colors: colors, stops: stops, begin: begin, end: end);
+
+  @override
   Object toWire() => {
     'k': 'linear',
-    'colors': [for (var c in colors) c.argb],
-    'stops': ?stops,
+    ..._stopsWire,
     'begin': begin.toWire(),
     'end': end.toWire(),
   };
@@ -228,18 +269,12 @@ class LinearPaint extends ScenePaint {
   @override
   bool operator ==(Object other) =>
       other is LinearPaint &&
-      _sameList(other.colors, colors) &&
-      _sameList(other.stops, stops) &&
+      _sameStops(other) &&
       other.begin == begin &&
       other.end == end;
 
   @override
-  int get hashCode => Object.hash(
-    Object.hashAll(colors),
-    Object.hashAll(stops ?? []),
-    begin,
-    end,
-  );
+  int get hashCode => Object.hash(_stopsHash, begin, end);
 
   @override
   String toString() => 'LinearPaint($colors)';

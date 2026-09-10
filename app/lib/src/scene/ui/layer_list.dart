@@ -271,17 +271,31 @@ class _SceneLayerListState extends State<SceneLayerList> {
         color: switch (layer.paint) {
           SolidPaint(:var color) => Color(color.argb),
           null => widget.color,
-          LinearPaint() => null,
+          SceneGradient(:var colors) when colors.length < 2 =>
+            colors.isEmpty ? widget.color : Color(colors.first.argb),
+          SceneGradient() => null,
         },
         gradient: switch (layer.paint) {
-          LinearPaint(:var colors, :var stops) => LinearGradient(
-            colors: [for (var c in colors) Color(c.argb)],
-            stops: stops,
-          ),
+          SceneGradient g when g.colors.length >= 2 => _swatch(g),
           _ => null,
         },
       ),
     );
+  }
+
+  /// A gradient as a swatch draws it — Flutter's own gradient classes, since
+  /// a swatch is a decoration; the pass itself goes through the scene's
+  /// shader.
+  static Gradient _swatch(SceneGradient g) {
+    var colors = [for (var c in g.colors) Color(c.argb)];
+    return switch (g) {
+      LinearPaint(:var begin, :var end) => LinearGradient(
+        colors: colors,
+        stops: g.resolvedStops,
+        begin: Alignment(begin.x, begin.y),
+        end: Alignment(end.x, end.y),
+      ),
+    };
   }
 
   String _describe(TextLayer layer) {
@@ -313,7 +327,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (layer.paint case LinearPaint _) ...[
+          if (layer.paint case SceneGradient _) ...[
             Text('a gradient, from the file', style: caption),
             const Gap(FwSpacing.xs),
             Tappable(
