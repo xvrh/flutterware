@@ -10,6 +10,7 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/previews/catalog_session.dart';
@@ -63,6 +64,9 @@ class _Session extends CatalogSession {
 const _shader = FillLayer(paint: ShaderPaint('shaders/glow.frag'));
 
 void main() {
+  // The guest follows the app's lifecycle, which lives on the binding.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late _Session session;
   late SceneDocument scene;
   late SceneEditor editor;
@@ -167,6 +171,41 @@ void main() {
         g.dispose();
         async.elapse(const Duration(seconds: 3));
         expect(session.refreshes, 1);
+      });
+    });
+
+    // Minimised over a shader document, the studio would have the daemon
+    // rebundle every second for nobody. Losing focus to the editor the
+    // `.frag` is being saved in is not that: it is the loop the poll is for.
+    test('not while the studio is hidden, and at once when it is back', () {
+      var binding = TestWidgetsFlutterBinding.instance;
+      void walk(List<AppLifecycleState> states) {
+        for (var state in states) {
+          binding.handleAppLifecycleStateChanged(state);
+        }
+      }
+
+      addTearDown(() {
+        if (binding.lifecycleState != AppLifecycleState.resumed) {
+          walk(const [AppLifecycleState.inactive, AppLifecycleState.resumed]);
+        }
+      });
+      fakeAsync((async) {
+        headline().layers = [_shader];
+        session.phase = CatalogSessionPhase.ready;
+        guest();
+        walk(const [AppLifecycleState.inactive]);
+        async.elapse(const Duration(milliseconds: 2100));
+        expect(session.refreshes, 2, reason: 'unfocused is still on screen');
+
+        walk(const [AppLifecycleState.hidden, AppLifecycleState.paused]);
+        async.elapse(const Duration(seconds: 3));
+        expect(session.refreshes, 2, reason: 'nobody is looking');
+
+        walk(const [AppLifecycleState.hidden, AppLifecycleState.inactive]);
+        expect(session.refreshes, 3, reason: 'asked on the way back');
+        async.elapse(const Duration(milliseconds: 1100));
+        expect(session.refreshes, 4, reason: 'and every second again');
       });
     });
   });

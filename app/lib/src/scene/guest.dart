@@ -12,6 +12,8 @@ import 'dart:convert';
 
 import 'package:flutter/painting.dart' show Size;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart'
+    show AppLifecycleListener, AppLifecycleState, WidgetsBinding;
 import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:flutterware/scene_authoring.dart';
 // ignore: implementation_imports
@@ -38,6 +40,8 @@ const sceneHostEntrySymbol = sceneCanvasHostSymbol;
 class SceneGuest {
   SceneGuest(this.session, this.editor, {required this.groupDirectory}) {
     _paintsWithClock = sceneShaderAssets(editor.doc).isNotEmpty;
+    _shown = _isShown(WidgetsBinding.instance.lifecycleState);
+    _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
     _pollAssets();
     editor.doc.addListener(_push);
     editor.addListener(_onEditor);
@@ -205,8 +209,34 @@ class SceneGuest {
   /// document, since that is the edit loop it is for.
   Timer? _assetPoll;
 
+  /// Whether the studio is on screen, which the poll also waits for: a
+  /// window left minimised over a shader document would otherwise have the
+  /// daemon rebundle once a second for as long as it stays down. Not
+  /// `inactive` — a studio beside the editor the `.frag` is saved in has
+  /// lost focus, and is the loop the poll is for.
+  var _shown = true;
+  late final AppLifecycleListener _lifecycle;
+
+  static bool _isShown(AppLifecycleState? state) =>
+      state != AppLifecycleState.hidden && state != AppLifecycleState.paused;
+
+  /// Back on screen, the daemon is asked at once rather than a second later:
+  /// whatever was saved while the window was down is what the user is
+  /// coming back to see.
+  void _onLifecycle(AppLifecycleState state) {
+    var shown = _isShown(state);
+    if (shown == _shown) return;
+    _shown = shown;
+    if (shown &&
+        _paintsWithClock &&
+        session.phase == CatalogSessionPhase.ready) {
+      session.refresh();
+    }
+    _pollAssets();
+  }
+
   void _pollAssets() {
-    if (!_paintsWithClock) {
+    if (!_paintsWithClock || !_shown) {
       _assetPoll?.cancel();
       _assetPoll = null;
       return;
@@ -338,6 +368,7 @@ class SceneGuest {
 
   void dispose() {
     _disposed = true;
+    _lifecycle.dispose();
     _assetPoll?.cancel();
     _shaderRetry?.cancel();
     _viewSettle?.cancel();
