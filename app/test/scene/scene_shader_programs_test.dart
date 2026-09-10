@@ -307,6 +307,11 @@ void main() {
   // A widget test that pumps a shader scene without precaching asks for the
   // program under fake time, then ends before the load lands. The load must
   // still land for whoever asks next.
+  //
+  // ORDER-DEPENDENT on purpose: the regression is a load stranded ACROSS a
+  // test boundary, so it takes two tests sharing `programs` and `gate`, run
+  // in declaration order. The second alone (`--plain-name`) has no `gate`
+  // and fails on that, not on the bug; run the group whole.
   group('a load asked for by a test that ends before it lands', () {
     const asset = 'late.frag';
     // Created by the loader, so in whatever zone the load runs in.

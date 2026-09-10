@@ -4,6 +4,7 @@
 //
 // Plain `test()`s with real async: a program's load never completes under
 // `testWidgets`' fake clock.
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -46,13 +47,14 @@ Future<(SceneTextStackPainter, ui.Image)> _paintWith(
   String text = 'MMMMMMMMMM',
   double width = 200,
   Color color = const Color(0xFFFFFFFF),
+  TextAlign textAlign = TextAlign.left,
   ValueListenable<Duration>? time,
 }) async {
   var painter = SceneTextStackPainter(
     span: TextSpan(text: text),
     style: TextStyle(fontSize: 20, height: 1, color: color),
     layers: layers,
-    textAlign: TextAlign.left,
+    textAlign: textAlign,
     maxLines: null,
     overflow: TextOverflow.clip,
     textDirection: TextDirection.ltr,
@@ -70,12 +72,14 @@ Future<ui.Image> _paint(
   String text = 'MMMMMMMMMM',
   double width = 200,
   Color color = const Color(0xFFFFFFFF),
+  TextAlign textAlign = TextAlign.left,
 }) async {
   var (_, image) = await _paintWith(
     layers,
     text: text,
     width: width,
     color: color,
+    textAlign: textAlign,
   );
   return image;
 }
@@ -229,14 +233,17 @@ void main() {
     expect((await _mean(image)).b, greaterThan(0.95));
   });
 
-  test('scene time changes the picture with no relayout', () async {
-    var time = ValueNotifier(const Duration(milliseconds: 250));
-    var (painter, first) = await _paintWith([shaderPass(1)], time: time);
-    expect((await _mean(first)).r, closeTo(0.25, 0.02));
-    time.value = const Duration(milliseconds: 750);
-    var second = await _repaint(painter);
-    expect((await _mean(second)).r, closeTo(0.75, 0.02));
-  });
+  test(
+    'scene time changes the picture when the same painter repaints',
+    () async {
+      var time = ValueNotifier(const Duration(milliseconds: 250));
+      var (painter, first) = await _paintWith([shaderPass(1)], time: time);
+      expect((await _mean(first)).r, closeTo(0.25, 0.02));
+      time.value = const Duration(milliseconds: 750);
+      var second = await _repaint(painter);
+      expect((await _mean(second)).r, closeTo(0.75, 0.02));
+    },
+  );
 
   test('the box starts at zero wherever the pass is moved', () async {
     var image = await _paint([shaderPass(2, dx: 40)]);
@@ -262,6 +269,23 @@ void main() {
       (await _mean(image, region: _rightInkOfLine(0))).r,
       greaterThan(0.95),
     );
+    expect(
+      (await _mean(image, region: _rightInkOfLine(1))).r,
+      greaterThan(0.95),
+    );
+  });
+
+  // A short line that does not start at the text's left edge: a box
+  // measured from the text's corner, or a band drawn without translating to
+  // the line's own, would start this line part-way along the shader.
+  test('a centred short line starts its own box at zero', () async {
+    var image = await _paint(
+      [shaderPass(2, box: SceneLayerBox.line)],
+      text: 'MMMM MM',
+      width: 90,
+      textAlign: TextAlign.center,
+    );
+    expect((await _mean(image, region: _leftInkOfLine(1))).r, lessThan(0.1));
     expect(
       (await _mean(image, region: _rightInkOfLine(1))).r,
       greaterThan(0.95),
@@ -353,4 +377,88 @@ void main() {
     var image = await _paint([const FillLayer(paint: ShaderPaint(''))]);
     expect(await _inkCount(image), 0);
   });
+
+  // A reassemble follows every shader reload. The mounted text drops the
+  // shaders it drew with — their uniform handles may name uniforms the reload
+  // dropped — and the cache forgets which assets failed, since a shader first
+  // seen broken may be fixed now.
+  testWidgets('a reassemble draws with new shaders and asks a failed asset '
+      'again', (tester) async {
+    const missing = 'test/scene/shaders/not_there.frag';
+    var programs = SceneShaderPrograms.instance;
+    var said = <String>[];
+    var saved = debugPrint;
+    debugPrint = (m, {wrapWidth}) => said.add(m ?? '');
+    // Put back inside the body, not in a tear-down: the binding checks its
+    // debug variables are unchanged before any tear-down runs.
+    try {
+      await tester.runAsync(() => programs.load(missing));
+      expect(programs.errorFor(missing), isNotNull);
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: LayeredText(
+            span: const TextSpan(text: 'MMMM'),
+            style: const TextStyle(fontSize: 20, height: 1),
+            layers: [
+              shaderPass(
+                0,
+                more: {
+                  'uTint': [1, 1, 1],
+                },
+              ),
+              const FillLayer(paint: ShaderPaint(missing)),
+            ],
+            textAlign: TextAlign.left,
+            maxLines: null,
+          ),
+        ),
+      );
+      var stack = tester.renderObject(
+        find.descendant(
+          of: find.byType(LayeredText),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      var before = _shadersDrawn(stack);
+      expect(before, hasLength(1), reason: 'the missing pass draws nothing');
+      expect(
+        _shadersDrawn(stack).single,
+        same(before.single),
+        reason: 'a slot is the same shader frame after frame',
+      );
+
+      unawaited(tester.binding.reassembleApplication());
+      await tester.pump();
+
+      expect(_shadersDrawn(stack).single, isNot(same(before.single)));
+      // Forgotten, so the repaint asked for it again.
+      expect(programs.pending, contains(missing));
+      await tester.runAsync(
+        () => programs.settle(timeout: const Duration(seconds: 5)),
+      );
+      expect(programs.errorFor(missing), isNotNull);
+    } finally {
+      debugPrint = saved;
+    }
+    expect(said.where((m) => m.contains('not_there.frag')), hasLength(2));
+  });
+}
+
+/// The shaders [box] draws with, in the order it draws them.
+List<ui.Shader> _shadersDrawn(RenderObject box) {
+  var shaders = <ui.Shader>[];
+  expect(
+    box,
+    paints..everything((method, arguments) {
+      if (method == #drawRect) {
+        if ((arguments[1] as Paint).shader case var shader?) {
+          shaders.add(shader);
+        }
+      }
+      return true;
+    }),
+  );
+  return shaders;
 }
