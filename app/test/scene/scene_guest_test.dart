@@ -3,9 +3,10 @@
 // a motion that animates nothing but a shader's `uTime` flushes no document,
 // so without that it would never reach the canvas.
 //
-// And what the guest tells a capture: busy while a push is out, and while the
-// canvas's last answer named shader programs still loading — a pass paints
-// nothing until its program lands, so that picture is honest and wrong.
+// And what the guest tells a capture: busy until the host first answers,
+// while a push is out, and while the canvas's last answer named shader
+// programs still loading — a pass paints nothing until its program lands, so
+// that picture is honest and wrong.
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
@@ -29,6 +30,12 @@ class _Session extends CatalogSession {
   /// Held open, the push is in flight until it completes.
   Completer<void>? gate;
 
+  void announce() => notifyListeners();
+
+  /// How many more pushes fail the way they do before the host's extension
+  /// is registered.
+  var unregistered = 0;
+
   @override
   Future<Map<String, dynamic>?> callGuestExtension(
     String method, {
@@ -36,6 +43,10 @@ class _Session extends CatalogSession {
   }) async {
     calls.add(args);
     await gate?.future;
+    if (unregistered > 0) {
+      unregistered--;
+      throw StateError('ext.fw.scene.apply is not registered');
+    }
     return {
       'rects': <String, dynamic>{},
       'frameMs': 1.0,
@@ -138,7 +149,8 @@ void main() {
 
   group('busy', () {
     test('while a push is out, and not once it has landed', () async {
-      var g = guest();
+      var g = guest()..push();
+      await pumpEventQueue();
       expect(g.busyWith, isNull);
       session.gate = Completer();
       g.push();
@@ -146,6 +158,44 @@ void main() {
       expect(g.busyWith, 'drawing the scene');
       session.gate!.complete();
       await pumpEventQueue();
+      expect(g.busyWith, isNull);
+    });
+
+    test('from the start until the host first answers, through the quiet '
+        'between failed pushes', () {
+      fakeAsync((async) {
+        session.unregistered = 2;
+        var g = guest();
+        expect(g.busyWith, 'drawing the scene', reason: 'nothing drawn yet');
+        g.push();
+        async.flushMicrotasks();
+        expect(session.calls, hasLength(1));
+        expect(
+          g.busyWith,
+          'drawing the scene',
+          reason: 'a failed push is not a canvas',
+        );
+        async.elapse(const Duration(milliseconds: 500));
+        expect(session.calls, hasLength(2));
+        expect(g.busyWith, 'drawing the scene');
+        async.elapse(const Duration(milliseconds: 500));
+        expect(session.calls, hasLength(3));
+        expect(g.busyWith, isNull);
+      });
+    });
+
+    test('not before the first answer when no answer is coming', () {
+      var g = guest();
+      session.phase = CatalogSessionPhase.error;
+      expect(g.busyWith, isNull);
+    });
+
+    test('nor when the group declares no host to answer', () {
+      var g = guest();
+      session
+        ..phase = CatalogSessionPhase.ready
+        ..announce();
+      expect(g.status.value, contains('no scene host'));
       expect(g.busyWith, isNull);
     });
 

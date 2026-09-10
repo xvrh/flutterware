@@ -105,13 +105,33 @@ class SceneGuest {
   Timer? _shaderRetry;
   var _disposed = false;
 
+  /// Whether the host has answered a push at all, with a picture or with
+  /// why not.
+  var _answered = false;
+
+  /// Why no host is going to answer: it does not compile, the switch to it
+  /// failed, or the group declares none. What [_onSession] last found.
+  String? _hostProblem;
+
   /// What the canvas is still waiting on, or null when what it shows is
   /// what the document says — read by the plugin's settle source.
-  String? get busyWith => _inflight
-      ? 'drawing the scene'
-      : _pendingShaders.isEmpty
-      ? null
-      : 'loading ${_pendingShaders.join(', ')}';
+  ///
+  /// Busy from the start until the host first answers, not only while a
+  /// push is out: before its first draw the guest retries every 500ms, and
+  /// the quiet between two failed pushes was long enough for a capture to
+  /// photograph the booting canvas. Not when nothing is coming — a host that
+  /// cannot answer would hold every capture to its timeout.
+  String? get busyWith {
+    if (_inflight) return 'drawing the scene';
+    if (!_answered &&
+        _hostProblem == null &&
+        session.phase != CatalogSessionPhase.error) {
+      return 'drawing the scene';
+    }
+    return _pendingShaders.isEmpty
+        ? null
+        : 'loading ${_pendingShaders.join(', ')}';
+  }
 
   /// Puts the scene host on the guest whenever it is not already there —
   /// including over whatever the session picked for itself while booting,
@@ -122,6 +142,7 @@ class SceneGuest {
 
   void _onSession() {
     if (session.phase != CatalogSessionPhase.ready) return;
+    _hostProblem = null;
     if (!identical(session.engine, _engine)) {
       _engine = session.engine;
       // A guest that restarted or reloaded holds no scene until it is sent
@@ -135,12 +156,15 @@ class SceneGuest {
       // A host that does not compile is a guest showing its last good
       // build, silently — the status line is where that has to be said.
       if (session.compileErrorFor(entry) case var error?) {
+        _hostProblem = error;
         status.value = 'guest: the host does not compile — $error';
       } else if (session.lastSwitch?.error case var error?) {
+        _hostProblem = error;
         status.value = 'guest: $error';
       }
       return;
     }
+    _hostProblem = 'no scene host';
     status.value =
         'guest: no scene host in $groupDirectory/ — the generated '
         '$sceneArgsFileName declares it; rescan the group';
@@ -209,6 +233,7 @@ class SceneGuest {
           .timeout(const Duration(seconds: 3))
           .then((reply) {
             if (_disposed) return;
+            if (reply != null) _answered = true;
             _pendingShaders = _pendingIn(reply);
             if (_pendingShaders.isNotEmpty) {
               _shaderRetry = Timer(const Duration(milliseconds: 250), _push);
