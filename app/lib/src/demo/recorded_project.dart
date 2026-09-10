@@ -126,6 +126,10 @@ ShellController recordedShell({
     ),
     worktreeWatcher: (root) => WorktreeWatcher(
       repoRoot: root,
+      // Both default to paths under the home directory, which is read from the
+      // environment — and a browser has neither. Nothing is watched anyway.
+      agentRoot: '$root/agents',
+      runDir: '$root/run',
       watch: (path, {required recursive}) => const Stream.empty(),
     ),
     watchEvents: (_) => const Stream.empty(),

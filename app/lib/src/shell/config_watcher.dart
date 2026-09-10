@@ -80,7 +80,12 @@ class ConfigWatcher {
   /// The directory being watched, or null when there is nothing to watch.
   String? get watching {
     var dir = p.dirname(configPath);
-    return Directory(dir).existsSync() ? dir : null;
+    try {
+      return Directory(dir).existsSync() ? dir : null;
+    } on UnsupportedError {
+      // A browser: no directory to watch, and no config that could move.
+      return null;
+    }
   }
 
   bool get isWatching => _events != null;

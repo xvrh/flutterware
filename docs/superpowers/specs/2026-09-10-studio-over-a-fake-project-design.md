@@ -415,9 +415,67 @@ branch, which a valid canned listing avoids. The two `Platform.isMacOS` reads
 in build methods move to `defaultTargetPlatform`, which was the better
 spelling anyway. No type changes, no diff outside the demo path.
 
+## What was built (2026-09-10, same day)
+
+The launcher-icon slice, all six steps, in one session. Every shared question
+above is now answered on fact:
+
+- **The recording.** `app/tool/demo/record.dart` scans `examples/example` as
+  `.` and writes `app/demo/fixture/launcher_icon/`: five scans (main, beta,
+  kiosk, partner, pro), 89 files copied flat, 295 KB, declared as two asset
+  directories. `IconScan` and its six model types round-trip through JSON;
+  a role is spelled by its id on the wire.
+- **The doors.** `LauncherIconCore(scan:)` takes an `IconScanner`;
+  `LauncherIconScreen(image:)` and `LauncherIconPlugin(image:)` take an
+  `IconImage`. The live core over the recorded reader is the recorded core.
+- **The stage set.** `app/lib/src/demo/recorded_project.dart`: a
+  `ShellController` over canned git, an in-process manifest written with the
+  same `FlutterwareConfig` classes a project uses, inert facts probes, empty
+  watch streams, a quiet `RecordedCore` and a `NotRecordedPlugin` panel for
+  the five plugins with nothing recorded. `test/demo/recorded_project_test.dart`
+  opens it end to end.
+- **Whole-panel catalog entries.** Three in `launcher_icon_panel.dart`,
+  photographed through `previews screenshot` under `flutter_tester` with the
+  recording read from assets — light, dark, and the kiosk flavor showing
+  "4 not overridden" over main's art.
+- **The studio scenario.** `app` declared in the root manifest's `Scenarios`
+  (narrowed to `test/scenarios`); `studio_test.dart` opens the shell, walks to
+  the panel, switches flavor and lands on a not-recorded plugin. Four shots,
+  1.4s, green under the harness at `window`.
+- **The web.** `lib/main_demo_web.dart` builds in 27s and runs: rail, tabs,
+  overview, the launcher-icon panel with its pictures fetched from the asset
+  bundle. What it took beyond the compile fence:
+
+  | touch on the run-time path | fix |
+  |---|---|
+  | `hooks_runner`/`code_assets` import `dart:ffi` | `build_hooks.dart` is a conditional export over `_io` and `_stub`; the kernel-asset types route through it |
+  | `Platform.isMacOS` in two build methods | `defaultTargetPlatform` |
+  | `flutterwareDir()` reads `HOME` from the environment; `flutterwareRunDir()` creates it | both answer a nominal path on `UnsupportedError` |
+  | `WorktreeWatcher` defaults `agentRoot` and `runDir` from the environment at construction | the recorded shell passes both |
+  | `scanRunHandles` lists the run directory from the desk button's `initState` | returns nothing on `UnsupportedError`, beside the existing `FileSystemException` case |
+  | `ConfigWatcher.watching` and `WorktreeWatcher.start` stat the disk | answer nothing on `UnsupportedError` |
+  | `changesConfigKey` stats the config file after every load | null on `UnsupportedError` |
+  | `findRepoRoot` and `discoverPackages` walk the disk | null / empty on `UnsupportedError` |
+
+  Every one of these is also the right answer on a desktop whose filesystem
+  refuses: the change makes a hostile disk a quiet screen rather than a red
+  one. None touched a plugin.
+
+- **A trap worth recording.** The file end of a recording hands back
+  `SynchronousFuture`s, and a throw *after* awaiting one escapes the `async`
+  function into the zone instead of failing its future — no caller can catch
+  it. `recordedIconScanner` awaits through `Future.value(...)` so the resume
+  is a microtask. The reverse trap (a real future never landing under
+  FakeAsync) is why the file end is synchronous in the first place; the two
+  together are the rule: a recording's readers resume on a microtask, never
+  inline.
+
+Not done: hosting the page and the README link. The viewer bundle's Pages
+workflow is the template.
+
 ## What to do next
 
-0. **The launcher-icon slice above.** Two to three days, all of it reusable.
+0. ~~The launcher-icon slice.~~ Built; see above.
 1. **Scenarios next, as the go/no-go for the interface.** Extract `ScenariosCore`'s panel-facing
    interface, rename today's class `LiveScenariosCore`, move the artifacts
    source onto it, write `RecordedScenariosCore` over a fixture the record

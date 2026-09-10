@@ -21,6 +21,18 @@ const configFileName = 'tool/flutterware.dart';
 /// right.
 String? findRepoRoot(String start) {
   var dir = Directory(p.normalize(p.absolute(start)));
+  // A browser has no filesystem to walk, and dart2js's `dart:io` says so by
+  // throwing from `existsSync`. Nothing found is the honest answer there —
+  // the caller falls back to the directory it was given, which for a
+  // recorded project is the only root there is.
+  try {
+    return _walkUpForRoot(dir);
+  } on UnsupportedError {
+    return null;
+  }
+}
+
+String? _walkUpForRoot(Directory dir) {
   while (true) {
     if (File(p.join(dir.path, configFileName)).existsSync()) return dir.path;
     // A linked worktree's `.git` is a file, the main checkout's a directory.
@@ -41,6 +53,16 @@ String? findRepoRoot(String start) {
 /// Paths are relative to [root]; the root package itself is `.` when it has a
 /// pubspec.
 List<String> discoverPackages(String root, {int maxDepth = 3}) {
+  // Nothing on a browser, for the reason [findRepoRoot] gives; a recorded
+  // project declares its packages and confirms none on disk.
+  try {
+    return _discoverPackagesOnDisk(root, maxDepth: maxDepth);
+  } on UnsupportedError {
+    return const [];
+  }
+}
+
+List<String> _discoverPackagesOnDisk(String root, {required int maxDepth}) {
   var found = <String>[];
   if (File(p.join(root, 'pubspec.yaml')).existsSync()) {
     found.add('.');

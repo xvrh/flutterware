@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutterware/plugins.dart';
@@ -445,7 +445,7 @@ class _RailToggle extends StatelessWidget {
     return Tooltip(
       message:
           '${showing ? 'Hide' : 'Show'} the sidebar '
-          '(${Platform.isMacOS ? '⌘B' : 'Ctrl+B'})',
+          '(${defaultTargetPlatform == TargetPlatform.macOS ? '⌘B' : 'Ctrl+B'})',
       child: Tappable.builder(
         onTap: shell.toggleSidebar,
         builder: (context, hovered) => Container(

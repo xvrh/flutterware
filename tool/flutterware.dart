@@ -364,6 +364,10 @@ void main() => Flutterware.configure((fw) {
     Scenarios(
       packages: [
         .new(example, languages: ['en', 'fr']),
+        // The studio itself, over a recording of the example — see
+        // `app/lib/src/demo/`. Narrowed to its own folder: `app/test/` is
+        // hundreds of widget tests, and only these are scenarios.
+        .new(app, directory: 'test/scenarios'),
       ],
     ),
   );

@@ -359,6 +359,9 @@ List<RunHandle> scanRunHandles(String runDir, {String? underRoot}) {
     entries = Directory(runDir).listSync();
   } on FileSystemException {
     return [];
+  } on UnsupportedError {
+    // No filesystem at all — a browser. Nothing has been launched from one.
+    return [];
   }
   var handles = <RunHandle>[];
   for (var entity in entries) {

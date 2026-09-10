@@ -14,7 +14,11 @@ import 'package:path/path.dart' as p;
 /// OS gives is about path length rather than about anything the caller did.
 String flutterwareRunDir() {
   var dir = p.join(flutterwareDir(), 'run');
-  Directory(dir).createSync(recursive: true);
+  try {
+    Directory(dir).createSync(recursive: true);
+  } on UnsupportedError {
+    // A browser: nothing can be created, and nothing will be run.
+  }
   return dir;
 }
 
@@ -23,10 +27,18 @@ String flutterwareRunDir() {
 /// the stages they were compiled for.
 String flutterwareDir() {
   if (flutterwareDirOverride case var it?) return it;
-  var home =
-      Platform.environment['HOME'] ??
-      Platform.environment['USERPROFILE'] ??
-      Directory.systemTemp.path;
+  String home;
+  try {
+    home =
+        Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        Directory.systemTemp.path;
+  } on UnsupportedError {
+    // A browser has no environment and no home. The studio's web demo opens
+    // a recording and writes nothing, so a nominal path is all anything
+    // needs — see `lib/main_demo_web.dart`.
+    home = '/';
+  }
   return p.join(home, '.flutterware');
 }
 

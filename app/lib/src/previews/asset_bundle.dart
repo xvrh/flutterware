@@ -3,8 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:hooks_runner/hooks_runner.dart'
-    show KernelAsset, KernelAssetAbsolutePath, KernelAssets;
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 import 'package:standard_message_codec/standard_message_codec.dart';
