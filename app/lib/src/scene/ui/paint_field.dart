@@ -156,8 +156,14 @@ class ScenePaintField extends StatelessWidget {
               'From',
               p.startAngle,
               _degrees,
+              // Turns the sweep rather than shrinking it: the arc's width
+              // (endAngle - startAngle) holds, so "To" keeps meaning where
+              // the sweep ends relative to where it starts.
               (v) => onChanged(
-                p.copyWith(startAngle: v),
+                p.copyWith(
+                  startAngle: v,
+                  endAngle: p.endAngle + (v - p.startAngle),
+                ),
                 label: 'Gradient start',
                 mergeKey: 'from',
               ),
@@ -191,7 +197,7 @@ class ScenePaintField extends StatelessWidget {
           'Centre X',
           (c.x + 1) * 50,
           _percent,
-          (v) => apply(SceneAlignment(v / 50 - 1, c.y)),
+          (v) => apply(SceneAlignment(_tidy(v / 50 - 1), c.y)),
         ),
       ),
       const Gap(FwSpacing.md),
@@ -200,11 +206,19 @@ class ScenePaintField extends StatelessWidget {
           'Centre Y',
           (c.y + 1) * 50,
           _percent,
-          (v) => apply(SceneAlignment(c.x, v / 50 - 1)),
+          (v) => apply(SceneAlignment(c.x, _tidy(v / 50 - 1))),
         ),
       ),
     ],
   );
+
+  /// Four decimals and no negative zero — the way `_tidy` in
+  /// `gradient_edit.dart` rounds a hand-typed angle, so 33% does not write
+  /// `-0.33999999999999997` into the file.
+  static double _tidy(double v) {
+    var r = (v * 10000).roundToDouble() / 10000;
+    return r == 0 ? 0 : r;
+  }
 
   Widget _number(
     String label,
