@@ -3,6 +3,7 @@
 // the guest on.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/src/scene/layer_presets.dart';
 
 void main() {
   group('a pass changes by copy', () {
@@ -162,5 +163,13 @@ void main() {
       );
       expect(const FillLayer().copyWith(box: SceneLayerBox.line), lined);
     });
+  });
+
+  test('the gloss preset keeps its sheen per line when scaled', () {
+    var gloss = layerPresets.firstWhere((p) => p.name == 'Gloss');
+    var small = gloss.forSize(27);
+    expect(small.last.box, SceneLayerBox.line);
+    expect(small.last.paint, isA<LinearPaint>());
+    expect(small.first.paint, isNull, reason: 'the text keeps its own colour');
   });
 }

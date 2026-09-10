@@ -93,4 +93,16 @@ const layerPresets = <LayerPreset>[
     FillLayer(paint: SolidPaint(SceneColor(0x55000000)), dy: -1),
     FillLayer(),
   ]),
+  // A sheen over the top half of every line, white fading to nothing — so it
+  // sits on whatever colour the text is, which is what a gold would not do.
+  LayerPreset('Gloss', [
+    FillLayer(),
+    FillLayer(
+      paint: LinearPaint(
+        colors: [SceneColor(0x99FFFFFF), SceneColor(0x00FFFFFF)],
+        stops: [0, 0.5],
+      ),
+      box: SceneLayerBox.line,
+    ),
+  ]),
 ];
