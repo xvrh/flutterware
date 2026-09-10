@@ -338,8 +338,10 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
 
   /// The files (source plus every local `#include`) and mtimes the hash in
   /// [_hashes] covered, as of the last time it was computed — [info]'s cheap
-  /// check before it pays for another [projectShaderHashWithFiles].
-  final _watched = <String, Map<String, DateTime>>{};
+  /// check before it pays for another [projectShaderHashWithFiles]. An
+  /// include that was not there is watched too, at a null mtime: its
+  /// appearing is a move, since the hash named it as missing.
+  final _watched = <String, Map<String, DateTime?>>{};
 
   final _inFlight = <String>{};
 
@@ -407,15 +409,15 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
       return _infos[key];
     }
 
-    var (:hash, :files) = projectShaderHashWithFiles(source);
+    var (:hash, :files, :missing) = projectShaderHashWithFiles(source);
     if (_hashes[key] == hash) {
-      _watched[key] = _stat(files);
+      _watched[key] = _stat(files, missing);
       return _infos[key];
     }
 
     var token = '$key@$hash';
     if (_inFlight.add(token)) {
-      unawaited(_load(key, source, hash, files, token));
+      unawaited(_load(key, source, hash, files, missing, token));
     }
     return null;
   }
@@ -425,6 +427,7 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
     String source,
     String hash,
     List<String> files,
+    List<String> missing,
     String token,
   ) async {
     SceneShaderInfo info;
@@ -450,24 +453,30 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
     }
     _infos[key] = info;
     _hashes[key] = hash;
-    _watched[key] = _stat(files);
+    _watched[key] = _stat(files, missing);
     _inFlight.remove(token);
     notifyListeners();
   }
 }
 
-Map<String, DateTime> _stat(List<String> files) => {
+Map<String, DateTime?> _stat(List<String> files, List<String> missing) => {
+  for (var path in missing) path: null,
   for (var file in files) file: File(file).statSync().modified,
 };
 
 /// Whether every file [watched] covers still stats to the mtime it did when
 /// it was last hashed — a vanished file (deleted, or a stat error) counts as
-/// changed.
-bool _unchanged(Map<String, DateTime>? watched) {
+/// changed, and so does one watched at a null mtime that is there now.
+bool _unchanged(Map<String, DateTime?>? watched) {
   if (watched == null) return false;
   for (var MapEntry(key: file, value: modified) in watched.entries) {
     var stat = File(file).statSync();
-    if (stat.type == FileSystemEntityType.notFound) return false;
+    var gone = stat.type == FileSystemEntityType.notFound;
+    if (modified == null) {
+      if (!gone) return false;
+      continue;
+    }
+    if (gone) return false;
     if (stat.modified != modified) return false;
   }
   return true;

@@ -285,6 +285,25 @@ flutter:
           shaders.removeListener(listener);
         });
       });
+
+      // The include a failed compile could not find, created later with the
+      // source untouched: no watched file moved, and only watching for the
+      // missing one to appear notices it.
+      test('an include that was missing, and was created', () {
+        fakeAsync((async) {
+          write('shaders/a.frag', '#include "lib/late.glsl"\n$source');
+          open(async);
+          shaders.addListener(listener);
+          async.elapse(const Duration(seconds: 2));
+          expect(heard, 0, reason: 'still missing is not news');
+
+          write('shaders/lib/late.glsl', 'float k = 1.0;\n');
+          async.elapse(const Duration(seconds: 1));
+          expect(calls, 2);
+          expect(heard, 2, reason: 'the move, then the compile landing');
+          shaders.removeListener(listener);
+        });
+      });
     });
 
     test('a changed hash starts a fresh compile', () async {
@@ -361,6 +380,32 @@ flutter:
       await pumpEventQueue();
       expect(calls, 2);
       expect(shaders.info('shaders/a.frag'), isNotNull);
+    });
+
+    test('creating an include the source names starts a recompile', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      write('shaders/a.frag', '#include "lib/late.glsl"\n$source');
+      var calls = 0;
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) async {
+          calls++;
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      shaders.info('shaders/a.frag');
+      await pumpEventQueue();
+      expect(shaders.info('shaders/a.frag'), isNotNull);
+      expect(calls, 1);
+
+      write('shaders/lib/late.glsl', 'float k = 1.0;\n');
+      expect(shaders.info('shaders/a.frag'), isNull);
+      await pumpEventQueue();
+      expect(calls, 2);
     });
 
     test('a sampler is reported alongside the uniforms it does have', () async {

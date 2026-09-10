@@ -48,21 +48,29 @@ var projectShaderHashCallsForTesting = 0;
 /// include without editing it is still a new key, and counts once however
 /// often it is met, which is also what stops a cycle.
 ///
-/// An include that resolves to neither is the engine's own `shader_lib`
-/// (`<flutter/runtime_effect.glsl>`), which changes only with the engine —
-/// and the engine revision is already in the directory this key is used
-/// under.
+/// An include that resolves to neither is one of two things, told apart by
+/// its first segment. Under `flutter/` or `impeller/` it is the engine's own
+/// `shader_lib` (`<flutter/runtime_effect.glsl>`) — the two directories the
+/// other `--include` holds — which changes only with the engine, and the
+/// engine revision is already in the directory this key is used under; it
+/// adds nothing. Anything else is a file that is not there yet, and it adds
+/// `missing:<name>`: the compile of a source naming it fails, that failure
+/// is remembered by this key, and creating the file without touching the
+/// source has to be a new key or the failure is served for good.
 String projectShaderHash(String source) =>
     projectShaderHashWithFiles(source).hash;
 
 /// Like [projectShaderHash], but also returns every file whose bytes fed
 /// it — [source] and each local `#include`, normalized and absolute — so a
 /// caller can watch those exact files for a change instead of re-hashing on
-/// every call.
-({String hash, List<String> files}) projectShaderHashWithFiles(String source) {
+/// every call; and, as [missing], every place an include that is not there
+/// yet would be found, so a caller can watch for it to appear.
+({String hash, List<String> files, List<String> missing})
+projectShaderHashWithFiles(String source) {
   projectShaderHashCallsForTesting++;
   var input = BytesBuilder(copy: false);
   var seen = <String>{};
+  var missing = <String>{};
   var base = p.dirname(p.normalize(p.absolute(source)));
   void visit(String file) {
     var path = p.normalize(p.absolute(file));
@@ -76,12 +84,17 @@ String projectShaderHash(String source) =>
     var text = utf8.decode(bytes, allowMalformed: true);
     for (var match in _include.allMatches(text)) {
       var name = match.group(1)!;
-      for (var dir in [p.dirname(path), base]) {
-        var candidate = p.join(dir, name);
-        if (File(candidate).existsSync()) {
-          visit(candidate);
-          break;
-        }
+      var candidates = {
+        for (var dir in [p.dirname(path), base]) p.join(dir, name),
+      };
+      var found = candidates.where((c) => File(c).existsSync()).firstOrNull;
+      if (found != null) {
+        visit(found);
+      } else if (!_engineOwned(name)) {
+        input
+          ..add(utf8.encode('missing:$name'))
+          ..addByte(0);
+        missing.addAll(candidates.map((c) => p.normalize(p.absolute(c))));
       }
     }
   }
@@ -90,8 +103,14 @@ String projectShaderHash(String source) =>
   return (
     hash: sha1.convert(input.takeBytes()).toString(),
     files: seen.toList(),
+    missing: missing.toList(),
   );
 }
+
+/// Whether an include that is not the project's names the engine's
+/// `shader_lib`: its `flutter/` and `impeller/` directories.
+bool _engineOwned(String name) =>
+    const {'flutter', 'impeller'}.contains(p.posix.split(name).first);
 
 /// `impellerc` refused a project shader; [message] is what it said.
 class ProjectShaderError extends StateError {

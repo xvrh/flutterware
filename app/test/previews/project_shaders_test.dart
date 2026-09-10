@@ -39,9 +39,31 @@ void main() {
   test("the engine's own includes are not files of the project", () {
     var source = write(
       'shaders/a.frag',
-      '#include <flutter/runtime_effect.glsl>\nvoid main() {}',
+      '#include <flutter/runtime_effect.glsl>\n'
+          '#include <impeller/constants.glsl>\n'
+          'void main() {}',
     );
-    expect(() => projectShaderHash(source), returnsNormally);
+    var read = projectShaderHashWithFiles(source);
+    expect(read.files, [source]);
+    expect(read.missing, isEmpty);
+  });
+
+  // A compile of a source naming an include that is not there fails, and
+  // the failure is remembered under this key. Creating the include without
+  // touching the source must be a new key, or the failure outlives its cause.
+  test('an include that is not there yet is in the hash, and watched for', () {
+    var source = write(
+      'shaders/a.frag',
+      '#include "lib/late.glsl"\nvoid main() {}',
+    );
+    var before = projectShaderHashWithFiles(source);
+    expect(before.files, [source]);
+    expect(before.missing, [p.join(root.path, 'shaders', 'lib', 'late.glsl')]);
+
+    write('shaders/lib/late.glsl', 'float k = 1.0;');
+    var after = projectShaderHashWithFiles(source);
+    expect(after.hash, isNot(before.hash));
+    expect(after.missing, isEmpty);
   });
 
   test('an include cycle is hashed once', () {
