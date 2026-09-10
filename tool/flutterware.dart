@@ -12,6 +12,7 @@ import 'package:flutterware/plugins.dart';
 const root = Pkg('.');
 const app = Pkg('app');
 const example = Pkg('examples/example');
+const webDemo = Pkg('web_demo');
 
 void main() => Flutterware.configure((fw) {
   // **What to surface first on the changes screen, for this repository.**
@@ -390,6 +391,9 @@ void main() => Flutterware.configure((fw) {
         // carries the profile that frames them as a window, which is also
         // what `flutter test` runs them at.
         .new(app, directory: 'test/scenarios/studio'),
+        // The web demo itself, walked under the harness: the same shell,
+        // recording and compiled-in previews the page is built from.
+        .new(webDemo, directory: 'test/scenarios'),
       ],
     ),
   );

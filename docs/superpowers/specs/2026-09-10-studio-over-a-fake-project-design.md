@@ -689,6 +689,36 @@ Dependencies any more. The inline picture is a boundary now, the way a
 window is. Pinned by a test that paints a text before the stage and reads
 its semantics after an app-wrapped entry opens.
 
+### Previews, closing (same day): the demo as a scenario, and no thumbnails
+
+**Thumbnails in-process were not built, on purpose.** The landing's
+pictures come from the tester lane with a content-keyed disk cache; an
+in-process version means mounting every entry hidden in the studio's own
+tree, waiting a frame each, capturing, and keeping a second pipeline in
+step with the first — a duplicate serving one page. What was wrong was
+smaller: with thumbnails off and nothing selected, the stage drew whichever
+entry the guest held, a demo nobody asked for. That state is a plain "pick
+a demo" now.
+
+**The web demo is a scenario.** `web_demo/test/scenarios/web_demo_test.dart`
+walks the page's own shell, recording and compiled-in previews under the
+harness: the catalog, an entry live, staged as a phone, its tree, another
+entry on the phone — seven steps, 2.8s, framed as a window by the folder's
+profile, and CI runs it beside the studio's own. The demo package is the
+one place the recorded shell and the example's entries meet, which is why
+the scenario lives there and not in the app.
+
+**The isolation cost, seen.** The example's column of buttons is 384
+points tall; at "Fit" into the half-height stage the Elements tab leaves,
+it overflows by 99. An embedder guest keeps that overflow to itself and
+its Problems tab; a guest drawn inline raises it in the studio's own
+tree, where the harness reports it as the studio's failure and the browser
+walk would count it as a console error. The walk stages the phone before
+it opens the tree. This is the one thing the inline guest gives up, and it
+is worth writing down: an entry's layout error is the page's. A per-guest
+error sink is possible — `FlutterError.onError` is global, but the details
+name the element chain — and is left until it is needed twice.
+
 ### The recording and the scenario, in that order
 
 The scenario does not record. It opens `app/demo/fixture/` through the file
@@ -727,10 +757,8 @@ so is the right answer there.
 1. ~~**Scenarios next, as the go/no-go for the interface.**~~ Built — see
    above. No interface on the core; the runner was the seam. Left for later:
    a whole-panel catalog demo of the scenarios panel over the recording.
-2. **Previews, inline.** Steps 1 and 2 built — see above; the page draws
-   the example's previews live and the browser walk opens one. Next:
-   thumbnails in-process for the landing, and the studio scenario over the
-   panel.
+2. ~~**Previews, inline.**~~ Built — see above. Thumbnails in-process
+   were declined; the demo is a scenario of its own package.
 3. ~~**The demo entry point, the record script as a documented command, the
    Pages deploy.**~~ Built; the README link remains.
 

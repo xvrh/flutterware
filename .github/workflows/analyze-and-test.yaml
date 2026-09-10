@@ -322,7 +322,9 @@ jobs:
         # `flutter test` in the macOS job already runs this file as a widget
         # test; this is the harness lane — the shots, the walk, the run report
         # — which is the thing a scenario exists for.
-        run: dart run app/bin/fw.dart run scenarios run --package=app --device=window --steps=none
+        run: |
+          dart run app/bin/fw.dart run scenarios run --package=app --device=window --steps=none
+          dart run app/bin/fw.dart run scenarios run --package=web_demo --device=window --steps=none
       - name: "the page is built, with the recording beside it"
         # `tool/demo/build_web.dart` is `flutter build web` on the demo entry
         # point plus the recording copied next to `index.html`, which is where

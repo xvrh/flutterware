@@ -666,6 +666,15 @@ class _CatalogViewState extends State<CatalogView> {
           );
         } else if (!_holdsGuest && widget.thumbnails != null) {
           canvas = _catalog(widget.thumbnails!);
+        } else if (!_holdsGuest && _session.selected == null) {
+          // No landing pictures — a host that cannot render them — and
+          // nothing picked: say so, rather than draw whichever entry the
+          // guest happens to hold, which is a demo nobody asked for.
+          canvas = const EmptyState(
+            icon: Icons.grid_view_outlined,
+            title: 'Pick a demo',
+            message: 'Opening one draws it here.',
+          );
         } else {
           canvas = _buildTexture(
             context,
