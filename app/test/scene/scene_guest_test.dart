@@ -2,6 +2,13 @@
 // document that paints with the clock is pushed when only the playhead moved:
 // a motion that animates nothing but a shader's `uTime` flushes no document,
 // so without that it would never reach the canvas.
+//
+// And what the guest tells a capture: busy while a push is out, and while the
+// canvas's last answer named shader programs still loading — a pass paints
+// nothing until its program lands, so that picture is honest and wrong.
+import 'dart:async';
+
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_app/src/previews/catalog_session.dart';
@@ -16,13 +23,24 @@ class _Session extends CatalogSession {
 
   final calls = <Map<String, String>>[];
 
+  /// What the host names as still loading, as it would put it on the wire.
+  Object? pendingShaders;
+
+  /// Held open, the push is in flight until it completes.
+  Completer<void>? gate;
+
   @override
   Future<Map<String, dynamic>?> callGuestExtension(
     String method, {
     Map<String, String> args = const {},
   }) async {
     calls.add(args);
-    return {'rects': <String, dynamic>{}, 'frameMs': 1.0};
+    await gate?.future;
+    return {
+      'rects': <String, dynamic>{},
+      'frameMs': 1.0,
+      'pendingShaders': ?pendingShaders,
+    };
   }
 }
 
@@ -114,6 +132,92 @@ void main() {
         expect(editor.activeMotion, isNull);
         expect(editor.playhead, Duration.zero);
         expect(session.calls.last['time'], '0.0');
+      });
+    }
+  });
+
+  group('busy', () {
+    test('while a push is out, and not once it has landed', () async {
+      var g = guest();
+      expect(g.busyWith, isNull);
+      session.gate = Completer();
+      g.push();
+      await pumpEventQueue();
+      expect(g.busyWith, 'drawing the scene');
+      session.gate!.complete();
+      await pumpEventQueue();
+      expect(g.busyWith, isNull);
+    });
+
+    test('while the canvas names shaders loading, re-pushing every 250ms '
+        'until it names none', () {
+      fakeAsync((async) {
+        session.pendingShaders = ['a.frag'];
+        var g = guest();
+        g.push();
+        async.flushMicrotasks();
+        expect(g.busyWith, 'loading a.frag');
+        var pushed = session.calls.length;
+
+        async.elapse(const Duration(milliseconds: 249));
+        expect(session.calls, hasLength(pushed));
+        async.elapse(const Duration(milliseconds: 1));
+        expect(session.calls, hasLength(pushed + 1));
+        expect(g.busyWith, 'loading a.frag');
+
+        session.pendingShaders = null;
+        async.elapse(const Duration(milliseconds: 250));
+        expect(session.calls, hasLength(pushed + 2));
+        expect(g.busyWith, isNull);
+        async.elapse(const Duration(seconds: 2));
+        expect(session.calls, hasLength(pushed + 2));
+      });
+    });
+
+    test('a newer push supersedes the pending re-push', () {
+      fakeAsync((async) {
+        session.pendingShaders = ['a.frag'];
+        var g = guest();
+        g.push();
+        async.flushMicrotasks();
+        var pushed = session.calls.length;
+
+        async.elapse(const Duration(milliseconds: 100));
+        g.push();
+        async.flushMicrotasks();
+        expect(session.calls, hasLength(pushed + 1));
+        // The first re-push would have gone out at 250ms; the newer push's
+        // own goes out 250ms after it.
+        async.elapse(const Duration(milliseconds: 200));
+        expect(session.calls, hasLength(pushed + 1));
+        async.elapse(const Duration(milliseconds: 50));
+        expect(session.calls, hasLength(pushed + 2));
+      });
+    });
+
+    test('dispose cancels the pending re-push', () {
+      fakeAsync((async) {
+        session.pendingShaders = ['a.frag'];
+        var g = SceneGuest(session, editor, groupDirectory: 'lib/scenes');
+        g.push();
+        async.flushMicrotasks();
+        var pushed = session.calls.length;
+        g.dispose();
+        async.elapse(const Duration(seconds: 1));
+        expect(session.calls, hasLength(pushed));
+      });
+    });
+
+    for (var (label, wire) in <(String, Object?)>[
+      ('absent', null),
+      ('not a list', 'a.frag'),
+      ('a list of no names', [1, null]),
+    ]) {
+      test('a pendingShaders that is $label is nothing pending', () async {
+        session.pendingShaders = wire;
+        var g = guest()..push();
+        await pumpEventQueue();
+        expect(g.busyWith, isNull);
       });
     }
   });

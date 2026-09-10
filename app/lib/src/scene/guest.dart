@@ -95,6 +95,24 @@ class SceneGuest {
   /// booting state rather than a blank artboard.
   bool get isLive => _everApplied;
 
+  /// The shader programs the canvas's last answer was still loading. A pass
+  /// paints nothing until its program lands, so while this is not empty the
+  /// texture is an honest picture of the wrong thing.
+  var _pendingShaders = const <String>[];
+
+  /// Asks again while [_pendingShaders] is not empty: the host answers once
+  /// per push, and a program that lands later says so to nobody.
+  Timer? _shaderRetry;
+  var _disposed = false;
+
+  /// What the canvas is still waiting on, or null when what it shows is
+  /// what the document says — read by the plugin's settle source.
+  String? get busyWith => _inflight
+      ? 'drawing the scene'
+      : _pendingShaders.isEmpty
+      ? null
+      : 'loading ${_pendingShaders.join(', ')}';
+
   /// Puts the scene host on the guest whenever it is not already there —
   /// including over whatever the session picked for itself while booting,
   /// which is how a rebooted session came up showing the catalog's first
@@ -154,6 +172,8 @@ class SceneGuest {
   }
 
   void _push() {
+    if (_disposed) return;
+    _shaderRetry?.cancel();
     if (_inflight) {
       _dirty = true;
       return;
@@ -185,8 +205,14 @@ class SceneGuest {
           // canvas that stops following edits is indistinguishable from a
           // frozen editor. Measured round trips are 10–300ms; a second is
           // already a guest in trouble, and the status line should say so.
+          // The host's wait for shader programs is bounded at 2s, inside this.
           .timeout(const Duration(seconds: 3))
           .then((reply) {
+            if (_disposed) return;
+            _pendingShaders = _pendingIn(reply);
+            if (_pendingShaders.isNotEmpty) {
+              _shaderRetry = Timer(const Duration(milliseconds: 250), _push);
+            }
             var rtt = clock.elapsedMicroseconds / 1000;
             if (reply != null && reply['error'] == null) {
               _everApplied = true;
@@ -206,6 +232,10 @@ class SceneGuest {
             }
           })
           .catchError((Object e) {
+            if (_disposed) return;
+            // No re-push follows a failure, so a list kept from the last
+            // answer would hold a capture until the next edit.
+            _pendingShaders = const [];
             if (_everApplied) {
               status.value = e is TimeoutException
                   ? 'guest: no answer in 3s — the host may be stuck'
@@ -221,6 +251,17 @@ class SceneGuest {
           }),
     );
   }
+
+  /// The asset keys a reply names as still loading; anything unreadable is
+  /// none, since a host that predates the list is one that never waits.
+  static List<String> _pendingIn(Map<String, dynamic>? reply) =>
+      switch (reply?['pendingShaders']) {
+        List names => [
+          for (var n in names)
+            if (n is String) n,
+        ],
+        _ => const [],
+      };
 
   /// The guest is the only renderer, so its laid-out rects are the editor's
   /// geometry: selection, hit targets and handles all read what it measured.
@@ -246,6 +287,8 @@ class SceneGuest {
   }
 
   void dispose() {
+    _disposed = true;
+    _shaderRetry?.cancel();
     _viewSettle?.cancel();
     rendered.dispose();
     _retry?.cancel();

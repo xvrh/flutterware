@@ -80,6 +80,22 @@ class ScenePlugin extends NativePlugin<SceneCore> {
     session.start(width: 2048, height: 1000).ignore();
   }
 
+  /// The panel mounted over this plugin, which is what holds the guest.
+  _ScenePanelState? _panel;
+
+  /// A scene open on a guest that is still booting, or on a canvas that has
+  /// not yet drawn what the document says — see [SceneGuest.busyWith]. With
+  /// no scene open there is no guest to wait for: the listing is the panel.
+  @override
+  String? get busyWith {
+    var guest = _panel?._guest;
+    if (guest == null) return null;
+    if (guest.session.phase == CatalogSessionPhase.starting) {
+      return guest.session.busyWith ?? 'starting the guest';
+    }
+    return guest.busyWith;
+  }
+
   @override
   void dispose() {
     for (var session in _sessions.values) {
@@ -323,6 +339,7 @@ class _ScenePanelState extends State<_ScenePanel>
   @override
   void initState() {
     super.initState();
+    widget.plugin._panel = this;
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -347,6 +364,8 @@ class _ScenePanelState extends State<_ScenePanel>
   void didUpdateWidget(_ScenePanel old) {
     super.didUpdateWidget(old);
     if (old.plugin == widget.plugin) return;
+    if (identical(old.plugin._panel, this)) old.plugin._panel = null;
+    widget.plugin._panel = this;
     var package = _package;
     // The new core has computed nothing; the old one's scan is gone with it.
     if (package != null) _core.track(package);
@@ -665,6 +684,7 @@ class _ScenePanelState extends State<_ScenePanel>
 
   @override
   void dispose() {
+    if (identical(widget.plugin._panel, this)) widget.plugin._panel = null;
     WidgetsBinding.instance.removeObserver(this);
     _resizeSettle?.cancel();
     // Before the playbacks and the guest: closing the panel is the last
