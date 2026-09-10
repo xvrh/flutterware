@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+// ignore: implementation_imports
+import 'package:flutterware/src/clock.dart';
 import 'package:flutterware_app/src/demo/recording_paths.dart';
 import 'package:flutterware_app/src/launcher_icon/model/scan.dart';
 import 'package:path/path.dart' as p;
@@ -76,6 +78,13 @@ String _recordLauncherIcons({required String project, required String out}) {
           copied[destination] = source.lengthSync();
         }
         entry['absolutePath'] = destination;
+        // A recording carries no clock. The file's mtime is whatever the last
+        // checkout set it to, which would make the same project record
+        // differently on every machine — and CI checks that re-recording
+        // changes nothing. The panel never draws it; the inventory action
+        // reports it, and reports the pinned instant everything else renders
+        // at.
+        entry['modified'] = pinnedClockOrigin.toIso8601String();
       }
     }
     File(p.join(out, recordedIconScanPath(packagePath, flavor: flavor)))

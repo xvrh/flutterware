@@ -470,8 +470,46 @@ above is now answered on fact:
   together are the rule: a recording's readers resume on a microtask, never
   inline.
 
-Not done: hosting the page and the README link. The viewer bundle's Pages
-workflow is the template.
+- **CI.** A `studio_demo` job on Ubuntu re-records and expects no diff (the
+  recorder pins every mtime to the project clock, so a fresh checkout records
+  the same bytes), runs the studio scenario through `fw` on the harness
+  lane, and builds the web page with the repository's Pages path as its base
+  href. A `deploy_demo` job publishes that build to GitHub Pages on every push
+  to master through the Actions flow (`upload-pages-artifact` +
+  `deploy-pages`). One-time repository setting: Settings → Pages → Source:
+  GitHub Actions. The README link lands once the page is live.
+
+### The recording and the scenario, in that order
+
+The scenario does not record. It opens `app/demo/fixture/` through the file
+end of the recording — synchronous reads, which is what a walk under
+FakeAsync needs — so the recording has to be committed before the scenario
+means anything, and CI's freshness check is what keeps a committed recording
+honest. The order is deliberate: recording is a real read of a real project
+(a directory listing, XML, PNG headers) and belongs to a tool run someone
+chose; a scenario is a deterministic walk and must not depend on the disk it
+happens to run on.
+
+### Which plugins the recording system reaches
+
+The *system* — a recording directory the tool writes, a `Recording` source
+with file, asset and HTTP ends, the recorded shell, the freshness check — is
+plugin-agnostic. What differs per plugin is the door and the data:
+
+| plugin | door | recording | cost |
+|---|---|---|---|
+| launcher icon | `scan:` on the core (built) | scan JSON + files | done |
+| assets, splash, scene, translations | the same `ScanCache` loader injection | their scan models, made JSON-serialisable, plus any files the panel draws | a day each, mostly serialisation |
+| dependencies | `PubDepsStore` already caches pub's answer as JSON keyed by the lockfile | that cache entry | small |
+| lints | `rules.json` at the SDK tag + issue counts | both are files already | small |
+| scenarios | interface extraction (see above) | a run's export — the format that ships | the go/no-go for the interface plan |
+| previews | interface extraction; the still picture | entries JSON + thumbnails + inspect trees | the hard one |
+| run, server, dev stack | none that helps: their subject is a live process | at best a snapshot — a run's log and inspect tree frozen — and the demo would show a cockpit that cannot move | not worth recording; a "not in this recording" panel is honest |
+
+So: mostly yes for the plugins whose subject is the project on disk, which is
+nine of fourteen. The three whose subject is a running process are where a
+recording stops being a demo and starts being a lie, and the panel that says
+so is the right answer there.
 
 ## What to do next
 

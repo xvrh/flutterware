@@ -34,7 +34,7 @@
         {
           "path": "android/app/src/main/res/mipmap-mdpi/ic_launcher.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-mdpi-ic_launcher.png",
-          "modified": "2026-08-31T09:45:02.564235",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 48,
           "height": 48,
           "hasAlpha": true,
@@ -46,7 +46,7 @@
         {
           "path": "android/app/src/main/res/mipmap-hdpi/ic_launcher.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-hdpi-ic_launcher.png",
-          "modified": "2026-08-31T09:45:02.563914",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 72,
           "height": 72,
           "hasAlpha": true,
@@ -58,7 +58,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xhdpi-ic_launcher.png",
-          "modified": "2026-08-31T09:45:02.564461",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 96,
           "height": 96,
           "hasAlpha": true,
@@ -70,7 +70,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xxhdpi-ic_launcher.png",
-          "modified": "2026-08-31T09:45:02.564694",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 144,
           "height": 144,
           "hasAlpha": true,
@@ -82,7 +82,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xxxhdpi-ic_launcher.png",
-          "modified": "2026-08-31T09:45:02.565026",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 192,
           "height": 192,
           "hasAlpha": true,
@@ -100,7 +100,7 @@
         {
           "path": "android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-mdpi-ic_launcher_foreground.png",
-          "modified": "2026-08-31T09:45:02.564304",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 108,
           "height": 108,
           "hasAlpha": true,
@@ -112,7 +112,7 @@
         {
           "path": "android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-hdpi-ic_launcher_foreground.png",
-          "modified": "2026-08-31T09:45:02.563976",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 162,
           "height": 162,
           "hasAlpha": true,
@@ -124,7 +124,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xhdpi-ic_launcher_foreground.png",
-          "modified": "2026-08-31T09:45:02.564529",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 216,
           "height": 216,
           "hasAlpha": true,
@@ -136,7 +136,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xxhdpi-ic_launcher_foreground.png",
-          "modified": "2026-08-31T09:45:02.564828",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 324,
           "height": 324,
           "hasAlpha": true,
@@ -148,7 +148,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xxxhdpi-ic_launcher_foreground.png",
-          "modified": "2026-08-31T09:45:02.565133",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 432,
           "height": 432,
           "hasAlpha": true,
@@ -176,7 +176,7 @@
         {
           "path": "android/app/src/main/res/mipmap-mdpi/ic_launcher_monochrome.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-mdpi-ic_launcher_monochrome.png",
-          "modified": "2026-08-31T09:45:02.564362",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 108,
           "height": 108,
           "hasAlpha": true,
@@ -188,7 +188,7 @@
         {
           "path": "android/app/src/main/res/mipmap-hdpi/ic_launcher_monochrome.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-hdpi-ic_launcher_monochrome.png",
-          "modified": "2026-08-31T09:45:02.564081",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 162,
           "height": 162,
           "hasAlpha": true,
@@ -200,7 +200,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xhdpi/ic_launcher_monochrome.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xhdpi-ic_launcher_monochrome.png",
-          "modified": "2026-08-31T09:45:02.564594",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 216,
           "height": 216,
           "hasAlpha": true,
@@ -212,7 +212,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xxhdpi/ic_launcher_monochrome.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xxhdpi-ic_launcher_monochrome.png",
-          "modified": "2026-08-31T09:45:02.564915",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 324,
           "height": 324,
           "hasAlpha": true,
@@ -224,7 +224,7 @@
         {
           "path": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_monochrome.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-mipmap-xxxhdpi-ic_launcher_monochrome.png",
-          "modified": "2026-08-31T09:45:02.565213",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 432,
           "height": 432,
           "hasAlpha": true,
@@ -242,7 +242,7 @@
         {
           "path": "android/app/src/main/res/drawable-mdpi/ic_notification.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-drawable-mdpi-ic_notification.png",
-          "modified": "2026-08-31T09:45:02.557015",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 24,
           "height": 24,
           "hasAlpha": true,
@@ -254,7 +254,7 @@
         {
           "path": "android/app/src/main/res/drawable-hdpi/ic_notification.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-drawable-hdpi-ic_notification.png",
-          "modified": "2026-08-31T09:45:02.556601",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 36,
           "height": 36,
           "hasAlpha": true,
@@ -266,7 +266,7 @@
         {
           "path": "android/app/src/main/res/drawable-xhdpi/ic_notification.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-drawable-xhdpi-ic_notification.png",
-          "modified": "2026-08-31T09:45:02.560517",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 48,
           "height": 48,
           "hasAlpha": true,
@@ -278,7 +278,7 @@
         {
           "path": "android/app/src/main/res/drawable-xxhdpi/ic_notification.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-drawable-xxhdpi-ic_notification.png",
-          "modified": "2026-08-31T09:45:02.561522",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 72,
           "height": 72,
           "hasAlpha": true,
@@ -290,7 +290,7 @@
         {
           "path": "android/app/src/main/res/drawable-xxxhdpi/ic_notification.png",
           "absolutePath": "launcher_icon/files/root-android-app-src-main-res-drawable-xxxhdpi-ic_notification.png",
-          "modified": "2026-08-31T09:45:02.563423",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 96,
           "height": 96,
           "hasAlpha": true,
@@ -312,7 +312,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@1x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-20x20@1x.png",
-          "modified": "2026-08-31T09:45:02.578410",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 20,
           "height": 20,
           "hasAlpha": false,
@@ -324,7 +324,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@1x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-29x29@1x.png",
-          "modified": "2026-08-31T09:45:02.579011",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 29,
           "height": 29,
           "hasAlpha": false,
@@ -336,7 +336,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@2x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-20x20@2x.png",
-          "modified": "2026-08-31T09:45:02.578457",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 40,
           "height": 40,
           "hasAlpha": false,
@@ -348,7 +348,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@1x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-40x40@1x.png",
-          "modified": "2026-08-31T09:45:02.580",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 40,
           "height": 40,
           "hasAlpha": false,
@@ -360,7 +360,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@2x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-29x29@2x.png",
-          "modified": "2026-08-31T09:45:02.579202",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 58,
           "height": 58,
           "hasAlpha": false,
@@ -372,7 +372,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@3x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-20x20@3x.png",
-          "modified": "2026-08-31T09:45:02.578505",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 60,
           "height": 60,
           "hasAlpha": false,
@@ -384,7 +384,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@1x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-76x76@1x.png",
-          "modified": "2026-08-31T09:45:02.580433",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 76,
           "height": 76,
           "hasAlpha": false,
@@ -396,7 +396,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@2x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-40x40@2x.png",
-          "modified": "2026-08-31T09:45:02.580058",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 80,
           "height": 80,
           "hasAlpha": false,
@@ -408,7 +408,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@3x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-29x29@3x.png",
-          "modified": "2026-08-31T09:45:02.579543",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 87,
           "height": 87,
           "hasAlpha": false,
@@ -420,7 +420,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@3x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-40x40@3x.png",
-          "modified": "2026-08-31T09:45:02.580204",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 120,
           "height": 120,
           "hasAlpha": false,
@@ -432,7 +432,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@2x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-60x60@2x.png",
-          "modified": "2026-08-31T09:45:02.580270",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 120,
           "height": 120,
           "hasAlpha": false,
@@ -444,7 +444,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@2x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-76x76@2x.png",
-          "modified": "2026-08-31T09:45:02.580940",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 152,
           "height": 152,
           "hasAlpha": false,
@@ -456,7 +456,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-83.5x83.5@2x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-83.5x83.5@2x.png",
-          "modified": "2026-08-31T09:45:02.581017",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 167,
           "height": 167,
           "hasAlpha": false,
@@ -468,7 +468,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@3x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-60x60@3x.png",
-          "modified": "2026-08-31T09:45:02.580335",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 180,
           "height": 180,
           "hasAlpha": false,
@@ -480,7 +480,7 @@
         {
           "path": "ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png",
           "absolutePath": "launcher_icon/files/root-ios-Runner-Assets.xcassets-AppIcon.appiconset-Icon-App-1024x1024@1x.png",
-          "modified": "2026-08-31T09:45:02.578358",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 1024,
           "height": 1024,
           "hasAlpha": false,
@@ -505,7 +505,7 @@
         {
           "path": "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_16.png",
           "absolutePath": "launcher_icon/files/root-macos-Runner-Assets.xcassets-AppIcon.appiconset-app_icon_16.png",
-          "modified": "2026-08-31T09:45:02.591016",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 16,
           "height": 16,
           "hasAlpha": true,
@@ -517,7 +517,7 @@
         {
           "path": "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_32.png",
           "absolutePath": "launcher_icon/files/root-macos-Runner-Assets.xcassets-AppIcon.appiconset-app_icon_32.png",
-          "modified": "2026-08-31T09:45:02.591136",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 32,
           "height": 32,
           "hasAlpha": true,
@@ -529,7 +529,7 @@
         {
           "path": "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_64.png",
           "absolutePath": "launcher_icon/files/root-macos-Runner-Assets.xcassets-AppIcon.appiconset-app_icon_64.png",
-          "modified": "2026-08-31T09:45:02.591294",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 64,
           "height": 64,
           "hasAlpha": true,
@@ -541,7 +541,7 @@
         {
           "path": "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png",
           "absolutePath": "launcher_icon/files/root-macos-Runner-Assets.xcassets-AppIcon.appiconset-app_icon_128.png",
-          "modified": "2026-08-31T09:45:02.590969",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 128,
           "height": 128,
           "hasAlpha": true,
@@ -553,7 +553,7 @@
         {
           "path": "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png",
           "absolutePath": "launcher_icon/files/root-macos-Runner-Assets.xcassets-AppIcon.appiconset-app_icon_256.png",
-          "modified": "2026-08-31T09:45:02.591078",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 256,
           "height": 256,
           "hasAlpha": true,
@@ -565,7 +565,7 @@
         {
           "path": "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png",
           "absolutePath": "launcher_icon/files/root-macos-Runner-Assets.xcassets-AppIcon.appiconset-app_icon_512.png",
-          "modified": "2026-08-31T09:45:02.591239",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 512,
           "height": 512,
           "hasAlpha": true,
@@ -577,7 +577,7 @@
         {
           "path": "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png",
           "absolutePath": "launcher_icon/files/root-macos-Runner-Assets.xcassets-AppIcon.appiconset-app_icon_1024.png",
-          "modified": "2026-08-31T09:45:02.590900",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 1024,
           "height": 1024,
           "hasAlpha": true,
@@ -594,7 +594,7 @@
         {
           "path": "web/icons/Icon-192.png",
           "absolutePath": "launcher_icon/files/root-web-icons-Icon-192.png",
-          "modified": "2026-08-31T09:45:02.594675",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 192,
           "height": 192,
           "hasAlpha": false,
@@ -604,7 +604,7 @@
         {
           "path": "web/icons/Icon-512.png",
           "absolutePath": "launcher_icon/files/root-web-icons-Icon-512.png",
-          "modified": "2026-08-31T09:45:02.595362",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 512,
           "height": 512,
           "hasAlpha": false,
@@ -619,7 +619,7 @@
         {
           "path": "web/icons/Icon-maskable-192.png",
           "absolutePath": "launcher_icon/files/root-web-icons-Icon-maskable-192.png",
-          "modified": "2026-08-31T09:45:02.595687",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 192,
           "height": 192,
           "hasAlpha": true,
@@ -629,7 +629,7 @@
         {
           "path": "web/icons/Icon-maskable-512.png",
           "absolutePath": "launcher_icon/files/root-web-icons-Icon-maskable-512.png",
-          "modified": "2026-08-31T09:45:02.595783",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 512,
           "height": 512,
           "hasAlpha": true,
@@ -644,7 +644,7 @@
         {
           "path": "web/favicon.png",
           "absolutePath": "launcher_icon/files/root-web-favicon.png",
-          "modified": "2026-08-31T09:45:02.594566",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 16,
           "height": 16,
           "hasAlpha": true,
@@ -659,7 +659,7 @@
         {
           "path": "windows/runner/resources/app_icon.ico",
           "absolutePath": "launcher_icon/files/root-windows-runner-resources-app_icon.ico",
-          "modified": "2026-08-31T09:45:02.598206",
+          "modified": "2026-01-01T09:41:00.000",
           "width": 256,
           "height": 256,
           "hasAlpha": false,
