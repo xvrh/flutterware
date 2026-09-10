@@ -2283,6 +2283,25 @@ class CatalogSession extends ChangeNotifier {
     var vm = _channel;
     if (vm == null) return;
     _fireAndForget(() async {
+      // A program is cached by key for the life of the isolate, so new bytes
+      // on disk are invisible until the engine is told to read them again —
+      // what `flutter run`'s `r` does for a `shaders:` entry. It swaps the
+      // program under every live FragmentShader and zeroes their uniforms;
+      // the reassemble below is what makes a painter set them again.
+      for (var key in change.shaders) {
+        try {
+          await vm.callExtension(
+            'ext.ui.window.reinitializeShader',
+            // Encoded the way `FragmentProgram.fromAsset` files the program,
+            // since the engine looks the key up exactly as given.
+            args: {'assetKey': Uri(path: Uri.encodeFull(key)).path},
+          );
+        } catch (e) {
+          // One key the engine could not read again keeps its old program;
+          // the rest of the refresh still applies.
+          if (!_disposed) debugPrint('[catalog] reloading $key: $e');
+        }
+      }
       await vm.callExtension(
         'ext.flutter.evict',
         args: {'value': 'AssetManifest.bin'},
