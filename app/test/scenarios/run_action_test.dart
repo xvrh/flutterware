@@ -217,14 +217,76 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
     // scenarios that passed. So the steps go to a file and the answer says
     // where, and what it keeps is the frame each failure was captured at.
 
-    test('a green run carries counts, not steps', () async {
-      var result = await run(core(_FakeRunner(steps: 5)));
+    test('a green run carries counts, not rows', () async {
+      var result = await run(core(_FakeRunner(steps: 5, alsoGreen: 2)));
 
-      var outcome = result.packages.single.scenarios.single;
-      expect(outcome.steps, isEmpty);
-      // Never silently: an empty list with no count reads as "captured
-      // nothing", which is a different and much worse answer.
-      expect(outcome.stepCount, 5);
+      var package = result.packages.single;
+      expect(package.scenarios, isEmpty);
+      expect(package.passed, 3);
+      expect(package.failed, 0);
+      // Never silently: an empty list with no count reads as "ran nothing",
+      // which is a different and much worse answer.
+      expect(package.scenariosElided, 3);
+      expect(package.toJson(), containsPair('passed', 3));
+    });
+
+    test('a red run lists the red one and counts the rest', () async {
+      var result = await run(
+        core(_FakeRunner(ok: false, steps: 5, alsoGreen: 2)),
+      );
+
+      var package = result.packages.single;
+      expect([for (var s in package.scenarios) s.name], ['A']);
+      expect(package.passed, 2);
+      expect(package.failed, 1);
+      expect(package.scenariosElided, 2);
+      expect(result.ok, isFalse);
+    });
+
+    test('a green scenario whose walk stalled keeps its row', () async {
+      var result = await run(
+        core(_FakeRunner(steps: 3, unchangedSteps: {2, 3}, alsoGreen: 2)),
+      );
+
+      var package = result.packages.single;
+      var stalled = package.scenarios.single;
+      expect(stalled.name, 'A');
+      expect(stalled.unchangedCount, 2);
+      expect(stalled.stepsElided, 3);
+      expect(package.passed, 3);
+      expect(package.scenariosElided, 2);
+    });
+
+    test('unsettled steps are summed over the rows it folded', () async {
+      var result = await run(
+        core(_FakeRunner(steps: 3, unsettledSteps: {1, 3}, alsoGreen: 1)),
+      );
+
+      var package = result.packages.single;
+      expect(package.scenarios, isEmpty);
+      expect(package.unsettledCount, 2);
+    });
+
+    test('steps: all lists every scenario and elides none', () async {
+      var result = await run(
+        core(_FakeRunner(steps: 2, alsoGreen: 2)),
+        steps: 'all',
+      );
+
+      var package = result.packages.single;
+      expect(package.scenarios, hasLength(3));
+      expect(package.passed, 3);
+      expect(package.toJson().containsKey('scenariosElided'), isFalse);
+    });
+
+    test('a summarised answer reads back with its counts', () async {
+      var result = await run(core(_FakeRunner(steps: 2, alsoGreen: 2)));
+
+      var decoded = ScenarioRunResult.fromJson(
+        jsonDecode(jsonEncode(result.toJson())) as Map<String, dynamic>,
+      ).packages.single;
+      expect(decoded.passed, 3);
+      expect(decoded.scenariosElided, 3);
     });
 
     test('a red one carries the frame it died on, and says so', () async {
@@ -286,8 +348,8 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
       // not there — reported by a consumer who read exactly that. The
       // difference between the two numbers is stated rather than left to be
       // inferred.
-      var green = await run(core(_FakeRunner(steps: 5)));
-      expect(green.packages.single.scenarios.single.stepsElided, 5);
+      var stalled = await run(core(_FakeRunner(steps: 5, unchangedSteps: {5})));
+      expect(stalled.packages.single.scenarios.single.stepsElided, 5);
 
       var red = await run(core(_FakeRunner(ok: false, steps: 5)));
       expect(red.packages.single.scenarios.single.stepsElided, 4);
@@ -303,8 +365,10 @@ ${names.map((n) => "  scenario('$n', (s) async {});").join('\n')}
     test('the translation reads stay in the file, not in the answer', () async {
       // The largest thing in a summarised answer on any suite with a catalog
       // registered, and read by nothing that summarises: the translations
-      // plugin asks for every step, so it never comes through here.
+      // plugin asks for every step, so it never comes through here. Red, so
+      // the answer has a row to leave them off.
       var runner = _FakeRunner(
+        ok: false,
         steps: 5,
         translations: const {
           'shop': {'title': 'Brewline', 'total': 'Total'},
@@ -541,6 +605,8 @@ class _FakeRunner extends ScenarioRunner {
     this.steps = 0,
     this.unchangedSteps = const {},
     this.translations,
+    this.alsoGreen = 0,
+    this.unsettledSteps = const {},
   }) : super(packageRoot: '/none', directory: 'none', flutterSdkRoot: '/none');
 
   @override
@@ -556,6 +622,13 @@ class _FakeRunner extends ScenarioRunner {
   /// The indices the harness flagged as `unchanged` — verbs that acted and
   /// changed nothing on screen.
   final Set<int> unchangedSteps;
+
+  /// How many more scenarios ran beside the first, every one of them green
+  /// with [steps] clean steps — the rows a summarised answer counts.
+  final int alsoGreen;
+
+  /// The indices of the first scenario's steps whose settle gave up.
+  final Set<int> unsettledSteps;
 
   /// Every key the scenario's catalogs were asked for. Bounded by the catalog
   /// rather than by the run, which is what makes it the largest thing in a
@@ -627,6 +700,10 @@ class _FakeRunner extends ScenarioRunner {
                 'tree': p.join(outDir, 'step$i.tree.json'),
                 'texts': ['step $i'],
                 if (unchangedSteps.contains(i)) 'unchanged': true,
+                if (unsettledSteps.contains(i)) ...{
+                  'settled': false,
+                  'waited': true,
+                },
               },
           ],
           'errors': [
@@ -634,6 +711,27 @@ class _FakeRunner extends ScenarioRunner {
           ],
           if (translations != null) 'translations': translations,
         },
+        for (var n = 1; n <= alsoGreen; n++)
+          {
+            'file': 'test/scenarios/b_test.dart',
+            'name': 'B$n',
+            'ok': true,
+            'ms': 2,
+            'steps': <Object?>[
+              for (var i = 1; i <= steps; i++)
+                {
+                  'index': i,
+                  'position': '#$i',
+                  'auto': true,
+                  'image': p.join(outDir, 'b${n}_step$i.png'),
+                  'format': 'png',
+                  'width': 390,
+                  'height': 844,
+                  'tree': p.join(outDir, 'b${n}_step$i.tree.json'),
+                  'texts': ['step $i'],
+                },
+            ],
+          },
       ],
     };
   }

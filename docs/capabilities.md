@@ -1337,7 +1337,11 @@ packages: List<ScenarioRunPackage>
   output: String   # Where this run's artifacts were written.
   axes: Map<String, String>?   # The assignment **this** entry ran under, when the request asked for a matrix (`devices=` / `languages=`): one entry per package per point of it, each with its own [output].
   ms: int   # Whole-run wall time inside the harness.
-  scenarios: List<ScenarioRunOutcome>
+  passed: int?   # How many scenarios passed — every one of the package's, whether or not [scenarios] lists it.
+  failed: int?   # How many came back red.
+  skipped: int?   # How many declared `skip: true` and never ran.
+  unsettledCount: int?   # How many steps across the whole package a settle gave up on — the sum of every scenario's [ScenarioRunOutcome.unsettledCount], including the ones [scenarios] leaves out, so folding the green rows does not fold the number away with them.
+  scenarios: List<ScenarioRunOutcome>   # Every scenario in `run.json`; in an action's answer, only the ones with something to say.
     file: String
     name: String
     ok: bool
@@ -1399,6 +1403,7 @@ packages: List<ScenarioRunPackage>
       error: String
       stack: String?
     translations: Map<String, Map<String, String>>?   # Every key each catalog was asked for on the way through this scenario, and what it answered: `catalog -> key -> value`.
+  scenariosElided: int?   # How many of the package's scenarios are in `run.json` rather than in this copy — zero when [scenarios] is the whole of them.
   report: String?   # The whole run, on disk, in this same shape — every step of every scenario, whatever this copy carries.
   log: String?   # The harness process's console, whole, on disk — engine noise, and anything printed outside a test zone.
   error: String?   # Set when the package could not be run at all — the harness did not compile, the tester did not start — in which case [scenarios] is empty.
@@ -1422,7 +1427,7 @@ Exits 1 when `ok` is false, so a job can gate on this action.
 | `orientations` | string | no | — | The third axis — `portrait,landscape`. Crossed with the other two, and overrides `orientation`. A device that cannot turn contributes one point rather than two identical ones, so mixing a desktop into the devices does not double the run. |
 | `matrix` | choice | no | — | `declared` runs every point the folder profiles declare — the union of their devices, languages and orientations, crossed exactly as explicit lists are. What CI wants instead of restating the declaration in `devices=` and watching the two drift. Instead of the axis lists, not beside them. |
 | `tag` | string | no | — | Run only scenarios carrying this tag — the same tag `scenario(tags: [...])` declares and `flutter test --tags` filters on |
-| `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file — a script reads it back typed with `package:flutterware/scenarios_report.dart` — so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone, which is the answer to "did it pass". Every scenario reports its `stepCount` whatever this says, and `stepsElided` says how many of them are in the file rather than here. Anything but `all` also leaves the scenario's translation reads on disk: a suite with a catalog registered spends more of the answer on those than on everything else together. |
+| `steps` | choice | no | failing | How many steps ride back in the answer. Every run writes all of them to `run.json` in its output directory either way and each package names that file — a script reads it back typed with `package:flutterware/scenarios_report.dart` — so this is about what arrives without asking: `failing` (default) is the frame each red scenario died on, `all` is every step of every scenario — a matrix suite is hundreds — and `none` is the summary alone, which is the answer to "did it pass". Anything but `all` also counts the green scenarios instead of listing them: each package says `passed` and `failed`, lists only the red, skipped and stalled ones, and `scenariosElided` says how many rows are in the file. Every listed scenario reports its `stepCount` whatever this says, and `stepsElided` says how many of them are in the file rather than here. Anything but `all` also leaves the scenario's translation reads on disk: a suite with a catalog registered spends more of the answer on those than on everything else together. |
 | `text-scale` | string | no | — | The platform text scale factor — `1.3` is a common accessibility setting |
 | `brightness` | choice | no | — | The platform brightness the app sees |
 | `bold-text` | choice | no | — | The bold-text accessibility switch |

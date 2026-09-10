@@ -221,7 +221,17 @@ class ScenarioRunPackage {
     this.log,
     this.error,
     this.drift,
-  });
+    int? passed,
+    int? failed,
+    int? skipped,
+    int? unsettledCount,
+    this.scenariosElided = 0,
+  }) : passed = passed ?? scenarios.where((s) => s.ok && !s.skipped).length,
+       failed = failed ?? scenarios.where((s) => !s.ok).length,
+       skipped = skipped ?? scenarios.where((s) => s.skipped).length,
+       unsettledCount =
+           unsettledCount ??
+           scenarios.fold(0, (sum, s) => sum + s.unsettledCount);
 
   factory ScenarioRunPackage.fromJson(Map<String, Object?> json) =>
       ScenarioRunPackage(
@@ -237,6 +247,13 @@ class ScenarioRunPackage {
           Map<String, Object?> drift => ScenarioRunDrift.fromJson(drift),
           _ => null,
         },
+        // Absent on a report written before they were counted, whose
+        // scenarios are all present and can count themselves.
+        passed: json['passed'] as int?,
+        failed: json['failed'] as int?,
+        skipped: json['skipped'] as int?,
+        unsettledCount: json['unsettledCount'] as int?,
+        scenariosElided: _int(json['scenariosElided'], 0),
       );
 
   final String path;
@@ -252,7 +269,8 @@ class ScenarioRunPackage {
   /// hands a model, and most of it is about scenarios that passed. So the
   /// answer summarises and the file keeps everything: one read when a reader
   /// wants a step it was not given, and no read at all in the ordinary case
-  /// where the answer is "20 scenarios, all green".
+  /// where the answer is "20 scenarios, all green" — which is [passed], with
+  /// the twenty rows left here.
   final String? report;
 
   /// The harness process's console, whole, on disk — engine noise, and
@@ -271,7 +289,61 @@ class ScenarioRunPackage {
   /// Whole-run wall time inside the harness.
   final int ms;
 
+  /// Every scenario in `run.json`; in an action's answer, only the ones with
+  /// something to say. A green scenario is counted in [passed] and left in
+  /// the file, and [scenariosElided] says how many were. What stays is every
+  /// red one, every skipped one, and every green one whose walk stalled —
+  /// `unchangedCount` above zero, which is a pass nobody should take at its
+  /// word.
   final List<ScenarioRunOutcome> scenarios;
+
+  /// How many scenarios passed — every one of the package's, whether or not
+  /// [scenarios] lists it.
+  ///
+  /// The answer to "did it pass", in one number. Rows for 136 green scenarios
+  /// were 8k tokens of an answer whose reader wanted exactly this, reported
+  /// by a consumer who had asked for the short form and got every row anyway.
+  final int passed;
+
+  /// How many came back red. Each of them is also in [scenarios], and in
+  /// [ScenarioRunResult.failed].
+  final int failed;
+
+  /// How many declared `skip: true` and never ran. Not counted in [passed]:
+  /// green they are not.
+  final int skipped;
+
+  /// How many steps across the whole package a settle gave up on — the sum
+  /// of every scenario's [ScenarioRunOutcome.unsettledCount], including the
+  /// ones [scenarios] leaves out, so folding the green rows does not fold
+  /// the number away with them.
+  final int unsettledCount;
+
+  /// How many of the package's scenarios are in `run.json` rather than in
+  /// this copy — zero when [scenarios] is the whole of them. The package's
+  /// [ScenarioRunOutcome.stepsElided]: stated, so a short list is never read
+  /// as a short run.
+  final int scenariosElided;
+
+  /// This package with [keep] in place of its scenarios, and its counts left
+  /// as they were — they describe the run, not the copy.
+  ScenarioRunPackage carrying(List<ScenarioRunOutcome> keep) =>
+      ScenarioRunPackage(
+        path: path,
+        output: output,
+        axes: axes,
+        ms: ms,
+        scenarios: keep,
+        report: report,
+        log: log,
+        error: error,
+        drift: drift,
+        passed: passed,
+        failed: failed,
+        skipped: skipped,
+        unsettledCount: unsettledCount,
+        scenariosElided: scenariosElided + scenarios.length - keep.length,
+      );
 
   /// Set when the package could not be run at all — the harness did not
   /// compile, the tester did not start — in which case [scenarios] is empty.
@@ -302,7 +374,14 @@ class ScenarioRunPackage {
     'output': output,
     if (axes != null) 'axes': axes,
     'ms': ms,
+    // Only for a package that ran: one that did not has an `error` and no
+    // scenarios, and `passed: 0` beside it would read as a verdict.
+    if (error == null) 'passed': passed,
+    if (error == null) 'failed': failed,
+    if (skipped > 0) 'skipped': skipped,
+    if (unsettledCount > 0) 'unsettledCount': unsettledCount,
     'scenarios': scenarios,
+    if (scenariosElided > 0) 'scenariosElided': scenariosElided,
     if (report != null) 'report': report,
     if (log != null) 'log': log,
     if (error != null) 'error': error,

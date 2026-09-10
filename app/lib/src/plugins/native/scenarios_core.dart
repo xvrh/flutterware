@@ -947,9 +947,13 @@ class ScenariosCore extends PluginCore {
                   'each red scenario died on, `all` is every step of every '
                   'scenario — a matrix suite is hundreds — and `none` is the '
                   'summary alone, which is the answer to "did it pass". '
-                  'Every scenario reports its `stepCount` whatever this says, '
-                  'and `stepsElided` says how many of them are in the file '
-                  'rather than here. Anything but `all` also leaves the '
+                  'Anything but `all` also counts the green scenarios '
+                  'instead of listing them: each package says `passed` and '
+                  '`failed`, lists only the red, skipped and stalled ones, and '
+                  '`scenariosElided` says how many rows are in the file. '
+                  'Every listed scenario reports its `stepCount` whatever '
+                  'this says, and `stepsElided` says how many of them are in '
+                  'the file rather than here. Anything but `all` also leaves the '
                   "scenario's translation reads on disk: a suite with a "
                   'catalog registered spends more of the answer on those than '
                   'on everything else together.',
@@ -3771,6 +3775,12 @@ class ScenariosCore extends PluginCore {
 
   /// [whole] with the steps [mode] asks for — the rest are in the file each
   /// package names.
+  ///
+  /// And with the green scenarios counted rather than listed, whenever it is
+  /// not `all`. A green row is sixty tokens saying "this one passed", and a
+  /// 136-scenario suite answered "did it pass" in 8k of them — see
+  /// [ScenarioRunPackage.passed]. A green row whose walk stalled stays: that
+  /// pass is the one thing in a green run worth reading by name.
   static ScenarioRunResult _carrying(ScenarioRunResult whole, String mode) {
     if (mode == 'all') return whole;
     var keepFailing = mode == 'failing';
@@ -3782,27 +3792,19 @@ class ScenariosCore extends PluginCore {
       clock: whole.clock,
       packages: [
         for (var run in whole.packages)
-          ScenarioRunPackage(
-            path: run.path,
-            output: run.output,
-            axes: run.axes,
-            ms: run.ms,
-            report: run.report,
-            log: run.log,
-            error: run.error,
-            drift: run.drift,
-            scenarios: [
-              for (var outcome in run.scenarios)
-                if (keepFailing && !outcome.ok)
-                  // The frame it died on, not the trail that led there: one
-                  // scenario with split branches is nineteen steps, and four
-                  // red ones were 99k characters of pictures nobody had asked
-                  // to see. The trail is in the file, one read away.
-                  outcome.withFailingStepOnly()
-                else
-                  outcome.withoutSteps(),
-            ],
-          ),
+          run.carrying([
+            for (var outcome in run.scenarios)
+              if (keepFailing && !outcome.ok)
+                // The frame it died on, not the trail that led there: one
+                // scenario with split branches is nineteen steps, and four
+                // red ones were 99k characters of pictures nobody had asked
+                // to see. The trail is in the file, one read away.
+                outcome.withFailingStepOnly()
+              else if (!outcome.ok ||
+                  outcome.skipped ||
+                  outcome.unchangedCount > 0)
+                outcome.withoutSteps(),
+          ]),
       ],
     );
   }

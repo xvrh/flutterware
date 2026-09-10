@@ -962,8 +962,8 @@ class InspectNode {
   /// can be carrying too.
   int get _weight {
     var weight = 0;
-    // `Text("Save")` — the only description the walk mints, and the words are
-    // why anyone reads a tree.
+    // `Text("Save")` — the only kind of description the walk mints, and the
+    // words are why anyone reads a tree.
     if (description != null && description!.contains('"')) weight += 8;
     // A Row is never scaffolding: `crossAxisAlignment` is the answer to half
     // the layout questions asked of a tree, and only this node has it.

@@ -319,13 +319,29 @@ class GuestInspector {
   /// It is what makes searching by the words on screen work at all. Without it
   /// `find --query=Save` matches nothing, because no node's type or description
   /// has ever contained "Save" — which is the first thing anybody would try.
-  /// [Text] only, deliberately. `Tooltip` and the rest of the labelled widgets
-  /// live in `package:flutter/material.dart`, and this file imports `widgets`
-  /// so that a guest is not made to link Material to be inspected.
+  ///
+  /// `Text.rich` and a hand-written `RichText` too, spelled out of their spans.
+  /// A chat bubble with a bold name and a link is one of those, and without
+  /// them its words were in the picture and the `texts` and nowhere a `find`
+  /// or a `screen` looks — the semantics label it sometimes matched by is the
+  /// bubble's own only when nothing above it merges. The drawn words, not the
+  /// spoken ones: a span's `semanticsLabel` is what a screen reader says, and
+  /// `find` is asked about what is on the glass.
+  ///
+  /// `Tooltip` and the rest of the labelled widgets live in
+  /// `package:flutter/material.dart`, and this file imports `widgets` so that
+  /// a guest is not made to link Material to be inspected.
   static String? _preview(Element? element) => switch (element) {
     Element(widget: Text(:var data?)) => 'Text("$data")',
+    Element(widget: Text(:var textSpan?)) => 'Text("${_plain(textSpan)}")',
+    Element(widget: RichText(:var text)) => 'RichText("${_plain(text)}")',
     _ => null,
   };
+
+  static String _plain(InlineSpan span) => span.toPlainText(
+    includeSemanticsLabels: false,
+    includePlaceholders: false,
+  );
 
   Element? _elementOf(Map<String, Object?> node) {
     var id = node['valueId'];
