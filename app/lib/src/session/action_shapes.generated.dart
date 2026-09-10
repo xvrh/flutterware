@@ -4979,8 +4979,33 @@ final resultShapes = <String, ResultShape>{
         'doc': 'Whole-run wall time inside the harness.',
       },
       <String, Object?>{
+        'name': 'passed',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many scenarios passed — every one of the package\'s, whether or not [scenarios] lists it.',
+      },
+      <String, Object?>{
+        'name': 'failed',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many came back red.',
+      },
+      <String, Object?>{
+        'name': 'skipped',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many declared `skip: true` and never ran.',
+      },
+      <String, Object?>{
+        'name': 'unsettledCount',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many steps across the whole package a settle gave up on — the sum of every scenario\'s [ScenarioRunOutcome.unsettledCount], including the ones [scenarios] leaves out, so folding the green rows does not fold the number away with them.',
+      },
+      <String, Object?>{
         'name': 'scenarios',
         'type': 'List<ScenarioRunOutcome>',
+        'doc': 'Every scenario in `run.json`; in an action\'s answer, only the ones with something to say.',
         'shape': <String, Object?>{
           'type': 'ScenarioRunOutcome',
           'fields': <Object?>[
@@ -5323,6 +5348,12 @@ final resultShapes = <String, ResultShape>{
         },
       },
       <String, Object?>{
+        'name': 'scenariosElided',
+        'type': 'int',
+        'optional': true,
+        'doc': 'How many of the package\'s scenarios are in `run.json` rather than in this copy — zero when [scenarios] is the whole of them.',
+      },
+      <String, Object?>{
         'name': 'report',
         'type': 'String',
         'optional': true,
@@ -5394,8 +5425,33 @@ final resultShapes = <String, ResultShape>{
               'doc': 'Whole-run wall time inside the harness.',
             },
             <String, Object?>{
+              'name': 'passed',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many scenarios passed — every one of the package\'s, whether or not [scenarios] lists it.',
+            },
+            <String, Object?>{
+              'name': 'failed',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many came back red.',
+            },
+            <String, Object?>{
+              'name': 'skipped',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many declared `skip: true` and never ran.',
+            },
+            <String, Object?>{
+              'name': 'unsettledCount',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many steps across the whole package a settle gave up on — the sum of every scenario\'s [ScenarioRunOutcome.unsettledCount], including the ones [scenarios] leaves out, so folding the green rows does not fold the number away with them.',
+            },
+            <String, Object?>{
               'name': 'scenarios',
               'type': 'List<ScenarioRunOutcome>',
+              'doc': 'Every scenario in `run.json`; in an action\'s answer, only the ones with something to say.',
               'shape': <String, Object?>{
                 'type': 'ScenarioRunOutcome',
                 'fields': <Object?>[
@@ -5734,6 +5790,12 @@ final resultShapes = <String, ResultShape>{
                   },
                 ],
               },
+            },
+            <String, Object?>{
+              'name': 'scenariosElided',
+              'type': 'int',
+              'optional': true,
+              'doc': 'How many of the package\'s scenarios are in `run.json` rather than in this copy — zero when [scenarios] is the whole of them.',
             },
             <String, Object?>{
               'name': 'report',
