@@ -13,9 +13,10 @@ import 'text_extract.dart';
 /// painted so canvas calls can be joined back to the semantics that produced
 /// them (text content from [RenderParagraph] and [RenderEditable], gradients
 /// from [RenderDecoratedBox]). Layer effects the stream cannot carry —
-/// backdrop filters, image filters, color filters, shader masks — become
-/// [VgBeginEffect]..[VgEndEffect] spans for the unsupported-op policy to
-/// decide over, instead of silently vanishing.
+/// backdrop filters, image filters, color filters, shader masks, a
+/// `saveLayer` that blends — become [VgBeginEffect]..[VgEndEffect] spans
+/// for the unsupported-op policy to decide over, instead of silently
+/// vanishing.
 VgRecording captureVector(RenderObject root) {
   var recording = VgRecording();
   var context = CapturePaintingContext(recording);
@@ -25,19 +26,26 @@ VgRecording captureVector(RenderObject root) {
 
 class CapturePaintingContext extends ClipContext implements PaintingContext {
   CapturePaintingContext(this.recording) {
-    canvas = _RecordingCanvas(recording, this);
+    canvas = _canvas = _RecordingCanvas(recording, this);
   }
 
   final VgRecording recording;
 
   @override
   late final ui.Canvas canvas;
+  late final _RecordingCanvas _canvas;
 
   final renderObjectStack = <RenderObject>[];
+
+  /// Where each object on [renderObjectStack] was told to paint, and the
+  /// canvas transform at the time — what it takes to find its box again
+  /// from inside a painter that has since moved the canvas.
+  final _paintFrames = <({Offset offset, Matrix4 transform})>[];
 
   @override
   void paintChild(RenderObject child, Offset offset) {
     renderObjectStack.add(child);
+    _paintFrames.add((offset: offset, transform: _canvas._matrix.clone()));
     // A repaint boundary may carry its effect on the composited layer
     // instead of the paint stream — RenderOpacity holds its alpha there and
     // paints the child at full opacity.
@@ -54,6 +62,7 @@ class CapturePaintingContext extends ClipContext implements PaintingContext {
     } else {
       child.paint(this, offset);
     }
+    _paintFrames.removeLast();
     renderObjectStack.removeLast();
   }
 
@@ -242,6 +251,19 @@ class CapturePaintingContext extends ClipContext implements PaintingContext {
     return childPaintBounds ?? Rect.zero;
   }
 
+  /// The same estimate for a `saveLayer` given no bounds: the painting
+  /// object's box, carried into the canvas frame the layer opens in — a
+  /// custom painter, say, draws after translating to its offset.
+  Rect? _layerBounds(Matrix4 canvasTransform) {
+    var ro = renderObjectStack.isEmpty ? null : renderObjectStack.last;
+    if (ro is! RenderBox || !ro.hasSize) return null;
+    var toCanvas = Matrix4.tryInvert(canvasTransform);
+    if (toCanvas == null) return null;
+    var frame = _paintFrames.last;
+    toCanvas.multiply(frame.transform);
+    return MatrixUtils.transformRect(toCanvas, frame.offset & ro.size);
+  }
+
   @override
   void addLayer(Layer layer) {
     // A leaf layer arrives whole (texture, platform view, performance
@@ -312,6 +334,15 @@ class _RecordingCanvas implements ui.Canvas {
   final CapturePaintingContext context;
   var _saveCount = 1;
 
+  /// The current transform, from the recording's frame to the one the
+  /// next op draws in, and one saved per open save.
+  var _matrix = Matrix4.identity();
+  final _savedTransforms = <Matrix4>[];
+
+  /// The layers still open: where each one's [VgSaveLayer] sits, the save
+  /// count it opened at, and the bounds to fall back on if it gave none.
+  final _openLayers = <({int index, int saveCount, Rect? fallback})>[];
+
   List<VgOp> get _ops => recording.ops;
 
   VgPaint _paint(ui.Paint paint, Rect bounds) {
@@ -324,19 +355,69 @@ class _RecordingCanvas implements ui.Canvas {
   @override
   void save() {
     _saveCount++;
+    _savedTransforms.add(_matrix.clone());
     _ops.add(VgSave());
   }
 
   @override
   void saveLayer(Rect? bounds, ui.Paint paint) {
     _saveCount++;
-    _ops.add(VgSaveLayer(paint.color.a));
+    _savedTransforms.add(_matrix.clone());
+    _openLayers.add((
+      index: _ops.length,
+      saveCount: _saveCount,
+      fallback: bounds == null ? context._layerBounds(_matrix) : null,
+    ));
+    _ops.add(
+      VgSaveLayer(paint.color.a, bounds: bounds, blendMode: paint.blendMode),
+    );
   }
 
   @override
   void restore() {
+    if (_saveCount <= 1) return;
+    var closesLayer =
+        _openLayers.isNotEmpty && _openLayers.last.saveCount == _saveCount;
     _saveCount--;
+    _matrix = _savedTransforms.removeLast();
+    if (closesLayer && _closeAsPatch(_openLayers.removeLast())) return;
     _ops.add(VgRestore());
+  }
+
+  /// A layer that blends onto what is beneath it, or holds a draw that
+  /// blends into the layer, becomes one [VgEffectKind.layer] span: written
+  /// op by op, every draw would land source-over on the page instead.
+  bool _closeAsPatch(({int index, int saveCount, Rect? fallback}) open) {
+    var layer = _ops[open.index] as VgSaveLayer;
+    if (layer.blendMode == ui.BlendMode.srcOver &&
+        !_ops.skip(open.index + 1).any(_blends)) {
+      return false;
+    }
+    var bounds = layer.bounds ?? open.fallback;
+    if (bounds == null) {
+      recording.unboundedLayers.add(layer);
+      return false;
+    }
+    recording.unboundedLayers.removeAll(
+      _ops.skip(open.index + 1).whereType<VgSaveLayer>(),
+    );
+    _ops[open.index] = VgBeginEffect(
+      VgEffectKind.layer,
+      bounds,
+      blendMode: layer.blendMode,
+      opacity: layer.opacity,
+    );
+    _ops.add(VgEndEffect());
+    return true;
+  }
+
+  static bool _blends(VgOp op) {
+    var mode = switch (op) {
+      VgSaveLayer(:var blendMode) => blendMode,
+      VgBeginEffect(kind: VgEffectKind.layer, :var blendMode) => blendMode,
+      _ => drawPaintOf(op)?.blendMode,
+    };
+    return mode != null && mode != ui.BlendMode.srcOver;
   }
 
   @override
@@ -349,19 +430,24 @@ class _RecordingCanvas implements ui.Canvas {
     }
   }
 
+  void _concat(Matrix4 matrix) {
+    _matrix.multiply(matrix);
+    _ops.add(VgTransform(matrix.storage));
+  }
+
   @override
   void translate(double dx, double dy) {
-    _ops.add(VgTransform(Matrix4.translationValues(dx, dy, 0).storage));
+    _concat(Matrix4.translationValues(dx, dy, 0));
   }
 
   @override
   void scale(double sx, [double? sy]) {
-    _ops.add(VgTransform(Matrix4.diagonal3Values(sx, sy ?? sx, 1).storage));
+    _concat(Matrix4.diagonal3Values(sx, sy ?? sx, 1));
   }
 
   @override
   void rotate(double radians) {
-    _ops.add(VgTransform(Matrix4.rotationZ(radians).storage));
+    _concat(Matrix4.rotationZ(radians));
   }
 
   @override
@@ -369,12 +455,12 @@ class _RecordingCanvas implements ui.Canvas {
     var m = Matrix4.identity();
     m.setEntry(0, 1, sx);
     m.setEntry(1, 0, sy);
-    _ops.add(VgTransform(m.storage));
+    _concat(m);
   }
 
   @override
   void transform(Float64List matrix4) {
-    _ops.add(VgTransform(Float64List.fromList(matrix4)));
+    _concat(Matrix4.fromFloat64List(Float64List.fromList(matrix4)));
   }
 
   @override
@@ -497,6 +583,7 @@ class _RecordingCanvas implements ui.Canvas {
           strokeWidth: 0,
           strokeCap: StrokeCap.butt,
           strokeJoin: StrokeJoin.miter,
+          blendMode: blendMode,
         ),
       ),
     );

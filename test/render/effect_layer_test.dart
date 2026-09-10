@@ -145,6 +145,93 @@ void main() {
     });
   });
 
+  group('a canvas layer', () {
+    testWidgets('with only opacity stays a vector group', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          CustomPaint(
+            size: const Size(60, 60),
+            painter: _LayerPainter(
+              Paint()..color = const Color(0x80000000),
+              Paint()..color = const Color(0xFFFF0000),
+            ),
+          ),
+        ),
+      );
+      var boundary = _boundary(tester);
+      var recording = captureVector(boundary);
+      expect(recording.ops.whereType<VgBeginEffect>(), isEmpty);
+      var svg = writeSvg(recording, boundary.size, []);
+      expect(svg, contains(RegExp(r'<g opacity="0\.50\d">')));
+      expect(svg, contains('<rect'));
+      expect(svg, isNot(contains('<image')));
+    });
+
+    testWidgets('with a blend and no bounds takes the box of its painter', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          CustomPaint(
+            size: const Size(60, 40),
+            painter: _LayerPainter(
+              Paint()..blendMode = BlendMode.multiply,
+              Paint()..color = const Color(0xFFFFFF00),
+              bounded: false,
+            ),
+          ),
+        ),
+      );
+      var boundary = _boundary(tester);
+      await tester.runAsync(() async {
+        var recording = captureVector(boundary);
+        var span = recording.ops.whereType<VgBeginEffect>().single;
+        expect(span.kind, VgEffectKind.layer);
+        expect(span.blendMode, BlendMode.multiply);
+        // The painter's frame is already translated to the box's corner.
+        expect(span.bounds, const Rect.fromLTWH(0, 0, 60, 40));
+        await recording.rasterizeUnsupported();
+        await recording.encodeImages();
+        // Composited plainly into the patch: the yellow is yellow, and the
+        // writer carries the multiply.
+        var rgba = recording.imageRgba[span.rasterId]!;
+        expect([rgba[0], rgba[1], rgba[2], rgba[3]], [255, 255, 0, 255]);
+        var svg = writeSvg(recording, boundary.size, []);
+        expect(svg, contains(RegExp('<image[^>]*mix-blend-mode:multiply')));
+      });
+    });
+
+    testWidgets('with a blend no document can name is placed plain, warned', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(
+          CustomPaint(
+            size: const Size(60, 40),
+            painter: _LayerPainter(
+              Paint()..blendMode = BlendMode.dstOut,
+              Paint()..color = const Color(0xFFFFFF00),
+            ),
+          ),
+        ),
+      );
+      var boundary = _boundary(tester);
+      await tester.runAsync(() async {
+        var result = await captureSvg(boundary);
+        expect(result.text, contains('<image'));
+        expect(result.text, isNot(contains('mix-blend-mode')));
+        expect(
+          result.warnings.where(
+            (w) =>
+                w.kind == RenderWarningKind.effectDropped &&
+                w.message.contains('dstOut'),
+          ),
+          hasLength(1),
+        );
+      });
+    });
+  });
+
   testWidgets('drawArc is captured as a path', (tester) async {
     await tester.pumpWidget(
       _host(CustomPaint(size: const Size(60, 60), painter: _ArcPainter())),
@@ -153,6 +240,26 @@ void main() {
     expect(recording.unhandled, isEmpty);
     expect(recording.ops.whereType<VgDrawPath>(), isNotEmpty);
   });
+}
+
+/// One rect inside one `saveLayer`, bounded by the box unless told not to.
+class _LayerPainter extends CustomPainter {
+  _LayerPainter(this.layer, this.fill, {this.bounded = true});
+
+  final Paint layer;
+  final Paint fill;
+  final bool bounded;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    var box = Offset.zero & size;
+    canvas.saveLayer(bounded ? box : null, layer);
+    canvas.drawRect(box, fill);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _ArcPainter extends CustomPainter {

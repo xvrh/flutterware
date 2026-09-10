@@ -57,6 +57,11 @@ class VgRecording {
   final unhandled = <String>{};
   final unreplayableLayers = <String>[];
 
+  /// Layers that needed a raster patch for a blend or a mask but had no
+  /// bounds to size it by; they stay op by op, without the blend — unless
+  /// a layer around them is patched whole, which takes them out again.
+  final unboundedLayers = <VgSaveLayer>{};
+
   /// PNG bytes per image id, filled by [encodeImages] after the sync capture.
   final imagePngs = <int, Uint8List>{};
   final imageRgba = <int, Uint8List>{};
@@ -71,8 +76,9 @@ class VgRecording {
   /// alongside the lifted values.
   ///
   /// Effect spans go first: a whole [VgBeginEffect]..[VgEndEffect] range
-  /// replays as one patch with the effect applied, and the single-op pass
-  /// skips anything such a patch already covers.
+  /// replays as one patch with the effect applied — bar a layer's blend,
+  /// which the writer places the patch with — and the single-op pass skips
+  /// anything such a patch already covers.
   Future<void> rasterizeUnsupported({double pixelRatio = 3}) async {
     var consumed = List<bool>.filled(ops.length, false);
     for (var i = 0; i < ops.length; i++) {
@@ -82,11 +88,18 @@ class VgRecording {
       var end = _matchingEnd(i);
       if (end == null) continue;
       var bounds = op.patchBounds;
-      var image = await _renderPatch(
-        bounds,
-        pixelRatio,
-        (canvas) => replayOps(canvas, from: i, to: end + 1),
-      );
+      var image = await _renderPatch(bounds, pixelRatio, (canvas) {
+        if (op.kind != VgEffectKind.layer) {
+          replayOps(canvas, from: i, to: end + 1);
+          return;
+        }
+        // A layer's own blend is the writer's to apply, against what lies
+        // under the patch; in here it composites plainly, and everything
+        // nested keeps its blend.
+        canvas.saveLayer(null, _layerPaint(op.opacity));
+        replayOps(canvas, from: i + 1, to: end);
+        canvas.restore();
+      });
       if (image == null) continue;
       var id = _nextRasterId--;
       images[id] = image;
@@ -190,17 +203,8 @@ class VgRecording {
       switch (ops[i]) {
         case VgSave():
           canvas.save();
-        case VgSaveLayer(:var opacity):
-          canvas.saveLayer(
-            null,
-            ui.Paint()
-              ..color = ui.Color.from(
-                alpha: opacity,
-                red: 0,
-                green: 0,
-                blue: 0,
-              ),
-          );
+        case VgSaveLayer(:var opacity, :var bounds, :var blendMode):
+          canvas.saveLayer(bounds, _layerPaint(opacity, blendMode));
         case VgRestore():
           canvas.restore();
         case VgTransform(:var matrix):
@@ -273,6 +277,12 @@ class VgRecording {
               // Its input is everything painted before it — not
               // reproducible here. The child paints plain.
               endActions.add(() {});
+            case VgEffectKind.layer:
+              canvas.saveLayer(
+                e.bounds,
+                _layerPaint(e.opacity, e.blendMode ?? ui.BlendMode.srcOver),
+              );
+              endActions.add(canvas.restore);
           }
         case VgEndEffect():
           if (endActions.isNotEmpty) endActions.removeLast()();
@@ -330,17 +340,7 @@ class VgRecording {
     }
     var shaders = 0;
     for (var op in ops) {
-      var paint = switch (op) {
-        VgDrawRect(:var paint) => paint,
-        VgDrawRRect(:var paint) => paint,
-        VgDrawDRRect(:var paint) => paint,
-        VgDrawCircle(:var paint) => paint,
-        VgDrawOval(:var paint) => paint,
-        VgDrawLine(:var paint) => paint,
-        VgDrawPath(:var paint) => paint,
-        _ => null,
-      };
-      if (paint != null && paint.hadUnresolvedShader) shaders++;
+      if (drawPaintOf(op)?.hadUnresolvedShader ?? false) shaders++;
     }
     if (shaders > 0) {
       warnings.add(
@@ -351,7 +351,62 @@ class VgRecording {
         ),
       );
     }
+    var rasterize = options.unsupported == UnsupportedPolicy.rasterize;
+    var layers = [
+      for (var op in ops)
+        if (op is VgBeginEffect && op.kind == VgEffectKind.layer) op,
+    ];
+    var patched = [
+      for (var layer in layers)
+        if (layer.rasterId != null && rasterize) layer,
+    ];
+    if (patched.isNotEmpty) {
+      warnings.add(
+        RenderWarning(
+          RenderWarningKind.effectRasterized,
+          '${patched.length} layer(s) with a blend or a mask were replayed '
+          'as raster patches',
+        ),
+      );
+    }
+    if (patched.length < layers.length) {
+      warnings.add(
+        RenderWarning(
+          RenderWarningKind.effectDropped,
+          '${layers.length - patched.length} layer(s) with a blend or a mask '
+          'could not be expressed; $fate',
+        ),
+      );
+    }
+    var nameless = [
+      for (var layer in patched)
+        if (layer.blendMode case var mode?
+            when mode != ui.BlendMode.srcOver &&
+                !documentBlendModes.containsKey(mode))
+          mode.name,
+    ];
+    if (nameless.isNotEmpty) {
+      warnings.add(
+        RenderWarning(
+          RenderWarningKind.effectDropped,
+          '${nameless.length} raster patch(es) blend with '
+          '${nameless.toSet().join(', ')}, which neither SVG nor PDF can '
+          'express; placed without the blend',
+        ),
+      );
+    }
+    if (unboundedLayers.isNotEmpty) {
+      warnings.add(
+        RenderWarning(
+          RenderWarningKind.effectDropped,
+          '${unboundedLayers.length} layer(s) with a blend or a mask gave no '
+          'bounds and had no box to take them from; exported op by op, '
+          'without the blend',
+        ),
+      );
+    }
     for (var op in ops.whereType<VgBeginEffect>()) {
+      if (op.kind == VgEffectKind.layer) continue;
       if (op.kind == VgEffectKind.backdropFilter) {
         warnings.add(
           RenderWarning(
@@ -387,8 +442,19 @@ sealed class VgOp {}
 class VgSave extends VgOp {}
 
 class VgSaveLayer extends VgOp {
-  VgSaveLayer(this.opacity);
+  VgSaveLayer(
+    this.opacity, {
+    this.bounds,
+    this.blendMode = ui.BlendMode.srcOver,
+  });
   final double opacity;
+  final Rect? bounds;
+
+  /// How the layer composites onto what is beneath it. Anything but
+  /// [ui.BlendMode.srcOver] turns the layer into a [VgEffectKind.layer]
+  /// span when it closes, so a layer that reaches a writer as a
+  /// [VgSaveLayer] is, bar a warning, only an opacity.
+  final ui.BlendMode blendMode;
 }
 
 class VgRestore extends VgOp {}
@@ -414,7 +480,19 @@ class VgClipPath extends VgOp {
   final ui.Path? source;
 }
 
-enum VgEffectKind { backdropFilter, imageFilter, colorFilter, shaderMask }
+enum VgEffectKind {
+  backdropFilter,
+  imageFilter,
+  colorFilter,
+  shaderMask,
+
+  /// A `saveLayer` that blends onto what is beneath it, or holds a draw
+  /// that blends with what the layer already has — a glyph mask a
+  /// gradient is drawn `srcIn` over. Neither survives being written op by
+  /// op, so the span becomes one patch, and the writer composites the
+  /// patch with the layer's own blend.
+  layer,
+}
 
 /// Opens a layer effect the paint stream itself cannot carry. The ops until
 /// the matching [VgEndEffect] are the child's; what happens to the pair is
@@ -430,6 +508,7 @@ class VgBeginEffect extends VgOp {
     this.shader,
     this.maskRect,
     this.blendMode,
+    this.opacity = 1,
   });
 
   final VgEffectKind kind;
@@ -440,8 +519,21 @@ class VgBeginEffect extends VgOp {
   final ui.ColorFilter? colorFilter;
   final ui.Shader? shader;
   final Rect? maskRect;
+
+  /// How a shader mask's shader meets its child; how a [VgEffectKind.layer]
+  /// composites onto what is beneath it.
   final ui.BlendMode? blendMode;
+
+  /// A [VgEffectKind.layer]'s own opacity, baked into its patch.
+  final double opacity;
   int? rasterId;
+
+  /// The blend a writer places this span's patch with: a layer's own, when
+  /// a document can name it.
+  ui.BlendMode? get documentBlend =>
+      kind == VgEffectKind.layer && documentBlendModes.containsKey(blendMode)
+      ? blendMode
+      : null;
 
   bool get reproducible =>
       kind != VgEffectKind.backdropFilter && bounds.isFinite && !bounds.isEmpty;
@@ -585,6 +677,7 @@ class VgPaint {
     this.gradient,
     this.hadUnresolvedShader = false,
     this.source,
+    this.blendMode = ui.BlendMode.srcOver,
   });
 
   factory VgPaint.from(ui.Paint paint, {VgLinearGradient? gradient}) {
@@ -596,6 +689,7 @@ class VgPaint {
       strokeJoin: paint.strokeJoin,
       gradient: gradient,
       hadUnresolvedShader: paint.shader != null && gradient == null,
+      blendMode: paint.blendMode,
       // Snapshot the live paint (shader included) so the raster lane can
       // replay this op faithfully.
       source: ui.Paint.from(paint),
@@ -614,6 +708,12 @@ class VgPaint {
   final bool hadUnresolvedShader;
   final ui.Paint? source;
 
+  /// How the draw composites onto what is already there. The writers draw
+  /// every op source-over; a draw that does not is only faithful inside a
+  /// [VgEffectKind.layer] patch, which is what the capture makes of the
+  /// layer around it.
+  final ui.BlendMode blendMode;
+
   bool get needsRaster => hadUnresolvedShader && source != null;
 
   /// The snapshot when there is one, a rebuild from the lifted values when
@@ -625,8 +725,51 @@ class VgPaint {
         ..style = style
         ..strokeWidth = strokeWidth
         ..strokeCap = strokeCap
-        ..strokeJoin = strokeJoin);
+        ..strokeJoin = strokeJoin
+        ..blendMode = blendMode);
 }
+
+/// The paint a draw op carries, or null for an op that is not a draw with
+/// one.
+VgPaint? drawPaintOf(VgOp op) => switch (op) {
+  VgDrawRect(:var paint) ||
+  VgDrawRRect(:var paint) ||
+  VgDrawDRRect(:var paint) ||
+  VgDrawCircle(:var paint) ||
+  VgDrawOval(:var paint) ||
+  VgDrawLine(:var paint) ||
+  VgDrawPath(:var paint) => paint,
+  _ => null,
+};
+
+/// Flutter's blend modes that SVG (CSS `mix-blend-mode`) and PDF (`/BM`)
+/// both name, with the CSS spelling; PDF's is Flutter's own name. The rest
+/// — the Porter-Duff operators, `plus`, `modulate` — have no counterpart in
+/// either document.
+const documentBlendModes = <ui.BlendMode, String>{
+  ui.BlendMode.multiply: 'multiply',
+  ui.BlendMode.screen: 'screen',
+  ui.BlendMode.overlay: 'overlay',
+  ui.BlendMode.darken: 'darken',
+  ui.BlendMode.lighten: 'lighten',
+  ui.BlendMode.colorDodge: 'color-dodge',
+  ui.BlendMode.colorBurn: 'color-burn',
+  ui.BlendMode.hardLight: 'hard-light',
+  ui.BlendMode.softLight: 'soft-light',
+  ui.BlendMode.difference: 'difference',
+  ui.BlendMode.exclusion: 'exclusion',
+  ui.BlendMode.hue: 'hue',
+  ui.BlendMode.saturation: 'saturation',
+  ui.BlendMode.color: 'color',
+  ui.BlendMode.luminosity: 'luminosity',
+};
+
+ui.Paint _layerPaint(
+  double opacity, [
+  ui.BlendMode blendMode = ui.BlendMode.srcOver,
+]) => ui.Paint()
+  ..color = ui.Color.from(alpha: opacity, red: 0, green: 0, blue: 0)
+  ..blendMode = blendMode;
 
 class VgLinearGradient {
   VgLinearGradient(this.from, this.to, this.colors, this.stops);

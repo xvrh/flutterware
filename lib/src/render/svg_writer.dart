@@ -38,14 +38,16 @@ String writeSvg(
     }
   }
 
-  bool emitRaster(int? rasterId) {
+  bool emitRaster(int? rasterId, {BlendMode? blend}) {
     var png = rasterId == null ? null : rec.imagePngs[rasterId];
     var bounds = rasterId == null ? null : rec.rasterRects[rasterId];
     if (png == null || bounds == null) return false;
+    var css = documentBlendModes[blend];
     body.write(
       '<image x="${_n(bounds.left)}" y="${_n(bounds.top)}" '
       'width="${_n(bounds.width)}" height="${_n(bounds.height)}" '
-      'preserveAspectRatio="none" '
+      'preserveAspectRatio="none"'
+      '${css == null ? '' : ' style="mix-blend-mode:$css"'} '
       'href="data:image/png;base64,${base64Encode(png)}"/>',
     );
     return true;
@@ -153,13 +155,20 @@ String writeSvg(
       case VgBeginEffect begin:
         if (opts.unsupported == UnsupportedPolicy.skip ||
             (opts.unsupported == UnsupportedPolicy.rasterize &&
-                emitRaster(begin.rasterId))) {
+                emitRaster(begin.rasterId, blend: begin.documentBlend))) {
           skipDepth = 1;
+          break;
         }
-      // Otherwise the effect is dropped and its child paints plain,
-      // flagged by the warnings channel.
+        // Otherwise the effect is dropped and its child paints plain,
+        // flagged by the warnings channel — in a frame of its own, since a
+        // layer's child may transform without a save of its own, and keeping
+        // a layer's opacity, which needs no patch.
+        frames.add(0);
+        if (begin.kind == VgEffectKind.layer && begin.opacity < 1) {
+          openGroup('opacity="${begin.opacity.toStringAsFixed(3)}"');
+        }
       case VgEndEffect():
-        break;
+        body.write('</g>' * frames.removeLast());
       case VgSave():
         frames.add(0);
       case VgSaveLayer(:var opacity):

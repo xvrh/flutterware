@@ -71,7 +71,7 @@ Future<Uint8List> writePdf(
   }
 
   var rasterImages = <int, PdfImage>{};
-  bool drawRaster(int? rasterId) {
+  bool drawRaster(int? rasterId, {BlendMode? blend}) {
     if (rasterId == null) return false;
     var bounds = rec.rasterRects[rasterId];
     var image = rec.images[rasterId];
@@ -83,6 +83,12 @@ Future<Uint8List> writePdf(
           PdfImage(doc, image: rgba, width: image.width, height: image.height),
     );
     g.saveContext();
+    if (documentBlendModes.containsKey(blend)) {
+      // PDF spells the modes it shares with Flutter the way Flutter does.
+      g.setGraphicState(
+        PdfGraphicState(blendMode: PdfBlendMode.values.byName(blend!.name)),
+      );
+    }
     g.setTransform(
       Matrix4.translationValues(bounds.left, bounds.bottom, 0)
         ..multiply(Matrix4.diagonal3Values(1, -1, 1)),
@@ -262,13 +268,20 @@ Future<Uint8List> writePdf(
       case VgBeginEffect begin:
         if (opts.unsupported == UnsupportedPolicy.skip ||
             (opts.unsupported == UnsupportedPolicy.rasterize &&
-                drawRaster(begin.rasterId))) {
+                drawRaster(begin.rasterId, blend: begin.documentBlend))) {
           skipDepth = 1;
+          break;
         }
-      // Otherwise the effect is dropped and its child paints plain,
-      // flagged by the warnings channel.
+        // Otherwise the effect is dropped and its child paints plain,
+        // flagged by the warnings channel — in a context of its own, since a
+        // layer's child may transform without a save of its own, and keeping
+        // a layer's opacity, which needs no patch.
+        g.saveContext();
+        if (begin.kind == VgEffectKind.layer && begin.opacity < 1) {
+          g.setGraphicState(PdfGraphicState(opacity: begin.opacity));
+        }
       case VgEndEffect():
-        break;
+        g.restoreContext();
       case VgSave():
         g.saveContext();
       case VgSaveLayer(:var opacity):
