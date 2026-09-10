@@ -28,12 +28,18 @@ const atelierEstuaryLightTheme = {
   'section': TextStyle(color: Color(0xff36a166)),
   'keyword': TextStyle(color: Color(0xff5f9182)),
   'selector-tag': TextStyle(color: Color(0xff5f9182)),
-  'deletion':
-      TextStyle(color: Color(0xff22221b), backgroundColor: Color(0xffba6236)),
-  'addition':
-      TextStyle(color: Color(0xff22221b), backgroundColor: Color(0xff7d9726)),
-  'root':
-      TextStyle(backgroundColor: Color(0xfff4f3ec), color: Color(0xff5f5e4e)),
+  'deletion': TextStyle(
+    color: Color(0xff22221b),
+    backgroundColor: Color(0xffba6236),
+  ),
+  'addition': TextStyle(
+    color: Color(0xff22221b),
+    backgroundColor: Color(0xff7d9726),
+  ),
+  'root': TextStyle(
+    backgroundColor: Color(0xfff4f3ec),
+    color: Color(0xff5f5e4e),
+  ),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),
   'strong': TextStyle(fontWeight: FontWeight.bold),
 };

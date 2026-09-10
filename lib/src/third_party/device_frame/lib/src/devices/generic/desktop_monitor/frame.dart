@@ -28,10 +28,7 @@ class GenericDesktopMonitorFramePainter extends CustomPainter {
   }
 
   Size get effectiveWindowSize {
-    return Size(
-      windowPosition.width,
-      windowPosition.height - barHeight,
-    );
+    return Size(windowPosition.width, windowPosition.height - barHeight);
   }
 
   double get barHeight {
@@ -141,16 +138,8 @@ class GenericDesktopMonitorFramePainter extends CustomPainter {
       bounds.width - innerBodyInsets.horizontal - screenInsets.horizontal,
       bounds.height - innerBodyInsets.vertical - screenInsets.vertical,
     );
-    canvas.clipRRect(
-      RRect.fromRectAndRadius(
-        screenBounds,
-        screenRadius,
-      ),
-    );
-    canvas.drawDefaultWallpaper(
-      platform: platform,
-      bounds: screenBounds,
-    );
+    canvas.clipRRect(RRect.fromRectAndRadius(screenBounds, screenRadius));
+    canvas.drawDefaultWallpaper(platform: platform, bounds: screenBounds);
 
     final windowPath = Path()
       ..addRRect(
@@ -164,19 +153,12 @@ class GenericDesktopMonitorFramePainter extends CustomPainter {
       Paint()
         ..blendMode = BlendMode.multiply
         ..color = const Color(0xFF3F2548).withValues(alpha: 0.6)
-        ..maskFilter = const MaskFilter.blur(
-          BlurStyle.outer,
-          56,
-        ),
+        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 56),
     );
 
     canvas.drawWindowBar(
       platform: platform,
-      bounds: _windowLocation &
-          Size(
-            windowPosition.width,
-            barHeight,
-          ),
+      bounds: _windowLocation & Size(windowPosition.width, barHeight),
       windowRadius: windowRadius,
     );
   }

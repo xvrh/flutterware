@@ -28,8 +28,10 @@ const atelierDuneLightTheme = {
   'section': TextStyle(color: Color(0xff6684e1)),
   'keyword': TextStyle(color: Color(0xffb854d4)),
   'selector-tag': TextStyle(color: Color(0xffb854d4)),
-  'root':
-      TextStyle(backgroundColor: Color(0xfffefbec), color: Color(0xff6e6b5e)),
+  'root': TextStyle(
+    backgroundColor: Color(0xfffefbec),
+    color: Color(0xff6e6b5e),
+  ),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),
   'strong': TextStyle(fontWeight: FontWeight.bold),
 };

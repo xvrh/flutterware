@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const codepenEmbedTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xff222222), color: Color(0xffffffff)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff222222),
+    color: Color(0xffffffff),
+  ),
   'comment': TextStyle(color: Color(0xff777777)),
   'quote': TextStyle(color: Color(0xff777777)),
   'variable': TextStyle(color: Color(0xffab875d)),

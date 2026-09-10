@@ -30,8 +30,10 @@ const paraisoDarkTheme = {
   'addition': TextStyle(color: Color(0xff48b685)),
   'keyword': TextStyle(color: Color(0xff815ba4)),
   'selector-tag': TextStyle(color: Color(0xff815ba4)),
-  'root':
-      TextStyle(backgroundColor: Color(0xff2f1e2e), color: Color(0xffa39e9b)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff2f1e2e),
+    color: Color(0xffa39e9b),
+  ),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),
   'strong': TextStyle(fontWeight: FontWeight.bold),
 };

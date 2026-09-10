@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const solarizedLightTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xfffdf6e3), color: Color(0xff657b83)),
+  'root': TextStyle(
+    backgroundColor: Color(0xfffdf6e3),
+    color: Color(0xff657b83),
+  ),
   'comment': TextStyle(color: Color(0xff93a1a1)),
   'quote': TextStyle(color: Color(0xff93a1a1)),
   'keyword': TextStyle(color: Color(0xff859900)),

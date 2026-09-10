@@ -28,8 +28,10 @@ const atelierHeathDarkTheme = {
   'section': TextStyle(color: Color(0xff516aec)),
   'keyword': TextStyle(color: Color(0xff7b59c0)),
   'selector-tag': TextStyle(color: Color(0xff7b59c0)),
-  'root':
-      TextStyle(backgroundColor: Color(0xff1b181b), color: Color(0xffab9bab)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff1b181b),
+    color: Color(0xffab9bab),
+  ),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),
   'strong': TextStyle(fontWeight: FontWeight.bold),
 };

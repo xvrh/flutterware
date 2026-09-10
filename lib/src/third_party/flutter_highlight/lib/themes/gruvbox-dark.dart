@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const gruvboxDarkTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xff282828), color: Color(0xffebdbb2)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff282828),
+    color: Color(0xffebdbb2),
+  ),
   'subst': TextStyle(color: Color(0xffebdbb2)),
   'deletion': TextStyle(color: Color(0xfffb4934)),
   'formula': TextStyle(color: Color(0xfffb4934)),

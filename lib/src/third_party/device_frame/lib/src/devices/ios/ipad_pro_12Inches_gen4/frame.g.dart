@@ -11,26 +11,38 @@ class _FramePainter extends CustomPainter {
     Paint paint_0_fill = Paint()..style = PaintingStyle.fill;
     paint_0_fill.color = Color(0xff3A4245).withValues(alpha: 1.0);
     canvas.drawRRect(
-        RRect.fromRectAndCorners(
-            Rect.fromLTWH(size.width * 0.0003262249, size.height * 0.007120380,
-                size.width * 0.9964216, size.height * 0.9926980),
-            bottomRight: Radius.circular(size.width * 0.05891892),
-            bottomLeft: Radius.circular(size.width * 0.05891892),
-            topLeft: Radius.circular(size.width * 0.05891892),
-            topRight: Radius.circular(size.width * 0.05891892)),
-        paint_0_fill);
+      RRect.fromRectAndCorners(
+        Rect.fromLTWH(
+          size.width * 0.0003262249,
+          size.height * 0.007120380,
+          size.width * 0.9964216,
+          size.height * 0.9926980,
+        ),
+        bottomRight: Radius.circular(size.width * 0.05891892),
+        bottomLeft: Radius.circular(size.width * 0.05891892),
+        topLeft: Radius.circular(size.width * 0.05891892),
+        topRight: Radius.circular(size.width * 0.05891892),
+      ),
+      paint_0_fill,
+    );
 
     Paint paint_1_fill = Paint()..style = PaintingStyle.fill;
     paint_1_fill.color = Color(0xff121515).withValues(alpha: 1.0);
     canvas.drawRRect(
-        RRect.fromRectAndCorners(
-            Rect.fromLTWH(size.width * 0.004544973, size.height * 0.01005611,
-                size.width * 0.9885297, size.height * 0.9869802),
-            bottomRight: Radius.circular(size.width * 0.05405405),
-            bottomLeft: Radius.circular(size.width * 0.05405405),
-            topLeft: Radius.circular(size.width * 0.05405405),
-            topRight: Radius.circular(size.width * 0.05405405)),
-        paint_1_fill);
+      RRect.fromRectAndCorners(
+        Rect.fromLTWH(
+          size.width * 0.004544973,
+          size.height * 0.01005611,
+          size.width * 0.9885297,
+          size.height * 0.9869802,
+        ),
+        bottomRight: Radius.circular(size.width * 0.05405405),
+        bottomLeft: Radius.circular(size.width * 0.05405405),
+        topLeft: Radius.circular(size.width * 0.05405405),
+        topRight: Radius.circular(size.width * 0.05405405),
+      ),
+      paint_1_fill,
+    );
 
     Path path_2 = Path();
     path_2.moveTo(1843.99, 183.302);

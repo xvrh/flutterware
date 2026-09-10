@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../info/info.dart';
 import 'oneplus_8_pro/device.dart' as i_oneplus_8_pro;
 import 'samsung_galaxy_a50/device.dart' as samsung_galaxy_a50;
@@ -146,19 +147,19 @@ class AndroidDevices {
 
   /// All available devices.
   List<DeviceInfo> get all => [
-        //Phones
-        samsungGalaxyA50,
-        samsungGalaxyS20,
-        samsungGalaxyNote20,
-        samsungGalaxyNote20Ultra,
-        onePlus8Pro,
-        sonyXperia1II,
-        smallPhone,
-        mediumPhone,
-        bigPhone,
-        // Tablets
-        smallTablet,
-        mediumTablet,
-        largeTablet,
-      ];
+    //Phones
+    samsungGalaxyA50,
+    samsungGalaxyS20,
+    samsungGalaxyNote20,
+    samsungGalaxyNote20Ultra,
+    onePlus8Pro,
+    sonyXperia1II,
+    smallPhone,
+    mediumPhone,
+    bigPhone,
+    // Tablets
+    smallTablet,
+    mediumTablet,
+    largeTablet,
+  ];
 }

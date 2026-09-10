@@ -28,12 +28,18 @@ const atelierPlateauLightTheme = {
   'section': TextStyle(color: Color(0xff7272ca)),
   'keyword': TextStyle(color: Color(0xff8464c4)),
   'selector-tag': TextStyle(color: Color(0xff8464c4)),
-  'deletion':
-      TextStyle(color: Color(0xff1b1818), backgroundColor: Color(0xffca4949)),
-  'addition':
-      TextStyle(color: Color(0xff1b1818), backgroundColor: Color(0xff4b8b8b)),
-  'root':
-      TextStyle(backgroundColor: Color(0xfff4ecec), color: Color(0xff585050)),
+  'deletion': TextStyle(
+    color: Color(0xff1b1818),
+    backgroundColor: Color(0xffca4949),
+  ),
+  'addition': TextStyle(
+    color: Color(0xff1b1818),
+    backgroundColor: Color(0xff4b8b8b),
+  ),
+  'root': TextStyle(
+    backgroundColor: Color(0xfff4ecec),
+    color: Color(0xff585050),
+  ),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),
   'strong': TextStyle(fontWeight: FontWeight.bold),
 };

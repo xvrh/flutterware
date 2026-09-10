@@ -1,5 +1,7 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
 import '../../../info/device_type.dart';
 import '../../../info/identifier.dart';
 import '../../../info/info.dart';
@@ -19,16 +21,11 @@ final info = () {
     ),
     name: 'MacBook Pro',
     pixelRatio: 2.0,
-    framePainter: const _FramePainter(
-      windowSize: windowSize,
-    ),
+    framePainter: const _FramePainter(windowSize: windowSize),
     screenPath: Path()
       ..addRect(
         screenBounds.center -
-                Offset(
-                  windowSize.width * 0.5,
-                  -30 + windowSize.height * 0.5,
-                ) &
+                Offset(windowSize.width * 0.5, -30 + windowSize.height * 0.5) &
             windowContentSize,
       ),
     frameSize: const Size(2992.19, 1723.0),

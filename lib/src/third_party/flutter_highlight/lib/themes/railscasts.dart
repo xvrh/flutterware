@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const railscastsTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xff232323), color: Color(0xffe6e1dc)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff232323),
+    color: Color(0xffe6e1dc),
+  ),
   'comment': TextStyle(color: Color(0xffbc9458), fontStyle: FontStyle.italic),
   'quote': TextStyle(color: Color(0xffbc9458), fontStyle: FontStyle.italic),
   'keyword': TextStyle(color: Color(0xffc26230)),
@@ -29,10 +31,14 @@ const railscastsTheme = {
   'meta': TextStyle(color: Color(0xff9b859d)),
   'title': TextStyle(color: Color(0xffffc66d)),
   'section': TextStyle(color: Color(0xffffc66d)),
-  'addition':
-      TextStyle(backgroundColor: Color(0xff144212), color: Color(0xffe6e1dc)),
-  'deletion':
-      TextStyle(backgroundColor: Color(0xff660000), color: Color(0xffe6e1dc)),
+  'addition': TextStyle(
+    backgroundColor: Color(0xff144212),
+    color: Color(0xffe6e1dc),
+  ),
+  'deletion': TextStyle(
+    backgroundColor: Color(0xff660000),
+    color: Color(0xffe6e1dc),
+  ),
   'selector-class': TextStyle(color: Color(0xff9b703f)),
   'selector-id': TextStyle(color: Color(0xff8b98ab)),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),

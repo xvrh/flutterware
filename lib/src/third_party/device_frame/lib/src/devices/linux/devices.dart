@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+
 import '../../info/info.dart';
 
 /// A set of Linux devices.
@@ -12,10 +13,7 @@ class LinuxDevices {
     id: 'large',
     screenSize: const Size(1920, 1080),
     windowPosition: Rect.fromCenter(
-      center: const Offset(
-        1920 * 0.5,
-        1080 * 0.5,
-      ),
+      center: const Offset(1920 * 0.5, 1080 * 0.5),
       width: 1620,
       height: 780,
     ),
@@ -28,18 +26,12 @@ class LinuxDevices {
     id: 'laptop',
     screenSize: const Size(1920, 1080),
     windowPosition: Rect.fromCenter(
-      center: const Offset(
-        1920 * 0.5,
-        1080 * 0.5,
-      ),
+      center: const Offset(1920 * 0.5, 1080 * 0.5),
       width: 1620,
       height: 780,
     ),
   );
 
   /// All devices.
-  List<DeviceInfo> get all => [
-        wideMonitor,
-        laptop,
-      ];
+  List<DeviceInfo> get all => [wideMonitor, laptop];
 }

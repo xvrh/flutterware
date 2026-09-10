@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'info/device_type.dart';
 import 'info/info.dart';
 
@@ -85,16 +86,12 @@ class DeviceFrame extends StatelessWidget {
   }
 
   ThemeData _theme(BuildContext context) {
-    final density = [
-      DeviceType.desktop,
-      DeviceType.laptop,
-    ].contains(device.identifier.type)
+    final density =
+        [DeviceType.desktop, DeviceType.laptop].contains(device.identifier.type)
         ? VisualDensity.compact
         : null;
-    return Theme.of(context).copyWith(
-      platform: device.identifier.platform,
-      visualDensity: density,
-    );
+    return Theme.of(context)
+        .copyWith(platform: device.identifier.platform, visualDensity: density);
   }
 
   Widget _screen(BuildContext context, DeviceInfo? info) {
@@ -115,10 +112,7 @@ class DeviceFrame extends StatelessWidget {
             orientation: orientation,
             context: context,
           ),
-          child: Theme(
-            data: _theme(context),
-            child: screen,
-          ),
+          child: Theme(data: _theme(context), child: screen),
         ),
       ),
     );
@@ -148,12 +142,8 @@ class DeviceFrame extends StatelessWidget {
             width: bounds.width,
             height: bounds.height,
             child: ClipPath(
-              clipper: _ScreenClipper(
-                device.screenPath,
-              ),
-              child: FittedBox(
-                child: _screen(context, device),
-              ),
+              clipper: _ScreenClipper(device.screenPath),
+              child: FittedBox(child: _screen(context, device)),
             ),
           ),
         ],
@@ -163,10 +153,7 @@ class DeviceFrame extends StatelessWidget {
     final isRotated = device.isLandscape(orientation);
 
     return FittedBox(
-      child: RotatedBox(
-        quarterTurns: isRotated ? -1 : 0,
-        child: stack,
-      ),
+      child: RotatedBox(quarterTurns: isRotated ? -1 : 0, child: stack),
     );
   }
 }

@@ -9,18 +9,26 @@ const gradientDarkTheme = {
   'meta': TextStyle(color: Color(0xffaf8dd9)),
   'comment': TextStyle(color: Color(0xffaf8dd9)),
   'quote': TextStyle(color: Color(0xffaf8dd9), fontStyle: FontStyle.italic),
-  'selector-tag':
-      TextStyle(color: Color(0xffAEFBFF), fontWeight: FontWeight.bold),
-  'selector-id':
-      TextStyle(color: Color(0xffAEFBFF), fontWeight: FontWeight.bold),
-  'template-tag':
-      TextStyle(color: Color(0xffAEFBFF), fontWeight: FontWeight.bold),
+  'selector-tag': TextStyle(
+    color: Color(0xffAEFBFF),
+    fontWeight: FontWeight.bold,
+  ),
+  'selector-id': TextStyle(
+    color: Color(0xffAEFBFF),
+    fontWeight: FontWeight.bold,
+  ),
+  'template-tag': TextStyle(
+    color: Color(0xffAEFBFF),
+    fontWeight: FontWeight.bold,
+  ),
   'regexp': TextStyle(color: Color(0xffAEFBFF)),
   'attr': TextStyle(color: Color(0xffAEFBFF)),
   'tag': TextStyle(color: Color(0xffAEFBFF)),
   'params': TextStyle(color: Color(0xffF19FFF), fontWeight: FontWeight.bold),
-  'selector-class':
-      TextStyle(color: Color(0xffF19FFF), fontWeight: FontWeight.bold),
+  'selector-class': TextStyle(
+    color: Color(0xffF19FFF),
+    fontWeight: FontWeight.bold,
+  ),
   'bullet': TextStyle(color: Color(0xffF19FFF)),
   'keyword': TextStyle(color: Color(0xff17fc95), fontWeight: FontWeight.bold),
   'section': TextStyle(color: Color(0xff17fc95), fontWeight: FontWeight.bold),

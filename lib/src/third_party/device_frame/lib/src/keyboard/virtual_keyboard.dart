@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../device_frame.dart';
 import 'button.dart';
 
@@ -32,9 +33,7 @@ class VirtualKeyboard extends StatelessWidget {
     return mediaQuery.copyWith(
       viewInsets: insets,
       viewPadding: mediaQuery.viewPadding,
-      padding: mediaQuery.padding.copyWith(
-        bottom: 0,
-      ),
+      padding: mediaQuery.padding.copyWith(bottom: 0),
     );
   }
 
@@ -82,10 +81,8 @@ class VirtualKeyboard extends StatelessWidget {
 }
 
 class _VirtualKeyboard extends StatelessWidget {
-  const _VirtualKeyboard({
-    double? height,
-    this.spacing = 12,
-  }) : height = height ?? minHeight;
+  const _VirtualKeyboard({double? height, this.spacing = 12})
+    : height = height ?? minHeight;
 
   static const double minHeight = 214;
   final double height;
@@ -93,13 +90,8 @@ class _VirtualKeyboard extends StatelessWidget {
 
   Widget _row(List<Widget> children) {
     return Padding(
-      padding: EdgeInsets.only(
-        top: spacing,
-        left: spacing,
-      ),
-      child: Row(
-        children: children,
-      ),
+      padding: EdgeInsets.only(top: spacing, left: spacing),
+      child: Row(children: children),
     );
   }
 
@@ -112,17 +104,12 @@ class _VirtualKeyboard extends StatelessWidget {
         .map<Widget>(
           (x) => Expanded(
             child: Padding(
-              padding: EdgeInsets.only(
-                right: spacing,
-              ),
+              padding: EdgeInsets.only(right: spacing),
               child: VirtualKeyboardButton(
                 backgroundColor: backgroundColor,
                 child: Text(
                   x,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: foregroundColor,
-                  ),
+                  style: TextStyle(fontSize: 14, color: foregroundColor),
                 ),
               ),
             ),
@@ -160,9 +147,7 @@ class _VirtualKeyboard extends StatelessWidget {
           ),
           _row([
             Padding(
-              padding: const EdgeInsets.only(
-                right: 12,
-              ),
+              padding: const EdgeInsets.only(right: 12),
               child: VirtualKeyboardButton(
                 child: Icon(
                   Icons.keyboard_capslock,
@@ -178,9 +163,7 @@ class _VirtualKeyboard extends StatelessWidget {
               theme.button1ForegroundColor,
             ),
             Padding(
-              padding: EdgeInsets.only(
-                right: spacing,
-              ),
+              padding: EdgeInsets.only(right: spacing),
               child: VirtualKeyboardButton(
                 child: Icon(
                   Icons.backspace,
@@ -191,60 +174,37 @@ class _VirtualKeyboard extends StatelessWidget {
               ),
             ),
           ]),
-          _row(
-            [
-              Padding(
-                padding: EdgeInsets.only(
-                  right: spacing,
-                ),
-                child: VirtualKeyboardButton(
-                  child: Text(
-                    '123',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: theme.button2ForegroundColor,
-                    ),
-                  ),
-                  backgroundColor: theme.button2BackgroundColor,
-                ),
-              ),
-              Padding(
-                padding: EdgeInsets.only(
-                  right: spacing,
-                ),
-                child: VirtualKeyboardButton(
-                  child: Icon(
-                    Icons.insert_emoticon,
+          _row([
+            Padding(
+              padding: EdgeInsets.only(right: spacing),
+              child: VirtualKeyboardButton(
+                child: Text(
+                  '123',
+                  style: TextStyle(
+                    fontSize: 14,
                     color: theme.button2ForegroundColor,
-                    size: 16,
                   ),
-                  backgroundColor: theme.button2BackgroundColor,
                 ),
+                backgroundColor: theme.button2BackgroundColor,
               ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    right: spacing,
-                  ),
-                  child: VirtualKeyboardButton(
-                    child: Text(
-                      'space',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: theme.button2ForegroundColor,
-                      ),
-                    ),
-                    backgroundColor: theme.button2BackgroundColor,
-                  ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(right: spacing),
+              child: VirtualKeyboardButton(
+                child: Icon(
+                  Icons.insert_emoticon,
+                  color: theme.button2ForegroundColor,
+                  size: 16,
                 ),
+                backgroundColor: theme.button2BackgroundColor,
               ),
-              Padding(
-                padding: EdgeInsets.only(
-                  right: spacing,
-                ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: spacing),
                 child: VirtualKeyboardButton(
                   child: Text(
-                    'return',
+                    'space',
                     style: TextStyle(
                       fontSize: 14,
                       color: theme.button2ForegroundColor,
@@ -253,8 +213,21 @@ class _VirtualKeyboard extends StatelessWidget {
                   backgroundColor: theme.button2BackgroundColor,
                 ),
               ),
-            ],
-          ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(right: spacing),
+              child: VirtualKeyboardButton(
+                child: Text(
+                  'return',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.button2ForegroundColor,
+                  ),
+                ),
+                backgroundColor: theme.button2BackgroundColor,
+              ),
+            ),
+          ]),
         ],
       ),
     );

@@ -3,13 +3,17 @@
 import 'package:flutter/painting.dart';
 
 const grayscaleTheme = {
-  'root':
-      TextStyle(color: Color(0xff333333), backgroundColor: Color(0xffffffff)),
+  'root': TextStyle(
+    color: Color(0xff333333),
+    backgroundColor: Color(0xffffffff),
+  ),
   'comment': TextStyle(color: Color(0xff777777), fontStyle: FontStyle.italic),
   'quote': TextStyle(color: Color(0xff777777), fontStyle: FontStyle.italic),
   'keyword': TextStyle(color: Color(0xff333333), fontWeight: FontWeight.bold),
-  'selector-tag':
-      TextStyle(color: Color(0xff333333), fontWeight: FontWeight.bold),
+  'selector-tag': TextStyle(
+    color: Color(0xff333333),
+    fontWeight: FontWeight.bold,
+  ),
   'subst': TextStyle(color: Color(0xff333333), fontWeight: FontWeight.normal),
   'number': TextStyle(color: Color(0xff777777)),
   'literal': TextStyle(color: Color(0xff777777)),
@@ -18,8 +22,10 @@ const grayscaleTheme = {
   'formula': TextStyle(color: Color(0xff333333)),
   'title': TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
   'section': TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
-  'selector-id':
-      TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
+  'selector-id': TextStyle(
+    color: Color(0xff000000),
+    fontWeight: FontWeight.bold,
+  ),
   'type': TextStyle(color: Color(0xff333333), fontWeight: FontWeight.bold),
   'name': TextStyle(color: Color(0xff333333), fontWeight: FontWeight.bold),
   'tag': TextStyle(color: Color(0xff333333)),

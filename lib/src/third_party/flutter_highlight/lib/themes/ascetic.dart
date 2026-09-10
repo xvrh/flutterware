@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const asceticTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xffffffff), color: Color(0xff000000)),
+  'root': TextStyle(
+    backgroundColor: Color(0xffffffff),
+    color: Color(0xff000000),
+  ),
   'string': TextStyle(color: Color(0xff888888)),
   'variable': TextStyle(color: Color(0xff888888)),
   'template-variable': TextStyle(color: Color(0xff888888)),
