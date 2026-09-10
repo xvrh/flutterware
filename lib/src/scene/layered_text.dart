@@ -163,26 +163,43 @@ class SceneTextStackPainter extends CustomPainter {
   /// gradient is drawn over it keeping only where the mask is (`srcIn`).
   /// Still one layout; the price is a layer save, paid only by passes that
   /// ask for it. A band runs to the midpoint of the gap to its neighbours
-  /// and far past the box at the ends, so a stroke or a blur that spills
-  /// out of its line still takes that line's colours.
+  /// and, at the ends, to a margin sized off the pass itself (see
+  /// [_spillMargin]), so a stroke or a blur that spills out of its line
+  /// still takes that line's colours.
   void _paintPerLine(Canvas canvas, TextLayer layer, Size size) {
     var gradient = layer.paint! as SceneGradient;
-    var mask = _painterFor(layer, size, mask: true);
+    // Keyed on coverage alone — paint, opacity and blend never change which
+    // pixels are ink, so dragging a stop must not cost a relayout.
+    var coverage = layer
+        .withPaint(null)
+        .copyWith(opacity: 1, blend: SceneBlendMode.normal);
+    var mask = _painterFor(coverage, size, mask: true);
     var lines = mask.computeLineMetrics();
-    canvas.saveLayer(null, Paint()..blendMode = layer.blend.flutter);
+    // How far past the box this pass's own spill can still reach: a stroke
+    // widens the outline by its width, a blur by roughly three sigmas, and
+    // the glyphs themselves can overhang their line by about a font size. A
+    // fixed 1e4 used to stand in for this — reachable by nothing a text pass
+    // actually paints — which sized the offscreen layer to the whole cull
+    // rect and, worse, sized a vector capture's raster patch from a band
+    // that ran to it: `Picture.toImage` on a patch that size fails outright.
+    var margin = _spillMargin(layer);
+    canvas.saveLayer(
+      (Offset.zero & size).inflate(margin),
+      Paint()..blendMode = layer.blend.flutter,
+    );
     mask.paint(canvas, Offset.zero);
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       var top = line.baseline - line.ascent;
       var bottom = line.baseline + line.descent;
       var bandTop = i == 0
-          ? -_spill
+          ? -margin
           : (lines[i - 1].baseline + lines[i - 1].descent + top) / 2;
       var bandBottom = i == lines.length - 1
-          ? size.height + _spill
+          ? size.height + margin
           : (bottom + lines[i + 1].baseline - lines[i + 1].ascent) / 2;
       canvas.drawRect(
-        Rect.fromLTRB(-_spill, bandTop, size.width + _spill, bandBottom),
+        Rect.fromLTRB(-margin, bandTop, size.width + margin, bandBottom),
         Paint()
           ..blendMode = BlendMode.srcIn
           ..shader = sceneGradientShader(
@@ -194,6 +211,11 @@ class SceneTextStackPainter extends CustomPainter {
     }
     canvas.restore();
   }
+
+  double _spillMargin(TextLayer layer) =>
+      (layer is StrokeLayer ? layer.width : 0) +
+      3 * layer.blur +
+      (style.fontSize ?? 14.0);
 
   TextPainter _painterFor(TextLayer layer, Size size, {bool mask = false}) {
     var key = _PainterKey(
@@ -371,9 +393,6 @@ class _PainterKey {
     mask,
   );
 }
-
-/// Far enough past the box that no stroke or blur reaches the end of a band.
-const _spill = 1e4;
 
 /// Bounded and least-recently-used, because a motion plays: every frame of an
 /// animated size is a different key, and an unbounded map would hold every
