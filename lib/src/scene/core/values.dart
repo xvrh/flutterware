@@ -109,6 +109,12 @@ enum SceneTextDecoration { none, underline, overline, lineThrough }
 /// bridge indexes it.
 enum SceneTextDecorationStyle { solid, double, dotted, dashed, wavy }
 
+/// A number off the wire, or [fallback] when it is missing or not a number —
+/// every numeric `fromWire` in this file goes through here so none of them
+/// throws on a payload that is present but the wrong shape.
+double _wireDouble(Object? v, double fallback) =>
+    v is num ? v.toDouble() : fallback;
+
 /// A point in a box, in the -1..1 space Flutter's `Alignment` uses — where a
 /// gradient starts and ends.
 class SceneAlignment {
@@ -129,12 +135,12 @@ class SceneAlignment {
 
   List<double> toWire() => [x, y];
 
+  // A non-number element makes the whole value fall back — a point is
+  // meaningless with only one of its two numbers.
   static SceneAlignment fromWire(Object? raw, SceneAlignment fallback) =>
       switch (raw) {
-        List l when l.length == 2 => SceneAlignment(
-          (l[0] as num).toDouble(),
-          (l[1] as num).toDouble(),
-        ),
+        List l when l.length == 2 && l[0] is num && l[1] is num =>
+          SceneAlignment((l[0] as num).toDouble(), (l[1] as num).toDouble()),
         _ => fallback,
       };
 
@@ -177,14 +183,14 @@ sealed class ScenePaint {
       colors: _wireColors(m),
       stops: _wireStops(m),
       center: SceneAlignment.fromWire(m['center'], SceneAlignment.center),
-      radius: (m['r'] as num?)?.toDouble() ?? 1,
+      radius: _wireDouble(m['r'], 1),
     ),
     Map m when m['k'] == 'sweep' => SweepPaint(
       colors: _wireColors(m),
       stops: _wireStops(m),
       center: SceneAlignment.fromWire(m['center'], SceneAlignment.center),
-      startAngle: (m['a0'] as num?)?.toDouble() ?? 0,
-      endAngle: (m['a1'] as num?)?.toDouble() ?? 360,
+      startAngle: _wireDouble(m['a0'], 0),
+      endAngle: _wireDouble(m['a1'], 360),
     ),
     _ => null,
   };
@@ -208,13 +214,23 @@ class SolidPaint extends ScenePaint {
   String toString() => 'SolidPaint($color)';
 }
 
+// A non-number element is SKIPPED rather than failing the whole list — a
+// gradient with one bad colour still has the rest of its colours.
 List<SceneColor> _wireColors(Map m) => [
-  for (var c in (m['colors'] as List? ?? const []))
-    SceneColor((c as num).toInt()),
+  for (var c in switch (m['colors']) {
+    List l => l,
+    _ => const [],
+  })
+    if (c is num) SceneColor(c.toInt()),
 ];
 
+// Same rule as colours: a bad stop is skipped. A stops list left shorter
+// than colors falls back to the even spread through SceneGradient.resolvedStops.
 List<double>? _wireStops(Map m) => switch (m['stops']) {
-  List l => [for (var s in l) (s as num).toDouble()],
+  List l => [
+    for (var s in l)
+      if (s is num) s.toDouble(),
+  ],
   _ => null,
 };
 
@@ -561,10 +577,10 @@ sealed class TextLayer {
   static TextLayer? fromWire(Object? raw) {
     if (raw is! Map) return null;
     var paint = ScenePaint.fromWire(raw['paint']);
-    var blur = (raw['blur'] as num?)?.toDouble() ?? 0;
-    var dx = (raw['dx'] as num?)?.toDouble() ?? 0;
-    var dy = (raw['dy'] as num?)?.toDouble() ?? 0;
-    var opacity = (raw['o'] as num?)?.toDouble() ?? 1;
+    var blur = _wireDouble(raw['blur'], 0);
+    var dx = _wireDouble(raw['dx'], 0);
+    var dy = _wireDouble(raw['dy'], 0);
+    var opacity = _wireDouble(raw['o'], 1);
     var box =
         SceneLayerBox.values.asNameMap()[raw['box']] ?? SceneLayerBox.text;
     var blend =
@@ -572,7 +588,7 @@ sealed class TextLayer {
         SceneBlendMode.normal;
     return switch (raw['k']) {
       'stroke' => StrokeLayer(
-        width: (raw['w'] as num?)?.toDouble() ?? 1,
+        width: _wireDouble(raw['w'], 1),
         join: switch (raw['j']) {
           num i when i >= 0 && i < SceneStrokeJoin.values.length =>
             SceneStrokeJoin.values[i.toInt()],
@@ -1076,10 +1092,12 @@ class SceneEdges implements SceneQuad {
   @override
   Object toWire() => isUniform ? left : [left, top, right, bottom];
 
-  /// Reads [toWire], and the plain number older payloads carried.
+  /// Reads [toWire], and the plain number older payloads carried. A list
+  /// with a non-number element falls back to [zero] — the whole value, the
+  /// same rule [SceneAlignment.fromWire] uses.
   static SceneEdges fromWire(Object? value) => switch (value) {
     num n => SceneEdges.all(n.toDouble()),
-    List l when l.length == 4 => SceneEdges(
+    List l when l.length == 4 && l.every((e) => e is num) => SceneEdges(
       left: (l[0] as num).toDouble(),
       top: (l[1] as num).toDouble(),
       right: (l[2] as num).toDouble(),
@@ -1166,9 +1184,11 @@ class SceneCorners implements SceneQuad {
   Object toWire() =>
       isUniform ? topLeft : [topLeft, topRight, bottomRight, bottomLeft];
 
+  // A list with a non-number element falls back to zero — same rule as
+  // SceneEdges.fromWire.
   static SceneCorners fromWire(Object? value) => switch (value) {
     num n => SceneCorners.all(n.toDouble()),
-    List l when l.length == 4 => SceneCorners(
+    List l when l.length == 4 && l.every((e) => e is num) => SceneCorners(
       topLeft: (l[0] as num).toDouble(),
       topRight: (l[1] as num).toDouble(),
       bottomRight: (l[2] as num).toDouble(),

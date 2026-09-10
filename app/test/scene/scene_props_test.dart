@@ -224,6 +224,20 @@ void main() {
     });
   }
 
+  test('every wire decoder is total: garbage input does not throw', () {
+    const garbage = ['not a value', true];
+    for (var p in sceneProps) {
+      for (var g in garbage) {
+        expect(() => p.fromWire(g), returnsNormally, reason: '${p.name}: $g');
+      }
+    }
+  });
+
+  test('SceneEdges and SceneCorners fall back to zero on a malformed list', () {
+    expect(SceneEdges.fromWire([1, 'x', 3, 4]), SceneEdges.zero);
+    expect(SceneCorners.fromWire([1, 2, 'x', 4]), SceneCorners.zero);
+  });
+
   test(
     'a property bound at its default is still written, as the reference',
     () {

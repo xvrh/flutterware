@@ -174,6 +174,98 @@ void main() {
     expect(multiplied.withPaint(null).blend, SceneBlendMode.multiply);
   });
 
+  group('wire decoding is total', () {
+    test(
+      'a stroke layer falls back to its defaults on garbage numeric fields',
+      () {
+        expect(
+          TextLayer.fromWire({
+            'k': 'stroke',
+            'w': 'wide',
+            'blur': true,
+            'dx': 'x',
+            'dy': false,
+            'o': [],
+          }),
+          const StrokeLayer(),
+        );
+      },
+    );
+
+    test('a colour list skips an element that is not a number', () {
+      var paint = ScenePaint.fromWire({
+        'k': 'linear',
+        'colors': [0xFFFF0000, 'x', 0xFF0000FF],
+      });
+      expect(
+        paint,
+        const LinearPaint(
+          colors: [SceneColor(0xFFFF0000), SceneColor(0xFF0000FF)],
+        ),
+      );
+    });
+
+    test('a colors field that is not a list is treated as empty', () {
+      expect(
+        ScenePaint.fromWire({'k': 'linear', 'colors': 'oops'}),
+        const LinearPaint(colors: []),
+      );
+    });
+
+    test('a stops list skips an element that is not a number', () {
+      var paint =
+          ScenePaint.fromWire({
+                'k': 'linear',
+                'colors': [0xFFFF0000, 0xFF00FF00],
+                'stops': [0, 'x'],
+              })!
+              as LinearPaint;
+      // Skipping the bad element leaves a stops list shorter than colors;
+      // resolvedStops already falls back to the even spread for that case.
+      expect(paint.stops, [0.0]);
+      expect(paint.resolvedStops, [0, 1]);
+    });
+
+    test(
+      'an alignment with a non-number element falls back to the default',
+      () {
+        var paint =
+            ScenePaint.fromWire({
+                  'k': 'radial',
+                  'colors': [0xFFFF0000, 0xFF00FF00],
+                  'center': ['a', 1],
+                })!
+                as RadialPaint;
+        expect(paint.center, SceneAlignment.center);
+      },
+    );
+
+    test(
+      'a radius or angle that is not a number falls back to the default',
+      () {
+        var radial =
+            ScenePaint.fromWire({
+                  'k': 'radial',
+                  'colors': [0xFFFF0000, 0xFF00FF00],
+                  'r': 'wide',
+                })!
+                as RadialPaint;
+        expect(radial.radius, 1);
+
+        var sweep =
+            ScenePaint.fromWire({
+                  'k': 'sweep',
+                  'colors': [0xFFFF0000, 0xFF00FF00],
+                  'a0': true,
+                  'a1': 'x',
+                })!
+                as SweepPaint;
+        expect(sweep.startAngle, 0);
+        expect(sweep.endAngle, 360);
+      },
+    );
+  });
+
   test('the gloss preset keeps its sheen per line when scaled', () {
     var gloss = layerPresets.firstWhere((p) => p.name == 'Gloss');
     var small = gloss.forSize(27);

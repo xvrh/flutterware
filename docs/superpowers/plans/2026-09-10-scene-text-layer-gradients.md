@@ -17,7 +17,7 @@
 - Lints: `var` for locals (`omit_local_variable_types`), single quotes, no `final` parameters, `unawaited(...)` for fire-and-forget, raw strings where they apply. Do not add `const` beyond what the code around it already uses.
 - **Nothing written here may name a client, their repository, their people or their product** — code, comments, tests, commit messages, PR text.
 - `lib/src/scene/core/` stays pure Dart: no `package:flutter` import there (a test guards the import graph).
-- Wire decoding is total: an unreadable payload decodes to null or the default, never throws. That is the aim, not yet the fact everywhere: `values.dart` and `props.dart` decode numbers with `as num?` casts, which throw on a payload that is present but not a number (the studio is the only writer, so this has not bitten in practice). New fields this plan adds decode totally.
+- Wire decoding is total: an unreadable payload decodes to null or the default, never throws. `values.dart` and `props.dart` decode every number, colour list, stop list and quad this way — a non-number falls back rather than casting.
 - The file grammar omits every default, `emit ∘ parse` is the identity, and anything off the allowlist is refused **by name, with what to write instead** — never dropped silently.
 - **A pass may change paint, never layout** (master plan §4.5). Nothing in this plan adds a metric property to a pass.
 - Angles are degrees, clockwise from twelve o'clock — the unit `rotate` uses and the convention `SceneAngleDial` already draws (`atan2(dx, -dy)`).

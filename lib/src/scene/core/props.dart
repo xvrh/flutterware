@@ -311,8 +311,8 @@ class SceneProp {
   /// both switches leave those two kinds alone.
   Object? fromWire(Object? raw) => switch (kind) {
     ScenePropKind.style || ScenePropKind.args => raw,
-    ScenePropKind.number => (raw as num?)?.toDouble() ?? defaultValue,
-    ScenePropKind.integer => (raw as num?)?.toInt(),
+    ScenePropKind.number => raw is num ? raw.toDouble() : defaultValue,
+    ScenePropKind.integer => raw is num ? raw.toInt() : null,
     ScenePropKind.string => raw is String ? raw : defaultValue,
     ScenePropKind.boolean => raw is bool ? raw : defaultValue,
     ScenePropKind.color => raw is num ? SceneColor(raw.toInt()) : defaultValue,
