@@ -352,9 +352,31 @@ class VgRecording {
       );
     }
     var rasterize = options.unsupported == UnsupportedPolicy.rasterize;
+
+    // An effect span nested inside a span that became one raster patch was
+    // replayed as part of that patch — it just never got a rasterId of its
+    // own, because the outer patch is the one [rasterizeUnsupported] walked.
+    // Left uncounted here, for every effect kind, so it is neither warned as
+    // dropped nor double-counted as its own rasterized patch.
+    var nestedInPatch = <VgBeginEffect>{};
+    var openEffects = <VgBeginEffect>[];
+    for (var op in ops) {
+      if (op is VgBeginEffect) {
+        if (openEffects.any((e) => e.rasterId != null)) {
+          nestedInPatch.add(op);
+        }
+        openEffects.add(op);
+      } else if (op is VgEndEffect) {
+        openEffects.removeLast();
+      }
+    }
+
     var layers = [
       for (var op in ops)
-        if (op is VgBeginEffect && op.kind == VgEffectKind.layer) op,
+        if (op is VgBeginEffect &&
+            op.kind == VgEffectKind.layer &&
+            !nestedInPatch.contains(op))
+          op,
     ];
     var patched = [
       for (var layer in layers)
@@ -407,6 +429,7 @@ class VgRecording {
     }
     for (var op in ops.whereType<VgBeginEffect>()) {
       if (op.kind == VgEffectKind.layer) continue;
+      if (nestedInPatch.contains(op)) continue;
       if (op.kind == VgEffectKind.backdropFilter) {
         warnings.add(
           RenderWarning(

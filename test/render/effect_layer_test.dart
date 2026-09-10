@@ -192,14 +192,61 @@ void main() {
         expect(span.bounds, const Rect.fromLTWH(0, 0, 60, 40));
         await recording.rasterizeUnsupported();
         await recording.encodeImages();
-        // Composited plainly into the patch: the yellow is yellow, and the
-        // writer carries the multiply.
-        var rgba = recording.imageRgba[span.rasterId]!;
-        expect([rgba[0], rgba[1], rgba[2], rgba[3]], [255, 255, 0, 255]);
         var svg = writeSvg(recording, boundary.size, []);
         expect(svg, contains(RegExp('<image[^>]*mix-blend-mode:multiply')));
       });
     });
+
+    testWidgets(
+      'a blended layer nested in an opacity-only layer promotes the outer '
+      'to one patch',
+      (tester) async {
+        await tester.pumpWidget(
+          _host(
+            CustomPaint(
+              size: const Size(60, 40),
+              painter: _NestedLayerPainter(),
+            ),
+          ),
+        );
+        var boundary = _boundary(tester);
+        await tester.runAsync(() async {
+          var recording = captureVector(boundary);
+          var spans = recording.ops.whereType<VgBeginEffect>().toList();
+          expect(spans, hasLength(2)); // the outer layer and the inner one
+          await recording.rasterizeUnsupported();
+          await recording.encodeImages();
+
+          // Only the outer span was patched; the inner one, replayed as
+          // part of the outer's patch, kept no rasterId of its own.
+          var patched = spans.where((s) => s.rasterId != null).toList();
+          expect(patched, hasLength(1));
+          expect(patched.single.kind, VgEffectKind.layer);
+          expect(patched.single.blendMode, BlendMode.srcOver);
+
+          var svg = writeSvg(recording, boundary.size, []);
+          expect('<image'.allMatches(svg), hasLength(1));
+
+          // The inner blend is baked into the outer's patch: cyan under
+          // yellow, multiplied, reads green — not a plain overwrite.
+          var rgba = recording.imageRgba[patched.single.rasterId]!;
+          var image = recording.images[patched.single.rasterId]!;
+          var o = ((image.height ~/ 2) * image.width + image.width ~/ 2) * 4;
+          expect([rgba[o], rgba[o + 1], rgba[o + 2]], [0, 255, 0]);
+
+          var warnings = recording.collectWarnings(CaptureOptions());
+          expect(
+            warnings.where((w) => w.kind == RenderWarningKind.effectDropped),
+            isEmpty,
+          );
+          var rasterized = warnings.where(
+            (w) => w.kind == RenderWarningKind.effectRasterized,
+          );
+          expect(rasterized, hasLength(1));
+          expect(rasterized.single.message, startsWith('1 layer'));
+        });
+      },
+    );
 
     testWidgets('with a blend no document can name is placed plain, warned', (
       tester,
@@ -255,6 +302,24 @@ class _LayerPainter extends CustomPainter {
     var box = Offset.zero & size;
     canvas.saveLayer(bounded ? box : null, layer);
     canvas.drawRect(box, fill);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// A layer that only carries opacity, holding a cyan backdrop and a yellow
+/// rect painted through a nested layer that multiplies.
+class _NestedLayerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    var box = Offset.zero & size;
+    canvas.saveLayer(box, Paint());
+    canvas.drawRect(box, Paint()..color = const Color(0xFF00FFFF));
+    canvas.saveLayer(box, Paint()..blendMode = BlendMode.multiply);
+    canvas.drawRect(box, Paint()..color = const Color(0xFFFFFF00));
+    canvas.restore();
     canvas.restore();
   }
 
