@@ -336,6 +336,8 @@ class _SceneLayerListState extends State<SceneLayerList> {
         },
       if (layer.box == SceneLayerBox.line && layer.paint is SceneGradient)
         'per line',
+      if (layer.blend != SceneBlendMode.normal)
+        _blendLabel(layer.blend).toLowerCase(),
       if (layer.blur > 0) 'blur ${_short(layer.blur)}',
       if (layer.dx != 0 || layer.dy != 0)
         '${_short(layer.dx)},${_short(layer.dy)}',
@@ -346,6 +348,27 @@ class _SceneLayerListState extends State<SceneLayerList> {
 
   static String _short(double v) =>
       v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
+
+  /// A mode in the words a design tool uses — Flutter's names are camel-case
+  /// identifiers, and this panel spells colour the British way throughout.
+  static String _blendLabel(SceneBlendMode m) => switch (m) {
+    SceneBlendMode.normal => 'Normal',
+    SceneBlendMode.multiply => 'Multiply',
+    SceneBlendMode.screen => 'Screen',
+    SceneBlendMode.overlay => 'Overlay',
+    SceneBlendMode.darken => 'Darken',
+    SceneBlendMode.lighten => 'Lighten',
+    SceneBlendMode.colorDodge => 'Colour dodge',
+    SceneBlendMode.colorBurn => 'Colour burn',
+    SceneBlendMode.hardLight => 'Hard light',
+    SceneBlendMode.softLight => 'Soft light',
+    SceneBlendMode.difference => 'Difference',
+    SceneBlendMode.exclusion => 'Exclusion',
+    SceneBlendMode.hue => 'Hue',
+    SceneBlendMode.saturation => 'Saturation',
+    SceneBlendMode.color => 'Colour',
+    SceneBlendMode.luminosity => 'Luminosity',
+  };
 
   Widget _detail(BuildContext context, int i, TextLayer layer) {
     return Padding(
@@ -473,6 +496,21 @@ class _SceneLayerListState extends State<SceneLayerList> {
                 ),
               ),
             ],
+          ),
+          const Gap(FwSpacing.sm),
+          _labelled(
+            context,
+            'Blend',
+            FwPicker<SceneBlendMode>(
+              key: const ValueKey('layer:blend'),
+              choices: [
+                for (var m in SceneBlendMode.values)
+                  FwChoice(value: m, label: _blendLabel(m)),
+              ],
+              selected: layer.blend,
+              onChanged: (m) =>
+                  _replace(i, layer.copyWith(blend: m), label: 'Layer blend'),
+            ),
           ),
         ],
       ),

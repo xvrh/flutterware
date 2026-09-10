@@ -85,4 +85,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('layer:box')), findsNothing);
   });
+
+  testWidgets('a pass can be set to multiply', (tester) async {
+    await pump(tester, const [FillLayer(paint: SolidPaint(_red))]);
+    await tester.tap(find.text('Fill'));
+    await tester.pumpAndSettle();
+    await pick(tester, const ValueKey('layer:blend'), 'Multiply');
+    expect(layers.single.blend, SceneBlendMode.multiply);
+    expect(find.textContaining('multiply'), findsOneWidget);
+    expect(labels.last, 'Layer blend');
+  });
 }
