@@ -8,6 +8,7 @@ import '../editor.dart';
 import '../type_axes.dart';
 import '../externals_file.dart';
 import '../playback.dart';
+import '../shader_library.dart';
 import 'canvas.dart';
 import 'drawer_header.dart';
 import 'inspector.dart';
@@ -46,6 +47,7 @@ class SceneWorkspaceView extends StatefulWidget {
     this.externals = const [],
     this.axesFor,
     this.packageRoot,
+    this.shaders,
     this.tokens,
   });
 
@@ -54,6 +56,9 @@ class SceneWorkspaceView extends StatefulWidget {
   /// The package the open file belongs to — where the inspector finds the
   /// project's model files for a row that picks one.
   final String? packageRoot;
+
+  /// The package's declared shaders — see [SceneInspector.shaders].
+  final SceneShaders? shaders;
 
   /// The group's libraries and the doors past this file — see
   /// [SceneOutlineSections.tokens].
@@ -254,6 +259,7 @@ class _SceneWorkspaceViewState extends State<SceneWorkspaceView> {
               externals: widget.externals,
               axesFor: widget.axesFor,
               packageRoot: widget.packageRoot,
+              shaders: widget.shaders,
               onOpenParam: _openParam,
               onEnterNested: widget.onEnterNested,
             ),

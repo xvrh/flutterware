@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene_authoring.dart';
+import 'package:flutterware_app/src/scene/shader_library.dart';
 import 'package:flutterware_app/src/scene/ui/layer_list.dart';
 import 'package:flutterware_app/src/ui/theme.dart';
 
@@ -12,7 +13,11 @@ void main() {
   late List<TextLayer> layers;
   late List<String> labels;
 
-  Future<void> pump(WidgetTester tester, List<TextLayer> start) async {
+  Future<void> pump(
+    WidgetTester tester,
+    List<TextLayer> start, {
+    SceneShaders? shaders,
+  }) async {
     // Tall enough for the blend picker's sixteen rows to open on screen.
     tester.view.physicalSize = const Size(600, 1400);
     tester.view.devicePixelRatio = 1;
@@ -32,6 +37,7 @@ void main() {
                   layers: layers,
                   fontSize: 54,
                   color: const Color(0xFFFFFFFF),
+                  shaders: shaders,
                   onChanged: (next, {required label, mergeKey}) {
                     labels.add(label);
                     setState(() => layers = next);
@@ -119,6 +125,47 @@ void main() {
       await pick(tester, const ValueKey('paint:kind'), 'Shader');
       expect(layers.single.paint, isA<ShaderPaint>());
       expect(layers.single.box, SceneLayerBox.line);
+    },
+  );
+
+  testWidgets(
+    'a per-line pass switched to Shader keeps its box, and takes the first '
+    'declared shader',
+    (tester) async {
+      var shaders = FixedSceneShaders({
+        'shaders/foil.frag': const SceneShaderInfo(
+          key: 'shaders/foil.frag',
+          uniforms: [
+            SceneShaderUniform(
+              name: 'uAngle',
+              size: 1,
+              location: 0,
+              defaults: [0.6],
+            ),
+          ],
+        ),
+      });
+      addTearDown(shaders.dispose);
+      await pump(tester, const [
+        FillLayer(
+          paint: LinearPaint(colors: [_red, SceneColor(0xFF0000FF)]),
+          box: SceneLayerBox.line,
+        ),
+      ], shaders: shaders);
+      await tester.tap(find.textContaining('Fill'));
+      await tester.pumpAndSettle();
+      await pick(tester, const ValueKey('paint:kind'), 'Shader');
+      expect(
+        layers.single.paint,
+        const ShaderPaint(
+          'shaders/foil.frag',
+          uniforms: {
+            'uAngle': [0.6],
+          },
+        ),
+      );
+      expect(layers.single.box, SceneLayerBox.line);
+      expect(find.byKey(const ValueKey('layer:box')), findsOneWidget);
     },
   );
 

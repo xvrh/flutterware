@@ -1,14 +1,17 @@
 // What one pass paints with: the kind as a picker, then whatever that kind
-// is made of — a colour, or a gradient's stops and its shape.
+// is made of — a colour, a gradient's stops and its shape, or a shader and
+// its uniforms.
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene_authoring.dart';
 
 import '../../ui/design/design.dart';
 import '../../ui/picker.dart';
 import '../gradient_edit.dart';
+import '../shader_library.dart';
 import 'gradient_field.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
+import 'shader_field.dart';
 import 'swatches.dart';
 
 /// A change to the paint, with the words for its undo entry.
@@ -24,6 +27,7 @@ class ScenePaintField extends StatelessWidget {
     required this.paint,
     required this.own,
     required this.onChanged,
+    this.shaders,
   });
 
   /// Null is "the text's own colour".
@@ -34,6 +38,10 @@ class ScenePaintField extends StatelessWidget {
   final SceneColor own;
 
   final PaintChanged onChanged;
+
+  /// The package's declared shaders, for a shader pass; null where there is
+  /// no package to look in.
+  final SceneShaders? shaders;
 
   static const _degrees = SceneNumberShape(
     perPixel: 1,
@@ -67,8 +75,7 @@ class ScenePaintField extends StatelessWidget {
             FwChoice(value: k, label: k.label),
         ],
         selected: ScenePaintKind.of(paint),
-        onChanged: (k) =>
-            onChanged(convertPaint(paint, k, own: own), label: 'Layer paint'),
+        onChanged: (k) => onChanged(_convert(k), label: 'Layer paint'),
       ),
       ...switch (paint) {
         null => const <Widget>[],
@@ -90,10 +97,33 @@ class ScenePaintField extends StatelessWidget {
           const Gap(FwSpacing.sm),
           ..._shape(g),
         ],
-        ShaderPaint() => const [],
+        ShaderPaint p => [
+          const Gap(FwSpacing.sm),
+          SceneShaderField(
+            paint: p,
+            shaders: shaders,
+            onChanged: (next, {required label, mergeKey}) =>
+                onChanged(next, label: label, mergeKey: mergeKey),
+          ),
+        ],
       },
     ],
   );
+
+  /// [paint] as a [kind] — and a pass that becomes a shader starts on the
+  /// package's first declared one, at its defaults, rather than on a blank
+  /// asset that paints nothing.
+  ScenePaint? _convert(ScenePaintKind kind) {
+    if (kind == ScenePaintKind.shader && paint is! ShaderPaint) {
+      if (shaders?.declared.firstOrNull case var first?) {
+        return ShaderPaint(
+          first,
+          uniforms: shaders!.info(first)?.defaults ?? const {},
+        );
+      }
+    }
+    return convertPaint(paint, kind, own: own);
+  }
 
   /// A gradient the bar can hold: two colours at least. Only a hand-edited
   /// wire payload can arrive with fewer — the file refuses them — and this

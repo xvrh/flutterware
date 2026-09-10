@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
 import '../../embedder/embedded_engine.dart';
+import '../../embedder/flutter_cache.dart';
 import '../../embedder/guest_texture.dart';
 import '../../previews/catalog_session.dart';
 import '../../previews/compiler_daemon_client.dart';
@@ -26,6 +27,7 @@ import '../../scene/editor.dart';
 import '../../scene/guest.dart';
 import '../../scene/import/variables.dart';
 import '../../scene/scene_file.dart';
+import '../../scene/shader_library.dart';
 import '../../scene/playback.dart';
 import '../../scene/tokens_file.dart';
 import '../../scene/tokens_library.dart';
@@ -76,6 +78,14 @@ class ScenePlugin extends NativePlugin<SceneCore> {
         return session;
       });
 
+  /// Every package's declared shaders and their uniforms, compiled with the
+  /// workspace's own SDK. Made when a scene is first opened; nothing
+  /// compiles until a shader pass asks for its uniforms.
+  SceneShaderLibrary get shaderLibrary => _shaderLibrary ??= SceneShaderLibrary(
+    cache: FlutterCache(p.join(host.workspace.flutterSdk.root, 'bin', 'cache')),
+  );
+  SceneShaderLibrary? _shaderLibrary;
+
   void unawaitedStart(CatalogSession session) {
     session.start(width: 2048, height: 1000).ignore();
   }
@@ -101,6 +111,7 @@ class ScenePlugin extends NativePlugin<SceneCore> {
     for (var session in _sessions.values) {
       session.dispose();
     }
+    _shaderLibrary?.dispose();
     super.dispose();
   }
 
@@ -1322,6 +1333,9 @@ class _ScenePanelState extends State<_ScenePanel>
             key: ValueKey(workspace.active.path),
             editor,
             packageRoot: _core.rootFor(_package!),
+            shaders: widget.plugin.shaderLibrary.forPackage(
+              _core.rootFor(_package!),
+            ),
             externals: _externals(),
             axesFor: _fontAxes,
             tokens: _tokensHost(workspace),

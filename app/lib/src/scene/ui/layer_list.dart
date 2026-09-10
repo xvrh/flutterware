@@ -16,6 +16,7 @@ import '../../ui/picker.dart';
 import '../../ui/popover.dart';
 import '../../ui/tappable.dart';
 import '../layer_presets.dart';
+import '../shader_library.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
 import 'paint_field.dart';
@@ -36,6 +37,7 @@ class SceneLayerList extends StatefulWidget {
     required this.color,
     required this.onChanged,
     this.marker,
+    this.shaders,
   });
 
   /// A text node's own stack, or a shared style's — the control is the same
@@ -58,6 +60,9 @@ class SceneLayerList extends StatefulWidget {
   /// paint stack is a style property like every other one, and the panel
   /// says so in the same words here as it does on a row.
   final Widget? marker;
+
+  /// What a shader pass picks from — see [ScenePaintField.shaders].
+  final SceneShaders? shaders;
 
   @override
   State<SceneLayerList> createState() => _SceneLayerListState();
@@ -394,6 +399,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
           ScenePaintField(
             paint: layer.paint,
             own: SceneColor(widget.color.toARGB32()),
+            shaders: widget.shaders,
             onChanged: (next, {required label, mergeKey}) => _replace(
               i,
               // "Laid across" has no control once the paint is not a
