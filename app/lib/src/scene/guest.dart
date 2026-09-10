@@ -38,6 +38,7 @@ const sceneHostEntrySymbol = sceneCanvasHostSymbol;
 class SceneGuest {
   SceneGuest(this.session, this.editor, {required this.groupDirectory}) {
     _paintsWithClock = sceneShaderAssets(editor.doc).isNotEmpty;
+    _pollAssets();
     editor.doc.addListener(_push);
     editor.addListener(_onEditor);
     editor.playheadClock.addListener(_onPlayhead);
@@ -188,7 +189,31 @@ class SceneGuest {
 
   void _onEditor() {
     _paintsWithClock = sceneShaderAssets(editor.doc).isNotEmpty;
+    _pollAssets();
     _push();
+  }
+
+  /// How often the daemon is asked to look at the assets while a shader
+  /// paints the document.
+  static const assetPollInterval = Duration(seconds: 1);
+
+  /// The daemon has no watcher: it rebuilds the bundle — and tells the guest
+  /// which shaders to reload — only when a client asks it something. The
+  /// previews panel polls while it is on screen; nothing asked on the scene
+  /// editor's behalf, so a `.frag` saved beside an open scene reached the
+  /// canvas only at the next restart. Polled only while a shader paints the
+  /// document, since that is the edit loop it is for.
+  Timer? _assetPoll;
+
+  void _pollAssets() {
+    if (!_paintsWithClock) {
+      _assetPoll?.cancel();
+      _assetPoll = null;
+      return;
+    }
+    _assetPoll ??= Timer.periodic(assetPollInterval, (_) {
+      if (session.phase == CatalogSessionPhase.ready) session.refresh();
+    });
   }
 
   void _onPlayhead() {
@@ -313,6 +338,7 @@ class SceneGuest {
 
   void dispose() {
     _disposed = true;
+    _assetPoll?.cancel();
     _shaderRetry?.cancel();
     _viewSettle?.cancel();
     rendered.dispose();

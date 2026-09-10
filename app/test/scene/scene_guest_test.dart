@@ -32,6 +32,11 @@ class _Session extends CatalogSession {
 
   void announce() => notifyListeners();
 
+  var refreshes = 0;
+
+  @override
+  void refresh() => refreshes++;
+
   /// How many more pushes fail the way they do before the host's extension
   /// is registered.
   var unregistered = 0;
@@ -118,6 +123,52 @@ void main() {
     editor.playhead = const Duration(milliseconds: 250);
     await pumpEventQueue();
     expect(session.calls, hasLength(before + 1));
+  });
+
+  group('the daemon is asked to look at the assets', () {
+    // It has no watcher of its own: a shader saved beside an open scene
+    // reaches the guest only when some client asks it something.
+    test('every second while a shader paints the document', () {
+      fakeAsync((async) {
+        headline().layers = [_shader];
+        session.phase = CatalogSessionPhase.ready;
+        guest();
+        async.elapse(const Duration(milliseconds: 3100));
+        expect(session.refreshes, 3);
+      });
+    });
+
+    test('never for a document without one, and not once it is gone', () {
+      fakeAsync((async) {
+        session.phase = CatalogSessionPhase.ready;
+        guest();
+        async.elapse(const Duration(seconds: 3));
+        expect(session.refreshes, 0);
+
+        editor.perform('paint', () => headline().layers = [_shader]);
+        async.elapse(const Duration(seconds: 2));
+        expect(session.refreshes, 2);
+
+        editor.perform('paint', () => headline().layers = const []);
+        async.elapse(const Duration(seconds: 3));
+        expect(session.refreshes, 2);
+      });
+    });
+
+    test('not while the guest is still starting, nor after dispose', () {
+      fakeAsync((async) {
+        headline().layers = [_shader];
+        var g = SceneGuest(session, editor, groupDirectory: 'lib/scenes');
+        async.elapse(const Duration(seconds: 2));
+        expect(session.refreshes, 0, reason: 'no daemon to ask yet');
+        session.phase = CatalogSessionPhase.ready;
+        async.elapse(const Duration(seconds: 1));
+        expect(session.refreshes, 1);
+        g.dispose();
+        async.elapse(const Duration(seconds: 3));
+        expect(session.refreshes, 1);
+      });
+    });
   });
 
   group('with no motion open, the time is zero', () {
