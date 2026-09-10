@@ -136,8 +136,6 @@ void main() {
     // The second recorded panel: a scenario run, its frames fetched the same
     // way. Opening a scenario "runs" it, which over a recording is a read.
     await screen.tap('Scenarios');
-    await screen.waitFor('shop_test.dart', unfoldingThrough: 'mobile');
-    await screen.tap('shop_test.dart');
     await screen.waitFor('Order a cappuccino');
     await screen.shot('scenarios');
     await screen.tap('Order a cappuccino');
@@ -153,6 +151,22 @@ void main() {
     );
     await screen.settle();
     await screen.shot('scenario-run');
+
+    // The canvas zooms on a modified wheel. In a browser a trackpad scroll
+    // is a wheel event, which is not what the desktop gets, so this is the
+    // one place the gesture is exercised as the page receives it.
+    var before = await screen.find('%');
+    if (before == null) fail('the zoom readout should be on screen');
+    var welcome = await screen.waitFor('1 · Welcome');
+    await page.mouse.move(Point(welcome.x + welcome.w / 2, welcome.y + 200));
+    await page.keyboard.down(Key.meta);
+    await page.mouse.wheel(deltaY: -240);
+    await page.keyboard.up(Key.meta);
+    await _waitUntil(
+      () async => (await screen.find('%'))?.text != before.text,
+      what: 'the zoom readout to move off ${before.text} after cmd+wheel',
+    );
+    await screen.shot('zoomed-with-the-wheel');
 
     // A plugin with nothing recorded says so, rather than reaching for a
     // process or a disk.
@@ -213,12 +227,12 @@ void _progress(int received, int total) {
 }
 
 Future<void> _waitUntil(
-  bool Function() condition, {
+  FutureOr<bool> Function() condition, {
   required String what,
   Duration timeout = const Duration(seconds: 30),
 }) async {
   var deadline = DateTime.now().add(timeout);
-  while (!condition()) {
+  while (!await condition()) {
     if (DateTime.now().isAfter(deadline)) {
       fail('Timed out waiting for $what');
     }
@@ -280,14 +294,10 @@ class _Screen {
     return best;
   }
 
-  /// [unfoldingThrough] names a folded tree node to open first, the way a
-  /// reader would, when [label] sits inside it.
   Future<_Node> waitFor(
     String label, {
     Duration timeout = const Duration(seconds: 60),
-    String? unfoldingThrough,
   }) async {
-    if (unfoldingThrough != null) await tap(unfoldingThrough);
     var deadline = DateTime.now().add(timeout);
     while (true) {
       var found = await find(label);

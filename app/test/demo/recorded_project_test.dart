@@ -75,18 +75,14 @@ void main() {
     await tester.pumpWidget(ShellApp(shell));
     await tester.pumpAndSettle();
 
-    // The list is the recorded scan: every scenario of the example, not only
-    // the ones with a run behind them.
+    // The list is the recorded scan, narrowed by the recorder to the files
+    // it ran: nothing on it that a click could not open.
     await tester.tap(find.text('Scenarios'));
     await tester.pumpAndSettle();
-    expect(find.text('shop_window_test.dart'), findsNothing);
-    // Folded by folder on arrival; the shop's file is two unfolds down.
-    await tester.tap(find.text('mobile'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('shop_test.dart'));
-    await tester.pumpAndSettle();
+    // Small enough to arrive open: both files, every scenario.
     expect(find.text('Order a cappuccino'), findsOneWidget);
     expect(find.text('Around the shop'), findsOneWidget);
+    expect(find.text('Order a cold brew on a laptop'), findsOneWidget);
 
     // Opening one "runs" it, which over a recording is a read: the flow
     // fills in with the recorded steps and their frames.

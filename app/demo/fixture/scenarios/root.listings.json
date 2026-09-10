@@ -1,78 +1,6 @@
 {
   "scenarios": [
     {
-      "file": "test/scenarios/api/profile_test.dart",
-      "name": "replayed — the profile, as it was recorded",
-      "profile": "phones",
-      "devices": [
-        "iphone-16",
-        "iphone-se",
-        "android-tall"
-      ],
-      "languages": [
-        "en",
-        "fr"
-      ]
-    },
-    {
-      "file": "test/scenarios/api/profile_test.dart",
-      "name": "stated — the shapes no recording can produce on demand",
-      "profile": "phones",
-      "devices": [
-        "iphone-16",
-        "iphone-se",
-        "android-tall"
-      ],
-      "languages": [
-        "en",
-        "fr"
-      ]
-    },
-    {
-      "file": "test/scenarios/api/profile_test.dart",
-      "name": "the phone is on a train",
-      "profile": "phones",
-      "devices": [
-        "iphone-16",
-        "iphone-se",
-        "android-tall"
-      ],
-      "languages": [
-        "en",
-        "fr"
-      ]
-    },
-    {
-      "file": "test/scenarios/api/profile_test.dart",
-      "name": "nothing stated, nothing recorded",
-      "profile": "phones",
-      "devices": [
-        "iphone-16",
-        "iphone-se",
-        "android-tall"
-      ],
-      "languages": [
-        "en",
-        "fr"
-      ]
-    },
-    {
-      "file": "test/scenarios/async_boot_test.dart",
-      "name": "Async boot"
-    },
-    {
-      "file": "test/scenarios/attachment_test.dart",
-      "name": "Exports a receipt"
-    },
-    {
-      "file": "test/scenarios/counter_test.dart",
-      "name": "Counter"
-    },
-    {
-      "file": "test/scenarios/database_test.dart",
-      "name": "Drinks ledger"
-    },
-    {
       "file": "test/scenarios/desktop/shop_window_test.dart",
       "name": "Order a cold brew on a laptop",
       "profile": "desktop",
@@ -82,74 +10,6 @@
       ],
       "languages": [
         "en"
-      ]
-    },
-    {
-      "file": "test/scenarios/events_test.dart",
-      "name": "Signing in"
-    },
-    {
-      "file": "test/scenarios/events_test.dart",
-      "name": "Signing in over http"
-    },
-    {
-      "file": "test/scenarios/mid_flight_test.dart",
-      "name": "Confirming an order"
-    },
-    {
-      "file": "test/scenarios/mobile/beans_test.dart",
-      "name": "Find a bean in the list",
-      "profile": "phones",
-      "devices": [
-        "iphone-16",
-        "iphone-se",
-        "android-tall"
-      ],
-      "languages": [
-        "en",
-        "fr"
-      ]
-    },
-    {
-      "file": "test/scenarios/mobile/brewline_reel_test.dart",
-      "name": "Brewline in twenty seconds",
-      "profile": "phones",
-      "devices": [
-        "iphone-16",
-        "iphone-se",
-        "android-tall"
-      ],
-      "languages": [
-        "en",
-        "fr"
-      ]
-    },
-    {
-      "file": "test/scenarios/mobile/keyboard_test.dart",
-      "name": "Naming the cup",
-      "profile": "phones",
-      "devices": [
-        "iphone-16",
-        "iphone-se",
-        "android-tall"
-      ],
-      "languages": [
-        "en",
-        "fr"
-      ]
-    },
-    {
-      "file": "test/scenarios/mobile/keyboard_types_test.dart",
-      "name": "Signing up on a phone",
-      "profile": "phones",
-      "devices": [
-        "iphone-16",
-        "iphone-se",
-        "android-tall"
-      ],
-      "languages": [
-        "en",
-        "fr"
       ]
     },
     {
@@ -179,10 +39,6 @@
         "en",
         "fr"
       ]
-    },
-    {
-      "file": "test/scenarios/vector_graphics_test.dart",
-      "name": "Artwork on the step that mounts it"
     }
   ]
 }

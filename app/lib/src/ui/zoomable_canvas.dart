@@ -93,6 +93,20 @@ class _ZoomableCanvasState extends State<ZoomableCanvas> {
     _zoomBy(math.exp(dy / _scaleFactor), event.localPosition);
   }
 
+  /// The wheel, with the modifier down. A trackpad scroll reaches Flutter as
+  /// a pan-zoom on the desktop and as a wheel in a browser, where the engine
+  /// has only the wheel event to go on — so the same gesture needs both
+  /// hands. The viewer's own scaling is off while the modifier is down (see
+  /// [build]), so a mouse wheel lands here too and nothing zooms twice; the
+  /// sign is the viewer's, fingers down to zoom in, which is also what the
+  /// pan-zoom above does.
+  void _onSignal(PointerSignalEvent event) {
+    if (!_zooming || event is! PointerScrollEvent) return;
+    var dy = event.scrollDelta.dy;
+    if (dy == 0) return;
+    _zoomBy(math.exp(-dy / _scaleFactor), event.localPosition);
+  }
+
   /// Scales about [focal] — the point under the pointer stays under it — the
   /// way `InteractiveViewer` does it for a wheel.
   void _zoomBy(double change, Offset focal) {
@@ -121,12 +135,15 @@ class _ZoomableCanvasState extends State<ZoomableCanvas> {
     // keeps the viewer from sliding the canvas under the same gesture.
     return Listener(
       onPointerPanZoomUpdate: _onPanZoom,
+      onPointerSignal: _onSignal,
       child: InteractiveViewer(
         transformationController: _transform,
         minScale: widget.minScale,
         maxScale: widget.maxScale,
         panEnabled: !_zooming,
-        scaleEnabled: widget.scaleEnabled,
+        // Off with the modifier down: the wheel is [_onSignal]'s then, and
+        // the viewer would otherwise scale a mouse wheel on its own as well.
+        scaleEnabled: widget.scaleEnabled && !_zooming,
         constrained: false,
         boundaryMargin: widget.boundaryMargin,
         child: widget.child,

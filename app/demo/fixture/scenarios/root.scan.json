@@ -1,100 +1,10 @@
 {
   "scenarios": [
     {
-      "name": "replayed — the profile, as it was recorded",
-      "file": "test/scenarios/api/profile_test.dart",
-      "line": 17,
-      "endLine": 21
-    },
-    {
-      "name": "stated — the shapes no recording can produce on demand",
-      "file": "test/scenarios/api/profile_test.dart",
-      "line": 23,
-      "endLine": 27
-    },
-    {
-      "name": "the phone is on a train",
-      "file": "test/scenarios/api/profile_test.dart",
-      "line": 29,
-      "endLine": 33
-    },
-    {
-      "name": "nothing stated, nothing recorded",
-      "file": "test/scenarios/api/profile_test.dart",
-      "line": 38,
-      "endLine": 44
-    },
-    {
-      "name": "Async boot",
-      "file": "test/scenarios/async_boot_test.dart",
-      "line": 19,
-      "endLine": 23
-    },
-    {
-      "name": "Exports a receipt",
-      "file": "test/scenarios/attachment_test.dart",
-      "line": 14,
-      "endLine": 46
-    },
-    {
-      "name": "Counter",
-      "file": "test/scenarios/counter_test.dart",
-      "line": 8,
-      "endLine": 18
-    },
-    {
-      "name": "Drinks ledger",
-      "file": "test/scenarios/database_test.dart",
-      "line": 18,
-      "endLine": 37
-    },
-    {
       "name": "Order a cold brew on a laptop",
       "file": "test/scenarios/desktop/shop_window_test.dart",
       "line": 12,
       "endLine": 22
-    },
-    {
-      "name": "Signing in",
-      "file": "test/scenarios/events_test.dart",
-      "line": 29,
-      "endLine": 37
-    },
-    {
-      "name": "Signing in over http",
-      "file": "test/scenarios/events_test.dart",
-      "line": 39,
-      "endLine": 52
-    },
-    {
-      "name": "Confirming an order",
-      "file": "test/scenarios/mid_flight_test.dart",
-      "line": 18,
-      "endLine": 39
-    },
-    {
-      "name": "Find a bean in the list",
-      "file": "test/scenarios/mobile/beans_test.dart",
-      "line": 16,
-      "endLine": 25
-    },
-    {
-      "name": "Brewline in twenty seconds",
-      "file": "test/scenarios/mobile/brewline_reel_test.dart",
-      "line": 18,
-      "endLine": 44
-    },
-    {
-      "name": "Naming the cup",
-      "file": "test/scenarios/mobile/keyboard_test.dart",
-      "line": 22,
-      "endLine": 36
-    },
-    {
-      "name": "Signing up on a phone",
-      "file": "test/scenarios/mobile/keyboard_types_test.dart",
-      "line": 17,
-      "endLine": 57
     },
     {
       "name": "Around the shop",
@@ -107,12 +17,6 @@
       "file": "test/scenarios/mobile/shop_test.dart",
       "line": 55,
       "endLine": 66
-    },
-    {
-      "name": "Artwork on the step that mounts it",
-      "file": "test/scenarios/vector_graphics_test.dart",
-      "line": 15,
-      "endLine": 25
     }
   ],
   "diagnostics": [],

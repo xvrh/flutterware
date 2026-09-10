@@ -42,8 +42,6 @@ void main() {
     await shell.start(recordedProjectRoot);
     await s.pumpWidget(ShellApp(shell));
     await s.tap('Scenarios', shot: Shot('The suite'));
-    await s.tap('mobile');
-    await s.tap('shop_test.dart', shot: Shot('A file unfolded'));
     await s.tap('Order a cappuccino', shot: Shot('A recorded run'));
     await s.tap(const Target.containing('1 · Welcome'), shot: Shot('A step'));
   });
@@ -56,8 +54,6 @@ void main() {
     await shell.start(recordedProjectRoot);
     await s.pumpWidget(ShellApp(shell));
     await s.tap('Scenarios');
-    await s.tap('mobile');
-    await s.tap('shop_test.dart');
     await s.tap('Order a cappuccino', shot: Shot('The run'));
     await s.tap(Icons.zoom_out);
     await s.tap(Icons.zoom_out);
@@ -77,8 +73,6 @@ void main() {
     await shell.start(recordedProjectRoot);
     await s.pumpWidget(ShellApp(shell));
     await s.tap('Scenarios');
-    await s.tap('mobile');
-    await s.tap('shop_test.dart');
     await s.tap('Order a cappuccino');
     await s.tap(const Target.containing('1 · Welcome'), shot: Shot('The step'));
     await s.tap(

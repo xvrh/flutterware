@@ -111,10 +111,22 @@ Future<String> _recordScenarios({
 
   // The scan, as the core takes it: the default root, since the recorded
   // manifest declares no directory.
-  var scan = ScenarioScanner(
+  // The scan, as the core takes it, narrowed to the files that are run
+  // below: the recorded project *has* those scenarios and no others, so
+  // its list offers nothing a click cannot open.
+  var scanned = ScenarioScanner(
     packageRoot: project,
     directory: defaultScenariosScanRoot,
   ).scan();
+  var scan = ScenarioScanResult(
+    scenarios: [
+      for (var ref in scanned.scenarios)
+        if (recordedScenarioFiles.contains(ref.file)) ref,
+    ],
+    diagnostics: scanned.diagnostics,
+    unnamed: scanned.unnamed,
+    configFolders: scanned.configFolders,
+  );
   write(recordedScenarioScanPath(packagePath), scan.toJson());
 
   // The banner icon the flow page shows, found the way the page finds it.
@@ -139,7 +151,10 @@ Future<String> _recordScenarios({
   try {
     var listed = await runner.list();
     write(recordedScenarioListingsPath(packagePath), {
-      'scenarios': [for (var listing in listed) listing.toJson()],
+      'scenarios': [
+        for (var listing in listed)
+          if (recordedScenarioFiles.contains(listing.file)) listing.toJson(),
+      ],
     });
 
     for (var (i, file) in recordedScenarioFiles.indexed) {
@@ -194,7 +209,8 @@ Future<String> _recordScenarios({
   } finally {
     await runner.dispose();
   }
-  return '${scan.scenarios.length} scenarios scanned, '
+  return '${scanned.scenarios.length} scenarios scanned, '
+      '${scan.scenarios.length} kept, '
       '${recordedScenarioFiles.length} files run ($scenarios scenarios, '
       '$steps steps), $copied artifacts, '
       '${(bytes / 1024).toStringAsFixed(0)} KB';

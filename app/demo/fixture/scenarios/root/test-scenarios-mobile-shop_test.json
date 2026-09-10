@@ -1,12 +1,12 @@
 {
-  "ms": 2298,
+  "ms": 2287,
   "scenarios": [
     {
       "file": "test/scenarios/mobile/shop_test.dart",
       "name": "Around the shop",
       "ok": true,
       "device": "iphone-16",
-      "ms": 1961,
+      "ms": 1984,
       "steps": [
         {
           "index": 1,
@@ -807,7 +807,7 @@
       "name": "Order a cappuccino",
       "ok": true,
       "device": "iphone-16",
-      "ms": 327,
+      "ms": 293,
       "steps": [
         {
           "index": 1,
