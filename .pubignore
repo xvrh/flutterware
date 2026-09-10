@@ -6,6 +6,10 @@ doc/api/
 _*
 .*
 examples/
+# The studio demo's recording (`app/demo/fixture/`): a fixture of the
+# studio's own tests and web page, never of a consumer's install. It grows
+# with every plugin recorded, and nothing in the archive reads it.
+app/demo/
 
 # `docs/` is the repo's own tree: 4 MB of design specs that produced the code,
 # plus the generated capability reference. The README links it by relative path

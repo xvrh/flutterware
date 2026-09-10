@@ -119,7 +119,7 @@ jobs:
         # is what lets this step block: a check nobody can fail is not a check,
         # and the step it replaces was `continue-on-error` from the day it was
         # written to the day it was deleted.
-        run: dart test integration_test --exclude-tags gpu
+        run: dart test integration_test --exclude-tags gpu,browser
         working-directory: app
 
 
@@ -320,13 +320,38 @@ jobs:
         # test; this is the harness lane — the shots, the walk, the run report
         # — which is the thing a scenario exists for.
         run: dart run app/bin/fw.dart run scenarios run --package=app --device=window --steps=none
-      - name: "the shell compiles for the web"
+      - name: "the page is built, with the recording beside it"
+        # `tool/demo/build_web.dart` is `flutter build web` on the demo entry
+        # point plus the recording copied next to `index.html`, which is where
+        # the page fetches it from — the recording is deliberately not an
+        # asset of the app (see `app/lib/src/demo/recording.dart`).
         # `--base-href` is the repository's Pages path, which is where the
-        # deploy job below puts it; `--pwa-strategy=none` leaves out the
-        # service worker Flutter is retiring, which only ever showed up as a
-        # console error on this page.
-        run: flutter build web -t lib/main_demo_web.dart --base-href "/${{ github.event.repository.name }}/" --pwa-strategy=none
+        # deploy job below puts it.
+        run: dart run tool/demo/build_web.dart --base-href "/${{ github.event.repository.name }}/"
         working-directory: app
+      # puppeteer's Chrome, ~150 MB, keyed on the lockfile so a puppeteer bump
+      # fetches the browser it wants and nothing else does.
+      - uses: actions/cache@v4
+        with:
+          path: .dart_tool/puppeteer
+          key: puppeteer-chrome-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+      - name: "the page opens in a browser and walks to a recorded panel"
+        # The compile above proves the shell builds without a filesystem;
+        # this proves it *runs* without one. Chrome opens the directory the
+        # deploy job is about to publish, served under the same path, and
+        # walks the rail through the semantics tree. A JavaScript error, a
+        # failed request or a panel that never draws fails it with the list.
+        run: dart test integration_test/web_demo_test.dart
+        env:
+          FW_WEB_DEMO_BUILD: build/web
+        working-directory: app
+      - uses: actions/upload-artifact@v4
+        # One screenshot per step the browser took, green or red.
+        if: always()
+        with:
+          name: studio-demo-shots
+          path: app/build/web_demo/shots
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: studio-demo

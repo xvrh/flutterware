@@ -479,6 +479,54 @@ above is now answered on fact:
   `deploy-pages`). One-time repository setting: Settings → Pages → Source:
   GitHub Actions. The README link lands once the page is live.
 
+### Hardened the same day: the page is tested, the recording is not shipped
+
+Three things the first deploy left open, closed before the next plugin:
+
+- **The compiled page is opened in a browser, in CI.** `flutter build web`
+  proves the shell compiles without a filesystem; every one of the eight
+  runtime guards above was a read that compiled fine and threw when a frame
+  reached it, and every one was found by clicking. A `flutter test
+  --platform chrome` lane was measured first and rejected: it compiles with
+  DDC rather than dart2js, serves no app assets (`rootBundle` hangs, not
+  404s), and never touches `index.html`, the base href or the fetch of the
+  recording. `app/integration_test/web_demo_test.dart` instead takes the
+  directory the deploy job is about to publish, serves it with shelf under
+  the same path as Pages, and drives it with puppeteer's own Chrome: a
+  JavaScript error, a failed request, a response at 400 or above, or a
+  screen that never shows what the recording holds fails the test with the
+  list. The demo turns semantics on at boot (`ensureSemantics`), which is
+  what a screen reader gets and the only DOM a browser test can find a tab
+  by. Measured: Chrome download 24s once (cached by CI on the lockfile), the
+  walk 13s. Removing the recording from the build fails it with the 404 and
+  the panel's own "no launcher icon scan" message on screen.
+- **The recording lives in one place.** It was in three: git, the pub
+  archive (`.pubignore` had no line for it) and every desktop build of the
+  studio (declared as assets). Now `app/demo/` is in `.pubignore`, the asset
+  declaration is gone with the asset end of `Recording`, and the two ends
+  that remain are the file end (scenario, widget test, catalog demo — the
+  previews guest runs with the package as its working directory) and the
+  HTTP end (the page, resolving `demo/fixture/` against the document's
+  `<base href>`). `tool/demo/build_web.dart` is the one place that knows the
+  page and the recording go together: it builds and copies. Found on the
+  way: `.pubignore` also lets `app/test/` into the archive, 364 files.
+- **Facts and pictures, when the recording grows.** What grows is not
+  scans. It is rendered output — previews thumbnails, scenario frames and
+  trees, scene renders — and rendered pixels are not byte-stable across
+  operating systems (the 3D probe showed it). The rule for the next plugins:
+  *facts* (what the tool scans, and the small source files a panel draws)
+  are committed and freshness-checked; *pictures* (anything rendered on
+  `flutter_tester`) are never committed — the `studio_demo` job produces
+  them before it builds, and a developer runs the same recorder once. A
+  studio scenario over pictures then has a prerequisite step, which is a
+  decision for when previews arrive.
+
+And the rule the guards need, so they do not spread: **an `UnsupportedError`
+guard lives on the shell path only.** A plugin on the web is either recorded,
+so it never touches `dart:io`, or not recorded, so its panel is never built.
+The same `try/on UnsupportedError` inside a plugin core would hide a real
+desktop bug. Add an `ambient_sdk_test`-style check the day it ships twice.
+
 ### The recording and the scenario, in that order
 
 The scenario does not record. It opens `app/demo/fixture/` through the file
@@ -523,8 +571,8 @@ so is the right answer there.
    worse for previews, and that is the moment to stop.
 2. **Previews.** The still picture, recorded thumbnails and inspect, read-only
    knobs. Three to five days.
-3. **The demo entry point, the record script as a documented command, the
-   Pages deploy and the README link.** One to two days.
+3. ~~**The demo entry point, the record script as a documented command, the
+   Pages deploy.**~~ Built; the README link remains.
 
 Related: `2026-08-11-scenario-web-export-design.md` (the viewer this rides
 on), `2026-07-29-config-reload-findings.md` (why a panel's dependence on its
