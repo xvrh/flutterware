@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "flutterware": {
+      "command": "dart",
+      "args": [
+        "run",
+        "flutterware",
+        "mcp"
+      ]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "title": "Brewline",
+  "tagline": "Votre café, prêt avant vous.",
+  "getStarted": "Commencer",
+  "menuTitle": "La carte",
+  "addToCart": "Ajouter au panier",
+  "size": "Taille",
+  "sizeSmall": "Petit",
+  "sizeMedium": "Moyen",
+  "sizeLarge": "Grand",
+  "yourOrder": "Votre commande",
+  "total": "Total",
+  "nameOnCup": "Nom sur le gobelet",
+  "placeOrder": "Commander",
+  "emptyCart": "Le panier est vide.",
+  "thanks": "Merci, **{name}** !",
+  "backToMenu": "Retour à la carte",
+  "drink.cappuccino": "Espresso, lait vapeur, mousse soyeuse.",
+  "drink.flat-white": "Double espresso sous un voile de lait.",
+  "drink.matcha": "Thé vert fouetté, doux et végétal.",
+  "drink.chai": "Épices chaudes, lait onctueux."
+}
