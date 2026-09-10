@@ -1,3 +1,21 @@
+## Unreleased
+
+- **A project's own shaders load, and scene text can be painted with one.**
+  The shaders a pubspec declares under `flutter: shaders:` were never in the
+  bundle flutterware renders from, so `FragmentProgram.fromAsset` failed with
+  *"Asset not found"* in every lane — previews, scenarios, scene video, the
+  studio's canvases. They are compiled and bundled now, and a `.frag` saved
+  while a preview or a scene is open is reloaded in place.
+
+  A scene text layer takes `ShaderPaint('shaders/foil.frag', uniforms: …)`:
+  the pass is painted by the shader through the glyphs, over the whole text
+  or once per line, with `uSize`, `uColor` and `uTime` set by the renderer
+  when the shader declares them. A pass paints nothing until its program has
+  loaded. The lanes wait for that themselves; a plain widget test does not,
+  so it loads them first with
+  `await tester.runAsync(() => precacheSceneShaders(scene));`.
+
+
 ## 0.6.0
 
 Development tooling for Flutter projects: a desktop app, a command line and an
