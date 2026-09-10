@@ -207,8 +207,13 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
     // Serial, and `runComparison` says why at length: a package is two
     // compilers and two guests, and the packages a branch did not touch are
     // nearly free now anyway.
+    // The total accumulates, because it sizes a bar that spans every package.
+    // The ids owed an answer do **not**: `ComparisonHalf.plan` replaces its
+    // pending list rather than adding to it, and by the time the next package
+    // plans the previous one has answered everything it owed — so handing the
+    // running list over put every finished row back under STILL RENDERING
+    // beside itself until the whole half ended.
     var total = 0;
-    var toAnswer = <String>[];
     for (var package in packages) {
       if (packages.length > 1) onProgress?.call('previews in $package');
       var runner = _previewsRunner(
@@ -219,12 +224,10 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
             ? null
             : (plan) {
                 total += plan.total;
-                toAnswer.addAll(
-                  plan.toRender.map(
-                    (id) => qualify ? comparedIdIn(package, id) : id,
-                  ),
-                );
-                onPlan(total, toAnswer);
+                onPlan(total, [
+                  for (var id in plan.toRender)
+                    qualify ? comparedIdIn(package, id) : id,
+                ]);
               },
         onProgress: onProgress,
         cancel: cancel,
@@ -260,8 +263,8 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
     var qualify = _qualify;
     var watch = Stopwatch()..start();
     var halves = <({String package, ScenarioResults results})>[];
+    var failures = <(Object, StackTrace)>[];
     var total = 0;
-    var toAnswer = <String>[];
     for (var package in packages) {
       if (packages.length > 1) onProgress?.call('scenarios in $package');
       var side = _scenariosSide(package);
@@ -284,18 +287,21 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
                 packagePath: side.packagePath,
                 roots: [topLevel, baseRoot],
               ),
+              locks: LockSides(
+                packagePath: side.packagePath,
+                roots: [topLevel, baseRoot],
+              ),
               onScenario: (scenario) =>
                   onScenario(scenario.inPackage(package, qualify: qualify)),
               onPlan: onPlan == null
                   ? null
                   : (plan) {
+                      // This package's ids only — see `runPreviews`.
                       total += plan.total;
-                      toAnswer.addAll(
-                        plan.toRun.map(
-                          (id) => qualify ? comparedIdIn(package, id) : id,
-                        ),
-                      );
-                      onPlan(total, toAnswer);
+                      onPlan(total, [
+                        for (var id in plan.toRun)
+                          qualify ? comparedIdIn(package, id) : id,
+                      ]);
                     },
               onProgress: onProgress,
               cancel: cancel,
@@ -313,12 +319,40 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
           package: package,
           results: results.inPackage(package, qualify: qualify),
         ));
+      } on ComparisonCancelled {
+        // Stop is the controller's to handle, and it must reach it: swallowed
+        // here it would read as a package that failed.
+        rethrow;
+      } on Object catch (error, stack) {
+        // A package whose harness will not build is that package's silence,
+        // exactly as `fw compare` records it — the two surfaces answer one
+        // comparison, and the panel used to refuse the whole half over one
+        // package the CLI reported a note for. Still thrown when it is the
+        // *only* failure mode on offer, below.
+        failures.add((error, stack));
+        halves.add((
+          package: package,
+          results: ScenarioResults.of(
+            items: const [],
+            ran: 0,
+            skipped: 0,
+            elapsed: Duration.zero,
+            note: '$error',
+          ),
+        ));
       } finally {
         // Two `flutter_tester` processes and a build directory each, where
         // one was built. A panel that navigated away mid-run would leak both
         // without this.
         await source.dispose();
       }
+    }
+    // Every package failed: there is no half to show, and the panel's
+    // refusal — what a single broken package always produced — is still the
+    // right answer. The previews half makes the same call.
+    if (failures.length == packages.length) {
+      var (error, stack) = failures.first;
+      Error.throwWithStackTrace(error, stack);
     }
     return ScenarioResults.merged(halves, elapsed: watch.elapsed);
   }

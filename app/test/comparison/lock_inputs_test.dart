@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/comparison/closure.dart';
 import 'package:flutterware_app/src/comparison/import_graph.dart';
-import 'package:flutterware_app/src/comparison/lock_inputs.dart';
 import 'package:flutterware_app/src/comparison/skip.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -244,6 +243,52 @@ void main() {
     );
 
     expect(decide(base: base, head: head, file: 'lib/a.dart').skip, isFalse);
+  });
+
+  // A monorepo that is not a pub workspace resolves each package beside
+  // itself, and has no `.dart_tool` at the top at all. Looking only there
+  // refused the split for every one of its packages — safely, and for exactly
+  // the repositories with the most packages.
+  test('a package resolved on its own narrows too', () {
+    String standalone(String name, String unrelated) {
+      var dir = Directory(p.join(root.path, name))..createSync();
+      void write(String relative, String content) {
+        File(p.join(dir.path, relative))
+          ..parent.createSync(recursive: true)
+          ..writeAsStringSync(content);
+      }
+
+      write(
+        'pkg/pubspec.lock',
+        lockOf({'used': '1.0.0', 'unrelated': unrelated}),
+      );
+      write(
+        'pkg/.dart_tool/package_graph.json',
+        '{"roots":["pkg"],"packages":['
+            '{"name":"pkg","dependencies":["used"]},'
+            '{"name":"used","dependencies":[]},'
+            '{"name":"unrelated","dependencies":[]}]}',
+      );
+      write('pkg/lib/a.dart', "import 'package:used/used.dart';\n");
+      return dir.path;
+    }
+
+    var base = standalone('base', '1.0.0');
+    var head = standalone('head', '2.0.0');
+    var memo = ClosureMemo(p.join(root.path, 'memo'))
+      ..remember('e', ['pkg/lib/a.dart']);
+    var decision = SkipDecision.of(
+      entryId: 'e',
+      memo: memo,
+      baseRoot: base,
+      headRoot: head,
+      lock: LockSides(
+        packagePath: 'pkg',
+        roots: [head, base],
+      ).forPackages({'used'}),
+    );
+
+    expect(decision.skip, isTrue);
   });
 
   test('an unparseable lock falls back to the whole lock', () {

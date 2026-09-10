@@ -12,6 +12,7 @@ import 'package:flutterware/src/inspect/node.dart';
 import 'package:flutterware/src/scenarios/network_mode.dart';
 
 import '../scenarios/discovery.dart';
+import '../scenarios/harness_entrypoint.dart';
 import '../scenarios/runner.dart';
 import '../embedder/build_directory.dart';
 import 'scenario_alignment.dart';
@@ -65,6 +66,27 @@ class ScenariosSide {
   /// several.
   static String idFor({required String file, required String scenario}) =>
       '$file#$scenario';
+
+  /// The `flutter_test_config.dart` that governs [id] in [checkout],
+  /// relative to the checkout root — or null where no folder config does.
+  ///
+  /// The harness imports it, so it decides what the scenario draws as surely
+  /// as the scenario's own file does: a theme, the fonts, the device. It is
+  /// not in the scenario's import closure — nothing the scenario writes names
+  /// it — so without this a change to it, or a bump to a package only it
+  /// imports, reached no scenario at all. Found with the same rule the harness
+  /// uses, [testConfigFolderFor], so the two cannot disagree about which file
+  /// that is.
+  String? configOf(String checkout, String id) {
+    var hash = id.indexOf('#');
+    var file = hash < 0 ? id : id.substring(0, hash);
+    var folder = testConfigFolderFor(
+      p.normalize(p.join(checkout, packagePath)),
+      file,
+    );
+    if (folder == null) return null;
+    return p.normalize(p.join(packagePath, folder, testConfigFileName));
+  }
 
   /// Where a scenario's source lives, relative to a checkout root.
   String fileOf(String id) {

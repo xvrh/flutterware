@@ -40,6 +40,11 @@ abstract interface class ScenarioSource {
   /// Where a scenario's source lives, relative to a checkout root.
   String fileOf(String id);
 
+  /// The folder config that governs [id] on the head side, relative to a
+  /// checkout root — or null where none does. See
+  /// `ScenariosSide.configOf`.
+  String? configOf(String id);
+
   /// Replays [id] on one side and reads back every step it captured.
   Future<List<ScenarioStepShot>> shots(
     String id, {
@@ -87,6 +92,9 @@ class LiveScenarioSource implements ScenarioSource {
 
   @override
   String fileOf(String id) => side.fileOf(id);
+
+  @override
+  String? configOf(String id) => side.configOf(headRoot, id);
 
   @override
   Future<List<ScenarioStepShot>> shots(
@@ -157,8 +165,8 @@ class ScenariosRunner {
     required this.baseRoot,
     required this.source,
     required this.cache,
+    required this.locks,
     this.pixels,
-    this.locks,
     this.only,
     this.onScenario,
     this.onPlan,
@@ -179,6 +187,12 @@ class ScenariosRunner {
   /// Both sides' lockfiles, read per package — see [LockSides]. Passed for
   /// the same reason [pixels] is, and used the same way: a scenario carries
   /// the resolution of the packages it reaches and no others.
+  ///
+  /// **Required, and nullable on purpose.** It was optional, and both callers
+  /// forgot it: the lockfile had just left the pixel inputs to come in through
+  /// here, so a runner built without it hashed no lockfile at all and a
+  /// dependency bump replayed nothing. Null is still a legal answer — a test's
+  /// fake checkout has no lock — but it has to be said.
   final LockSides? locks;
 
   /// Compare only these scenario ids.
@@ -299,8 +313,16 @@ class ScenariosRunner {
         );
         continue;
       }
+      // The scenario's own file and the folder config the harness wraps it
+      // in. Both decide what it draws, and only the first is named by
+      // anything the scenario imports — so both the closure and the reach
+      // are taken over the pair.
       var file = source.fileOf(id);
-      cache.memo.remember(id, imports.closureOf(file));
+      var config = source.configOf(id);
+      cache.memo.remember(id, {
+        ...imports.closureOf(file),
+        if (config != null) ...imports.closureOf(config),
+      });
       var decision = SkipDecision.of(
         entryId: id,
         memo: cache.memo,
@@ -308,7 +330,10 @@ class ScenariosRunner {
         headRoot: headRoot,
         pixels: pixels,
         digests: digests,
-        lock: locks?.forPackages(imports.packagesOf(file)),
+        lock: locks?.forPackages({
+          ...imports.packagesOf(file),
+          if (config != null) ...imports.packagesOf(config),
+        }),
       );
       if (decision.skip) {
         settled.add(

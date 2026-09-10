@@ -81,4 +81,41 @@ void main() {
   test('a checkout with no scenario directory scans to nothing', () {
     expect(sideFor().scannedScenarios(checkout('head', {})), isEmpty);
   });
+
+  // The harness wraps a scenario in the nearest folder config at or above it,
+  // stopping at the package root — `flutter test`'s own rule. The comparison
+  // asks the same question so a change to that file reaches the scenarios it
+  // governs.
+  group('the folder config', () {
+    test('is the nearest one at or above the scenario', () {
+      var path = checkout('head', {
+        'app/test/flutter_test_config.dart': '',
+        'app/test/scenarios/flutter_test_config.dart': '',
+        'app/test/scenarios/shop_test.dart': '',
+      });
+
+      expect(
+        sideFor().configOf(path, 'test/scenarios/shop_test.dart#Checkout'),
+        'app/test/scenarios/flutter_test_config.dart',
+      );
+    });
+
+    test('is found above the scenario when none is beside it', () {
+      var path = checkout('head', {
+        'app/test/flutter_test_config.dart': '',
+        'app/test/scenarios/shop_test.dart': '',
+      });
+
+      expect(
+        sideFor().configOf(path, 'test/scenarios/shop_test.dart#Checkout'),
+        'app/test/flutter_test_config.dart',
+      );
+    });
+
+    test('is null where no folder has one', () {
+      var path = checkout('head', {'app/test/shop_test.dart': ''});
+
+      expect(sideFor().configOf(path, 'test/shop_test.dart#Checkout'), isNull);
+    });
+  });
 }

@@ -316,6 +316,35 @@ void main() {
       expect(cache.has(added.shots!.base), isFalse);
     });
 
+    // Before these rows were given pictures, a side nothing needed to render
+    // was never compiled — so a branch that only deleted an entry compared
+    // cleanly against a base that could not be built. Drawing the deleted
+    // entry must not be what refuses it.
+    test(
+      'whose side does not compile costs its picture, not the run',
+      () async {
+        side.declared[p.join(root.path, 'head')] = ['demo/a.dart#a'];
+        side.uncompilable.add(base);
+
+        var result = await compare(base: base, head: head);
+
+        expect(
+          itemFor(result, 'demo/old.dart#gone').state,
+          ComparedState.removed,
+        );
+      },
+    );
+
+    test('still refuses when the side was needed for a comparison', () async {
+      base = checkout('base', {'demo/a.dart': '2', 'demo/old.dart': '1'});
+      side.uncompilable.add(base);
+
+      expect(
+        () => compare(base: base, head: head),
+        throwsA(isA<ComparisonRefused>()),
+      );
+    });
+
     // The picture is a bonus; the verdict must not wait for it.
     test('is settled by the plan before anything renders', () async {
       var plan = await ComparisonRunner(
@@ -634,6 +663,9 @@ class _FakeSide implements ComparisonSide {
   /// Entry id → a build that threw, leaving no frame.
   final fatal = <String, String>{};
 
+  /// Checkouts whose whole catalog does not compile.
+  final uncompilable = <String>{};
+
   @override
   Future<List<String>> entries(String checkout) async =>
       declared[checkout] ?? declared['*'] ?? const [];
@@ -644,6 +676,9 @@ class _FakeSide implements ComparisonSide {
     required List<String> entryIds,
     required Future<void> Function(RenderedEntry frame) onFrame,
   }) async {
+    if (uncompilable.contains(checkout)) {
+      throw SideDidNotCompile('lib/a.dart:1:1: Error: not found');
+    }
     var failed = <String, String>{};
     for (var entry in entryIds) {
       renderedFor.add((entry, checkout));

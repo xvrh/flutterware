@@ -337,6 +337,20 @@ Future<CompareOutcome> runComparison({
 
 String abbreviatedSha(String sha) => sha.length > 8 ? sha.substring(0, 8) : sha;
 
+/// `--frames=` as both surfaces spell it — `all` or `changed` — or null for
+/// anything else.
+///
+/// One parser, because there were two and they disagreed. The CLI mapped
+/// `changed` itself; the action handed the string to
+/// `ExportedFrames.fromName`, which reads the *file's* vocabulary (`findings`)
+/// and answers `all` for anything it does not know. So the action's own
+/// documented option silently exported every frame.
+ExportedFrames? exportedFramesFromFlag(String? flag) => switch (flag) {
+  null || '' || 'all' => ExportedFrames.all,
+  'changed' => ExportedFrames.findings,
+  _ => null,
+};
+
 /// Which of [declared] a run covers, given what it was asked for.
 ///
 /// An empty [asked] is every package the half declares — the whole point of
@@ -394,7 +408,12 @@ Future<ComparisonCompareResult> runCompareAction({
 }) async {
   var entry = arguments['entry'] as String?;
   var export = arguments['export'];
-  var frames = ExportedFrames.fromName(arguments['frames']);
+  var frames = exportedFramesFromFlag(arguments['frames'] as String?);
+  if (frames == null) {
+    throw CompareException(
+      '`frames` takes `all` or `changed`, not "${arguments['frames']}".',
+    );
+  }
   var baseHref = switch (arguments['base-href'] as String?) {
     var given? when given.isNotEmpty => given,
     _ => defaultBaseHref,
@@ -642,6 +661,10 @@ Future<ScenarioResults> _comparePackageScenarios({
             source: source,
             cache: cache,
             pixels: PixelInputs.of(
+              packagePath: side.packagePath,
+              roots: [top, baseRoot],
+            ),
+            locks: LockSides(
               packagePath: side.packagePath,
               roots: [top, baseRoot],
             ),

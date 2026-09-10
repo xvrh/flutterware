@@ -336,7 +336,7 @@ class LockSides {
       // the plan takes from one side: a branch that added a dependency should
       // have the entry that uses it rendered, and the base has never heard of
       // it.
-      _reach = ReachableLock.of(roots.first);
+      _reach = ReachableLock.of(roots.first, packagePath: packagePath);
 
   final String packagePath;
   final Map<String, LockInputs> _inputs;

@@ -135,6 +135,59 @@ class BaseCheckout {
 
   static final _inProcess = <String, Future<void>>{};
 
+  /// Removes the base at [path] under the same exclusion [ensure] takes, and
+  /// only if nobody holds it.
+  ///
+  /// The sweep used to remove an expired base without asking, which reopened
+  /// the race the lock exists to close: a comparison reusing a
+  /// fortnight-old base takes the lock and finds the marker, while a sweep for
+  /// some other sha has already statted that marker as old and runs `worktree
+  /// remove --force` out from under it.
+  ///
+  /// Two layers, as in [ensure], and for the same reason. The file lock is
+  /// advisory **per process**: a try-lock here would succeed against an
+  /// [ensure] running in this very process, and closing it would drop that
+  /// [ensure]'s lock too — so this process's own claim is taken first,
+  /// through [_inProcess], which also makes any [ensure] arriving mid-sweep
+  /// wait its turn and then rebuild the checkout rather than find it half
+  /// gone. Only then is the file lock tried, *non*-blocking, for everybody
+  /// else: a sweep is housekeeping, and a base somebody holds is not expired.
+  ///
+  /// The `.lock` file is left where it is. It is empty, and deleting one that
+  /// another process has open would let a third create a fresh inode under
+  /// the same name — two holders of "the" lock.
+  static Future<bool> _removeIfUnheld({
+    required String repoRoot,
+    required String path,
+  }) async {
+    if (_inProcess.containsKey(path)) return false;
+    var done = Completer<void>();
+    _inProcess[path] = done.future;
+    RandomAccessFile? lock;
+    try {
+      try {
+        lock = File('$path.lock').openSync(mode: FileMode.append);
+        lock.lockSync(FileLock.exclusive);
+      } on FileSystemException {
+        return false;
+      }
+      try {
+        await _remove(repoRoot: repoRoot, path: path);
+      } on FileSystemException {
+        // A base another process is removing at the same moment. The sweep is
+        // a courtesy, not a guarantee.
+        return false;
+      }
+      return true;
+    } finally {
+      lock?.closeSync();
+      done.complete();
+      if (identical(_inProcess[path], done.future)) {
+        unawaited(_inProcess.remove(path));
+      }
+    }
+  }
+
   static Future<BaseCheckout> _ensureLocked({
     required String repoRoot,
     required String sha,
@@ -241,23 +294,20 @@ class BaseCheckout {
     var swept = 0;
     for (var entity in root.listSync()) {
       if (entity is! Directory) continue;
-      if (keep != null && p.equals(entity.path, keep)) continue;
+      var path = entity.path;
+      if (keep != null && p.equals(path, keep)) continue;
+      var marker = File(p.join(path, _marker));
       try {
-        var marker = File(p.join(entity.path, _marker));
         // No marker is a checkout that died between `worktree add` and
         // `resolve`, and `_ensureLocked` already throws those away when it
         // meets them. Left alone here: it is somebody's half-built base until
         // the run that is building it says otherwise.
         if (!marker.existsSync()) continue;
         if (!marker.statSync().modified.isBefore(expiry)) continue;
-        await _remove(repoRoot: repoRoot, path: entity.path);
-        var lock = File('${entity.path}.lock');
-        if (lock.existsSync()) lock.deleteSync();
-        swept++;
       } on FileSystemException {
-        // A base another process is removing at the same moment. The sweep is
-        // a courtesy, not a guarantee.
+        continue;
       }
+      if (await _removeIfUnheld(repoRoot: repoRoot, path: path)) swept++;
     }
     return swept;
   }

@@ -7,6 +7,7 @@ import 'package:flutterware_app/src/comparison/scenario_diff.dart';
 import 'package:flutterware_app/src/comparison/scenario_alignment.dart';
 import 'package:flutterware_app/src/comparison/scenarios_runner.dart';
 import 'package:flutterware_app/src/comparison/shot_cache.dart';
+import 'package:flutterware_app/src/comparison/skip.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -44,6 +45,7 @@ void main() {
         baseRoot: base,
         source: source,
         cache: cache,
+        locks: null,
       );
 
   group('the plan', () {
@@ -110,11 +112,132 @@ void main() {
         }),
         source: source,
         cache: cache,
+        locks: null,
         only: const ['test/cart.dart#Cart'],
       ).plan();
 
       expect(plan.total, 1);
       expect(plan.toRun, ['test/cart.dart#Cart']);
+    });
+  });
+
+  // The review that found this: the lockfile left the pixel inputs to come in
+  // through `locks`, which was optional, and neither caller passed it — so a
+  // dependency bump replayed no scenario at all. `locks` is required now; these
+  // pin what it is for.
+  group('the lockfile', () {
+    String lockOf(String version) =>
+        'packages:\n'
+        '  used:\n'
+        '    dependency: "direct main"\n'
+        '    source: hosted\n'
+        '    version: "$version"\n';
+    const graph =
+        '{"roots":["pkg"],"packages":['
+        '{"name":"pkg","dependencies":["used"]},'
+        '{"name":"used","dependencies":[]}]}';
+
+    Future<ScenariosPlan> planWith({
+      required Map<String, String> base,
+      required Map<String, String> head,
+    }) {
+      var baseRoot = checkout('base', base);
+      var headRoot = checkout('head', head);
+      return ScenariosRunner(
+        headRoot: headRoot,
+        baseRoot: baseRoot,
+        source: source,
+        cache: cache,
+        locks: LockSides(packagePath: '.', roots: [headRoot, baseRoot]),
+      ).plan();
+    }
+
+    test('a bump to a package the scenario imports replays it', () async {
+      source.declared = ['test/shop.dart#Checkout'];
+      var shop = "import 'package:used/used.dart';\n";
+
+      var plan = await planWith(
+        base: {
+          'test/shop.dart': shop,
+          'pubspec.lock': lockOf('1.0.0'),
+          '.dart_tool/package_graph.json': graph,
+        },
+        head: {
+          'test/shop.dart': shop,
+          'pubspec.lock': lockOf('2.0.0'),
+          '.dart_tool/package_graph.json': graph,
+        },
+      );
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
+      expect(plan.because.keys.single, contains('pubspec.lock#used'));
+    });
+
+    // The harness wraps every scenario in its folder's config, and nothing
+    // the scenario itself imports names it — so a package only the config
+    // uses was invisible, and so was a change to the config's own source.
+    test(
+      'a bump to a package only the folder config imports replays it',
+      () async {
+        source.declared = ['test/shop.dart#Checkout'];
+        source.config = 'test/flutter_test_config.dart';
+        var config = "import 'package:used/used.dart';\n";
+
+        var plan = await planWith(
+          base: {
+            'test/shop.dart': 'var a = 1;\n',
+            'test/flutter_test_config.dart': config,
+            'pubspec.lock': lockOf('1.0.0'),
+            '.dart_tool/package_graph.json': graph,
+          },
+          head: {
+            'test/shop.dart': 'var a = 1;\n',
+            'test/flutter_test_config.dart': config,
+            'pubspec.lock': lockOf('2.0.0'),
+            '.dart_tool/package_graph.json': graph,
+          },
+        );
+
+        expect(plan.toRun, ['test/shop.dart#Checkout']);
+      },
+    );
+
+    test('a change to the folder config itself replays it', () async {
+      source.declared = ['test/shop.dart#Checkout'];
+      source.config = 'test/flutter_test_config.dart';
+
+      var plan = await planWith(
+        base: {
+          'test/shop.dart': 'var a = 1;\n',
+          'test/flutter_test_config.dart': 'var theme = 1;\n',
+        },
+        head: {
+          'test/shop.dart': 'var a = 1;\n',
+          'test/flutter_test_config.dart': 'var theme = 2;\n',
+        },
+      );
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
+    });
+
+    test('a bump nothing it reaches names still skips it', () async {
+      source.declared = ['test/shop.dart#Checkout'];
+      var shop = 'var a = 1;\n';
+
+      var plan = await planWith(
+        base: {
+          'test/shop.dart': shop,
+          'pubspec.lock': lockOf('1.0.0'),
+          '.dart_tool/package_graph.json': graph,
+        },
+        head: {
+          'test/shop.dart': shop,
+          'pubspec.lock': lockOf('2.0.0'),
+          '.dart_tool/package_graph.json': graph,
+        },
+      );
+
+      expect(plan.toRun, isEmpty);
     });
   });
 
@@ -268,6 +391,7 @@ void main() {
         baseRoot: checkout('base', {'test/a.dart': '1'}),
         source: source,
         cache: cache,
+        locks: null,
         onScenario: (s) => seen.add(s.scenario),
       ).run(outDir: root.path);
 
@@ -329,6 +453,12 @@ class _FakeSource implements ScenarioSource {
 
   @override
   String fileOf(String id) => id.split('#').first;
+
+  /// The folder config every scenario is governed by, or null for none.
+  String? config;
+
+  @override
+  String? configOf(String id) => config;
 
   @override
   Future<List<ScenarioStepShot>> shots(

@@ -552,10 +552,17 @@ class ComparisonRunner {
         },
       );
     } on SideDidNotCompile catch (e) {
-      throw ComparisonRefused(
-        'the base checkout does not compile, so there is nothing to compare '
-        'against: ${e.reason}',
-      );
+      // A side compiled only to draw what the branch *removed* owes the run
+      // nothing: those rows were settled without a picture, and before they
+      // were given one this side was never compiled at all. Refusing here
+      // would turn a comparison that used to succeed into exit 64 for the
+      // sake of an optional frame.
+      if (!wantedByBase.every(plan.onlyOnBase.contains)) {
+        throw ComparisonRefused(
+          'the base checkout does not compile, so there is nothing to compare '
+          'against: ${e.reason}',
+        );
+      }
     }
     cancel?.check();
 
@@ -584,10 +591,13 @@ class ComparisonRunner {
         },
       );
     } on SideDidNotCompile catch (e) {
-      throw ComparisonRefused(
-        'this worktree does not compile, so its previews cannot be '
-        'rendered: ${e.reason}',
-      );
+      // The same rule as the base pass, for what the branch *added*.
+      if (!wantedByHead.every(plan.onlyOnHead.contains)) {
+        throw ComparisonRefused(
+          'this worktree does not compile, so its previews cannot be '
+          'rendered: ${e.reason}',
+        );
+      }
     }
     cancel?.check();
 

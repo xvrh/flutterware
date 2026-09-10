@@ -637,12 +637,11 @@ class FwCli {
         exportDir = argument.substring('--export='.length);
       } else if (argument.startsWith('--frames=')) {
         var named = argument.substring('--frames='.length);
-        if (named != 'all' && named != 'changed') {
+        var parsed = exportedFramesFromFlag(named);
+        if (parsed == null) {
           return fail('--frames takes `all` or `changed`, not "$named".');
         }
-        frames = named == 'changed'
-            ? ExportedFrames.findings
-            : ExportedFrames.all;
+        frames = parsed;
       } else if (argument.startsWith('--base-href=')) {
         baseHref = argument.substring('--base-href='.length);
       } else if (argument.startsWith('--report=')) {

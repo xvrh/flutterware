@@ -138,12 +138,12 @@ class LockInputs {
       byPackage: byPackage,
       shared: shared,
       whole: whole,
-      splittable: parsed && found && _hasGraph(root),
+      splittable:
+          parsed &&
+          found &&
+          packageGraphFile(root: root, packagePath: packagePath) != null,
     );
   }
-
-  static bool _hasGraph(String root) =>
-      File(p.join(root, '.dart_tool', 'package_graph.json')).existsSync();
 
   /// The entries a set of reached packages contributes to a closure.
   ///
@@ -180,6 +180,26 @@ class LockInputs {
   }
 }
 
+/// The `package_graph.json` that describes [packagePath]'s resolution, or
+/// null where there is none.
+///
+/// Beside the package first, then at the checkout's top. A pub workspace
+/// resolves once at the top and its members have no `.dart_tool` of their
+/// own; a package resolved on its own — a monorepo that is not a workspace —
+/// has its graph beside it and nothing at the top. Looking only at the top
+/// found nothing for the second layout, refused the split for every one of
+/// its packages, and quietly fell back to the whole lockfile for exactly the
+/// repositories with the most packages.
+String? packageGraphFile({required String root, required String packagePath}) {
+  for (var candidate in {
+    p.normalize(p.join(root, packagePath, '.dart_tool', 'package_graph.json')),
+    p.join(root, '.dart_tool', 'package_graph.json'),
+  }) {
+    if (File(candidate).existsSync()) return candidate;
+  }
+  return null;
+}
+
 /// Which packages an entry reaches, closed over what those depend on.
 ///
 /// The import graph answers the first hop: the packages an entry's own
@@ -195,12 +215,14 @@ class ReachableLock {
 
   final Map<String, List<String>> _dependencies;
 
-  /// Reads [root]'s graph, or an empty one where there is none — which makes
-  /// every reach its own first hop, and is why [LockInputs.splittable] refuses
+  /// Reads the graph for [packagePath] inside [root] — see
+  /// [packageGraphFile] — or an empty one where there is none, which makes
+  /// every reach its own first hop and is why [LockInputs.splittable] refuses
   /// the split in that case rather than trusting it.
-  factory ReachableLock.of(String root) {
-    var file = File(p.join(root, '.dart_tool', 'package_graph.json'));
-    if (!file.existsSync()) return ReachableLock._(const {});
+  factory ReachableLock.of(String root, {required String packagePath}) {
+    var path = packageGraphFile(root: root, packagePath: packagePath);
+    if (path == null) return ReachableLock._(const {});
+    var file = File(path);
     try {
       var json = jsonDecode(file.readAsStringSync());
       if (json is! Map) return ReachableLock._(const {});

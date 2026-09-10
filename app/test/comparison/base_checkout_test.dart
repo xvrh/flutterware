@@ -4,6 +4,8 @@ import 'package:flutterware_app/src/comparison/base_checkout.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
+import '../support/lock_holder.dart';
+
 /// The other side of a comparison, on disk: checked out once per commit,
 /// shared by every worktree on the machine, and disposable.
 void main() {
@@ -177,7 +179,7 @@ void main() {
     Future<BaseCheckout> checkout(String sha) =>
         BaseCheckout.ensure(repoRoot: repo, sha: sha, cacheRoot: cache);
 
-    test('drops a base nothing has asked for, and its lock with it', () async {
+    test('drops a base nothing has asked for', () async {
       var sha = await git(['rev-parse', 'HEAD']);
       var base = await checkout(sha);
       age(base.path, const Duration(days: 30));
@@ -186,10 +188,26 @@ void main() {
 
       expect(swept, 1);
       expect(Directory(base.path).existsSync(), isFalse);
-      expect(File('${base.path}.lock').existsSync(), isFalse);
       // And git no longer believes in it, which is the half a plain delete
       // would have left behind.
       expect(await git(['worktree', 'list']), isNot(contains(base.path)));
+      // The lock file stays. Deleting one another process has open lets a
+      // third create a fresh inode under the same name — two holders of "the"
+      // lock — and an empty file costs nothing.
+      expect(File('${base.path}.lock').existsSync(), isTrue);
+    });
+
+    // A comparison reusing an old base holds its lock while it renders; the
+    // sweep used to `worktree remove --force` it regardless, on the strength
+    // of an mtime it had read a moment before.
+    test('leaves a base somebody holds, however old', () async {
+      var sha = await git(['rev-parse', 'HEAD']);
+      var base = await checkout(sha);
+      age(base.path, const Duration(days: 30));
+      await holdLock('${base.path}.lock');
+
+      expect(await BaseCheckout.sweep(repoRoot: repo, cacheRoot: cache), 0);
+      expect(Directory(base.path).existsSync(), isTrue);
     });
 
     test('keeps one inside the window', () async {
