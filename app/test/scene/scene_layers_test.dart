@@ -139,6 +139,20 @@ void main() {
       expect(parsed.refusals.single.message, contains('one stop per colour'));
     });
 
+    test(
+      'refuses a spread among a gradient’s colours, rather than drop it',
+      () {
+        var parsed = parseSceneFile(
+          _scene(
+            '[FillLayer(paint: LinearPaint(colors: '
+            '[SceneColor(0xFFFF0000), ...others]))]',
+          ),
+        );
+        expect(parsed.refusals.single.construct, 'paint');
+        expect(parsed.refusals.single.message, contains('one by one'));
+      },
+    );
+
     test('a radial gradient round-trips, and writes no default', () {
       var layers = <TextLayer>[
         const FillLayer(

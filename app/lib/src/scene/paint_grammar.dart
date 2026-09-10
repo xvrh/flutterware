@@ -313,7 +313,15 @@ ScenePaint? _readPaint(Expression e, Refuse refuse) {
   }
   var colors = <SceneColor>[];
   for (var c in colorList.elements) {
-    if (c is! Expression) continue;
+    if (c is! Expression) {
+      refuse(
+        c.offset,
+        'paint',
+        'a gradient lists its colours one by one as SceneColor(0x…) '
+            'literals',
+      );
+      return null;
+    }
     var color = _readColor(c, refuse);
     if (color == null) return null;
     colors.add(color);
@@ -339,8 +347,8 @@ ScenePaint? _readPaint(Expression e, Refuse refuse) {
       refuse(
         s.offset,
         'paint',
-        'a gradient has one stop per colour, each a number from 0 to 1 — '
-            'or no stops, which spreads the colours evenly',
+        'a gradient has one stop per colour — or no stops, which spreads '
+            'the colours evenly',
       );
       return null;
     }
