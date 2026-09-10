@@ -79,6 +79,15 @@ class LintsCore extends PluginCore {
   String? get countError => _countError;
   bool get isCounting => _counting;
 
+  /// Whether a scan is running *now*.
+  ///
+  /// Not "has never scanned", which is what a capture used to be told. Nothing
+  /// scans until a panel mounts or an action asks, so a window showing some
+  /// other plugin left this one claiming to be busy for as long as it was
+  /// open — and `fw capture` believed it and waited for its whole timeout,
+  /// every time, in every project that declares lints.
+  bool get isScanning => _pending != null;
+
   /// True when the persisted counts were computed for a different candidate
   /// set than today's — still worth showing, worth re-running.
   bool get countsAreStale {

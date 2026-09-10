@@ -9,6 +9,7 @@ import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/lints/model/issue_counts.dart';
 import 'package:flutterware_app/src/lints/model/rule_catalog.dart';
 import 'package:flutterware_app/src/plugins/native/lints_core.dart';
+import 'package:flutterware_app/src/plugins/native/lints_plugin.dart';
 import 'package:flutterware_app/src/plugins/native/lints_results.dart';
 import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
@@ -91,6 +92,28 @@ void main() {
     var lints = core();
     expect(lints.report.status, Status.none);
     expect(lints.classification, isNull);
+  });
+
+  /// And a window that never opens the panel is not waiting for it.
+  ///
+  /// `busyWith` used to read "have I classified anything yet", which is false
+  /// from launch until a panel mounts — so this plugin told every capture the
+  /// window was still working, forever. `fw capture` believed it: every
+  /// screenshot of this repository sat out its whole timeout and came back
+  /// `settled: false`, and the wait was long enough to hide a real bug in
+  /// another panel.
+  test('nothing scanning is not busy', () async {
+    write('analysis_options.yaml', 'linter:\n  rules:\n    on_rule: true\n');
+    var lints = core(catalogCache: seedCatalog([rule('on_rule')]));
+    var plugin = LintsPlugin(lints);
+    expect(plugin.busyWith, isNull, reason: 'nobody has asked for a scan');
+
+    var scanning = lints.reload();
+    expect(plugin.busyWith, 'scanning lint options');
+
+    await scanning;
+    expect(plugin.busyWith, isNull);
+    expect(lints.classification, isNotNull);
   });
 
   test('status classifies against the cached catalog, offline', () async {

@@ -81,6 +81,25 @@ class EmbeddedEngine extends ChangeNotifier {
   int textureWidth = 0;
   int textureHeight = 0;
 
+  /// Whether the guest has delivered a frame for the surfaces the texture
+  /// holds *now*.
+  ///
+  /// A texture exists from the moment the ring is mapped, which is well before
+  /// anything has been drawn into it — and an unpainted ring is black. So this
+  /// is the question anything photographing the panel has to ask, and
+  /// `EmbeddedEnginePhase.running` is not it: that says the plumbing is up.
+  ///
+  /// Per generation rather than ever, because a resize allocates a new ring and
+  /// the old frame does not come with it. It goes false the moment the guest
+  /// announces the new surfaces and true again on the first frame composited
+  /// against them.
+  bool get hasPainted => _paintedGeneration == _currentGeneration;
+
+  /// The generation of the last frame the guest announced. Starts apart from
+  /// [_currentGeneration] so that "nothing has painted" is the initial state
+  /// rather than a coincidence of two -1s.
+  int _paintedGeneration = -2;
+
   ServerSocket? _server;
   Socket? _conn;
   Process? _guest;
@@ -222,6 +241,14 @@ class EmbeddedEngine extends ChangeNotifier {
     }
   }
 
+  /// One message from the guest, as the socket would have delivered it.
+  ///
+  /// The seam a test drives [hasPainted] through: the states that matter — a
+  /// ring mapped but never drawn into, a resize that drops the picture — are
+  /// two protocol messages apart and need neither a guest process nor a GPU.
+  @visibleForTesting
+  Future<void> handleMessage(EmbedderMessage message) => _handle(message);
+
   Future<void> _handle(EmbedderMessage message) async {
     switch (message) {
       case ReadyMessage():
@@ -236,6 +263,13 @@ class EmbeddedEngine extends ChangeNotifier {
             'textureId': textureId,
             'ringIndex': message.ringIndex,
           });
+          // Only the first frame of a generation is news — the rest are the
+          // guest animating, and notifying on each of those would rebuild
+          // every listener at the guest's frame rate.
+          if (!hasPainted) {
+            _paintedGeneration = message.generation;
+            if (!_disposed) notifyListeners();
+          }
         }
       case ErrorMessage():
         // Before failing the engine: a guest that has errored will not finish
