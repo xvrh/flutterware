@@ -343,12 +343,64 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
 
   final _inFlight = <String>{};
 
+  /// How often a view somebody listens to looks at its shaders' files.
+  static const recheckInterval = Duration(seconds: 1);
+
+  /// The inspector reads [info] when it builds, and nothing rebuilt it when a
+  /// `.frag` was saved: an edit, a break or its fix stayed off the panel
+  /// until something else redrew it. So while anybody listens, the files each
+  /// answer covered are statted once a second, and a move is announced — the
+  /// build that follows asks [info], which starts the compile and says so.
+  Timer? _recheck;
+
+  @override
+  void addListener(VoidCallback listener) {
+    super.addListener(listener);
+    _recheck ??= Timer.periodic(recheckInterval, (_) => _recheckFiles());
+  }
+
+  @override
+  void removeListener(VoidCallback listener) {
+    super.removeListener(listener);
+    if (!hasListeners) {
+      _recheck?.cancel();
+      _recheck = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _recheck?.cancel();
+    super.dispose();
+  }
+
+  void _recheckFiles() {
+    var moved = false;
+    for (var key in _infos.keys.toList()) {
+      if (_inFlight.any((token) => token.startsWith('$key@'))) continue;
+      var watched = _watched[key];
+      // An answer with nothing watched was about a file that was not there:
+      // it has moved once the file is back.
+      if (watched == null
+          ? File(p.join(packageRoot, key)).existsSync()
+          : !_unchanged(watched)) {
+        info(key);
+        moved = true;
+      }
+    }
+    if (moved) notifyListeners();
+  }
+
   @override
   SceneShaderInfo? info(String key) {
     var source = p.join(packageRoot, key);
     if (!File(source).existsSync()) {
       _watched.remove(key);
-      return SceneShaderInfo(key: key, error: "'$key' is not on disk");
+      _hashes.remove(key);
+      return _infos[key] = SceneShaderInfo(
+        key: key,
+        error: "'$key' is not on disk",
+      );
     }
 
     if (_hashes.containsKey(key) && _unchanged(_watched[key])) {

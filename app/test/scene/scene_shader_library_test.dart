@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/previews/project_shaders.dart';
@@ -212,6 +213,78 @@ flutter:
       shaders.info('shaders/a.frag');
       shaders.info('shaders/a.frag');
       expect(calls, 1);
+    });
+
+    group('while somebody listens, a saved file is noticed', () {
+      // The inspector reads info() when it builds, and nothing else rebuilds
+      // it when a .frag is saved beside it.
+      late int calls;
+      late SceneShaders shaders;
+      var heard = 0;
+      void listener() => heard++;
+
+      void open(FakeAsync async) {
+        var reflectionFile = write('cache/reflection.json', reflection);
+        calls = 0;
+        heard = 0;
+        var library = SceneShaderLibrary(
+          cache: null,
+          compile: (_) async {
+            calls++;
+            return CompiledShader(
+              binary: reflectionFile,
+              reflection: reflectionFile,
+            );
+          },
+        );
+        shaders = library.forPackage(root.path);
+        shaders.info('shaders/a.frag');
+        async.flushMicrotasks();
+      }
+
+      test('within a second, recompiled, and not once nobody listens', () {
+        fakeAsync((async) {
+          open(async);
+          shaders.addListener(listener);
+          async.elapse(const Duration(seconds: 2));
+          expect(heard, 0, reason: 'nothing moved');
+
+          bump(write('shaders/a.frag', '$source\n// edited\n'));
+          async.elapse(const Duration(seconds: 1));
+          expect(heard, 2, reason: 'the move, then the compile landing');
+          expect(calls, 2);
+          expect(shaders.info('shaders/a.frag'), isNotNull);
+
+          shaders.removeListener(listener);
+          bump(write('shaders/a.frag', '$source\n// again\n'));
+          async.elapse(const Duration(seconds: 3));
+          expect(calls, 2, reason: 'nobody is looking');
+        });
+      });
+
+      test('a file that went missing, and came back', () {
+        fakeAsync((async) {
+          open(async);
+          shaders.addListener(listener);
+          var path = p.join(root.path, 'shaders', 'a.frag');
+          File(path).deleteSync();
+          async.elapse(const Duration(seconds: 1));
+          expect(heard, 1);
+          expect(
+            shaders.info('shaders/a.frag')!.error,
+            contains('not on disk'),
+          );
+
+          async.elapse(const Duration(seconds: 2));
+          expect(heard, 1, reason: 'still missing is not news');
+
+          write('shaders/a.frag', source);
+          async.elapse(const Duration(seconds: 1));
+          expect(shaders.info('shaders/a.frag')!.error, isNull);
+          expect(shaders.info('shaders/a.frag')!.uniforms, hasLength(4));
+          shaders.removeListener(listener);
+        });
+      });
     });
 
     test('a changed hash starts a fresh compile', () async {
