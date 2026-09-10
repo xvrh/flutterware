@@ -32,6 +32,13 @@ class CompiledShader {
 
 final _include = RegExp(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]', multiLine: true);
 
+/// How many times [projectShaderHashWithFiles] has actually hashed a
+/// shader's content — every call, hit or miss. The function has no other
+/// externally visible effect on a hit, so this is a test's seam for "did
+/// this re-hash".
+@visibleForTesting
+var projectShaderHashCallsForTesting = 0;
+
 /// sha1 over the source and every local `#include`, recursively.
 ///
 /// An include is looked for where the compiler looks: beside the file that
@@ -45,7 +52,15 @@ final _include = RegExp(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]', multiLine: true);
 /// (`<flutter/runtime_effect.glsl>`), which changes only with the engine —
 /// and the engine revision is already in the directory this key is used
 /// under.
-String projectShaderHash(String source) {
+String projectShaderHash(String source) =>
+    projectShaderHashWithFiles(source).hash;
+
+/// Like [projectShaderHash], but also returns every file whose bytes fed
+/// it — [source] and each local `#include`, normalized and absolute — so a
+/// caller can watch those exact files for a change instead of re-hashing on
+/// every call.
+({String hash, List<String> files}) projectShaderHashWithFiles(String source) {
+  projectShaderHashCallsForTesting++;
   var input = BytesBuilder(copy: false);
   var seen = <String>{};
   var base = p.dirname(p.normalize(p.absolute(source)));
@@ -72,7 +87,10 @@ String projectShaderHash(String source) {
   }
 
   visit(source);
-  return sha1.convert(input.takeBytes()).toString();
+  return (
+    hash: sha1.convert(input.takeBytes()).toString(),
+    files: seen.toList(),
+  );
 }
 
 /// `impellerc` refused a project shader; [message] is what it said.

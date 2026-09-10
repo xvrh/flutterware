@@ -37,6 +37,14 @@ void main() {
     return file.path;
   }
 
+  // Same-second writes can look untouched to a filesystem with one-second
+  // mtime resolution (see the `declared` test below) — this is `info`'s
+  // cheap check relying on exactly that mtime, so a test proving a change
+  // is noticed has to force it forward the same way.
+  void bump(String path) =>
+      File(path)
+          .setLastModifiedSync(DateTime.now().add(const Duration(seconds: 2)));
+
   group('readShaderUniforms', () {
     test('uniforms come in declaration order, with what the comments add', () {
       var u = readShaderUniforms(reflection, source);
@@ -222,7 +230,60 @@ flutter:
       var shaders = library.forPackage(root.path);
       shaders.info('shaders/a.frag');
       await pumpEventQueue();
-      write('shaders/a.frag', '$source\n// touched\n');
+      bump(write('shaders/a.frag', '$source\n// touched\n'));
+      expect(shaders.info('shaders/a.frag'), isNull);
+      await pumpEventQueue();
+      expect(calls, 2);
+      expect(shaders.info('shaders/a.frag'), isNotNull);
+    });
+
+    test(
+      'repeated info() calls on an unchanged source do not re-hash',
+      () async {
+        var reflectionFile = write('cache/reflection.json', reflection);
+        var library = SceneShaderLibrary(
+          cache: null,
+          compile: (_) async => CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          ),
+        );
+        var shaders = library.forPackage(root.path);
+        shaders.info('shaders/a.frag');
+        await pumpEventQueue();
+
+        // The cheap seam: projectShaderHashWithFiles is the only place that
+        // reads and hashes the source and its includes, so a call count that
+        // does not move across three more reads is "did not re-hash".
+        var afterLanding = projectShaderHashCallsForTesting;
+        shaders.info('shaders/a.frag');
+        shaders.info('shaders/a.frag');
+        shaders.info('shaders/a.frag');
+        expect(projectShaderHashCallsForTesting, afterLanding);
+      },
+    );
+
+    test('editing only an include starts a recompile', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      write('shaders/a.frag', '#include "lib/inc.glsl"\n$source');
+      write('shaders/lib/inc.glsl', 'float k = 1.0;\n');
+      var calls = 0;
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) async {
+          calls++;
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      shaders.info('shaders/a.frag');
+      await pumpEventQueue();
+      expect(calls, 1);
+
+      bump(write('shaders/lib/inc.glsl', 'float k = 2.0;\n'));
       expect(shaders.info('shaders/a.frag'), isNull);
       await pumpEventQueue();
       expect(calls, 2);

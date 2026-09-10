@@ -143,25 +143,35 @@ Map<String, _Annotation> _readAnnotations(String source) {
 List<SceneShaderUniform> readShaderUniforms(
   String reflectionJson,
   String source,
-) {
-  List<({String name, int size, int location})> entries;
+) => _uniformsFromReflection(_decodeReflection(reflectionJson), source);
+
+/// [reflectionJson] decoded once, or null for anything that does not parse —
+/// the seam [readShaderUniforms] and [_sampledImageNames] share so a caller
+/// holding both a shader's uniforms and its samplers pays for one decode,
+/// not two.
+Object? _decodeReflection(String reflectionJson) {
   try {
-    var decoded = jsonDecode(reflectionJson);
-    var raw = decoded is Map ? decoded['uniforms'] : null;
-    if (raw is! List) return const [];
-    entries = [
-      for (var item in raw)
-        if (item is Map && _isFloatVector(item))
-          (
-            name: item['name'] as String,
-            size: (item['type'] as Map)['vec_size'] as int,
-            location: item['location'] as int,
-          ),
-    ];
+    return jsonDecode(reflectionJson);
   } on FormatException {
-    return const [];
+    return null;
   }
-  entries.sort((a, b) => a.location.compareTo(b.location));
+}
+
+List<SceneShaderUniform> _uniformsFromReflection(
+  Object? decoded,
+  String source,
+) {
+  var raw = decoded is Map ? decoded['uniforms'] : null;
+  if (raw is! List) return const [];
+  var entries = [
+    for (var item in raw)
+      if (item is Map && _isFloatVector(item))
+        (
+          name: item['name'] as String,
+          size: (item['type'] as Map)['vec_size'] as int,
+          location: item['location'] as int,
+        ),
+  ]..sort((a, b) => a.location.compareTo(b.location));
 
   var annotations = _readAnnotations(source);
   return [
@@ -190,18 +200,13 @@ bool _isFloatVector(Map item) {
   return vecSize is int && vecSize >= 1 && vecSize <= 4;
 }
 
-List<String> _sampledImageNames(String reflectionJson) {
-  try {
-    var decoded = jsonDecode(reflectionJson);
-    var raw = decoded is Map ? decoded['sampled_images'] : null;
-    if (raw is! List) return const [];
-    return [
-      for (var item in raw)
-        if (item is Map && item['name'] is String) item['name'] as String,
-    ];
-  } on FormatException {
-    return const [];
-  }
+List<String> _sampledImageNames(Object? decoded) {
+  var raw = decoded is Map ? decoded['sampled_images'] : null;
+  if (raw is! List) return const [];
+  return [
+    for (var item in raw)
+      if (item is Map && item['name'] is String) item['name'] as String,
+  ];
 }
 
 /// The package's own `flutter: shaders:` entries, in the order the pubspec
@@ -314,19 +319,36 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
 
   final _infos = <String, SceneShaderInfo>{};
   final _hashes = <String, String>{};
+
+  /// The files (source plus every local `#include`) and mtimes the hash in
+  /// [_hashes] covered, as of the last time it was computed — [info]'s cheap
+  /// check before it pays for another [projectShaderHashWithFiles].
+  final _watched = <String, Map<String, DateTime>>{};
+
   final _inFlight = <String>{};
 
   @override
   SceneShaderInfo? info(String key) {
     var source = p.join(packageRoot, key);
     if (!File(source).existsSync()) {
+      _watched.remove(key);
       return SceneShaderInfo(key: key, error: "'$key' is not on disk");
     }
-    var hash = projectShaderHash(source);
-    if (_hashes[key] == hash) return _infos[key];
+
+    if (_hashes.containsKey(key) && _unchanged(_watched[key])) {
+      return _infos[key];
+    }
+
+    var (:hash, :files) = projectShaderHashWithFiles(source);
+    if (_hashes[key] == hash) {
+      _watched[key] = _stat(files);
+      return _infos[key];
+    }
 
     var token = '$key@$hash';
-    if (_inFlight.add(token)) unawaited(_load(key, source, hash, token));
+    if (_inFlight.add(token)) {
+      unawaited(_load(key, source, hash, files, token));
+    }
     return null;
   }
 
@@ -334,17 +356,19 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
     String key,
     String source,
     String hash,
+    List<String> files,
     String token,
   ) async {
     SceneShaderInfo info;
     try {
       var compiled = await _library._runCompile(source);
       var reflectionText = File(compiled.reflection).readAsStringSync();
-      var uniforms = readShaderUniforms(
-        reflectionText,
+      var decoded = _decodeReflection(reflectionText);
+      var uniforms = _uniformsFromReflection(
+        decoded,
         File(source).readAsStringSync(),
       );
-      var samplers = _sampledImageNames(reflectionText);
+      var samplers = _sampledImageNames(decoded);
       info = SceneShaderInfo(
         key: key,
         uniforms: uniforms,
@@ -358,9 +382,27 @@ class _PackageShaders extends ChangeNotifier implements SceneShaders {
     }
     _infos[key] = info;
     _hashes[key] = hash;
+    _watched[key] = _stat(files);
     _inFlight.remove(token);
     notifyListeners();
   }
+}
+
+Map<String, DateTime> _stat(List<String> files) => {
+  for (var file in files) file: File(file).statSync().modified,
+};
+
+/// Whether every file [watched] covers still stats to the mtime it did when
+/// it was last hashed — a vanished file (deleted, or a stat error) counts as
+/// changed.
+bool _unchanged(Map<String, DateTime>? watched) {
+  if (watched == null) return false;
+  for (var MapEntry(key: file, value: modified) in watched.entries) {
+    var stat = File(file).statSync();
+    if (stat.type == FileSystemEntityType.notFound) return false;
+    if (stat.modified != modified) return false;
+  }
+  return true;
 }
 
 /// [error]'s message, trimmed to a few lines and with any scratch path a
