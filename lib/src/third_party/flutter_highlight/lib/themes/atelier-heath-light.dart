@@ -28,8 +28,10 @@ const atelierHeathLightTheme = {
   'section': TextStyle(color: Color(0xff516aec)),
   'keyword': TextStyle(color: Color(0xff7b59c0)),
   'selector-tag': TextStyle(color: Color(0xff7b59c0)),
-  'root':
-      TextStyle(backgroundColor: Color(0xfff7f3f7), color: Color(0xff695d69)),
+  'root': TextStyle(
+    backgroundColor: Color(0xfff7f3f7),
+    color: Color(0xff695d69),
+  ),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),
   'strong': TextStyle(fontWeight: FontWeight.bold),
 };

@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const agateTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xff333333), color: Color(0xffffffff)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff333333),
+    color: Color(0xffffffff),
+  ),
   'name': TextStyle(fontWeight: FontWeight.bold),
   'strong': TextStyle(fontWeight: FontWeight.bold),
   'code': TextStyle(fontStyle: FontStyle.italic, color: Color(0xff888888)),
@@ -29,11 +31,15 @@ const agateTheme = {
   'selector-tag': TextStyle(color: Color(0xfffcc28c)),
   'literal': TextStyle(color: Color(0xfffcc28c)),
   'comment': TextStyle(color: Color(0xff888888)),
-  'deletion':
-      TextStyle(color: Color(0xff333333), backgroundColor: Color(0xfffc9b9b)),
+  'deletion': TextStyle(
+    color: Color(0xff333333),
+    backgroundColor: Color(0xfffc9b9b),
+  ),
   'regexp': TextStyle(color: Color(0xffc6b4f0)),
   'link': TextStyle(color: Color(0xffc6b4f0)),
   'meta': TextStyle(color: Color(0xfffc9b9b)),
-  'addition':
-      TextStyle(backgroundColor: Color(0xffa2fca2), color: Color(0xff333333)),
+  'addition': TextStyle(
+    backgroundColor: Color(0xffa2fca2),
+    color: Color(0xff333333),
+  ),
 };

@@ -28,8 +28,10 @@ const atelierSulphurpoolLightTheme = {
   'section': TextStyle(color: Color(0xff3d8fd1)),
   'keyword': TextStyle(color: Color(0xff6679cc)),
   'selector-tag': TextStyle(color: Color(0xff6679cc)),
-  'root':
-      TextStyle(backgroundColor: Color(0xfff5f7ff), color: Color(0xff5e6687)),
+  'root': TextStyle(
+    backgroundColor: Color(0xfff5f7ff),
+    color: Color(0xff5e6687),
+  ),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),
   'strong': TextStyle(fontWeight: FontWeight.bold),
 };

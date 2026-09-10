@@ -171,44 +171,74 @@ class _FramePainter extends CustomPainter {
     final paint_8_fill = Paint()..style = PaintingStyle.fill;
     paint_8_fill.color = const Color(0xff36454C);
     canvas.drawRect(
-        Rect.fromLTWH(size.width * 0.7825063, 0, size.width * 0.01418442,
-            size.height * 0.005826708),
-        paint_8_fill);
+      Rect.fromLTWH(
+        size.width * 0.7825063,
+        0,
+        size.width * 0.01418442,
+        size.height * 0.005826708,
+      ),
+      paint_8_fill,
+    );
 
     final paint_9_fill = Paint()..style = PaintingStyle.fill;
     paint_9_fill.color = const Color(0xff36454C);
     canvas.drawRect(
-        Rect.fromLTWH(size.width * 0.9810871, size.height * 0.1002196,
-            size.width * 0.01182027, size.height * 0.006992095),
-        paint_9_fill);
+      Rect.fromLTWH(
+        size.width * 0.9810871,
+        size.height * 0.1002196,
+        size.width * 0.01182027,
+        size.height * 0.006992095,
+      ),
+      paint_9_fill,
+    );
 
     final paint_10_fill = Paint()..style = PaintingStyle.fill;
     paint_10_fill.color = const Color(0xff36454C);
     canvas.drawRect(
-        Rect.fromLTWH(size.width * 0.007092108, size.height * 0.1002196,
-            size.width * 0.01182027, size.height * 0.006992095),
-        paint_10_fill);
+      Rect.fromLTWH(
+        size.width * 0.007092108,
+        size.height * 0.1002196,
+        size.width * 0.01182027,
+        size.height * 0.006992095,
+      ),
+      paint_10_fill,
+    );
 
     final paint_11_fill = Paint()..style = PaintingStyle.fill;
     paint_11_fill.color = const Color(0xff36454C);
     canvas.drawRect(
-        Rect.fromLTWH(size.width * 0.007092108, size.height * 0.8926539,
-            size.width * 0.01182027, size.height * 0.006992095),
-        paint_11_fill);
+      Rect.fromLTWH(
+        size.width * 0.007092108,
+        size.height * 0.8926539,
+        size.width * 0.01182027,
+        size.height * 0.006992095,
+      ),
+      paint_11_fill,
+    );
 
     final paint_12_fill = Paint()..style = PaintingStyle.fill;
     paint_12_fill.color = const Color(0xff36454C);
     canvas.drawRect(
-        Rect.fromLTWH(size.width * 0.9810871, size.height * 0.8926539,
-            size.width * 0.01182027, size.height * 0.006992095),
-        paint_12_fill);
+      Rect.fromLTWH(
+        size.width * 0.9810871,
+        size.height * 0.8926539,
+        size.width * 0.01182027,
+        size.height * 0.006992095,
+      ),
+      paint_12_fill,
+    );
 
     final paint_13_fill = Paint()..style = PaintingStyle.fill;
     paint_13_fill.color = const Color(0xff36454C);
     canvas.drawRect(
-        Rect.fromLTWH(size.width * 0.2033093, size.height * 0.9940429,
-            size.width * 0.01418442, size.height * 0.005826708),
-        paint_13_fill);
+      Rect.fromLTWH(
+        size.width * 0.2033093,
+        size.height * 0.9940429,
+        size.width * 0.01418442,
+        size.height * 0.005826708,
+      ),
+      paint_13_fill,
+    );
 
     final path_14 = Path();
     path_14.moveTo(328.511, 77.0213);

@@ -3,11 +3,15 @@
 import 'package:flutter/painting.dart';
 
 const schoolBookTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xfff6f6ae), color: Color(0xff3e5915)),
+  'root': TextStyle(
+    backgroundColor: Color(0xfff6f6ae),
+    color: Color(0xff3e5915),
+  ),
   'keyword': TextStyle(color: Color(0xff005599), fontWeight: FontWeight.bold),
-  'selector-tag':
-      TextStyle(color: Color(0xff005599), fontWeight: FontWeight.bold),
+  'selector-tag': TextStyle(
+    color: Color(0xff005599),
+    fontWeight: FontWeight.bold,
+  ),
   'literal': TextStyle(color: Color(0xff005599), fontWeight: FontWeight.bold),
   'subst': TextStyle(color: Color(0xff3e5915)),
   'string': TextStyle(color: Color(0xff2c009f)),

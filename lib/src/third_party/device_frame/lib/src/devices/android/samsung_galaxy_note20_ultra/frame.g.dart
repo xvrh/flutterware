@@ -47,9 +47,14 @@ class _FramePainter extends CustomPainter {
     final paint_2_fill = Paint()..style = PaintingStyle.fill;
     paint_2_fill.color = const Color(0xff262C2D);
     canvas.drawRect(
-        Rect.fromLTWH(size.width * 0.3541149, 0, size.width * 0.01246883,
-            size.height * 0.006992415),
-        paint_2_fill);
+      Rect.fromLTWH(
+        size.width * 0.3541149,
+        0,
+        size.width * 0.01246883,
+        size.height * 0.006992415,
+      ),
+      paint_2_fill,
+    );
 
     final path_3 = Path();
     path_3.moveTo(795.007, 643.197);

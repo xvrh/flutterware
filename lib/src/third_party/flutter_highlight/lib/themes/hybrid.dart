@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const hybridTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xff1d1f21), color: Color(0xffc5c8c6)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff1d1f21),
+    color: Color(0xffc5c8c6),
+  ),
   '.hljs::selection': TextStyle(backgroundColor: Color(0xff373b41)),
   '.hljs::-moz-selection': TextStyle(backgroundColor: Color(0xff373b41)),
   'title': TextStyle(color: Color(0xfff0c674)),

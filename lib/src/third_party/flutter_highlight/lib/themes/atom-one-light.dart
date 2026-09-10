@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const atomOneLightTheme = {
-  'root':
-      TextStyle(color: Color(0xff383a42), backgroundColor: Color(0xfffafafa)),
+  'root': TextStyle(
+    color: Color(0xff383a42),
+    backgroundColor: Color(0xfffafafa),
+  ),
   'comment': TextStyle(color: Color(0xffa0a1a7), fontStyle: FontStyle.italic),
   'quote': TextStyle(color: Color(0xffa0a1a7), fontStyle: FontStyle.italic),
   'doctag': TextStyle(color: Color(0xffa626a4)),

@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const qtcreatorLightTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xffffffff), color: Color(0xff000000)),
+  'root': TextStyle(
+    backgroundColor: Color(0xffffffff),
+    color: Color(0xff000000),
+  ),
   'subst': TextStyle(color: Color(0xff000000)),
   'tag': TextStyle(color: Color(0xff000000)),
   'title': TextStyle(color: Color(0xff000000)),

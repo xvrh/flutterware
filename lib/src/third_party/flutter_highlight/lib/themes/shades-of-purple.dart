@@ -4,16 +4,19 @@ import 'package:flutter/painting.dart';
 
 const shadesOfPurpleTheme = {
   'root': TextStyle(
-      backgroundColor: Color(0xff2d2b57),
-      fontWeight: FontWeight.normal,
-      color: Color(0xffe3dfff)),
+    backgroundColor: Color(0xff2d2b57),
+    fontWeight: FontWeight.normal,
+    color: Color(0xffe3dfff),
+  ),
   'title': TextStyle(color: Color(0xfffad000), fontWeight: FontWeight.normal),
   'name': TextStyle(color: Color(0xffa1feff), fontWeight: FontWeight.normal),
   'tag': TextStyle(color: Color(0xffffffff)),
   'attr': TextStyle(color: Color(0xfff8d000), fontStyle: FontStyle.italic),
   'built_in': TextStyle(color: Color(0xfffb9e00)),
-  'selector-tag':
-      TextStyle(color: Color(0xfffb9e00), fontWeight: FontWeight.normal),
+  'selector-tag': TextStyle(
+    color: Color(0xfffb9e00),
+    fontWeight: FontWeight.normal,
+  ),
   'section': TextStyle(color: Color(0xfffb9e00)),
   'keyword': TextStyle(color: Color(0xfffb9e00), fontWeight: FontWeight.normal),
   'subst': TextStyle(color: Color(0xffe3dfff)),

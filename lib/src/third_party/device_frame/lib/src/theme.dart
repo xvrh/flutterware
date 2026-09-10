@@ -11,14 +11,8 @@ const _freezed = Object();
 /// The only customizable visuals are the keyboard style.
 class DeviceFrameTheme extends InheritedWidget {
   /// Give a [style] to all descentant in [child] device frames.
-  const DeviceFrameTheme({
-    Key? key,
-    required this.style,
-    required Widget child,
-  }) : super(
-          key: key,
-          child: child,
-        );
+  const DeviceFrameTheme({Key? key, required this.style, required Widget child})
+    : super(key: key, child: child);
 
   /// The style of the device frame.
   final DeviceFrameStyle style;
@@ -26,8 +20,8 @@ class DeviceFrameTheme extends InheritedWidget {
   /// The data from the closest instance of this class that encloses the given
   /// [context].
   static DeviceFrameStyle of(BuildContext context) {
-    final widget =
-        context.dependOnInheritedWidgetOfExactType<DeviceFrameTheme>();
+    final widget = context
+        .dependOnInheritedWidgetOfExactType<DeviceFrameTheme>();
 
     return widget?.style ?? DeviceFrameStyle.dark();
   }
@@ -45,9 +39,8 @@ class DeviceFrameTheme extends InheritedWidget {
 /// * [DeviceKeyboardStyle] to customize the virtual on screen keyboard.
 abstract class DeviceFrameStyle with _$DeviceFrameStyle {
   /// Create a [DeviceFrameStyle] with the given [keyboardStyle].
-  const factory DeviceFrameStyle({
-    required DeviceKeyboardStyle keyboardStyle,
-  }) = _DeviceFrameStyle;
+  const factory DeviceFrameStyle({required DeviceKeyboardStyle keyboardStyle}) =
+      _DeviceFrameStyle;
 
   /// A default dark theme.
   factory DeviceFrameStyle.dark({DeviceKeyboardStyle? keyboardStyle}) =>
@@ -69,10 +62,10 @@ abstract class DeviceKeyboardStyle with _$DeviceKeyboardStyle {
 
   /// A default dark theme for the virtual keyboard.
   factory DeviceKeyboardStyle.dark() => const DeviceKeyboardStyle(
-        backgroundColor: Color(0xDD2B2B2D),
-        button1BackgroundColor: Color(0xFF6D6D6E),
-        button1ForegroundColor: Colors.white,
-        button2BackgroundColor: Color(0xFF4A4A4B),
-        button2ForegroundColor: Colors.white,
-      );
+    backgroundColor: Color(0xDD2B2B2D),
+    button1BackgroundColor: Color(0xFF6D6D6E),
+    button1ForegroundColor: Colors.white,
+    button2BackgroundColor: Color(0xFF4A4A4B),
+    button2ForegroundColor: Colors.white,
+  );
 }

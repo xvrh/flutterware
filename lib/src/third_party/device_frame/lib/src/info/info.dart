@@ -2,6 +2,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+
 import '../devices/generic/desktop_monitor/device.dart';
 import '../devices/generic/laptop/device.dart';
 import '../devices/generic/phone/device.dart';
@@ -53,17 +54,16 @@ abstract class DeviceInfo with _$DeviceInfo {
     EdgeInsets rotatedSafeAreas = EdgeInsets.zero,
     double pixelRatio = 2.0,
     GenericTabletFramePainter framePainter = const GenericTabletFramePainter(),
-  }) =>
-      buildGenericTabletDevice(
-        platform: platform,
-        id: id,
-        name: name,
-        screenSize: screenSize,
-        safeAreas: safeAreas,
-        rotatedSafeAreas: rotatedSafeAreas,
-        pixelRatio: pixelRatio,
-        framePainter: framePainter,
-      );
+  }) => buildGenericTabletDevice(
+    platform: platform,
+    id: id,
+    name: name,
+    screenSize: screenSize,
+    safeAreas: safeAreas,
+    rotatedSafeAreas: rotatedSafeAreas,
+    pixelRatio: pixelRatio,
+    framePainter: framePainter,
+  );
 
   factory DeviceInfo.genericPhone({
     required TargetPlatform platform,
@@ -74,17 +74,16 @@ abstract class DeviceInfo with _$DeviceInfo {
     EdgeInsets rotatedSafeAreas = EdgeInsets.zero,
     double pixelRatio = 2.0,
     GenericPhoneFramePainter framePainter = const GenericPhoneFramePainter(),
-  }) =>
-      buildGenericPhoneDevice(
-        platform: platform,
-        id: id,
-        name: name,
-        screenSize: screenSize,
-        safeAreas: safeAreas,
-        rotatedSafeAreas: rotatedSafeAreas,
-        pixelRatio: pixelRatio,
-        framePainter: framePainter,
-      );
+  }) => buildGenericPhoneDevice(
+    platform: platform,
+    id: id,
+    name: name,
+    screenSize: screenSize,
+    safeAreas: safeAreas,
+    rotatedSafeAreas: rotatedSafeAreas,
+    pixelRatio: pixelRatio,
+    framePainter: framePainter,
+  );
 
   factory DeviceInfo.genericDesktopMonitor({
     required TargetPlatform platform,
@@ -95,17 +94,16 @@ abstract class DeviceInfo with _$DeviceInfo {
     EdgeInsets safeAreas = EdgeInsets.zero,
     double pixelRatio = 2.0,
     GenericDesktopMonitorFramePainter? framePainter,
-  }) =>
-      buildGenericDesktopMonitorDevice(
-        platform: platform,
-        id: id,
-        name: name,
-        screenSize: screenSize,
-        windowPosition: windowPosition,
-        safeAreas: safeAreas,
-        pixelRatio: pixelRatio,
-        framePainter: framePainter,
-      );
+  }) => buildGenericDesktopMonitorDevice(
+    platform: platform,
+    id: id,
+    name: name,
+    screenSize: screenSize,
+    windowPosition: windowPosition,
+    safeAreas: safeAreas,
+    pixelRatio: pixelRatio,
+    framePainter: framePainter,
+  );
 
   factory DeviceInfo.genericLaptop({
     required TargetPlatform platform,
@@ -116,17 +114,16 @@ abstract class DeviceInfo with _$DeviceInfo {
     EdgeInsets safeAreas = EdgeInsets.zero,
     double pixelRatio = 2.0,
     GenericLaptopFramePainter? framePainter,
-  }) =>
-      buildGenericLaptopDevice(
-        platform: platform,
-        id: id,
-        name: name,
-        screenSize: screenSize,
-        windowPosition: windowPosition,
-        safeAreas: safeAreas,
-        pixelRatio: pixelRatio,
-        framePainter: framePainter,
-      );
+  }) => buildGenericLaptopDevice(
+    platform: platform,
+    id: id,
+    name: name,
+    screenSize: screenSize,
+    windowPosition: windowPosition,
+    safeAreas: safeAreas,
+    pixelRatio: pixelRatio,
+    framePainter: framePainter,
+  );
 }
 
 extension DeviceInfoExtension on DeviceInfo {

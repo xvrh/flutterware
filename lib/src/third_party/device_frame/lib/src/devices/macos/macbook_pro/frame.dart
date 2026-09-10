@@ -5,9 +5,7 @@ part of 'device.dart';
 // Generated manually with https://fluttershapemaker.com/
 // Then modified to add custom screen logic.
 class _FramePainter extends CustomPainter {
-  const _FramePainter({
-    required this.windowSize,
-  });
+  const _FramePainter({required this.windowSize});
 
   final Size windowSize;
   @override
@@ -87,9 +85,14 @@ class _FramePainter extends CustomPainter {
     final paint_3_fill = Paint()..style = PaintingStyle.fill;
     paint_3_fill.color = const Color(0xff262C2D);
     canvas.drawRect(
-        Rect.fromLTWH(size.width * 0.09892883, size.height * 0.9129316,
-            size.width * 0.8018710, size.height * 0.02586170),
-        paint_3_fill);
+      Rect.fromLTWH(
+        size.width * 0.09892883,
+        size.height * 0.9129316,
+        size.width * 0.8018710,
+        size.height * 0.02586170,
+      ),
+      paint_3_fill,
+    );
 
     final path_4 = Path();
     path_4.moveTo(1496.09, 69.956);
@@ -139,26 +142,20 @@ class _FramePainter extends CustomPainter {
 
     final paint_7_fill = Paint()..style = PaintingStyle.fill;
     paint_7_fill.shader = ui.Gradient.linear(
-        Offset(size.width * -8.601804e-8, size.height * 0.9525840),
-        Offset(size.width * 0.4998630, size.height * 0.9525840), [
-      const Color(0xff303135),
-      const Color(0xff535458),
-      const Color(0xff4D4E52),
-      const Color(0xff333438),
-      const Color(0xff35363A),
-      const Color(0xff4E4F53),
-      const Color(0xff818286),
-      const Color(0xff818286)
-    ], [
-      0,
-      0.0218797,
-      0.0363004,
-      0.05818,
-      0.0865241,
-      0.135753,
-      0.756906,
-      1
-    ]);
+      Offset(size.width * -8.601804e-8, size.height * 0.9525840),
+      Offset(size.width * 0.4998630, size.height * 0.9525840),
+      [
+        const Color(0xff303135),
+        const Color(0xff535458),
+        const Color(0xff4D4E52),
+        const Color(0xff333438),
+        const Color(0xff35363A),
+        const Color(0xff4E4F53),
+        const Color(0xff818286),
+        const Color(0xff818286),
+      ],
+      [0, 0.0218797, 0.0363004, 0.05818, 0.0865241, 0.135753, 0.756906, 1],
+    );
     canvas.drawPath(path_7, paint_7_fill);
 
     final path_8 = Path();
@@ -173,26 +170,20 @@ class _FramePainter extends CustomPainter {
 
     final paint_8_fill = Paint()..style = PaintingStyle.fill;
     paint_8_fill.shader = ui.Gradient.linear(
-        Offset(size.width * 0.9994788, size.height * 0.9525840),
-        Offset(size.width * 0.4996158, size.height * 0.9525840), [
-      const Color(0xff303135),
-      const Color(0xff535458),
-      const Color(0xff4D4E52),
-      const Color(0xff333438),
-      const Color(0xff35363A),
-      const Color(0xff4E4F53),
-      const Color(0xff818286),
-      const Color(0xff818286)
-    ], [
-      0,
-      0.0218797,
-      0.0363004,
-      0.05818,
-      0.0865241,
-      0.135753,
-      0.756906,
-      1
-    ]);
+      Offset(size.width * 0.9994788, size.height * 0.9525840),
+      Offset(size.width * 0.4996158, size.height * 0.9525840),
+      [
+        const Color(0xff303135),
+        const Color(0xff535458),
+        const Color(0xff4D4E52),
+        const Color(0xff333438),
+        const Color(0xff35363A),
+        const Color(0xff4E4F53),
+        const Color(0xff818286),
+        const Color(0xff818286),
+      ],
+      [0, 0.0218797, 0.0363004, 0.05818, 0.0865241, 0.135753, 0.756906, 1],
+    );
     canvas.drawPath(path_8, paint_8_fill);
 
     final path_9 = Path();
@@ -217,18 +208,16 @@ class _FramePainter extends CustomPainter {
 
     final paint_10_fill = Paint()..style = PaintingStyle.fill;
     paint_10_fill.shader = ui.Gradient.linear(
-        Offset(size.width * 0.4285266, size.height * 0.9482793),
-        Offset(size.width * 0.5712028, size.height * 0.9482793), [
-      const Color(0xff000000).withValues(alpha: 0.5),
-      const Color(0x00818487),
-      const Color(0x00818487),
-      const Color(0xff000000).withValues(alpha: 0.5)
-    ], [
-      0,
-      0.139373,
-      0.860627,
-      1
-    ]);
+      Offset(size.width * 0.4285266, size.height * 0.9482793),
+      Offset(size.width * 0.5712028, size.height * 0.9482793),
+      [
+        const Color(0xff000000).withValues(alpha: 0.5),
+        const Color(0x00818487),
+        const Color(0x00818487),
+        const Color(0xff000000).withValues(alpha: 0.5),
+      ],
+      [0, 0.139373, 0.860627, 1],
+    );
     canvas.drawPath(path_10, paint_10_fill);
 
     final path_11 = Path();
@@ -244,14 +233,11 @@ class _FramePainter extends CustomPainter {
 
     final paint_11_fill = Paint()..style = PaintingStyle.fill;
     paint_11_fill.shader = ui.Gradient.linear(
-        Offset(size.width * 0.4998630, size.height * 0.9655156),
-        Offset(size.width * 0.4998630, size.height * 0.9896582), [
-      const Color(0xff303135),
-      const Color(0xff08090D),
-    ], [
-      0,
-      1
-    ]);
+      Offset(size.width * 0.4998630, size.height * 0.9655156),
+      Offset(size.width * 0.4998630, size.height * 0.9896582),
+      [const Color(0xff303135), const Color(0xff08090D)],
+      [0, 1],
+    );
     canvas.drawPath(path_11, paint_11_fill);
 
     // Generic custom
@@ -262,11 +248,9 @@ class _FramePainter extends CustomPainter {
     );
     canvas.drawWindowBar(
       platform: TargetPlatform.macOS,
-      bounds: screenBounds.center -
-              Offset(
-                windowSize.width * 0.5,
-                windowSize.height * 0.5,
-              ) &
+      bounds:
+          screenBounds.center -
+              Offset(windowSize.width * 0.5, windowSize.height * 0.5) &
           Size(windowSize.width, 30),
       windowRadius: const Radius.circular(6),
     );

@@ -3,16 +3,22 @@
 import 'package:flutter/painting.dart';
 
 const isblEditorLightTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xffffffff), color: Color(0xff000000)),
+  'root': TextStyle(
+    backgroundColor: Color(0xffffffff),
+    color: Color(0xff000000),
+  ),
   'subst': TextStyle(color: Color(0xff000000)),
   'comment': TextStyle(color: Color(0xff555555), fontStyle: FontStyle.italic),
   'keyword': TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
   'attribute': TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
-  'selector-tag':
-      TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
-  'meta-keyword':
-      TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
+  'selector-tag': TextStyle(
+    color: Color(0xff000000),
+    fontWeight: FontWeight.bold,
+  ),
+  'meta-keyword': TextStyle(
+    color: Color(0xff000000),
+    fontWeight: FontWeight.bold,
+  ),
   'doctag': TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
   'name': TextStyle(color: Color(0xff000000), fontWeight: FontWeight.bold),
   'string': TextStyle(color: Color(0xff000080)),
@@ -25,8 +31,10 @@ const isblEditorLightTheme = {
   'deletion': TextStyle(color: Color(0xff000000)),
   'title': TextStyle(color: Color(0xfffb2c00)),
   'section': TextStyle(color: Color(0xfffb2c00)),
-  'title>.hljs-built_in':
-      TextStyle(color: Color(0xff008080), fontWeight: FontWeight.normal),
+  'title>.hljs-built_in': TextStyle(
+    color: Color(0xff008080),
+    fontWeight: FontWeight.normal,
+  ),
   'regexp': TextStyle(color: Color(0xff5e1700)),
   'symbol': TextStyle(color: Color(0xff5e1700)),
   'variable': TextStyle(color: Color(0xff5e1700)),

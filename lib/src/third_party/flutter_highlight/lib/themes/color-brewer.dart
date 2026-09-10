@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const colorBrewerTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xffffffff), color: Color(0xff000000)),
+  'root': TextStyle(
+    backgroundColor: Color(0xffffffff),
+    color: Color(0xff000000),
+  ),
   'subst': TextStyle(color: Color(0xff000000)),
   'string': TextStyle(color: Color(0xff756bb1)),
   'meta': TextStyle(color: Color(0xff756bb1)),

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import 'device_type.dart';
 
 /// A unique identifier that represents a device.
@@ -18,11 +19,7 @@ class DeviceIdentifier {
   final TargetPlatform platform;
 
   /// Private constructor.
-  const DeviceIdentifier(
-    this.platform,
-    this.type,
-    this.name,
-  );
+  const DeviceIdentifier(this.platform, this.type, this.name);
 
   @override
   bool operator ==(Object other) {
@@ -39,10 +36,14 @@ class DeviceIdentifier {
 
   @override
   String toString() {
-    final platformKey =
-        platform.toString().replaceAll('$TargetPlatform.', '').toLowerCase();
-    final typeKey =
-        type.toString().replaceAll('$DeviceType.', '').toLowerCase();
+    final platformKey = platform
+        .toString()
+        .replaceAll('$TargetPlatform.', '')
+        .toLowerCase();
+    final typeKey = type
+        .toString()
+        .replaceAll('$DeviceType.', '')
+        .toLowerCase();
     return '${platformKey}_${typeKey}_$name';
   }
 }

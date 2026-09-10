@@ -1,29 +1,72 @@
 name: Publish package to pub.dev
+
+# The tag is the trigger, and `v{{version}}` is the tag pattern to enter in the
+# package's Admin tab on pub.dev. The trailing `*` is what lets a prerelease
+# through — `v0.7.0-beta.1` publishes, `v0.7.0` publishes, `nightly` does not.
 on:
   push:
     tags:
-      - v*
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
 jobs:
-  build:
+  publish:
+    name: Publish to pub.dev
     runs-on: ubuntu-latest
+    # **The whole authentication story.** GitHub mints a short-lived OIDC token
+    # for this run, pub.dev checks its claims against the repository and tag
+    # pattern configured on the package, and that is the credential. There is
+    # nothing to store and nothing to rotate — the `OAUTH_ACCESS_TOKEN` and
+    # `OAUTH_REFRESH_TOKEN` secrets this workflow used to write into a
+    # `pub-credentials.json` are no longer read by anything and can be deleted.
+    permissions:
+      id-token: write
+      contents: read
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      # The pinned SDK, read from the same committed file every other job reads.
+      # `dart-lang/setup-dart`'s reusable publish workflow would do the OIDC
+      # exchange for us, but it publishes with a bare Dart SDK — and this
+      # package depends on `flutter` from the SDK, so resolution fails before
+      # publishing is even attempted. Hence a Flutter toolchain and the exchange
+      # written out below.
+      - name: Read the pinned Flutter version
+        id: pin
+        run: |
+          version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc)"
+          if [ -z "$version" ]; then echo "::error::.fvmrc names no Flutter version"; exit 1; fi
+          case "$version" in *-*) channel=beta ;; *) channel=stable ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
       - uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          flutter-version: ${{ steps.pin.outputs.version }}
+          channel: ${{ steps.pin.outputs.channel }}
+      - run: flutter --version
       - run: flutter pub get
-      - run: flutter pub run tool/publish/check_version.dart ${GITHUB_REF}
-      - name: Setup credentials
+
+      # The tag and the pubspec have to agree. Cheap, and the failure it catches
+      # — a tag naming a version the archive does not contain — is one nobody
+      # can fix after the fact, because a published version is permanent.
+      - run: dart tool/publish/check_version.dart ${GITHUB_REF}
+
+      # The exchange, in full. `--env-var` stores *the name of the variable* to
+      # read at request time rather than the token itself, so the secret never
+      # reaches `pub-tokens.json` on disk.
+      - name: Authenticate to pub.dev with a GitHub OIDC token
         run: |
-          mkdir -p $XDG_CONFIG_HOME/dart
-          cat <<EOF > $XDG_CONFIG_HOME/dart/pub-credentials.json
-          {
-            "accessToken":"${{ secrets.OAUTH_ACCESS_TOKEN }}",
-            "refreshToken":"${{ secrets.OAUTH_REFRESH_TOKEN }}",
-            "tokenEndpoint":"https://accounts.google.com/o/oauth2/token",
-            "scopes": [ "openid", "https://www.googleapis.com/auth/userinfo.email" ],
-            "expiration": 1691492965565
-          }
-          EOF
-      - name: Publish package
-        run: flutter pub publish --force
+          token="$(curl -sSf \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://pub.dev" \
+            | jq -r '.value')"
+          if [ -z "$token" ] || [ "$token" = "null" ]; then
+            echo "::error::no OIDC token — is 'id-token: write' still granted?"
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          echo "PUB_TOKEN=$token" >> "$GITHUB_ENV"
+          dart pub token add https://pub.dev --env-var PUB_TOKEN
+
+      # `--force` skips the prompt, not the validation: the archive is still
+      # built and checked, and a package that fails validation is not published.
+      - run: flutter pub publish --force

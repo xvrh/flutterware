@@ -3,12 +3,16 @@
 import 'package:flutter/painting.dart';
 
 const monokaiTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xff272822), color: Color(0xffdddddd)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff272822),
+    color: Color(0xffdddddd),
+  ),
   'tag': TextStyle(color: Color(0xfff92672)),
   'keyword': TextStyle(color: Color(0xfff92672), fontWeight: FontWeight.bold),
-  'selector-tag':
-      TextStyle(color: Color(0xfff92672), fontWeight: FontWeight.bold),
+  'selector-tag': TextStyle(
+    color: Color(0xfff92672),
+    fontWeight: FontWeight.bold,
+  ),
   'literal': TextStyle(color: Color(0xfff92672), fontWeight: FontWeight.bold),
   'strong': TextStyle(color: Color(0xfff92672)),
   'name': TextStyle(color: Color(0xfff92672)),

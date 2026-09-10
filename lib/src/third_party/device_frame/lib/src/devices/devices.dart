@@ -24,10 +24,10 @@ abstract class Devices {
 
   /// All available devices.
   static List<DeviceInfo> get all => [
-        ...ios.all,
-        ...android.all,
-        ...windows.all,
-        ...macOS.all,
-        ...linux.all,
-      ];
+    ...ios.all,
+    ...android.all,
+    ...windows.all,
+    ...macOS.all,
+    ...linux.all,
+  ];
 }

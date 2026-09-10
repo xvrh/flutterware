@@ -31,17 +31,17 @@ class IosDevices {
 
   /// All devices.
   List<DeviceInfo> get all => [
-        // Phones
-        iPhone12Mini,
-        iPhone12,
-        iPhone12ProMax,
-        iPhone13Mini,
-        iPhone13,
-        iPhone13ProMax,
-        iPhoneSE,
-        //Tablets
-        iPadAir4,
-        iPad,
-        iPadPro11Inches,
-      ];
+    // Phones
+    iPhone12Mini,
+    iPhone12,
+    iPhone12ProMax,
+    iPhone13Mini,
+    iPhone13,
+    iPhone13ProMax,
+    iPhoneSE,
+    //Tablets
+    iPadAir4,
+    iPad,
+    iPadPro11Inches,
+  ];
 }

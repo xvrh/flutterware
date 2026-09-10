@@ -28,6 +28,21 @@ import '../embedder/embedded_engine.dart';
 abstract final class WindowCapture {
   /// Rasterizes [boundary] at [pixelRatio] and composites every live guest
   /// under it into the hole it left.
+  ///
+  /// **Under, and it has to be literal.** A guest pasted *over* the host looks
+  /// identical wherever the host is transparent, which is most of the hole and
+  /// is why this read as correct for a long time. It differs exactly where the
+  /// host draws something above the texture — and a device frame does: the
+  /// screen is a rounded rect inside an opaque bezel, with a notch over it. The
+  /// texture's rect is the full screen rectangle, so pasting it over the raster
+  /// squared off the frame's corners, painted across the bezel and erased the
+  /// notch. Every previews screenshot on a phone had it.
+  ///
+  /// So the guests go onto an empty canvas first and the host raster goes over
+  /// them. The host's own alpha is then what decides where a guest shows, which
+  /// is the same rule the compositor would have applied had the texture been in
+  /// the layer tree at all. `package:image` has no `dstOver`, hence the canvas
+  /// rather than a blend mode.
   static Future<img.Image> capture(
     RenderRepaintBoundary boundary, {
     required double pixelRatio,
@@ -52,10 +67,18 @@ abstract final class WindowCapture {
     var host = await OffscreenRaster.around(
       () => _raster(boundary, pixelRatio),
     );
+    if (guests.isEmpty) return host;
+
+    var scene = img.Image(
+      width: host.width,
+      height: host.height,
+      numChannels: 4,
+    );
     for (var (engine, rect) in guests) {
-      await _compositeGuest(host, engine, rect);
+      await _compositeGuest(scene, engine, rect);
     }
-    return host;
+    img.compositeImage(scene, host);
+    return scene;
   }
 
   static Future<img.Image> _raster(
@@ -78,7 +101,7 @@ abstract final class WindowCapture {
   }
 
   static Future<void> _compositeGuest(
-    img.Image host,
+    img.Image scene,
     EmbeddedEngine engine,
     Rect rect,
   ) async {
@@ -100,7 +123,7 @@ abstract final class WindowCapture {
       );
     }
     img.compositeImage(
-      host,
+      scene,
       guest,
       dstX: rect.left.round(),
       dstY: rect.top.round(),

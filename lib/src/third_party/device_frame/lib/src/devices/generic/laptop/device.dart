@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../info/device_type.dart';
 import '../../../info/identifier.dart';
 import '../../../info/info.dart';
@@ -18,17 +19,14 @@ DeviceInfo buildGenericLaptopDevice({
   EdgeInsets? rotatedSafeAreas,
   GenericLaptopFramePainter? framePainter,
 }) {
-  final effectivePainter = framePainter ??
+  final effectivePainter =
+      framePainter ??
       GenericLaptopFramePainter(
         platform: platform,
         windowPosition: windowPosition,
       );
   return DeviceInfo(
-    identifier: DeviceIdentifier(
-      platform,
-      DeviceType.laptop,
-      id,
-    ),
+    identifier: DeviceIdentifier(platform, DeviceType.laptop, id),
     name: name,
     pixelRatio: pixelRatio,
     frameSize: effectivePainter.calculateFrameSize(screenSize),

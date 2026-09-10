@@ -34,7 +34,8 @@ class GenericTabletFramePainter extends CustomPainter {
   }
 
   Path createScreenPath(Size screenSize) {
-    final rect = Offset(
+    final rect =
+        Offset(
           innerBodyInsets.left + screenInsets.left,
           innerBodyInsets.top + screenInsets.top,
         ) &
@@ -83,10 +84,7 @@ class GenericTabletFramePainter extends CustomPainter {
     15,
     80,
   ];
-  static const List<double> defaultTopSideButtonsGapsAndSizes = [
-    50,
-    80,
-  ];
+  static const List<double> defaultTopSideButtonsGapsAndSizes = [50, 80];
 
   static const EdgeInsets defaultInnerBodyInsets = EdgeInsets.only(
     left: 6,

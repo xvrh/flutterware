@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const artaTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xff222222), color: Color(0xffaaaaaa)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff222222),
+    color: Color(0xffaaaaaa),
+  ),
   'subst': TextStyle(color: Color(0xffaaaaaa)),
   'section': TextStyle(color: Color(0xffffffff), fontWeight: FontWeight.bold),
   'comment': TextStyle(color: Color(0xff444444)),

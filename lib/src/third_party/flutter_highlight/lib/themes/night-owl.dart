@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const nightOwlTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xff011627), color: Color(0xffd6deeb)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff011627),
+    color: Color(0xffd6deeb),
+  ),
   'keyword': TextStyle(color: Color(0xffc792ea), fontStyle: FontStyle.italic),
   'built_in': TextStyle(color: Color(0xffaddb67), fontStyle: FontStyle.italic),
   'type': TextStyle(color: Color(0xff82aaff)),
@@ -39,12 +41,18 @@ const nightOwlTheme = {
   'quote': TextStyle(color: Color(0xff697098), fontStyle: FontStyle.italic),
   'selector-tag': TextStyle(color: Color(0xffff6363)),
   'selector-id': TextStyle(color: Color(0xfffad430)),
-  'selector-class':
-      TextStyle(color: Color(0xffaddb67), fontStyle: FontStyle.italic),
-  'selector-attr':
-      TextStyle(color: Color(0xffc792ea), fontStyle: FontStyle.italic),
-  'selector-pseudo':
-      TextStyle(color: Color(0xffc792ea), fontStyle: FontStyle.italic),
+  'selector-class': TextStyle(
+    color: Color(0xffaddb67),
+    fontStyle: FontStyle.italic,
+  ),
+  'selector-attr': TextStyle(
+    color: Color(0xffc792ea),
+    fontStyle: FontStyle.italic,
+  ),
+  'selector-pseudo': TextStyle(
+    color: Color(0xffc792ea),
+    fontStyle: FontStyle.italic,
+  ),
   'template-tag': TextStyle(color: Color(0xffc792ea)),
   'template-variable': TextStyle(color: Color(0xffaddb67)),
   'addition': TextStyle(color: Color(0xffaddb67), fontStyle: FontStyle.italic),

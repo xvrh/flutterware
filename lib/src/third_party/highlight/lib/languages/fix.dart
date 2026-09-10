@@ -2,8 +2,10 @@
 
 import '../src/mode.dart';
 
-final fix = Mode(refs: {}, contains: [
-  Mode(
+final fix = Mode(
+  refs: {},
+  contains: [
+    Mode(
       begin: "[^\\u2401\\u0001]+",
       end: "[\\u2401\\u0001]",
       excludeEnd: true,
@@ -11,16 +13,21 @@ final fix = Mode(refs: {}, contains: [
       returnEnd: false,
       contains: [
         Mode(
-            begin: "([^\\u2401\\u0001=]+)",
-            end: "=([^\\u2401\\u0001=]+)",
-            returnEnd: true,
-            returnBegin: false,
-            className: "attr"),
+          begin: "([^\\u2401\\u0001=]+)",
+          end: "=([^\\u2401\\u0001=]+)",
+          returnEnd: true,
+          returnBegin: false,
+          className: "attr",
+        ),
         Mode(
-            begin: "=",
-            end: "([\\u2401\\u0001])",
-            excludeEnd: true,
-            excludeBegin: true,
-            className: "string")
-      ])
-], case_insensitive: true);
+          begin: "=",
+          end: "([\\u2401\\u0001])",
+          excludeEnd: true,
+          excludeBegin: true,
+          className: "string",
+        ),
+      ],
+    ),
+  ],
+  case_insensitive: true,
+);

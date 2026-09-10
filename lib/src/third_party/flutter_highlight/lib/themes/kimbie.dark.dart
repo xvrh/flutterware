@@ -31,8 +31,10 @@ const kimbieDarkTheme = {
   'keyword': TextStyle(color: Color(0xff98676a)),
   'selector-tag': TextStyle(color: Color(0xff98676a)),
   'function': TextStyle(color: Color(0xff98676a)),
-  'root':
-      TextStyle(backgroundColor: Color(0xff221a0f), color: Color(0xffd3af86)),
+  'root': TextStyle(
+    backgroundColor: Color(0xff221a0f),
+    color: Color(0xffd3af86),
+  ),
   'emphasis': TextStyle(fontStyle: FontStyle.italic),
   'strong': TextStyle(fontWeight: FontWeight.bold),
 };

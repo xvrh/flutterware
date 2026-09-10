@@ -1,23 +1,43 @@
 name: flutterware
 description: 'Development tooling for Flutter projects: a desktop app, a command line and an MCP server over one set of tools you declare once.'
-version: 0.5.2 # Keep it sync with flutterware_app
-homepage: https://github.com/xvrh/flutterware
+version: 0.6.0 # Keep it sync with flutterware_app
+# Point this at https://flutterware.dev once something is served there.
+homepage: https://github.com/flutterware/flutterware
+repository: https://github.com/flutterware/flutterware
+issue_tracker: https://github.com/flutterware/flutterware/issues
 
 environment:
-  sdk: ^3.13.0-0
-  flutter: '>=3.47.0-0'
+  sdk: ^3.13.0
+  flutter: '>=3.47.0'
 
 workspace:
   - app
   - examples/example
 
+# **No `web:` here, and it is load-bearing — see the `pub_score` CI job.**
+#
+# pana grades a package that *claims* web on whether it is also WASM-ready, and
+# a library is WASM-ready only if `dart:io` is nowhere in its transitive
+# imports. `lib/flutter_test.dart` re-exports `package:flutter_test`, whose
+# `src/platform.dart` and `src/event_simulation.dart` import `dart:io`
+# unconditionally. That is an SDK package: we cannot fix it, and dropping the
+# re-export would gut the one library whose entire promise is being a strict
+# superset of `package:flutter_test`. So claiming web costs 10 points that no
+# amount of work here can win back.
+#
+# Not claiming it costs the web chip on pub.dev, and that is the real price.
+# What it does not cost is truth: pana's own analysis already concluded this
+# package is not web-compatible, and the declaration was overriding that
+# conclusion rather than reporting one. Measured 2026-09-09 — a Flutter web and
+# `--wasm` build of a consumer importing `ui_catalog.dart` both succeed, so the
+# libraries a web app would actually reach for still work. `platforms:` is
+# pub.dev metadata; it compiles nothing and forbids nothing.
 platforms:
   android:
   ios:
   linux:
   macos:
   windows:
-  web:
 
 dependencies:
   built_collection: ^5.1.1
@@ -34,7 +54,6 @@ dependencies:
   http: ^1.0.0
   logging: ^1.0.0
   meta: ^1.7.0
-  package_config: ^2.0.0
   path: ^1.8.0
   pdf: ^3.11.0
   pool: ^1.5.0

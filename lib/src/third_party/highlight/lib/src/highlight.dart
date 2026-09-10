@@ -1,4 +1,5 @@
 import 'package:collection/collection.dart' show IterableExtension;
+
 import '../languages/plaintext.dart';
 import 'mode.dart';
 import 'node.dart';

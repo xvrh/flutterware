@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const monoBlueTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xffeaeef3), color: Color(0xff00193a)),
+  'root': TextStyle(
+    backgroundColor: Color(0xffeaeef3),
+    color: Color(0xff00193a),
+  ),
   'keyword': TextStyle(fontWeight: FontWeight.bold),
   'selector-tag': TextStyle(fontWeight: FontWeight.bold),
   'title': TextStyle(fontWeight: FontWeight.bold, color: Color(0xff0048ab)),

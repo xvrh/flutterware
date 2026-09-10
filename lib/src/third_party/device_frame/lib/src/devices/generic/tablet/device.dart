@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../info/device_type.dart';
 import '../../../info/identifier.dart';
 import '../../../info/info.dart';
@@ -18,11 +19,7 @@ DeviceInfo buildGenericTabletDevice({
   GenericTabletFramePainter framePainter = const GenericTabletFramePainter(),
 }) {
   return DeviceInfo(
-    identifier: DeviceIdentifier(
-      platform,
-      DeviceType.tablet,
-      id,
-    ),
+    identifier: DeviceIdentifier(platform, DeviceType.tablet, id),
     name: name,
     pixelRatio: pixelRatio,
     frameSize: framePainter.calculateFrameSize(screenSize),

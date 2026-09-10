@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const doccoTheme = {
-  'root':
-      TextStyle(color: Color(0xff000000), backgroundColor: Color(0xfff8f8ff)),
+  'root': TextStyle(
+    color: Color(0xff000000),
+    backgroundColor: Color(0xfff8f8ff),
+  ),
   'comment': TextStyle(color: Color(0xff408080), fontStyle: FontStyle.italic),
   'quote': TextStyle(color: Color(0xff408080), fontStyle: FontStyle.italic),
   'keyword': TextStyle(color: Color(0xff954121)),
@@ -22,8 +24,10 @@ const doccoTheme = {
   'title': TextStyle(color: Color(0xff445588), fontWeight: FontWeight.bold),
   'tag': TextStyle(color: Color(0xff000080), fontWeight: FontWeight.normal),
   'name': TextStyle(color: Color(0xff000080), fontWeight: FontWeight.normal),
-  'attribute':
-      TextStyle(color: Color(0xff000080), fontWeight: FontWeight.normal),
+  'attribute': TextStyle(
+    color: Color(0xff000080),
+    fontWeight: FontWeight.normal,
+  ),
   'variable': TextStyle(color: Color(0xff008080)),
   'template-variable': TextStyle(color: Color(0xff008080)),
   'regexp': TextStyle(color: Color(0xffbb6688)),

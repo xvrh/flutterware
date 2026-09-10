@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const magulaTheme = {
-  'root':
-      TextStyle(backgroundColor: Color(0xfff4f4f4), color: Color(0xff000000)),
+  'root': TextStyle(
+    backgroundColor: Color(0xfff4f4f4),
+    color: Color(0xff000000),
+  ),
   'subst': TextStyle(color: Color(0xff000000)),
   'string': TextStyle(color: Color(0xff005500)),
   'title': TextStyle(color: Color(0xff000080), fontWeight: FontWeight.bold),
@@ -25,8 +27,10 @@ const magulaTheme = {
   'deletion': TextStyle(color: Color(0xff0000ee)),
   'meta': TextStyle(color: Color(0xff0000ee)),
   'keyword': TextStyle(fontWeight: FontWeight.bold, color: Color(0xff000080)),
-  'selector-tag':
-      TextStyle(fontWeight: FontWeight.bold, color: Color(0xff000080)),
+  'selector-tag': TextStyle(
+    fontWeight: FontWeight.bold,
+    color: Color(0xff000080),
+  ),
   'doctag': TextStyle(fontWeight: FontWeight.bold, color: Color(0xff000080)),
   'section': TextStyle(fontWeight: FontWeight.bold, color: Color(0xff000080)),
   'built_in': TextStyle(fontWeight: FontWeight.bold, color: Color(0xff000080)),

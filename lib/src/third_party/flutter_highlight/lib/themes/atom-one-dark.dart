@@ -3,8 +3,10 @@
 import 'package:flutter/painting.dart';
 
 const atomOneDarkTheme = {
-  'root':
-      TextStyle(color: Color(0xffabb2bf), backgroundColor: Color(0xff282c34)),
+  'root': TextStyle(
+    color: Color(0xffabb2bf),
+    backgroundColor: Color(0xff282c34),
+  ),
   'comment': TextStyle(color: Color(0xff5c6370), fontStyle: FontStyle.italic),
   'quote': TextStyle(color: Color(0xff5c6370), fontStyle: FontStyle.italic),
   'doctag': TextStyle(color: Color(0xffc678dd)),

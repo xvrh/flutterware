@@ -122,6 +122,64 @@ jobs:
         run: dart test integration_test --exclude-tags gpu
         working-directory: app
 
+
+  pub_score:
+    name: pub.dev score
+    # **Full marks, enforced.** The published 0.5.1 sat at 50/160 for two years
+    # — it failed static analysis against a Flutter that had moved under it, so
+    # pana could not infer platform support and the pub.dev page showed no
+    # platform chips at all. Nothing in this repo noticed, because nothing here
+    # was looking. This job is what looks.
+    #
+    # It asserts `granted == max` rather than `>= 160`. The rubric is pana's and
+    # it moves: the same package scored out of 130 before pana added categories.
+    # A number hard-coded here would be a number to forget; "lose no points" is
+    # the actual policy and it survives the rubric changing.
+    #
+    # Ubuntu, not macOS: pana compiles nothing and renders nothing, so the
+    # expensive runner buys it nothing.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      # The same pin every other job reads, for the same reason.
+      - name: Read the pinned Flutter version
+        id: pin
+        run: |
+          version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc)"
+          if [ -z "$version" ]; then echo "::error::.fvmrc names no Flutter version"; exit 1; fi
+          case "$version" in *-*) channel=beta ;; *) channel=stable ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.pin.outputs.version }}
+          channel: ${{ steps.pin.outputs.channel }}
+      - run: flutter --version
+      # Pinned on purpose. pana is the grader, and an unpinned grader means a
+      # release on somebody else's schedule can turn this repo red on a morning
+      # nobody touched it. Bumping it is a deliberate act, and the bump is where
+      # a new category gets read and answered.
+      - run: dart pub global activate pana 0.23.19
+      - name: Score the package
+        run: dart pub global run pana --no-warning --json . > pana.json
+      - name: Lose no points
+        run: |
+          granted=$(jq '[.report.sections[].grantedPoints] | add' pana.json)
+          max=$(jq '[.report.sections[].maxPoints] | add' pana.json)
+          echo "## pub.dev score: $granted / $max" >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.report.sections[]
+                 | "- \(.grantedPoints)/\(.maxPoints) \(.status) — \(.title)"' \
+            pana.json | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$granted" != "$max" ]; then
+            echo "::error::pana scores $granted/$max. Every section has to be full."
+            # The summaries of what did not pass, so the log says why rather
+            # than only that.
+            jq -r '.report.sections[] | select(.status != "passed") | .summary' pana.json
+            exit 1
+          fi
+          echo "pana: $granted/$max"
+
   previews_audit_linux:
     name: Previews audit on Linux
     # The audit's whole bring-up — spawning `flutter_tester`, compiling the
