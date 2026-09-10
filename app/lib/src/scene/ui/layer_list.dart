@@ -282,9 +282,19 @@ class _SceneLayerListState extends State<SceneLayerList> {
           SceneGradient(:var colors) when colors.length < 2 =>
             colors.isEmpty ? widget.color : Color(colors.first.argb),
           SceneGradient() => null,
+          ShaderPaint() => null,
         },
         gradient: switch (layer.paint) {
           SceneGradient g when g.colors.length >= 2 => _swatch(g),
+          // Not a colour: a fixed sweep says so, rather than guessing at
+          // what the shader itself will paint.
+          ShaderPaint() => SweepGradient(
+            colors: [
+              context.colors.mut,
+              context.colors.mut2,
+              context.colors.mut3,
+            ],
+          ),
           _ => null,
         },
       ),
@@ -334,6 +344,7 @@ class _SceneLayerListState extends State<SceneLayerList> {
           RadialPaint() => 'radial',
           SweepPaint() => 'sweep',
         },
+      if (layer.paint case ShaderPaint()) 'shader',
       if (layer.box == SceneLayerBox.line && layer.paint is SceneGradient)
         'per line',
       if (layer.blend != SceneBlendMode.normal)
@@ -388,14 +399,14 @@ class _SceneLayerListState extends State<SceneLayerList> {
               // "Laid across" has no control once the paint is not a
               // gradient, so a hidden box: line would otherwise survive
               // in the file with nothing left to change it back.
-              next is SceneGradient
+              next is SceneGradient || next is ShaderPaint
                   ? layer.withPaint(next)
                   : layer.withPaint(next).copyWith(box: SceneLayerBox.text),
               label: label,
               mergeKey: mergeKey == null ? null : 'layer:$i:paint:$mergeKey',
             ),
           ),
-          if (layer.paint is SceneGradient) ...[
+          if (layer.paint is SceneGradient || layer.paint is ShaderPaint) ...[
             const Gap(FwSpacing.sm),
             _labelled(
               context,

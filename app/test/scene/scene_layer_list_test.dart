@@ -101,6 +101,27 @@ void main() {
     expect(layers.single.box, SceneLayerBox.text);
   });
 
+  testWidgets(
+    'a shader pass shows the box picker, and keeps it through an edit',
+    (tester) async {
+      await pump(tester, const [
+        FillLayer(
+          paint: ShaderPaint('shaders/foil.frag'),
+          box: SceneLayerBox.line,
+        ),
+      ]);
+      await tester.tap(find.textContaining('Fill'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('layer:box')), findsOneWidget);
+      // Re-picking the already-selected kind still round-trips the paint
+      // through onChanged, which is what the ternary keeping `box` has to
+      // survive.
+      await pick(tester, const ValueKey('paint:kind'), 'Shader');
+      expect(layers.single.paint, isA<ShaderPaint>());
+      expect(layers.single.box, SceneLayerBox.line);
+    },
+  );
+
   testWidgets('a pass can be set to multiply', (tester) async {
     await pump(tester, const [FillLayer(paint: SolidPaint(_red))]);
     await tester.tap(find.text('Fill'));

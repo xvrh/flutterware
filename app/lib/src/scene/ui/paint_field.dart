@@ -90,6 +90,7 @@ class ScenePaintField extends StatelessWidget {
           const Gap(FwSpacing.sm),
           ..._shape(g),
         ],
+        ShaderPaint() => const [],
       },
     ],
   );

@@ -301,6 +301,10 @@ class SceneTextStackPainter extends CustomPainter {
             Offset.zero & size,
             opacity: layer.opacity,
           );
+        case ShaderPaint():
+          // Never painted through the glyph paint — see `_paintShader`
+          // (Task 6); transparent until then.
+          paint.color = const Color(0x00000000);
         case null:
           // No paint of its own: the text's colour, which is what lets one
           // stack serve several colours.
