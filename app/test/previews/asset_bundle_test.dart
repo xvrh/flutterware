@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/previews/asset_bundle.dart';
 import 'package:flutterware_app/src/previews/asset_transformer.dart';
+import 'package:flutterware_app/src/previews/project_shaders.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
 import 'package:hooks_runner/hooks_runner.dart'
@@ -337,6 +338,204 @@ void main(List<String> args) {
     }, timeout: const Timeout(Duration(minutes: 2)));
   });
 
+  group("the project's own shaders", () {
+    late String? saved;
+
+    setUp(() {
+      saved = flutterwareDirOverride;
+      flutterwareDirOverride = p.join(root.path, 'flutterware');
+      write('project/pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/glow.frag
+''');
+      write('project/shaders/glow.frag', glow());
+    });
+    tearDown(() => flutterwareDirOverride = saved);
+
+    /// The real SDK, as for the framework shaders: what is under test is what
+    /// `impellerc` makes of the project's GLSL.
+    var cache = FlutterCache(
+      p.join(Platform.environment['FLUTTER_ROOT']!, 'bin', 'cache'),
+    );
+
+    AssetBundleBuilder shaderBuilder() => AssetBundleBuilder(
+      cache: cache,
+      rootPackageRoot: projectRoot(),
+      packageConfigPath: p.join(
+        projectRoot(),
+        '.dart_tool',
+        'package_config.json',
+      ),
+    );
+
+    String source() => p.join(projectRoot(), 'shaders', 'glow.frag');
+    File entry([String name = 'glow.frag']) =>
+        File(p.join(output(), 'shaders', name));
+
+    test('a declared shader lands at its key, compiled', () async {
+      var sync = await shaderBuilder().build(output());
+
+      expect(entry().existsSync(), isTrue);
+      expect(
+        entry().readAsBytesSync(),
+        isNot(File(source()).readAsBytesSync()),
+        reason:
+            'FragmentProgram.fromAsset parses the compiled form, and '
+            'throws on the GLSL',
+      );
+      expect(sync.shaders, {'shaders/glow.frag'});
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('its reflection lands beside the compiled bytes', () async {
+      var compiled = await compileProjectShader(cache: cache, source: source());
+
+      var reflection =
+          jsonDecode(File(compiled.reflection).readAsStringSync()) as Map;
+      expect(
+        {
+          for (var uniform in reflection['uniforms'] as List)
+            (uniform as Map)['name'],
+        },
+        {'uSize', 'uTint'},
+        reason: 'uSize is declared and unused, and still listed',
+      );
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('an edited shader is compiled again and reported', () async {
+      await shaderBuilder().build(output());
+      var before = entry().readAsBytesSync();
+      write('project/shaders/glow.frag', glow(tint: 'uTint * 0.5'));
+
+      var sync = await shaderBuilder().build(output());
+
+      expect(sync.changed, isTrue);
+      expect(sync.shaders, {'shaders/glow.frag'});
+      expect(entry().readAsBytesSync(), isNot(before));
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('an edited include is compiled again', () async {
+      write('project/shaders/common.glsl', 'vec3 tint(vec3 c) { return c; }');
+      write(
+        'project/shaders/glow.frag',
+        glow(include: '#include "common.glsl"', tint: 'tint(uTint)'),
+      );
+      await shaderBuilder().build(output());
+      var before = entry().readAsBytesSync();
+
+      // The `.frag` itself is untouched: only a hash that reads its includes
+      // can tell this build from the last.
+      write(
+        'project/shaders/common.glsl',
+        'vec3 tint(vec3 c) { return c * 0.5; }',
+      );
+      var sync = await shaderBuilder().build(output());
+
+      expect(entry().readAsBytesSync(), isNot(before));
+      expect(sync.shaders, {'shaders/glow.frag'});
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('a rebuild with nothing changed reports no shader', () async {
+      await shaderBuilder().build(output());
+
+      var sync = await shaderBuilder().build(output());
+
+      expect(sync.changed, isFalse);
+      expect(sync.shaders, isEmpty);
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test(
+      'a shader that does not compile is left out, and the rest still land',
+      () async {
+        write('project/pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/glow.frag
+    - shaders/broken.frag
+''');
+        write('project/shaders/broken.frag', glow(tint: 'uTint * 0.5'));
+        await shaderBuilder().build(output());
+        expect(entry('broken.frag').existsSync(), isTrue);
+
+        // Broken after it once compiled, so what is asserted is also that the
+        // link to its last good bytes goes: a stale program would be a pass
+        // that silently disagrees with the file on screen.
+        write('project/shaders/broken.frag', 'void main() { this is not glsl');
+        var sync = await shaderBuilder().build(output());
+
+        expect(entry().existsSync(), isTrue);
+        expect(FileSystemEntity.isLinkSync(entry('broken.frag').path), isFalse);
+        expect(sync.changed, isTrue);
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    test(
+      "a shader named like the framework's leaves the framework's",
+      () async {
+        write('project/pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/ink_sparkle.frag
+''');
+        write('project/shaders/ink_sparkle.frag', glow());
+
+        var sync = await shaderBuilder().build(output());
+
+        expect(
+          Link(p.join(output(), 'shaders', 'ink_sparkle.frag')).targetSync(),
+          isNot(contains(p.join('shaders', 'project'))),
+          reason: 'every Material ripple loads this key',
+        );
+        expect(sync.shaders, isEmpty);
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
+
+    test('a warm compile spawns nothing', () async {
+      var first = await compileProjectShader(cache: cache, source: source());
+      var modified = File(first.binary).lastModifiedSync();
+
+      var second = await compileProjectShader(cache: cache, source: source());
+
+      expect(second.binary, first.binary);
+      expect(File(second.binary).lastModifiedSync(), modified);
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('two builders compiling it at once do not share a scratch', () async {
+      var bundles = [
+        for (var n in ['a', 'b', 'c', 'd']) p.join(root.path, n),
+      ];
+
+      await Future.wait([
+        for (var bundle in bundles) shaderBuilder().build(bundle),
+      ]);
+
+      var shaders = [
+        for (var bundle in bundles)
+          File(p.join(bundle, 'shaders', 'glow.frag')).readAsBytesSync(),
+      ];
+      for (var bytes in shaders.skip(1)) {
+        expect(bytes, shaders.first);
+      }
+      var project = Directory(
+        p.join(flutterwareDirOverride!, 'shaders', 'project'),
+      );
+      expect(
+        project
+            .listSync(recursive: true)
+            .whereType<File>()
+            .map((e) => p.basename(e.path))
+            .toSet(),
+        {'shader.iplr', 'reflection.json'},
+        reason: 'every scratch, binary and reflection, was renamed in',
+      );
+    }, timeout: const Timeout(Duration(minutes: 2)));
+  });
+
   group('native libraries', () {
     late File lib;
 
@@ -417,3 +616,15 @@ void main(List<String> args) {
     });
   });
 }
+
+/// A fragment shader with two uniforms, one of them unused.
+String glow({String include = '', String tint = 'uTint'}) =>
+    '''
+#version 460 core
+#include <flutter/runtime_effect.glsl>
+$include
+uniform vec2 uSize;
+uniform vec3 uTint;
+out vec4 fragColor;
+void main() { fragColor = vec4($tint, 1.0); }
+''';
