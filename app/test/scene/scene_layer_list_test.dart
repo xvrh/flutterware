@@ -86,6 +86,21 @@ void main() {
     expect(find.byKey(const ValueKey('layer:box')), findsNothing);
   });
 
+  testWidgets('switching a per-line pass to a colour drops its box', (
+    tester,
+  ) async {
+    await pump(tester, const [
+      FillLayer(
+        paint: LinearPaint(colors: [_red, SceneColor(0xFF0000FF)]),
+        box: SceneLayerBox.line,
+      ),
+    ]);
+    await tester.tap(find.textContaining('Fill'));
+    await tester.pumpAndSettle();
+    await pick(tester, const ValueKey('paint:kind'), 'Colour');
+    expect(layers.single.box, SceneLayerBox.text);
+  });
+
   testWidgets('a pass can be set to multiply', (tester) async {
     await pump(tester, const [FillLayer(paint: SolidPaint(_red))]);
     await tester.tap(find.text('Fill'));

@@ -385,7 +385,12 @@ class _SceneLayerListState extends State<SceneLayerList> {
             own: SceneColor(widget.color.toARGB32()),
             onChanged: (next, {required label, mergeKey}) => _replace(
               i,
-              layer.withPaint(next),
+              // "Laid across" has no control once the paint is not a
+              // gradient, so a hidden box: line would otherwise survive
+              // in the file with nothing left to change it back.
+              next is SceneGradient
+                  ? layer.withPaint(next)
+                  : layer.withPaint(next).copyWith(box: SceneLayerBox.text),
               label: label,
               mergeKey: mergeKey == null ? null : 'layer:$i:paint:$mergeKey',
             ),
