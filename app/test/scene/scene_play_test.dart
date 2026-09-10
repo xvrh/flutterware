@@ -220,6 +220,38 @@ void main() {
       await tester.pump();
       expect(title(tester).time, same(first));
     });
+
+    testWidgets('a stop puts the time back at zero; a pause holds it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(mount(SceneView(scene, motion: motion)));
+      var time = title(tester).time!;
+      player.play();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      player.pause();
+      var held = time.value;
+      expect(held, greaterThan(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(time.value, held);
+      player.stop();
+      expect(time.value, Duration.zero);
+    });
+
+    testWidgets('a finish holds the end time, and a dispose drops it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(mount(SceneView(scene, motion: motion)));
+      var time = title(tester).time!;
+      player.finish();
+      expect(time.value, const Duration(milliseconds: 360));
+      // A second player over the same motion, so the group's own tear-down
+      // still has one to dispose.
+      MotionPlayer(motion, vsync: null)
+        ..position = const Duration(milliseconds: 200)
+        ..dispose();
+      expect(time.value, Duration.zero);
+    });
   });
 
   testWidgets('a compiled scene plays its compiled motion', (tester) async {

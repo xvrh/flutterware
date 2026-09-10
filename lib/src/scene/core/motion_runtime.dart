@@ -142,8 +142,8 @@ abstract class Playable {
 
   /// Where this playable was last applied — scene time, for what is drawn by
   /// the clock rather than by a track: a shader pass's `uTime`. Every [apply]
-  /// records it before it writes; one never applied is at zero. A child's is
-  /// its own local time.
+  /// records it before it writes; one never applied is at zero, and a
+  /// player's stop puts it back there. A child's is its own local time.
   final clock = SceneValue<Duration>(Duration.zero);
 
   Duration get position => clock.value;

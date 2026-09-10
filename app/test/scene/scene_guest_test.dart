@@ -90,4 +90,31 @@ void main() {
     await pumpEventQueue();
     expect(session.calls, hasLength(before + 1));
   });
+
+  group('with no motion open, the time is zero', () {
+    // The chevron stops the playback, and a stop zeroes the playhead on its
+    // own; these are the ways a motion leaves the drawer without one.
+    for (var (label, close) in <(String, void Function(SceneEditor))>[
+      ('deleted', (e) => e.removeMotion('BannerIntro')),
+      ('a parameter opened over it', (e) => e.openParam = 'tagline'),
+      ('its creation undone', (e) => e.undo()),
+    ]) {
+      test(label, () async {
+        headline().layers = [_shader];
+        scene.params.add(
+          SceneParamDecl('tagline', SceneParamKind.string, 'Fresh'),
+        );
+        editor = SceneEditor(scene)
+          ..addMotion('BannerScene', name: 'BannerIntro');
+        editor.playhead = const Duration(milliseconds: 250);
+        guest().push();
+        await pumpEventQueue();
+        close(editor);
+        await pumpEventQueue();
+        expect(editor.activeMotion, isNull);
+        expect(editor.playhead, Duration.zero);
+        expect(session.calls.last['time'], '0.0');
+      });
+    }
+  });
 }
