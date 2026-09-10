@@ -410,6 +410,23 @@ preset is a style applied and detached — a seeded library, not a mechanism,
 which is what collapses it into this milestone instead of being its own.
 Lands: the poster.
 
+*Extended 2026-09-10:* a text pass now paints with a linear gradient of any
+length — a three-colour gradient with no stops used to throw, since the
+engine refuses a gradient with anything but two colours and no stops — and
+with two shapes beyond linear: radial, stretched to the text's box rather
+than Flutter's shortest-side radius, and sweep, in degrees from twelve
+o'clock. A pass can lay its gradient across each line (`SceneLayerBox.line`)
+instead of the whole text, so a two-line title in gold gets the gold twice
+rather than once with the second line stuck in its darker half. A pass also
+takes one of sixteen blend modes, for how it lands on what is beneath it.
+The inspector edits all of it — a kind picker, a stop bar for a gradient's
+colours and positions, the shape's own fields (an angle, a centre and a
+radius, or a centre and two angles), the "Laid across" picker and the blend
+picker — and a Gloss preset demonstrates the per-line gradient with a sheen
+that fades to nothing over the top half of each line. Shaders are Phase 3 of
+`docs/superpowers/plans/2026-09-10-scene-text-layer-gradients.md`, planned
+separately after a spike.
+
 **M10c — variable axes.**
 `axes` as a tag → number map, discovered from the font's `fvar` table so the
 inspector draws real sliders with the font's own min, default and max rather
