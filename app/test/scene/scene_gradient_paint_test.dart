@@ -182,4 +182,62 @@ void main() {
       expect(three.b, greaterThan(three.r));
     });
   });
+
+  group('a pass laid across each line', () {
+    // Ten Ms over two: the second line is a fifth as long as the first.
+    const twoLines = 'MMMMMMMMMM\nMM';
+    const size = Size(200, 40);
+    const across = LinearPaint(
+      colors: [_red, _blue],
+      begin: SceneAlignment.centerLeft,
+      end: SceneAlignment.centerRight,
+    );
+
+    test('runs a short line through the whole gradient', () async {
+      var boxed = await _paint(
+        const [FillLayer(paint: across)],
+        text: twoLines,
+        size: size,
+      );
+      var lined = await _paint(
+        const [FillLayer(paint: across, box: SceneLayerBox.line)],
+        text: twoLines,
+        size: size,
+      );
+      // The end of "MM": across the text it is a fifth of the way along and
+      // still red; across its own line it is the blue end.
+      var inBox = await _mean(boxed, _spot(35, 30));
+      var inLine = await _mean(lined, _spot(35, 30));
+      expect(inBox.r, greaterThan(inBox.b));
+      expect(inLine.b, greaterThan(inLine.r));
+    });
+
+    test('restarts a gradient down the text on every line', () async {
+      var lined = await _paint(
+        const [
+          FillLayer(
+            paint: LinearPaint(colors: [_red, _blue]),
+            box: SceneLayerBox.line,
+          ),
+        ],
+        text: twoLines,
+        size: size,
+      );
+      var topOfSecond = await _mean(lined, _spot(20, 22));
+      expect(topOfSecond.r, greaterThan(topOfSecond.b));
+    });
+
+    test('changes nothing for a solid pass', () async {
+      Future<List<int>> bytes(SceneLayerBox box) async {
+        var image = await _paint(
+          [FillLayer(paint: const SolidPaint(_green), box: box)],
+          text: twoLines,
+          size: size,
+        );
+        return (await image.toByteData())!.buffer.asUint8List();
+      }
+
+      expect(await bytes(SceneLayerBox.line), await bytes(SceneLayerBox.text));
+    });
+  });
 }

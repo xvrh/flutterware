@@ -466,6 +466,15 @@ enum SceneStrokeJoin { miter, round, bevel }
 /// **A pass may change paint, never layout.** Every field here is paint; a
 /// metric one would give the passes two layouts to register against, and
 /// every effect would drift by a subpixel that grows along the line.
+/// What a pass's paint is laid across. A solid colour is the same either
+/// way; a gradient is not — a two-line title in gold wants the gold to run
+/// down EACH line, not once down the paragraph with the second line in its
+/// darker half.
+///
+/// On the pass rather than on the paint, because a paint is shaped to be a
+/// frame's fill one day (master plan §6), and a frame has no lines.
+enum SceneLayerBox { text, line }
+
 sealed class TextLayer {
   const TextLayer({
     this.paint,
@@ -473,6 +482,7 @@ sealed class TextLayer {
     this.dx = 0,
     this.dy = 0,
     this.opacity = 1,
+    this.box = SceneLayerBox.text,
   });
 
   /// Null paints the text's own colour — which is what lets one stack serve
@@ -487,6 +497,9 @@ sealed class TextLayer {
   final double dy;
   final double opacity;
 
+  /// What [paint] is measured against: the whole text, or each line.
+  final SceneLayerBox box;
+
   Map<String, Object?> toWire();
 
   /// This pass painted with [paint] instead — null included, which is "the
@@ -498,7 +511,13 @@ sealed class TextLayer {
   /// and every rescale goes through here, so a field added to a pass is
   /// carried by all of them rather than dropped by whichever call site
   /// respelled the constructor and forgot it.
-  TextLayer copyWith({double? blur, double? dx, double? dy, double? opacity});
+  TextLayer copyWith({
+    double? blur,
+    double? dx,
+    double? dy,
+    double? opacity,
+    SceneLayerBox? box,
+  });
 
   Map<String, Object?> get _common => {
     'paint': ?paint?.toWire(),
@@ -506,6 +525,7 @@ sealed class TextLayer {
     if (dx != 0) 'dx': dx,
     if (dy != 0) 'dy': dy,
     if (opacity != 1) 'o': opacity,
+    if (box != SceneLayerBox.text) 'box': box.name,
   };
 
   static TextLayer? fromWire(Object? raw) {
@@ -515,6 +535,8 @@ sealed class TextLayer {
     var dx = (raw['dx'] as num?)?.toDouble() ?? 0;
     var dy = (raw['dy'] as num?)?.toDouble() ?? 0;
     var opacity = (raw['o'] as num?)?.toDouble() ?? 1;
+    var box =
+        SceneLayerBox.values.asNameMap()[raw['box']] ?? SceneLayerBox.text;
     return switch (raw['k']) {
       'stroke' => StrokeLayer(
         width: (raw['w'] as num?)?.toDouble() ?? 1,
@@ -528,6 +550,7 @@ sealed class TextLayer {
         dx: dx,
         dy: dy,
         opacity: opacity,
+        box: box,
       ),
       _ => FillLayer(
         paint: paint,
@@ -535,30 +558,50 @@ sealed class TextLayer {
         dx: dx,
         dy: dy,
         opacity: opacity,
+        box: box,
       ),
     };
   }
 }
 
 class FillLayer extends TextLayer {
-  const FillLayer({super.paint, super.blur, super.dx, super.dy, super.opacity});
+  const FillLayer({
+    super.paint,
+    super.blur,
+    super.dx,
+    super.dy,
+    super.opacity,
+    super.box,
+  });
 
   @override
   Map<String, Object?> toWire() => {'k': 'fill', ..._common};
 
   @override
-  FillLayer withPaint(ScenePaint? paint) =>
-      FillLayer(paint: paint, blur: blur, dx: dx, dy: dy, opacity: opacity);
+  FillLayer withPaint(ScenePaint? paint) => FillLayer(
+    paint: paint,
+    blur: blur,
+    dx: dx,
+    dy: dy,
+    opacity: opacity,
+    box: box,
+  );
 
   @override
-  FillLayer copyWith({double? blur, double? dx, double? dy, double? opacity}) =>
-      FillLayer(
-        paint: paint,
-        blur: blur ?? this.blur,
-        dx: dx ?? this.dx,
-        dy: dy ?? this.dy,
-        opacity: opacity ?? this.opacity,
-      );
+  FillLayer copyWith({
+    double? blur,
+    double? dx,
+    double? dy,
+    double? opacity,
+    SceneLayerBox? box,
+  }) => FillLayer(
+    paint: paint,
+    blur: blur ?? this.blur,
+    dx: dx ?? this.dx,
+    dy: dy ?? this.dy,
+    opacity: opacity ?? this.opacity,
+    box: box ?? this.box,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -567,10 +610,11 @@ class FillLayer extends TextLayer {
       other.blur == blur &&
       other.dx == dx &&
       other.dy == dy &&
-      other.opacity == opacity;
+      other.opacity == opacity &&
+      other.box == box;
 
   @override
-  int get hashCode => Object.hash(paint, blur, dx, dy, opacity);
+  int get hashCode => Object.hash(paint, blur, dx, dy, opacity, box);
 
   @override
   String toString() => 'FillLayer($paint)';
@@ -587,6 +631,7 @@ class StrokeLayer extends TextLayer {
     super.dx,
     super.dy,
     super.opacity,
+    super.box,
   });
 
   final double width;
@@ -609,6 +654,7 @@ class StrokeLayer extends TextLayer {
     dx: dx,
     dy: dy,
     opacity: opacity,
+    box: box,
   );
 
   @override
@@ -617,6 +663,7 @@ class StrokeLayer extends TextLayer {
     double? dx,
     double? dy,
     double? opacity,
+    SceneLayerBox? box,
     double? width,
     SceneStrokeJoin? join,
   }) => StrokeLayer(
@@ -627,6 +674,7 @@ class StrokeLayer extends TextLayer {
     dx: dx ?? this.dx,
     dy: dy ?? this.dy,
     opacity: opacity ?? this.opacity,
+    box: box ?? this.box,
   );
 
   @override
@@ -638,10 +686,12 @@ class StrokeLayer extends TextLayer {
       other.blur == blur &&
       other.dx == dx &&
       other.dy == dy &&
-      other.opacity == opacity;
+      other.opacity == opacity &&
+      other.box == box;
 
   @override
-  int get hashCode => Object.hash(width, join, paint, blur, dx, dy, opacity);
+  int get hashCode =>
+      Object.hash(width, join, paint, blur, dx, dy, opacity, box);
 
   @override
   String toString() => 'StrokeLayer($width, $paint)';

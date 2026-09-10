@@ -108,6 +108,12 @@ void main() {
         FillLayer(paint: SolidPaint(SceneColor(0xFF120720)), dx: 8, dy: 8),
         StrokeLayer(width: 12, paint: SolidPaint(SceneColor(0xFF120720))),
         FillLayer(),
+        FillLayer(
+          paint: LinearPaint(
+            colors: [SceneColor(0xFFFFF3B0), SceneColor(0xFFFFB020)],
+          ),
+          box: SceneLayerBox.line,
+        ),
       ]),
     );
     expect(

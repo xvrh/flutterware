@@ -135,19 +135,67 @@ class SceneTextStackPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (var layer in layers) {
-      var painter = _painterFor(layer, size);
-      if (layer.dx == 0 && layer.dy == 0) {
-        painter.paint(canvas, Offset.zero);
-        continue;
+      var moved = layer.dx != 0 || layer.dy != 0;
+      if (moved) {
+        canvas.save();
+        canvas.translate(layer.dx, layer.dy);
       }
-      canvas.save();
-      canvas.translate(layer.dx, layer.dy);
-      painter.paint(canvas, Offset.zero);
-      canvas.restore();
+      if (_perLine(layer)) {
+        _paintPerLine(canvas, layer, size);
+      } else {
+        _painterFor(layer, size).paint(canvas, Offset.zero);
+      }
+      if (moved) canvas.restore();
     }
   }
 
-  TextPainter _painterFor(TextLayer layer, Size size) {
+  /// Whether [layer]'s paint restarts on every line. Only a gradient can
+  /// tell the difference, so a solid pass never pays for it.
+  static bool _perLine(TextLayer layer) =>
+      layer.box == SceneLayerBox.line &&
+      layer.paint is SceneGradient &&
+      (layer.paint! as SceneGradient).colors.length >= 2;
+
+  /// A pass whose gradient is laid across each line rather than the text.
+  ///
+  /// One gradient cannot restart per line, so the pass is painted as a MASK
+  /// — the same glyphs, stroke and blur, in opaque black — and each line's
+  /// gradient is drawn over it keeping only where the mask is (`srcIn`).
+  /// Still one layout; the price is a layer save, paid only by passes that
+  /// ask for it. A band runs to the midpoint of the gap to its neighbours
+  /// and far past the box at the ends, so a stroke or a blur that spills
+  /// out of its line still takes that line's colours.
+  void _paintPerLine(Canvas canvas, TextLayer layer, Size size) {
+    var gradient = layer.paint! as SceneGradient;
+    var mask = _painterFor(layer, size, mask: true);
+    var lines = mask.computeLineMetrics();
+    canvas.saveLayer(null, Paint());
+    mask.paint(canvas, Offset.zero);
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var top = line.baseline - line.ascent;
+      var bottom = line.baseline + line.descent;
+      var bandTop = i == 0
+          ? -_spill
+          : (lines[i - 1].baseline + lines[i - 1].descent + top) / 2;
+      var bandBottom = i == lines.length - 1
+          ? size.height + _spill
+          : (bottom + lines[i + 1].baseline - lines[i + 1].ascent) / 2;
+      canvas.drawRect(
+        Rect.fromLTRB(-_spill, bandTop, size.width + _spill, bandBottom),
+        Paint()
+          ..blendMode = BlendMode.srcIn
+          ..shader = sceneGradientShader(
+            gradient,
+            Rect.fromLTRB(line.left, top, line.left + line.width, bottom),
+            opacity: layer.opacity,
+          ),
+      );
+    }
+    canvas.restore();
+  }
+
+  TextPainter _painterFor(TextLayer layer, Size size, {bool mask = false}) {
     var key = _PainterKey(
       span.toPlainText(),
       style,
@@ -159,6 +207,7 @@ class SceneTextStackPainter extends CustomPainter {
       scaler,
       widthBasis,
       heightBehavior,
+      mask,
     );
     return _cache.putIfAbsent(key, () {
       var painter = TextPainter(
@@ -167,7 +216,7 @@ class SceneTextStackPainter extends CustomPainter {
           style: style.copyWith(
             // `foreground` and `color` are mutually exclusive in a TextStyle,
             // and this is the one that carries a stroke or a gradient.
-            foreground: _paintFor(layer, size, style.color),
+            foreground: _paintFor(layer, size, style.color, mask: mask),
           ),
         ),
         textAlign: textAlign,
@@ -185,7 +234,12 @@ class SceneTextStackPainter extends CustomPainter {
     });
   }
 
-  ui.Paint _paintFor(TextLayer layer, Size size, Color? own) {
+  ui.Paint _paintFor(
+    TextLayer layer,
+    Size size,
+    Color? own, {
+    bool mask = false,
+  }) {
     var paint = ui.Paint();
     if (layer case StrokeLayer(:var width, :var join)) {
       paint
@@ -196,26 +250,31 @@ class SceneTextStackPainter extends CustomPainter {
         // means by an outline, and is the default the model spells.
         ..strokeCap = StrokeCap.round;
     }
-    switch (layer.paint) {
-      case SolidPaint(:var color):
-        paint.color = _faded(color.flutter, layer.opacity);
-      case SceneGradient(:var colors) when colors.length < 2:
-        // One colour is that colour, and none is the text's: the engine
-        // refuses both as gradients.
-        paint.color = _faded(
-          colors.firstOrNull?.flutter ?? own ?? const Color(0xFF000000),
-          layer.opacity,
-        );
-      case SceneGradient g:
-        paint.shader = sceneGradientShader(
-          g,
-          Offset.zero & size,
-          opacity: layer.opacity,
-        );
-      case null:
-        // No paint of its own: the text's colour, which is what lets one
-        // stack serve several colours.
-        paint.color = _faded(own ?? const Color(0xFF000000), layer.opacity);
+    if (mask) {
+      // Coverage only: the colours arrive per line, and opacity with them.
+      paint.color = const Color(0xFF000000);
+    } else {
+      switch (layer.paint) {
+        case SolidPaint(:var color):
+          paint.color = _faded(color.flutter, layer.opacity);
+        case SceneGradient(:var colors) when colors.length < 2:
+          // One colour is that colour, and none is the text's: the engine
+          // refuses both as gradients.
+          paint.color = _faded(
+            colors.firstOrNull?.flutter ?? own ?? const Color(0xFF000000),
+            layer.opacity,
+          );
+        case SceneGradient g:
+          paint.shader = sceneGradientShader(
+            g,
+            Offset.zero & size,
+            opacity: layer.opacity,
+          );
+        case null:
+          // No paint of its own: the text's colour, which is what lets one
+          // stack serve several colours.
+          paint.color = _faded(own ?? const Color(0xFF000000), layer.opacity);
+      }
     }
     if (layer.blur > 0) {
       // On the pass's own paint, so the glyph OUTLINE is blurred. Compositing
@@ -266,6 +325,7 @@ class _PainterKey {
     this.scaler,
     this.widthBasis,
     this.heightBehavior,
+    this.mask,
   );
 
   final String text;
@@ -278,6 +338,7 @@ class _PainterKey {
   final TextScaler scaler;
   final TextWidthBasis widthBasis;
   final TextHeightBehavior? heightBehavior;
+  final bool mask;
 
   @override
   bool operator ==(Object other) =>
@@ -291,7 +352,8 @@ class _PainterKey {
       other.direction == direction &&
       other.scaler == scaler &&
       other.widthBasis == widthBasis &&
-      other.heightBehavior == heightBehavior;
+      other.heightBehavior == heightBehavior &&
+      other.mask == mask;
 
   @override
   int get hashCode => Object.hash(
@@ -305,8 +367,12 @@ class _PainterKey {
     scaler,
     widthBasis,
     heightBehavior,
+    mask,
   );
 }
+
+/// Far enough past the box that no stroke or blur reaches the end of a band.
+const _spill = 1e4;
 
 /// Bounded and least-recently-used, because a motion plays: every frame of an
 /// animated size is a different key, and an unbounded map would hold every

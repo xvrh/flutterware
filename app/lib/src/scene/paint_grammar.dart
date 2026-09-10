@@ -32,6 +32,9 @@ String _layer(TextLayer l) {
   if (l.dx != 0) args.add('dx: ${_num(l.dx)}');
   if (l.dy != 0) args.add('dy: ${_num(l.dy)}');
   if (l.opacity != 1) args.add('opacity: ${_num(l.opacity)}');
+  if (l.box != SceneLayerBox.text) {
+    args.add('box: SceneLayerBox.${l.box.name}');
+  }
   return '${l is StrokeLayer ? 'StrokeLayer' : 'FillLayer'}(${args.join(', ')})';
 }
 
@@ -143,6 +146,23 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
   var dx = _take(named, 'dx', refuse) ?? 0;
   var dy = _take(named, 'dy', refuse) ?? 0;
   var opacity = _take(named, 'opacity', refuse) ?? 1;
+  var box = SceneLayerBox.text;
+  if (named.remove('box') case var b?) {
+    var read = _enumMember(
+      b,
+      'SceneLayerBox',
+      SceneLayerBox.values.map((v) => v.name),
+    );
+    if (read == null) {
+      refuse(
+        b.offset,
+        'layers',
+        'a box is SceneLayerBox.text or SceneLayerBox.line',
+      );
+      return null;
+    }
+    box = SceneLayerBox.values.byName(read);
+  }
 
   if (name == 'FillLayer') {
     if (!_rest(named, 'FillLayer', refuse)) return null;
@@ -152,6 +172,7 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
       dx: dx,
       dy: dy,
       opacity: opacity,
+      box: box,
     );
   }
   var width = _take(named, 'width', refuse) ?? 1;
@@ -181,6 +202,7 @@ TextLayer? _readLayer(Expression e, Refuse refuse) {
     dx: dx,
     dy: dy,
     opacity: opacity,
+    box: box,
   );
 }
 

@@ -204,6 +204,25 @@ void main() {
         isNot(contains('Angle')),
       );
     });
+
+    test('a pass laid across each line says so, and nothing otherwise', () {
+      var layers = <TextLayer>[
+        const FillLayer(
+          paint: LinearPaint(
+            colors: [SceneColor(0xFFFFF3B0), SceneColor(0xFFFFB020)],
+          ),
+          box: SceneLayerBox.line,
+        ),
+      ];
+      var out = _emit(layers);
+      expect(out, contains('box: SceneLayerBox.line'));
+      expect(_read(out), layers);
+      expect(_emit(const [FillLayer()]), isNot(contains('box:')));
+      var parsed = parseSceneFile(
+        _scene('[FillLayer(box: SceneLayerBox.glyph)]'),
+      );
+      expect(parsed.refusals.single.message, contains('SceneLayerBox.line'));
+    });
   });
 
   group('a style token', () {

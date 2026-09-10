@@ -34,6 +34,7 @@ Object? sample(SceneProp p) => switch (p.kind) {
         begin: SceneAlignment.centerLeft,
         end: SceneAlignment.centerRight,
       ),
+      box: SceneLayerBox.line,
     ),
     FillLayer(
       paint: RadialPaint(

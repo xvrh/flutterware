@@ -144,4 +144,23 @@ void main() {
       expect(g.copyWith(startAngle: 90).endAngle, 300);
     });
   });
+
+  group("a pass's box", () {
+    test('is on the wire only when it is not the text', () {
+      expect(const FillLayer().toWire(), {'k': 'fill'});
+      const lined = StrokeLayer(width: 4, box: SceneLayerBox.line);
+      expect(lined.toWire()['box'], 'line');
+      expect(TextLayer.fromWire(lined.toWire()), lined);
+    });
+
+    test('is carried by every copy', () {
+      const lined = FillLayer(box: SceneLayerBox.line);
+      expect(lined.copyWith(dx: 3).box, SceneLayerBox.line);
+      expect(
+        lined.withPaint(const SolidPaint(SceneColor(0xFF000000))).box,
+        SceneLayerBox.line,
+      );
+      expect(const FillLayer().copyWith(box: SceneLayerBox.line), lined);
+    });
+  });
 }
