@@ -46,6 +46,18 @@ jobs:
       # other half, a floor lower than what the code needs, is a claim only
       # running an older SDK could disprove, and nothing here does.
       - run: dart tool/bump_flutter.dart --check
+      # `examples/brewline` is not a workspace member: it is the demo a stranger
+      # clones, so its pubspec names the published `flutterware`. Analyzed here
+      # against this checkout instead — the code under review is what the
+      # demo's snippets have to compile against, published or not — through
+      # the same gitignored override a laptop writes (see CLAUDE.md). Without
+      # it `flutter analyze` walks into an unresolved package and reports its
+      # every import as an error.
+      - name: Resolve the demo app against this checkout
+        working-directory: examples/brewline
+        run: |
+          printf 'dependency_overrides:\n  flutterware:\n    path: ../..\n' > pubspec_overrides.yaml
+          flutter pub get
       - run: flutter analyze
       - run: flutter test
         working-directory: app
@@ -272,6 +284,14 @@ jobs:
         working-directory: app
       - run: flutter test test/previews/phone_rig_probe_test.dart
         working-directory: app
+      # The probe writes every frame of every walk; when a walk is not
+      # order-free on this runner and nowhere else, the pictures are the
+      # only way to see what differed.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: phone-rig-probe-frames
+          path: app/build/phone_rig_probe
 
   studio_demo:
     name: Studio demo
