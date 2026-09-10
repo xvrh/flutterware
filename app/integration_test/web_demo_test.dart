@@ -133,6 +133,27 @@ void main() {
     await screen.settle();
     await screen.shot('kiosk-flavor');
 
+    // The second recorded panel: a scenario run, its frames fetched the same
+    // way. Opening a scenario "runs" it, which over a recording is a read.
+    await screen.tap('Scenarios');
+    await screen.waitFor('shop_test.dart', unfoldingThrough: 'mobile');
+    await screen.tap('shop_test.dart');
+    await screen.waitFor('Order a cappuccino');
+    await screen.shot('scenarios');
+    await screen.tap('Order a cappuccino');
+    await screen.waitFor('Order placed');
+    await _waitUntil(
+      () => fetched.entries.any(
+        (e) =>
+            e.key.contains('/scenarios/root/') &&
+            e.key.endsWith('.png') &&
+            e.value == 200,
+      ),
+      what: 'a recorded scenario frame fetched from beside the page',
+    );
+    await screen.settle();
+    await screen.shot('scenario-run');
+
     // A plugin with nothing recorded says so, rather than reaching for a
     // process or a disk.
     await screen.tap('Dependencies');
@@ -259,15 +280,22 @@ class _Screen {
     return best;
   }
 
+  /// [unfoldingThrough] names a folded tree node to open first, the way a
+  /// reader would, when [label] sits inside it.
   Future<_Node> waitFor(
     String label, {
     Duration timeout = const Duration(seconds: 60),
+    String? unfoldingThrough,
   }) async {
+    if (unfoldingThrough != null) await tap(unfoldingThrough);
     var deadline = DateTime.now().add(timeout);
     while (true) {
       var found = await find(label);
       if (found != null) return found;
       if (errors.isNotEmpty) {
+        // A stack arrives as one console line per frame; let it finish so
+        // the failure names the frame and not just the exception.
+        await Future<void>.delayed(const Duration(seconds: 2));
         fail(
           'The page reported errors while waiting for "$label":\n'
           '${errors.join('\n')}\nOn screen:\n${(await texts()).join('\n')}',

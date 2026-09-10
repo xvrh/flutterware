@@ -61,6 +61,109 @@ class ScenarioListing {
   /// only the harness evaluates the argument, so only this listing can say a
   /// run will report the scenario skipped rather than run it.
   final bool skip;
+
+  /// The harness's own wire shape for one listing — what `list` answers and
+  /// what a recording of it keeps.
+  factory ScenarioListing.fromJson(Map<String, Object?> json) =>
+      ScenarioListing(
+        file: json['file']! as String,
+        name: json['name']! as String,
+        profile: json['profile'] as String?,
+        devices: (json['devices'] as List?)?.cast<String>() ?? const [],
+        languages: (json['languages'] as List?)?.cast<String>() ?? const [],
+        orientations:
+            (json['orientations'] as List?)?.cast<String>() ?? const [],
+        tags: (json['tags'] as List?)?.cast<String>() ?? const [],
+        skip: json['skip'] == true,
+      );
+
+  Map<String, Object?> toJson() => {
+    'file': file,
+    'name': name,
+    'profile': ?profile,
+    if (devices.isNotEmpty) 'devices': devices,
+    if (languages.isNotEmpty) 'languages': languages,
+    if (orientations.isNotEmpty) 'orientations': orientations,
+    if (tags.isNotEmpty) 'tags': tags,
+    if (skip) 'skip': true,
+  };
+}
+
+/// Where a package's scenario runs come from, as the scenarios core sees it.
+///
+/// Five members, which is everything the core asks of the thing that runs a
+/// scenario: the live listing, a run, where the harness log is, a hook for
+/// each step as it lands, and disposal. [ScenarioRunner] is the real one — a
+/// warm `flutter_tester` — and a recording of a run answers the same five
+/// from files, which is what lets the panel draw a run where no harness can
+/// be spawned. The core does not know which it has; see
+/// `lib/src/demo/recorded_scenarios.dart`.
+abstract interface class ScenarioRunSource {
+  /// The harness console file, when a run has left one behind.
+  String get logPath;
+
+  /// One step, announced the moment its artifacts are written — the same
+  /// event the harness publishes over the VM service.
+  void Function(Map<String, Object?> event)? onStep;
+
+  Future<List<ScenarioListing>> list();
+
+  /// See [ScenarioRunner.run].
+  Future<Map<String, Object?>> run({
+    required String outDir,
+    String? file,
+    String? scenario,
+    String? tag,
+    ScenarioAxes axes = const ScenarioAxes(),
+    String? unspecifiedDevice,
+    double? captureScale,
+    bool captureRaw = false,
+    bool captureNative = false,
+    Duration? recordInterval,
+
+    /// Null records at the same scale as the step's own screenshot, which is
+    /// the only setting where playback does not visibly change resolution
+    /// when it stops.
+    double? recordScale,
+    int recordMaxFrames = 90,
+    DateTime? clock,
+
+    /// What this run's http requests reach, or null to leave it to the
+    /// project, each folder's `runScenarios(network: ...)` and each scenario's
+    /// own.
+    ScenarioNetwork? network,
+
+    /// Where a recording is read and written, or null for the package's
+    /// `test/scenarios/network`.
+    String? networkStore,
+
+    /// Which steps are worth a picture. A probe pass reads the walk and not
+    /// the frames; a translation pass wants only the screens showing a key.
+    ScenarioPixels pixels = ScenarioPixels.all,
+
+    /// Pad every translation read by this percentage: the max-length probe.
+    int? expandTranslations,
+
+    /// When no device is named, frame each file on the *narrowest* device its
+    /// folder profile declares instead of the first — the probe's geometry.
+    bool narrowestDevice = false,
+
+    /// Render this run as a **film**: every pumped frame kept at the film's
+    /// own pace, the verbs given a cursor that travels and presses, and the
+    /// frames written to [FilmSettings.directory] for an encoder to drain.
+    ///
+    /// A film is one scenario and one path through it, so a run that asks for
+    /// one names the scenario and — where it splits — its branches.
+    FilmSettings? film,
+
+    /// Render the film as a **reel**: the scenario runs twice in one request
+    /// — dry for the take, then filmed under the edit it declared (or the
+    /// stock one), which decides what every output frame shows. Nothing
+    /// without [film].
+    bool filmReel = false,
+  });
+
+  Future<void> dispose();
 }
 
 /// Runs a package's scenarios in a directly-spawned `flutter_tester`, exactly
@@ -141,7 +244,7 @@ class _ScenarioProgram extends TesterProgram {
 /// A warm runner stays honest: [run] re-syncs with the sources on disk before
 /// every warm run, so the Run button never replays code that has since been
 /// edited.
-class ScenarioRunner {
+class ScenarioRunner implements ScenarioRunSource {
   /// [buildDirectory] is what this runner would *rather* build in; where it
   /// actually builds is [takeBuildLane]'s answer, because another process may
   /// already hold it.
@@ -228,6 +331,7 @@ class ScenarioRunner {
   final TesterHost _host;
 
   /// Where the harness process's console is teed — see [TesterHost.logPath].
+  @override
   String get logPath => _host.logPath;
 
   /// Called for every step the harness announces **mid-run**. The blocking
@@ -235,12 +339,14 @@ class ScenarioRunner {
   ///
   /// Mutable rather than constructor-fixed so the owner can attach after the
   /// runner exists.
+  @override
   void Function(Map<String, Object?> event)? onStep;
 
   Future<void> start() => _host.start();
 
   Future<void> refresh() => _host.refresh();
 
+  @override
   Future<List<ScenarioListing>> list() => _host.exclusive(() async {
     await _host.ensureGuest();
     var response = await _host.vm.requireExtension(
@@ -248,18 +354,8 @@ class ScenarioRunner {
     );
     return [
       for (var entry
-          in (response!['scenarios']! as List).cast<Map<String, dynamic>>())
-        ScenarioListing(
-          file: entry['file']! as String,
-          name: entry['name']! as String,
-          profile: entry['profile'] as String?,
-          devices: (entry['devices'] as List?)?.cast<String>() ?? const [],
-          languages: (entry['languages'] as List?)?.cast<String>() ?? const [],
-          orientations:
-              (entry['orientations'] as List?)?.cast<String>() ?? const [],
-          tags: (entry['tags'] as List?)?.cast<String>() ?? const [],
-          skip: entry['skip'] == true,
-        ),
+          in (response!['scenarios']! as List).cast<Map<String, Object?>>())
+        ScenarioListing.fromJson(entry),
     ];
   });
 
@@ -273,6 +369,7 @@ class ScenarioRunner {
   /// passes nothing gets the bare test surface.
   ///
   /// A warm runner refreshes first, so what runs is always what is on disk.
+  @override
   Future<Map<String, Object?>> run({
     required String outDir,
     String? file,
@@ -404,5 +501,6 @@ class ScenarioRunner {
   @visibleForTesting
   Future<void> debugKillGuest() => _host.killGuest();
 
+  @override
   Future<void> dispose() => _host.dispose();
 }

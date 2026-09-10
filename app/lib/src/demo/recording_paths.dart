@@ -4,11 +4,18 @@
 /// importing the other's world.
 ///
 /// A **recording** is a fixture the real tool produced from a real project:
-/// the launcher-icon scan of `examples/example`, with the files it names
-/// copied in beside it. The studio's own catalog demos, its scenario tests and
-/// the web demo all open one. See
+/// the launcher-icon scan of `examples/example` with the files it names
+/// copied in beside it, and a run of some of its scenarios with every frame
+/// and tree the harness wrote. The studio's own catalog demos, its scenario
+/// tests and the web demo all open one. See
 /// `docs/superpowers/specs/2026-09-10-studio-over-a-fake-project-design.md`.
 library;
+
+/// Where the recorded project pretends to be. Never read from disk; it is what
+/// the address bar shows, what the facts store is keyed by, and the root a
+/// recorded run's artifact paths are spelled under so the core relativises
+/// them back to recording-relative.
+const recordedProjectRoot = '/recording';
 
 /// The recording's package path for a package. `.` is `root`, and a nested
 /// path flattens to one segment so every file of a recording sits at a known
@@ -29,3 +36,45 @@ String recordedIconScanPath(String packagePath, {String? flavor}) =>
 String recordedIconFilePath(String packagePath, String packageRelativePath) =>
     'launcher_icon/files/${recordedPackageSlug(packagePath)}-'
     '${packageRelativePath.replaceAll('/', '-')}';
+
+/// The syntactic scan of one package's scenarios.
+String recordedScenarioScanPath(String packagePath) =>
+    'scenarios/${recordedPackageSlug(packagePath)}.scan.json';
+
+/// What the live harness listed for one package: profiles, devices, tags.
+String recordedScenarioListingsPath(String packagePath) =>
+    'scenarios/${recordedPackageSlug(packagePath)}.listings.json';
+
+/// Which scenario files of one package were run and recorded.
+String recordedScenarioRunsIndexPath(String packagePath) =>
+    'scenarios/${recordedPackageSlug(packagePath)}.runs.json';
+
+/// The project's launcher icon as the flow page's banner shows it.
+String recordedScenarioAppIconPath(String packagePath) =>
+    'scenarios/${recordedPackageSlug(packagePath)}.icon.png';
+
+/// The harness's report for one scenario file's run, verbatim but for its
+/// artifact paths, which are spelled relative to the recording.
+String recordedScenarioRunPath(String packagePath, String file) =>
+    'scenarios/${recordedPackageSlug(packagePath)}/'
+    '${recordedScenarioFileSlug(file)}.json';
+
+/// Where that run's artifacts for one scenario go — a directory per
+/// scenario, each file keeping the name the harness gave it.
+String recordedScenarioArtifactDir(
+  String packagePath,
+  String file,
+  String scenario,
+) =>
+    'scenarios/${recordedPackageSlug(packagePath)}/'
+    '${recordedScenarioFileSlug(file)}/${recordedScenarioSlug(scenario)}';
+
+/// `test/scenarios/mobile/shop_test.dart` → `test-scenarios-mobile-shop_test`.
+String recordedScenarioFileSlug(String file) =>
+    file.replaceFirst(RegExp(r'\.dart$'), '').replaceAll('/', '-');
+
+/// `Order a cappuccino` → `order-a-cappuccino`.
+String recordedScenarioSlug(String scenario) => scenario
+    .toLowerCase()
+    .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+    .replaceAll(RegExp(r'^-|-$'), '');

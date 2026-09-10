@@ -31,4 +31,19 @@ void main() {
     await s.tap('kiosk', shot: Shot('Kiosk flavor'));
     await s.tap('Dependencies', shot: Shot('Not recorded'));
   });
+
+  /// A scenario of the scenarios panel: the recorded run of the example's
+  /// coffee shop, drawn by the studio, photographed by the harness. Opening a
+  /// scenario runs it, and over a recording that run is a read — which is
+  /// what lets this walk settle under FakeAsync.
+  scenario('Scenarios of a recorded project', (s) async {
+    var shell = recordedShell(recording: recording);
+    await shell.start(recordedProjectRoot);
+    await s.pumpWidget(ShellApp(shell));
+    await s.tap('Scenarios', shot: Shot('The suite'));
+    await s.tap('mobile');
+    await s.tap('shop_test.dart', shot: Shot('A file unfolded'));
+    await s.tap('Order a cappuccino', shot: Shot('A recorded run'));
+    await s.tap(const Target.containing('1 · Welcome'), shot: Shot('A step'));
+  });
 }

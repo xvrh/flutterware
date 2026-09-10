@@ -308,11 +308,14 @@ jobs:
       - name: "the recording is what the tool records today"
         # Re-records and expects no diff. The recorder pins every mtime to the
         # project clock, so a fresh checkout records the same bytes as the
-        # laptop that committed them.
+        # laptop that committed them. The launcher-icon half only: the
+        # scenario half is rendered pixels, which are not byte-stable across
+        # operating systems, and is recorded from one machine on purpose —
+        # see the spec's "facts and pictures".
         run: |
-          dart run tool/demo/record.dart
+          dart run tool/demo/record.dart --only=launcher-icon
           git diff --exit-code --stat -- demo/fixture \
-            || (echo "##[error] app/demo/fixture is stale. Run 'cd app && fvm dart run tool/demo/record.dart' and commit the result." \
+            || (echo "##[error] app/demo/fixture is stale. Run 'cd app && fvm dart run tool/demo/record.dart --only=launcher-icon' and commit the result." \
                 && exit 1)
         working-directory: app
       - name: "the studio's own scenario, under the harness"

@@ -1,0 +1,1135 @@
+{
+  "ms": 2127,
+  "scenarios": [
+    {
+      "file": "test/scenarios/mobile/shop_test.dart",
+      "name": "Around the shop",
+      "ok": true,
+      "device": "iphone-16",
+      "ms": 1861,
+      "steps": [
+        {
+          "index": 1,
+          "position": "#1",
+          "name": "Welcome",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/1-Welcome.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/1-Welcome.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/1-Welcome.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/1-Welcome.semantics.json",
+          "texts": [
+            "☕",
+            "Brewline",
+            "Your coffee, ready before you are.",
+            "Get started"
+          ],
+          "statusBrightness": "dark",
+          "navBrightness": "light",
+          "verb": "pumpWidget",
+          "target": "ShopApp",
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/1-Welcome.events.json",
+          "eventCount": 5,
+          "eventChannels": {
+            "system": 5
+          },
+          "eventTitles": [],
+          "digest": "517d17e7a8e0742b"
+        },
+        {
+          "index": 2,
+          "position": "#2",
+          "parent": 1,
+          "name": "Menu",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/2-Menu.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/2-Menu.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/2-Menu.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/2-Menu.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "Espresso, steamed milk, silky foam.",
+            "4.20 €",
+            "🥛",
+            "Flat white",
+            "Double espresso under a thin veil of milk.",
+            "4.60 €",
+            "🍵",
+            "Matcha latte",
+            "Whisked green tea, soft and grassy.",
+            "5.10 €",
+            "🫖",
+            "Chai latte",
+            "Warm spices, creamy milk.",
+            "4.80 €",
+            "🧊",
+            "Cold brew",
+            "Steeped cold for sixteen hours.",
+            "3.90 €",
+            "The menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.getStarted'",
+          "aim": {
+            "x": 28.0,
+            "y": 738.0,
+            "w": 337.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/2-Menu.events.json",
+          "eventCount": 2,
+          "eventChannels": {
+            "system": 2
+          },
+          "eventTitles": [],
+          "digest": "d59b5bbfc3522ec2"
+        },
+        {
+          "index": 3,
+          "position": "0#1",
+          "parent": 2,
+          "branch": "a cappuccino",
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/3-tap_Cappuccino_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/3-tap_Cappuccino_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/3-tap_Cappuccino_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/3-tap_Cappuccino_.semantics.json",
+          "texts": [
+            "☕",
+            "Espresso, steamed milk, silky foam.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 4.20 €",
+            "Cappuccino"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "\"Cappuccino\"",
+          "aim": {
+            "x": 104.0,
+            "y": 154.5,
+            "w": 97.87109375,
+            "h": 23.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/3-tap_Cappuccino_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "5b611dc8088135d8"
+        },
+        {
+          "index": 4,
+          "position": "0.0#1",
+          "parent": 3,
+          "branch": "small cup",
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/4-tap_key_shop.size.small_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/4-tap_key_shop.size.small_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/4-tap_key_shop.size.small_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/4-tap_key_shop.size.small_.semantics.json",
+          "texts": [
+            "☕",
+            "Espresso, steamed milk, silky foam.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 3.70 €",
+            "Cappuccino"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.size.small'",
+          "aim": {
+            "x": 24.0,
+            "y": 402.0,
+            "w": 109.66666666666669,
+            "h": 48.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/4-tap_key_shop.size.small_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "4563662d52091ca8"
+        },
+        {
+          "index": 5,
+          "position": "0.0#2",
+          "parent": 4,
+          "name": "Cart · small",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/5-Cart_small.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/5-Cart_small.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/5-Cart_small.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/5-Cart_small.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "3.70 €",
+            "Total",
+            "3.70 €",
+            "",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.addToCart'",
+          "aim": {
+            "x": 24.0,
+            "y": 776.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/5-Cart_small.events.json",
+          "eventCount": 4,
+          "eventChannels": {
+            "system": 4
+          },
+          "eventTitles": [],
+          "digest": "8237fcacf7f481f8"
+        },
+        {
+          "index": 6,
+          "position": "0.0#3",
+          "parent": 5,
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/6-enterText_key_shop.cupName_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/6-enterText_key_shop.cupName_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/6-enterText_key_shop.cupName_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/6-enterText_key_shop.cupName_.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "3.70 €",
+            "Total",
+            "3.70 €",
+            "Ada",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "enterText",
+          "target": "key 'shop.cupName'",
+          "aim": {
+            "x": 40.0,
+            "y": 722.0,
+            "w": 313.0,
+            "h": 24.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/6-enterText_key_shop.cupName_.events.json",
+          "eventCount": 22,
+          "eventChannels": {
+            "system": 22
+          },
+          "eventTitles": [],
+          "digest": "312b8559f44fb6ed",
+          "keyboard": 336.0
+        },
+        {
+          "index": 7,
+          "position": "0.0#4",
+          "parent": 6,
+          "name": "Order placed",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/7-Order_placed.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/7-Order_placed.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/7-Order_placed.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/7-Order_placed.semantics.json",
+          "texts": [
+            "Thanks, Ada!",
+            "Your order is on its way.",
+            "Back to menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.placeOrder'",
+          "aim": {
+            "x": 24.0,
+            "y": 440.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/7-Order_placed.events.json",
+          "eventCount": 3,
+          "eventChannels": {
+            "system": 3
+          },
+          "eventTitles": [],
+          "digest": "9d0285d9ad9ccb39"
+        },
+        {
+          "index": 8,
+          "position": "0.1#1",
+          "parent": 3,
+          "branch": "large cup",
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/8-tap_key_shop.size.large_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/8-tap_key_shop.size.large_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/8-tap_key_shop.size.large_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/8-tap_key_shop.size.large_.semantics.json",
+          "texts": [
+            "☕",
+            "Espresso, steamed milk, silky foam.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 4.90 €",
+            "Cappuccino"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.size.large'",
+          "aim": {
+            "x": 259.33333333333337,
+            "y": 402.0,
+            "w": 109.66666666666669,
+            "h": 48.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/8-tap_key_shop.size.large_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "cd3e83131c9e256a"
+        },
+        {
+          "index": 9,
+          "position": "0.1#2",
+          "parent": 8,
+          "name": "Cart · large",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/9-Cart_large.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/9-Cart_large.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/9-Cart_large.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/9-Cart_large.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "4.90 €",
+            "Total",
+            "4.90 €",
+            "",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.addToCart'",
+          "aim": {
+            "x": 24.0,
+            "y": 776.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/9-Cart_large.events.json",
+          "eventCount": 4,
+          "eventChannels": {
+            "system": 4
+          },
+          "eventTitles": [],
+          "digest": "1523ab025180bee2"
+        },
+        {
+          "index": 10,
+          "position": "0.1#3",
+          "parent": 9,
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/10-enterText_key_shop.cupName_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/10-enterText_key_shop.cupName_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/10-enterText_key_shop.cupName_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/10-enterText_key_shop.cupName_.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "4.90 €",
+            "Total",
+            "4.90 €",
+            "Ada",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "enterText",
+          "target": "key 'shop.cupName'",
+          "aim": {
+            "x": 40.0,
+            "y": 722.0,
+            "w": 313.0,
+            "h": 24.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/10-enterText_key_shop.cupName_.events.json",
+          "eventCount": 22,
+          "eventChannels": {
+            "system": 22
+          },
+          "eventTitles": [],
+          "digest": "424112eb8350e448",
+          "keyboard": 336.0
+        },
+        {
+          "index": 11,
+          "position": "0.1#4",
+          "parent": 10,
+          "name": "Order placed",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/11-Order_placed.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/11-Order_placed.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/11-Order_placed.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/11-Order_placed.semantics.json",
+          "texts": [
+            "Thanks, Ada!",
+            "Your order is on its way.",
+            "Back to menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.placeOrder'",
+          "aim": {
+            "x": 24.0,
+            "y": 440.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/11-Order_placed.events.json",
+          "eventCount": 3,
+          "eventChannels": {
+            "system": 3
+          },
+          "eventTitles": [],
+          "digest": "9d0285d9ad9ccb39"
+        },
+        {
+          "index": 12,
+          "position": "1#1",
+          "parent": 2,
+          "branch": "a flat white",
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/12-tap_Flat_white_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/12-tap_Flat_white_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/12-tap_Flat_white_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/12-tap_Flat_white_.semantics.json",
+          "texts": [
+            "🥛",
+            "Double espresso under a thin veil of milk.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 4.60 €",
+            "Flat white"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "\"Flat white\"",
+          "aim": {
+            "x": 104.0,
+            "y": 250.5,
+            "w": 81.35546875,
+            "h": 23.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/12-tap_Flat_white_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "11abef21c4d7910e"
+        },
+        {
+          "index": 13,
+          "position": "1#2",
+          "parent": 12,
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/13-tap_key_shop.size.medium_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/13-tap_key_shop.size.medium_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/13-tap_key_shop.size.medium_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/13-tap_key_shop.size.medium_.semantics.json",
+          "texts": [
+            "🥛",
+            "Double espresso under a thin veil of milk.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 4.60 €",
+            "Flat white"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.size.medium'",
+          "aim": {
+            "x": 141.66666666666669,
+            "y": 402.0,
+            "w": 109.66666666666669,
+            "h": 48.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/13-tap_key_shop.size.medium_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "11abef21c4d7910e",
+          "unchanged": true
+        },
+        {
+          "index": 14,
+          "position": "1#3",
+          "parent": 13,
+          "name": "Cart",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/14-Cart.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/14-Cart.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/14-Cart.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/14-Cart.semantics.json",
+          "texts": [
+            "🥛",
+            "Flat white",
+            "4.60 €",
+            "Total",
+            "4.60 €",
+            "",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.addToCart'",
+          "aim": {
+            "x": 24.0,
+            "y": 776.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/14-Cart.events.json",
+          "eventCount": 4,
+          "eventChannels": {
+            "system": 4
+          },
+          "eventTitles": [],
+          "digest": "edf2273cae934de2"
+        },
+        {
+          "index": 15,
+          "position": "2#1",
+          "parent": 2,
+          "branch": "a cold brew",
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/15-tap_Cold_brew_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/15-tap_Cold_brew_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/15-tap_Cold_brew_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/15-tap_Cold_brew_.semantics.json",
+          "texts": [
+            "🧊",
+            "Steeped cold for sixteen hours.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 3.90 €",
+            "Cold brew"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "\"Cold brew\"",
+          "aim": {
+            "x": 104.0,
+            "y": 538.5,
+            "w": 83.48828125,
+            "h": 23.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/15-tap_Cold_brew_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "aa4b8eae6503eeda"
+        },
+        {
+          "index": 16,
+          "position": "2#2",
+          "parent": 15,
+          "name": "Cart",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/16-Cart.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/16-Cart.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/16-Cart.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/16-Cart.semantics.json",
+          "texts": [
+            "🧊",
+            "Cold brew",
+            "3.90 €",
+            "Total",
+            "3.90 €",
+            "",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.addToCart'",
+          "aim": {
+            "x": 24.0,
+            "y": 776.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/16-Cart.events.json",
+          "eventCount": 4,
+          "eventChannels": {
+            "system": 4
+          },
+          "eventTitles": [],
+          "digest": "a9df28621b995e3e"
+        },
+        {
+          "index": 17,
+          "position": "2#3",
+          "parent": 16,
+          "name": "Order placed",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/17-Order_placed.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/17-Order_placed.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/17-Order_placed.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/17-Order_placed.semantics.json",
+          "texts": [
+            "Thanks, —!",
+            "Your order is on its way.",
+            "Back to menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.placeOrder'",
+          "aim": {
+            "x": 24.0,
+            "y": 776.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/17-Order_placed.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "baa4015a1453d036"
+        },
+        {
+          "index": 18,
+          "position": "3#1",
+          "parent": 2,
+          "branch": "the empty cart",
+          "name": "Empty cart",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/18-Empty_cart.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/18-Empty_cart.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/18-Empty_cart.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/18-Empty_cart.semantics.json",
+          "texts": [
+            "Your cart is empty.",
+            "Back to menu",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.openCart'",
+          "aim": {
+            "x": 333.0,
+            "y": 63.0,
+            "w": 48.0,
+            "h": 48.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/18-Empty_cart.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "b840604782cdafdf"
+        },
+        {
+          "index": 19,
+          "position": "3#2",
+          "parent": 18,
+          "name": "Back at the menu",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/19-Back_at_the_menu.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/19-Back_at_the_menu.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/19-Back_at_the_menu.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/19-Back_at_the_menu.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "Espresso, steamed milk, silky foam.",
+            "4.20 €",
+            "🥛",
+            "Flat white",
+            "Double espresso under a thin veil of milk.",
+            "4.60 €",
+            "🍵",
+            "Matcha latte",
+            "Whisked green tea, soft and grassy.",
+            "5.10 €",
+            "🫖",
+            "Chai latte",
+            "Warm spices, creamy milk.",
+            "4.80 €",
+            "🧊",
+            "Cold brew",
+            "Steeped cold for sixteen hours.",
+            "3.90 €",
+            "The menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.backToMenu'",
+          "aim": {
+            "x": 24.0,
+            "y": 776.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/around-the-shop/19-Back_at_the_menu.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "d59b5bbfc3522ec2"
+        }
+      ],
+      "stepCount": 19,
+      "unchangedCount": 1,
+      "unsettledCount": 0,
+      "translations": {
+        "shop": {
+          "title": "Brewline",
+          "tagline": "Your coffee, ready before you are.",
+          "getStarted": "Get started",
+          "menuTitle": "The menu",
+          "drink.cappuccino": "Espresso, steamed milk, silky foam.",
+          "drink.flat-white": "Double espresso under a thin veil of milk.",
+          "drink.matcha": "Whisked green tea, soft and grassy.",
+          "drink.chai": "Warm spices, creamy milk.",
+          "drink.cold-brew": "Steeped cold for sixteen hours.",
+          "size": "Size",
+          "sizeSmall": "Small",
+          "sizeMedium": "Medium",
+          "sizeLarge": "Large",
+          "addToCart": "Add to cart",
+          "yourOrder": "Your order",
+          "total": "Total",
+          "nameOnCup": "Name on the cup",
+          "placeOrder": "Place order",
+          "thanks": "Thanks, **{name}**!",
+          "onItsWay": "Your order is on its way.",
+          "backToMenu": "Back to menu",
+          "emptyCart": "Your cart is empty."
+        }
+      }
+    },
+    {
+      "file": "test/scenarios/mobile/shop_test.dart",
+      "name": "Order a cappuccino",
+      "ok": true,
+      "device": "iphone-16",
+      "ms": 257,
+      "steps": [
+        {
+          "index": 1,
+          "position": "#1",
+          "name": "Welcome",
+          "auto": false,
+          "tags": [
+            "store"
+          ],
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/1-Welcome.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/1-Welcome.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/1-Welcome.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/1-Welcome.semantics.json",
+          "texts": [
+            "☕",
+            "Brewline",
+            "Your coffee, ready before you are.",
+            "Get started"
+          ],
+          "statusBrightness": "dark",
+          "navBrightness": "light",
+          "verb": "pumpWidget",
+          "target": "ShopApp",
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/1-Welcome.events.json",
+          "eventCount": 4,
+          "eventChannels": {
+            "system": 4
+          },
+          "eventTitles": [],
+          "digest": "517d17e7a8e0742b"
+        },
+        {
+          "index": 2,
+          "position": "#2",
+          "parent": 1,
+          "name": "Menu",
+          "auto": false,
+          "tags": [
+            "store"
+          ],
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/2-Menu.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/2-Menu.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/2-Menu.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/2-Menu.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "Espresso, steamed milk, silky foam.",
+            "4.20 €",
+            "🥛",
+            "Flat white",
+            "Double espresso under a thin veil of milk.",
+            "4.60 €",
+            "🍵",
+            "Matcha latte",
+            "Whisked green tea, soft and grassy.",
+            "5.10 €",
+            "🫖",
+            "Chai latte",
+            "Warm spices, creamy milk.",
+            "4.80 €",
+            "🧊",
+            "Cold brew",
+            "Steeped cold for sixteen hours.",
+            "3.90 €",
+            "The menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.getStarted'",
+          "aim": {
+            "x": 28.0,
+            "y": 738.0,
+            "w": 337.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/2-Menu.events.json",
+          "eventCount": 2,
+          "eventChannels": {
+            "system": 2
+          },
+          "eventTitles": [],
+          "digest": "d59b5bbfc3522ec2"
+        },
+        {
+          "index": 3,
+          "position": "#3",
+          "parent": 2,
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/3-tap_Cappuccino_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/3-tap_Cappuccino_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/3-tap_Cappuccino_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/3-tap_Cappuccino_.semantics.json",
+          "texts": [
+            "☕",
+            "Espresso, steamed milk, silky foam.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 4.20 €",
+            "Cappuccino"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "\"Cappuccino\"",
+          "aim": {
+            "x": 104.0,
+            "y": 154.5,
+            "w": 97.87109375,
+            "h": 23.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/3-tap_Cappuccino_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "5b611dc8088135d8"
+        },
+        {
+          "index": 4,
+          "position": "#4",
+          "parent": 3,
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/4-tap_key_shop.size.large_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/4-tap_key_shop.size.large_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/4-tap_key_shop.size.large_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/4-tap_key_shop.size.large_.semantics.json",
+          "texts": [
+            "☕",
+            "Espresso, steamed milk, silky foam.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 4.90 €",
+            "Cappuccino"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.size.large'",
+          "aim": {
+            "x": 259.33333333333337,
+            "y": 402.0,
+            "w": 109.66666666666669,
+            "h": 48.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/4-tap_key_shop.size.large_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "cd3e83131c9e256a"
+        },
+        {
+          "index": 5,
+          "position": "#5",
+          "parent": 4,
+          "name": "Cart",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/5-Cart.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/5-Cart.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/5-Cart.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/5-Cart.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "4.90 €",
+            "Total",
+            "4.90 €",
+            "",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.addToCart'",
+          "aim": {
+            "x": 24.0,
+            "y": 776.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/5-Cart.events.json",
+          "eventCount": 4,
+          "eventChannels": {
+            "system": 4
+          },
+          "eventTitles": [],
+          "digest": "1523ab025180bee2"
+        },
+        {
+          "index": 6,
+          "position": "#6",
+          "parent": 5,
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/6-enterText_key_shop.cupName_.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/6-enterText_key_shop.cupName_.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/6-enterText_key_shop.cupName_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/6-enterText_key_shop.cupName_.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "4.90 €",
+            "Total",
+            "4.90 €",
+            "Xavier",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "enterText",
+          "target": "key 'shop.cupName'",
+          "aim": {
+            "x": 40.0,
+            "y": 722.0,
+            "w": 313.0,
+            "h": 24.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/6-enterText_key_shop.cupName_.events.json",
+          "eventCount": 22,
+          "eventChannels": {
+            "system": 22
+          },
+          "eventTitles": [],
+          "digest": "6c32814a0d7db230",
+          "keyboard": 336.0
+        },
+        {
+          "index": 7,
+          "position": "#7",
+          "parent": 6,
+          "name": "Order placed",
+          "auto": false,
+          "tags": [
+            "store"
+          ],
+          "image": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/7-Order_placed.png",
+          "format": "png",
+          "width": 393,
+          "height": 852,
+          "tree": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/7-Order_placed.tree.json",
+          "keys": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/7-Order_placed.keys.json",
+          "semantics": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/7-Order_placed.semantics.json",
+          "texts": [
+            "Thanks, Xavier!",
+            "Your order is on its way.",
+            "Back to menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.placeOrder'",
+          "aim": {
+            "x": 24.0,
+            "y": 440.0,
+            "w": 345.0,
+            "h": 52.0
+          },
+          "events": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/7-Order_placed.events.json",
+          "eventCount": 3,
+          "eventChannels": {
+            "system": 3
+          },
+          "eventTitles": [],
+          "digest": "46b2c8c8bb4392a3"
+        }
+      ],
+      "stepCount": 7,
+      "unchangedCount": 0,
+      "unsettledCount": 0,
+      "translations": {
+        "shop": {
+          "title": "Brewline",
+          "tagline": "Your coffee, ready before you are.",
+          "getStarted": "Get started",
+          "menuTitle": "The menu",
+          "drink.cappuccino": "Espresso, steamed milk, silky foam.",
+          "drink.flat-white": "Double espresso under a thin veil of milk.",
+          "drink.matcha": "Whisked green tea, soft and grassy.",
+          "drink.chai": "Warm spices, creamy milk.",
+          "drink.cold-brew": "Steeped cold for sixteen hours.",
+          "size": "Size",
+          "sizeSmall": "Small",
+          "sizeMedium": "Medium",
+          "sizeLarge": "Large",
+          "addToCart": "Add to cart",
+          "yourOrder": "Your order",
+          "total": "Total",
+          "nameOnCup": "Name on the cup",
+          "placeOrder": "Place order",
+          "thanks": "Thanks, **{name}**!",
+          "onItsWay": "Your order is on its way.",
+          "backToMenu": "Back to menu",
+          "emptyCart": "Your cart is empty."
+        }
+      }
+    }
+  ],
+  "clock": "2026-01-01T09:41:00.000",
+  "network": [
+    "off"
+  ]
+}

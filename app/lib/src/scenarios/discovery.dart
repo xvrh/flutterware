@@ -6,6 +6,7 @@ import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:path/path.dart' as p;
 
 import '../utils/list_files.dart';
+import 'harness_entrypoint.dart';
 
 /// Where discovery looks when the config does not say otherwise: all of
 /// `test/`. A scenario is an ordinary widget test, and `flutter test` does not
@@ -39,6 +40,20 @@ class ScenarioRef {
   /// touched; see `entry_change.dart`.
   final int endLine;
 
+  factory ScenarioRef.fromJson(Map<String, Object?> json) => ScenarioRef(
+    name: json['name']! as String,
+    file: json['file']! as String,
+    line: json['line']! as int,
+    endLine: json['endLine'] as int?,
+  );
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'file': file,
+    'line': line,
+    'endLine': endLine,
+  };
+
   @override
   String toString() => '$file:$line $name';
 }
@@ -48,9 +63,33 @@ class ScenarioScanResult {
     required this.scenarios,
     required this.diagnostics,
     this.unnamed = 0,
+    this.configFolders = const [],
   });
 
   final List<ScenarioRef> scenarios;
+
+  /// Every folder whose `flutter_test_config.dart` governs one of
+  /// [scenarios] — package-relative, `''` for the package root, listed once.
+  ///
+  /// Here so that *which pool a scenario belongs to* is a question the scan
+  /// answers rather than the disk: the panel used to stat the folders on
+  /// every scenario it opened, which is a read a recording cannot answer
+  /// and a browser cannot make.
+  final List<String> configFolders;
+
+  /// The folder whose `flutter_test_config.dart` governs [file] — the nearest
+  /// of [configFolders] at or above it — or null where nothing does. The same
+  /// answer `testConfigFolderFor` reads off the disk.
+  String? testConfigFolderOf(String file) {
+    var directory = p.url.dirname(file);
+    if (directory == '.') directory = '';
+    while (true) {
+      if (configFolders.contains(directory)) return directory;
+      if (directory.isEmpty) return null;
+      directory = p.url.dirname(directory);
+      if (directory == '.') directory = '';
+    }
+  }
 
   /// What the scan noticed but did not act on — a non-literal name it cannot
   /// list, a duplicate. Never guessed at, always reported.
@@ -64,6 +103,27 @@ class ScenarioScanResult {
   /// the harness would report. A duplicate is not one of these — it is
   /// ambiguous, not missing, and the listing still holds it.
   final int unnamed;
+
+  /// The scan as a recording keeps it — every field, so a reader of the
+  /// recording sees exactly what the scan of the disk saw.
+  factory ScenarioScanResult.fromJson(Map<String, Object?> json) =>
+      ScenarioScanResult(
+        scenarios: [
+          for (var entry in (json['scenarios'] as List? ?? const []))
+            ScenarioRef.fromJson((entry as Map).cast<String, Object?>()),
+        ],
+        diagnostics: (json['diagnostics'] as List?)?.cast<String>() ?? const [],
+        unnamed: json['unnamed'] as int? ?? 0,
+        configFolders:
+            (json['configFolders'] as List?)?.cast<String>() ?? const [],
+      );
+
+  Map<String, Object?> toJson() => {
+    'scenarios': [for (var ref in scenarios) ref.toJson()],
+    'diagnostics': diagnostics,
+    'unnamed': unnamed,
+    'configFolders': configFolders,
+  };
 }
 
 /// Finds scenarios by **parsing** the scenario directory, never by resolving
@@ -89,8 +149,10 @@ class ScenarioScanner {
     var scenarios = <ScenarioRef>[];
     var diagnostics = <String>[];
     var unnamed = 0;
+    var configFolders = <String>{};
 
     var root = p.join(packageRoot, directory);
+    var rootUrl = p.url.joinAll(p.split(directory));
     if (Directory(root).existsSync()) {
       // Listed the way git lists — see `list_files.dart`. A recursive
       // `listSync` follows symlinks by default, which is how a scan of a
@@ -100,10 +162,23 @@ class ScenarioScanner {
           if (file.path.endsWith('.dart')) file,
       ]..sort((a, b) => a.path.compareTo(b.path));
       for (var file in files) {
+        if (p.basename(file.path) == testConfigFileName) {
+          var folder = p.url.dirname(
+            p.url.joinAll(p.split(p.relative(file.path, from: packageRoot))),
+          );
+          configFolders.add(folder == '.' ? '' : folder);
+          continue;
+        }
         var source = file.readAsStringSync();
         // A substring prefilter before parsing, as the catalog scanner does.
         if (!source.contains('scenario(')) continue;
         unnamed += _scanFile(file, source, scenarios, diagnostics);
+      }
+      // A config above the scan root governs everything in it that has no
+      // nearer one — the same rule the harness applies, so the two agree.
+      if (testConfigFolderFor(packageRoot, p.url.join(rootUrl, '_'))
+          case var above?) {
+        configFolders.add(above);
       }
     }
 
@@ -112,6 +187,7 @@ class ScenarioScanner {
       scenarios: scenarios,
       diagnostics: diagnostics,
       unnamed: unnamed,
+      configFolders: configFolders.toList()..sort(),
     );
   }
 

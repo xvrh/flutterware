@@ -170,7 +170,29 @@ typedef _Baseline = ({String dir, ScenarioRunResult run});
 /// caused to scan. Scanning begins in [track], which the panel calls on mount
 /// and `fw` calls for the duration of a request.
 class ScenariosCore extends PluginCore {
-  ScenariosCore(super.host);
+  /// [scan] answers a package's syntactic scan and [runner] makes the thing
+  /// that runs its scenarios. Both default to the real ones — a parse of the
+  /// disk off-isolate, a warm `flutter_tester` — and both are the doors a
+  /// recording comes in through: the same core, the same panel, reading what
+  /// a tool recorded rather than what a machine would do now. See
+  /// `lib/src/demo/recorded_scenarios.dart`.
+  ScenariosCore(
+    super.host, {
+    ScenarioScan? scan,
+    ScenarioRunSourceFactory? runner,
+  }) : _scan = scan ?? _liveScan,
+       _runnerFactory = runner;
+
+  final ScenarioScan _scan;
+  final ScenarioRunSourceFactory? _runnerFactory;
+
+  /// Parsing runs off-isolate, as the catalog's scan does.
+  static Future<ScenarioScanResult> _liveScan({
+    required String packageRoot,
+    required String directory,
+  }) => Isolate.run(
+    ScenarioScanner(packageRoot: packageRoot, directory: directory).scan,
+  );
 
   final _scans = <String, Future<void>>{};
   final _results = <String, ScenarioScanResult>{};
@@ -182,7 +204,7 @@ class ScenariosCore extends PluginCore {
 
   /// One warm runner per package, created by the first `run` and kept — a
   /// second run reuses the compiled harness and the live tester.
-  final _runners = <String, ScenarioRunner>{};
+  final _runners = <String, ScenarioRunSource>{};
 
   /// The panel's runs, one per scenario, keyed `(package, file, scenario)`.
   final _panelRuns = <(String, String, String), ScenarioPanelRun>{};
@@ -277,22 +299,21 @@ class ScenariosCore extends PluginCore {
   /// Starts (and keeps) the scan for [path]. Idempotent.
   void track(String path) {
     if (_scans.containsKey(path)) return;
-    var scanner = ScenarioScanner(
-      packageRoot: host.workspace.packageFor(path).directory.path,
-      directory: scanRootFor(path),
-    );
-    // Parsing runs off-isolate, as the catalog's scan does.
-    _scans[path] = Isolate.run(scanner.scan)
-        .then<void>((result) {
-          _results[path] = result;
-          _delta.scanLanded(path, result);
-          // A scan that lands clears the failure it recovers from — a save
-          // caught mid-write fails one rescan, and that error may not outlive
-          // the next scan that read the finished file.
-          _errors.remove(path);
-        })
-        .catchError((Object error) => _errors[path] = error)
-        .whenComplete(notifyChanged);
+    _scans[path] =
+        _scan(
+              packageRoot: host.workspace.packageFor(path).directory.path,
+              directory: scanRootFor(path),
+            )
+            .then<void>((result) {
+              _results[path] = result;
+              _delta.scanLanded(path, result);
+              // A scan that lands clears the failure it recovers from — a save
+              // caught mid-write fails one rescan, and that error may not outlive
+              // the next scan that read the finished file.
+              _errors.remove(path);
+            })
+            .catchError((Object error) => _errors[path] = error)
+            .whenComplete(notifyChanged);
     notifyChanged();
   }
 
@@ -586,11 +607,7 @@ class ScenariosCore extends PluginCore {
       // directories. The images already on screen are decoded, so pulling the
       // files is safe — and keeping them would grow a directory per click.
       if (previous?.output case var old? when old != outDir) {
-        try {
-          Directory(old).deleteSync(recursive: true);
-        } on FileSystemException {
-          // Somebody looking at it, or already gone — either way not ours.
-        }
+        _discardRun(old);
       }
       notifyChanged();
       // The run compiled the suite as it is on disk, which is newer truth
@@ -636,21 +653,21 @@ class ScenariosCore extends PluginCore {
 
   /// Replaces the cached scan — what [track] deliberately never does.
   void _rescan(String path) {
-    var scanner = ScenarioScanner(
-      packageRoot: host.workspace.packageFor(path).directory.path,
-      directory: scanRootFor(path),
-    );
-    _scans[path] = Isolate.run(scanner.scan)
-        .then<void>((result) {
-          _results[path] = result;
-          _delta.scanLanded(path, result);
-          // Same recovery rule as [track]: the watcher rescans on every
-          // save, and the one that read a half-written file must not brand
-          // the suite "scan failed" after the next one read it whole.
-          _errors.remove(path);
-        })
-        .catchError((Object error) => _errors[path] = error)
-        .whenComplete(notifyChanged);
+    _scans[path] =
+        _scan(
+              packageRoot: host.workspace.packageFor(path).directory.path,
+              directory: scanRootFor(path),
+            )
+            .then<void>((result) {
+              _results[path] = result;
+              _delta.scanLanded(path, result);
+              // Same recovery rule as [track]: the watcher rescans on every
+              // save, and the one that read a half-written file must not brand
+              // the suite "scan failed" after the next one read it whole.
+              _errors.remove(path);
+            })
+            .catchError((Object error) => _errors[path] = error)
+            .whenComplete(notifyChanged);
   }
 
   @override
@@ -3692,6 +3709,17 @@ class ScenariosCore extends PluginCore {
   /// writes a large one; nothing ever removed them, and a single worktree here
   /// had reached 848MB. Called where a run *finishes* rather than once per
   /// process, because that is where the litter is made.
+  /// Deletes one superseded run directory. Housekeeping, like [_sweepRuns]:
+  /// somebody looking at it, a directory already gone, or a host with no
+  /// disk to delete from — none of it is worth failing a finished run over.
+  void _discardRun(String dir) {
+    try {
+      Directory(dir).deleteSync(recursive: true);
+    } on Object {
+      // See above.
+    }
+  }
+
   void _sweepRuns(String path, {Set<String> protect = const {}}) {
     try {
       sweepScenarioRuns(
@@ -4344,15 +4372,11 @@ class ScenariosCore extends PluginCore {
     notifyChanged();
   }
 
-  ScenarioRunner _runnerFor(String path) {
+  ScenarioRunSource _runnerFor(String path) {
     var runner = _runners.putIfAbsent(
       path,
-      () => ScenarioRunner(
-        packageRoot: host.workspace.packageFor(path).directory.path,
-        directory: scanRootFor(path),
-        flutterSdkRoot: host.workspace.flutterSdk.root,
-        projectClock: host.projectClock,
-        projectNetwork: host.projectNetwork,
+      () => (_runnerFactory ?? _liveRunner)(
+        path,
         onLog: (line) {
           // Lines the panel has no word for are the guest's own console —
           // an app's `print` during boot. Real log material, and nothing the
@@ -4369,10 +4393,24 @@ class ScenariosCore extends PluginCore {
     return runner;
   }
 
+  /// A warm `flutter_tester` for [path] — what runs scenarios everywhere but
+  /// in a recording.
+  ScenarioRunSource _liveRunner(
+    String path, {
+    required void Function(String line) onLog,
+  }) => ScenarioRunner(
+    packageRoot: host.workspace.packageFor(path).directory.path,
+    directory: scanRootFor(path),
+    flutterSdkRoot: host.workspace.flutterSdk.root,
+    projectClock: host.projectClock,
+    projectNetwork: host.projectNetwork,
+    onLog: onLog,
+  );
+
   /// Installs a runner for [path], so a test can drive the run-state machinery
   /// without a real `flutter_tester` behind it.
   @visibleForTesting
-  void debugInstallRunner(String path, ScenarioRunner runner) =>
+  void debugInstallRunner(String path, ScenarioRunSource runner) =>
       _runners[path] = runner;
 
   /// An artifact path as every surface reports it: relative to the worktree,
@@ -4489,6 +4527,19 @@ class ScenariosCore extends PluginCore {
     super.dispose();
   }
 }
+
+/// A package's syntactic scan — see [ScenariosCore.new].
+typedef ScenarioScan = Future<ScenarioScanResult> Function({
+  required String packageRoot,
+  required String directory,
+});
+
+/// Makes the thing that runs [path]'s scenarios — see [ScenariosCore.new].
+/// [onLog] receives the harness's console, a line at a time.
+typedef ScenarioRunSourceFactory = ScenarioRunSource Function(
+  String path, {
+  required void Function(String line) onLog,
+});
 
 PluginCore scenariosCoreFactory(PluginHost host) => ScenariosCore(host);
 

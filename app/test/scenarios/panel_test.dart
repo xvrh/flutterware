@@ -418,6 +418,15 @@ void main() {
       }
     }
 
+    // The pool is read off the scan, which lands off-isolate: real work the
+    // fake clock cannot wait on, so wait in real time and pump it in.
+    for (var i = 0; i < 200 && core.scanResultFor('.') == null; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+    expect(core.scanResultFor('.'), isNotNull);
     await pumpFrames();
     // A pasted link is honoured as it stands: the first pool adopts it.
     expect(address.value.axes['device'], 'iphone-13');

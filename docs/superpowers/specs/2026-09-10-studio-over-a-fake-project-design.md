@@ -527,6 +527,52 @@ so it never touches `dart:io`, or not recorded, so its panel is never built.
 The same `try/on UnsupportedError` inside a plugin core would hide a real
 desktop bug. Add an `ambient_sdk_test`-style check the day it ships twice.
 
+### The scenarios slice (same day): the runner was the seam, not the core
+
+The go/no-go the plan set for scenarios came out as a *no interface on the
+core at all*. The panel reads twenty-six members of `ScenariosCore`, which
+looked like the width of an interface — but what the core does that a
+recording cannot is only two things: parse the disk (`Isolate.run` over
+`ScenarioScanner`) and run a `flutter_tester` (`ScenarioRunner`). Both were
+already behind one call each. So the core gained two constructor doors,
+`scan:` and `runner:`, exactly like the launcher icon's, and the runner
+gained a five-member interface, `ScenarioRunSource` — `list`, `run`,
+`logPath`, `onStep`, `dispose` — which is everything the core ever calls on
+it. `ScenarioRunner` implements it; `RecordedScenarioRunner` answers the
+same five from files. The core does not know which it has.
+
+**The recording of a run is the harness's own report.** `record.dart` runs
+`ScenarioRunner` on two files of the example — the coffee shop on a phone
+and in a window, three scenarios, 31 steps — and keeps the raw report per
+file with every artifact copied in beside it and its seven path fields
+spelled relative to the recording. On the way out the recorded runner puts
+them under `/recording`, the recorded project's root, so the core's own
+relativising hands the panel a recording-relative path and the panel's
+artifact source — the recording itself, through a new `artifacts:` door on
+`ScenariosPlugin` — reads it. Opening a scenario runs it, in the panel's
+model; over a recording that run is a read, which is what lets the studio's
+own scenario of the scenarios panel settle under FakeAsync. Measured:
+recording 13s; the fixture 3.3 MB, of which 2.4 MB is trees and 1 MB
+pictures; the studio scenario 1.3s for six steps.
+
+**What the browser test caught on its first run.** Opening a scenario threw
+`_Namespace` on the web: the panel stats the folder's
+`flutter_test_config.dart` to know which *pool* a scenario belongs to — the
+scope a remembered device is valid in. That is a fact about the project,
+not the machine, so the scan now records every governing config folder
+(`ScenarioScanResult.configFolders`, by the harness's own rule) and the
+panel answers the pool from the scan. One consequence: the pool is known
+when the scan lands rather than synchronously, so the panel follows it on
+every core change and not only on an address change, and the test that
+remembers a device per pool lets the scan land first. The panel's other
+disk read, the banner's app icon, became an `appIcon:` door.
+
+**Two doors, one interface, no guard.** Nothing in the scenarios plugin
+catches `UnsupportedError`. The one place a superseded run directory was
+deleted with a narrow catch now goes through the same housekeeping rule the
+sweep already had — a delete that cannot happen is not worth failing a
+finished run over — which is a rule about housekeeping, not about the web.
+
 ### The recording and the scenario, in that order
 
 The scenario does not record. It opens `app/demo/fixture/` through the file
@@ -562,13 +608,9 @@ so is the right answer there.
 ## What to do next
 
 0. ~~The launcher-icon slice.~~ Built; see above.
-1. **Scenarios next, as the go/no-go for the interface.** Extract `ScenariosCore`'s panel-facing
-   interface, rename today's class `LiveScenariosCore`, move the artifacts
-   source onto it, write `RecordedScenariosCore` over a fixture the record
-   script produced. Deliverable: one whole-panel catalog demo, one studio
-   scenario with shots, and the panel on the web behind the `dart:ffi` fence.
-   Roughly two to three days. If the interface is unpleasant here, it will be
-   worse for previews, and that is the moment to stop.
+1. ~~**Scenarios next, as the go/no-go for the interface.**~~ Built — see
+   above. No interface on the core; the runner was the seam. Left for later:
+   a whole-panel catalog demo of the scenarios panel over the recording.
 2. **Previews.** The still picture, recorded thumbnails and inspect, read-only
    knobs. Three to five days.
 3. ~~**The demo entry point, the record script as a documented command, the

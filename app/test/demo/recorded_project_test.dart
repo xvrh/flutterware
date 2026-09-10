@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware_app/src/demo/recorded_project.dart';
 import 'package:flutterware_app/src/demo/recording.dart';
 import 'package:flutterware_app/src/launcher_icon/ui/plate.dart';
+import 'package:flutterware_app/src/scenarios/framed_shot.dart';
 import 'package:flutterware_app/src/plugins/scan_cache.dart';
 import 'package:flutterware_app/src/shell/shell_view.dart';
 import 'package:path/path.dart' as p;
@@ -61,6 +62,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Not in this recording'), findsOneWidget);
+  });
+
+  testWidgets('opens a recorded scenario and draws its run', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var shell = recordedShell(recording: recording);
+    addTearDown(shell.dispose);
+    await shell.start(recordedProjectRoot);
+    await tester.pumpWidget(ShellApp(shell));
+    await tester.pumpAndSettle();
+
+    // The list is the recorded scan: every scenario of the example, not only
+    // the ones with a run behind them.
+    await tester.tap(find.text('Scenarios'));
+    await tester.pumpAndSettle();
+    expect(find.text('shop_window_test.dart'), findsNothing);
+    // Folded by folder on arrival; the shop's file is two unfolds down.
+    await tester.tap(find.text('mobile'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('shop_test.dart'));
+    await tester.pumpAndSettle();
+    expect(find.text('Order a cappuccino'), findsOneWidget);
+    expect(find.text('Around the shop'), findsOneWidget);
+
+    // Opening one "runs" it, which over a recording is a read: the flow
+    // fills in with the recorded steps and their frames.
+    await tester.tap(find.text('Order a cappuccino'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Welcome'), findsWidgets);
+    expect(find.textContaining('Order placed'), findsWidgets);
+    expect(find.text('iPhone 16 (default)'), findsOneWidget);
+    expect(find.byType(FramedShot), findsWidgets);
+    expect(find.textContaining('This recording has no'), findsNothing);
   });
 
   test('a scan missing from the recording is a failure, not a crash', () async {

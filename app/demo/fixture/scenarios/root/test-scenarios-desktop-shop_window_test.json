@@ -1,0 +1,245 @@
+{
+  "ms": 294,
+  "scenarios": [
+    {
+      "file": "test/scenarios/desktop/shop_window_test.dart",
+      "name": "Order a cold brew on a laptop",
+      "ok": true,
+      "device": "window-wide",
+      "ms": 293,
+      "steps": [
+        {
+          "index": 1,
+          "position": "#1",
+          "name": "Welcome",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/1-Welcome.png",
+          "format": "png",
+          "width": 1600,
+          "height": 900,
+          "tree": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/1-Welcome.tree.json",
+          "keys": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/1-Welcome.keys.json",
+          "semantics": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/1-Welcome.semantics.json",
+          "texts": [
+            "☕",
+            "Brewline",
+            "Your coffee, ready before you are.",
+            "Get started"
+          ],
+          "statusBrightness": "dark",
+          "navBrightness": "light",
+          "verb": "pumpWidget",
+          "target": "ShopApp",
+          "events": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/1-Welcome.events.json",
+          "eventCount": 4,
+          "eventChannels": {
+            "system": 4
+          },
+          "eventTitles": [],
+          "digest": "08bef8315bd2201b"
+        },
+        {
+          "index": 2,
+          "position": "#2",
+          "parent": 1,
+          "name": "Menu",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/2-Menu.png",
+          "format": "png",
+          "width": 1600,
+          "height": 900,
+          "tree": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/2-Menu.tree.json",
+          "keys": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/2-Menu.keys.json",
+          "semantics": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/2-Menu.semantics.json",
+          "texts": [
+            "☕",
+            "Cappuccino",
+            "Espresso, steamed milk, silky foam.",
+            "4.20 €",
+            "🥛",
+            "Flat white",
+            "Double espresso under a thin veil of milk.",
+            "4.60 €",
+            "🍵",
+            "Matcha latte",
+            "Whisked green tea, soft and grassy.",
+            "5.10 €",
+            "🫖",
+            "Chai latte",
+            "Warm spices, creamy milk.",
+            "4.80 €",
+            "🧊",
+            "Cold brew",
+            "Steeped cold for sixteen hours.",
+            "3.90 €",
+            "The menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.getStarted'",
+          "aim": {
+            "x": 28.0,
+            "y": 828.0,
+            "w": 1544.0,
+            "h": 44.0
+          },
+          "events": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/2-Menu.events.json",
+          "eventCount": 2,
+          "eventChannels": {
+            "system": 2
+          },
+          "eventTitles": [],
+          "digest": "c356f97332d9e445"
+        },
+        {
+          "index": 3,
+          "position": "#3",
+          "parent": 2,
+          "auto": true,
+          "image": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/3-tap_Cold_brew_.png",
+          "format": "png",
+          "width": 1600,
+          "height": 900,
+          "tree": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/3-tap_Cold_brew_.tree.json",
+          "keys": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/3-tap_Cold_brew_.keys.json",
+          "semantics": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/3-tap_Cold_brew_.semantics.json",
+          "texts": [
+            "🧊",
+            "Steeped cold for sixteen hours.",
+            "Size",
+            "Small",
+            "Medium",
+            "Large",
+            "Add to cart · 3.90 €",
+            "Cold brew"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "\"Cold brew\"",
+          "aim": {
+            "x": 104.0,
+            "y": 479.5,
+            "w": 83.48828125,
+            "h": 23.0
+          },
+          "events": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/3-tap_Cold_brew_.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "0bebea0abe9333f7"
+        },
+        {
+          "index": 4,
+          "position": "#4",
+          "parent": 3,
+          "name": "Cart",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/4-Cart.png",
+          "format": "png",
+          "width": 1600,
+          "height": 900,
+          "tree": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/4-Cart.tree.json",
+          "keys": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/4-Cart.keys.json",
+          "semantics": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/4-Cart.semantics.json",
+          "texts": [
+            "🧊",
+            "Cold brew",
+            "3.90 €",
+            "Total",
+            "3.90 €",
+            "",
+            "Name on the cup",
+            "Place order",
+            "Your order"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.addToCart'",
+          "aim": {
+            "x": 24.0,
+            "y": 832.0,
+            "w": 1552.0,
+            "h": 44.0
+          },
+          "events": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/4-Cart.events.json",
+          "eventCount": 4,
+          "eventChannels": {
+            "system": 4
+          },
+          "eventTitles": [],
+          "digest": "d7b8ef638ef5a38f"
+        },
+        {
+          "index": 5,
+          "position": "#5",
+          "parent": 4,
+          "name": "Order placed",
+          "auto": false,
+          "image": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/5-Order_placed.png",
+          "format": "png",
+          "width": 1600,
+          "height": 900,
+          "tree": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/5-Order_placed.tree.json",
+          "keys": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/5-Order_placed.keys.json",
+          "semantics": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/5-Order_placed.semantics.json",
+          "texts": [
+            "Thanks, —!",
+            "Your order is on its way.",
+            "Back to menu"
+          ],
+          "statusBrightness": "dark",
+          "verb": "tap",
+          "target": "key 'shop.placeOrder'",
+          "aim": {
+            "x": 24.0,
+            "y": 832.0,
+            "w": 1552.0,
+            "h": 44.0
+          },
+          "events": "scenarios/root/test-scenarios-desktop-shop_window_test/order-a-cold-brew-on-a-laptop/5-Order_placed.events.json",
+          "eventCount": 1,
+          "eventChannels": {
+            "system": 1
+          },
+          "eventTitles": [],
+          "digest": "1818f0ed837e24f0"
+        }
+      ],
+      "stepCount": 5,
+      "unchangedCount": 0,
+      "unsettledCount": 0,
+      "translations": {
+        "shop": {
+          "title": "Brewline",
+          "tagline": "Your coffee, ready before you are.",
+          "getStarted": "Get started",
+          "menuTitle": "The menu",
+          "drink.cappuccino": "Espresso, steamed milk, silky foam.",
+          "drink.flat-white": "Double espresso under a thin veil of milk.",
+          "drink.matcha": "Whisked green tea, soft and grassy.",
+          "drink.chai": "Warm spices, creamy milk.",
+          "drink.cold-brew": "Steeped cold for sixteen hours.",
+          "size": "Size",
+          "sizeSmall": "Small",
+          "sizeMedium": "Medium",
+          "sizeLarge": "Large",
+          "addToCart": "Add to cart",
+          "yourOrder": "Your order",
+          "total": "Total",
+          "nameOnCup": "Name on the cup",
+          "placeOrder": "Place order",
+          "thanks": "Thanks, **{name}**!",
+          "onItsWay": "Your order is on its way.",
+          "backToMenu": "Back to menu",
+          "emptyCart": "Your cart is empty."
+        }
+      }
+    }
+  ],
+  "clock": "2026-01-01T09:41:00.000",
+  "network": [
+    "off"
+  ]
+}
