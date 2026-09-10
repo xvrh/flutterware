@@ -8,6 +8,9 @@ import 'dart:io';
 
 import 'package:flutterware_app/src/previews/asset_bundle.dart';
 import 'package:flutterware_app/src/previews/package_config_locator.dart';
+import 'package:flutterware_app/src/previews/protocol.dart' show AssetsChanged;
+import 'package:flutterware_app/src/previews/shader_reload.dart'
+    show reloadGuestAssets;
 import 'package:flutterware_app/src/embedder/embedder_build.dart';
 import 'package:flutterware_app/src/embedder/flutter_cache.dart';
 import 'package:flutterware_app/src/embedder/guest_vm_service.dart';
@@ -365,14 +368,19 @@ void main() => runApp(
     );
     expect(yellow(shaderEvicted), isZero);
 
-    for (var key in afterShader.shaders) {
-      await vm!.service.callServiceExtension(
-        'ext.ui.window.reinitializeShader',
+    // The session's own sequence, not a second copy of it — see
+    // CatalogSession._onAssetsChanged.
+    await reloadGuestAssets(
+      AssetsChanged(
+        fontsChanged: afterShader.fontsChanged,
+        shaders: [...afterShader.shaders],
+      ),
+      (method, [args]) => vm!.service.callServiceExtension(
+        method,
         isolateId: vm!.isolateId,
-        args: {'assetKey': key},
-      );
-    }
-    await evictAndReassemble(['AssetManifest.bin']);
+        args: args,
+      ),
+    );
     var reloaded = await capture();
     expect(
       yellow(reloaded),
