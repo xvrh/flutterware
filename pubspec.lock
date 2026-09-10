@@ -883,7 +883,7 @@ packages:
     source: hosted
     version: "2.0.3"
   package_config:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: package_config
       sha256: f096c55ebb7deb7e384101542bfba8c52696c1b56fca2eb62827989ef2353bbc
@@ -1578,5 +1578,5 @@ packages:
     source: hosted
     version: "2.2.4"
 sdks:
-  dart: ">=3.13.0-0 <4.0.0"
+  dart: ">=3.13.0 <4.0.0"
   flutter: ">=3.47.0"
