@@ -161,6 +161,12 @@ flutter:
   assets:
     - assets/
 
+  # The scene tests' own shaders: `flutter test` compiles what the package
+  # declares, and nothing else can put a program in a test's bundle.
+  shaders:
+    - test/scene/shaders/probe.frag
+    - test/scene/shaders/probe_bare.frag
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
 
