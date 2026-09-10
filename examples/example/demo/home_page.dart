@@ -4,13 +4,10 @@ import 'package:flutterware_example/main.dart';
 
 import 'shell.dart';
 
-/// Two demos in one file, so the catalog derives a `Home page` group for them
-/// without either declaring one.
+/// The unframed half of the `Home page` group. Its phone-canvas counterpart is
+/// `home_page_mobile.dart`, which is a separate file so that the canvas
+/// declared for it in `tool/flutterware.dart` does not catch this one too — the
+/// group is derived from the shared `group:`, not from the file.
 
 @Preview(name: 'Default', group: 'Home page', wrapper: wrapInApp)
 Widget homePageDefault() => const MyHomePage(title: 'Flutter Demo Home Page');
-
-/// The same screen at a phone's size, to show that a demo can pin its own
-/// canvas rather than take whatever the panel happens to be.
-@Preview(name: 'On a phone', group: 'Home page', wrapper: wrapInApp)
-Widget homePageMobile() => const MyHomePage(title: 'Home');
