@@ -120,4 +120,28 @@ void main() {
       );
     });
   });
+
+  group('a sweep gradient', () {
+    const a = SceneColor(0xFFFF0000);
+    const b = SceneColor(0xFF0000FF);
+
+    test('says nothing on the wire that a default already says', () {
+      expect(const SweepPaint(colors: [a, b]).toWire(), {
+        'k': 'sweep',
+        'colors': [a.argb, b.argb],
+      });
+    });
+
+    test('round-trips its centre and angles', () {
+      const g = SweepPaint(
+        colors: [a, b],
+        center: SceneAlignment(-0.5, 0),
+        startAngle: 45,
+        endAngle: 300,
+      );
+      expect(ScenePaint.fromWire(g.toWire()), g);
+      expect(g.copyWith(startAngle: 90).startAngle, 90);
+      expect(g.copyWith(startAngle: 90).endAngle, 300);
+    });
+  });
 }

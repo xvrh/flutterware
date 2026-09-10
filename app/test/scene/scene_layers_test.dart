@@ -171,6 +171,39 @@ void main() {
       expect(plain, isNot(contains('center:')));
       expect(plain, isNot(contains('radius:')));
     });
+
+    test('a sweep gradient round-trips, and writes no default', () {
+      var layers = <TextLayer>[
+        const StrokeLayer(
+          width: 6,
+          paint: SweepPaint(
+            colors: [SceneColor(0xFFFF2D95), SceneColor(0xFF00E5FF)],
+            startAngle: 45,
+            endAngle: 300,
+          ),
+        ),
+      ];
+      var out = _emit(layers);
+      expect(_read(out), layers);
+      expect(_emit(_read(out)), out);
+      // The formatter wraps `SweepPaint(…)` onto its own lines at this
+      // nesting depth (the same trap as RadialPaint above), so the check is
+      // by piece rather than one contiguous substring: both angles are
+      // written, with their values, and the round-trip identity checks above
+      // already pin the semantics.
+      expect(out, contains('startAngle: 45'));
+      expect(out, contains('endAngle: 300'));
+      expect(
+        _emit(const [
+          FillLayer(
+            paint: SweepPaint(
+              colors: [SceneColor(0xFFFF2D95), SceneColor(0xFF00E5FF)],
+            ),
+          ),
+        ]),
+        isNot(contains('Angle')),
+      );
+    });
   });
 
   group('a style token', () {

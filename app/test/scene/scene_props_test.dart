@@ -43,6 +43,15 @@ Object? sample(SceneProp p) => switch (p.kind) {
         radius: 1.5,
       ),
     ),
+    StrokeLayer(
+      width: 3,
+      paint: SweepPaint(
+        colors: [SceneColor(0xFFFF2D95), SceneColor(0xFF00E5FF)],
+        center: SceneAlignment(-0.5, 0),
+        startAngle: 45,
+        endAngle: 300,
+      ),
+    ),
     FillLayer(),
   ],
   ScenePropKind.axes => const {'wght': 640.0, 'wdth': 85.0},

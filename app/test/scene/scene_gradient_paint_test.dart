@@ -149,4 +149,37 @@ void main() {
       expect(edge.r, lessThan(40));
     },
   );
+
+  group('a sweep gradient', () {
+    test("starts at twelve o'clock and runs clockwise", () async {
+      var image = await _paint(const [
+        FillLayer(paint: SweepPaint(colors: [_red, _blue])),
+      ]);
+      // Three o'clock is a quarter of the way round, nine o'clock three
+      // quarters. With the engine's own zero at three o'clock, nine would be
+      // halfway and read as purple.
+      var three = await _mean(image, _spot(150, 10));
+      var nine = await _mean(image, _spot(50, 10));
+      expect(three.r, greaterThan(three.b));
+      expect(nine.b, greaterThan(nine.r));
+    });
+
+    test('puts its first colour at its start angle', () async {
+      // A full turn past the start, so the arc is the whole circle shifted
+      // rather than a half-turn with the far side clamped.
+      var image = await _paint(const [
+        FillLayer(
+          paint: SweepPaint(
+            colors: [_red, _blue],
+            startAngle: 180,
+            endAngle: 540,
+          ),
+        ),
+      ]);
+      var three = await _mean(image, _spot(150, 10));
+      var nine = await _mean(image, _spot(50, 10));
+      expect(nine.r, greaterThan(nine.b));
+      expect(three.b, greaterThan(three.r));
+    });
+  });
 }

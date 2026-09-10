@@ -48,6 +48,24 @@ ui.Shader sceneGradientShader(SceneGradient g, Rect box, {double opacity = 1}) {
         sy: math.max(box.height / 2, _minHalf),
       ),
     ),
+    SweepPaint(:var center, :var startAngle, :var endAngle) =>
+      ui.Gradient.sweep(
+        Offset.zero,
+        colors,
+        stops,
+        ui.TileMode.clamp,
+        // The engine gets a sweep from its own zero, and the turn is in the
+        // matrix: it misreads a negative start or one that wraps past a full
+        // turn, and an editor's dial produces both. Its start must also be
+        // below its end, which a drag of one past the other would break.
+        0,
+        _radians((endAngle - startAngle).clamp(0.01, 360)),
+        // The engine's zero is three o'clock; the file's is twelve.
+        _placed(
+          Alignment(center.x, center.y).withinRect(box),
+          radians: _radians(startAngle - 90),
+        ),
+      ),
   };
 }
 
@@ -73,3 +91,5 @@ Float64List _placed(
     at.dx, at.dy, 0, 1, //
   ]);
 }
+
+double _radians(double degrees) => degrees * math.pi / 180;

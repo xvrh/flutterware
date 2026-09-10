@@ -5,6 +5,8 @@
 // order IS the meaning. The model is back to front (the first layer is
 // painted first, so it sits behind); the list shows it FRONT first, which is
 // what "the top layer" means to everyone who has used one of these.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene_authoring.dart';
 
@@ -302,6 +304,13 @@ class _SceneLayerListState extends State<SceneLayerList> {
         // A swatch is square, so the box-stretched radius is Flutter's
         // shortest-side one at half the number.
         radius: radius / 2,
+      ),
+      SweepPaint(:var center, :var startAngle, :var endAngle) => SweepGradient(
+        colors: colors,
+        stops: g.resolvedStops,
+        center: Alignment(center.x, center.y),
+        endAngle: (endAngle - startAngle).clamp(0.01, 360) * math.pi / 180,
+        transform: GradientRotation((startAngle - 90) * math.pi / 180),
       ),
     };
   }

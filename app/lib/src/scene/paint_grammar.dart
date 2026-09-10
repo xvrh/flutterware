@@ -51,6 +51,21 @@ String _paint(ScenePaint p) => switch (p) {
     if (radius != 1) ', radius: ${_num(radius)}',
     ')',
   ].join(),
+  SweepPaint(
+    :var colors,
+    :var stops,
+    :var center,
+    :var startAngle,
+    :var endAngle,
+  ) =>
+    [
+      'SweepPaint(colors: [${colors.map(_color).join(', ')}]',
+      if (stops != null) ', stops: [${stops.map(_num).join(', ')}]',
+      if (center != SceneAlignment.center) ', center: ${_alignment(center)}',
+      if (startAngle != 0) ', startAngle: ${_num(startAngle)}',
+      if (endAngle != 360) ', endAngle: ${_num(endAngle)}',
+      ')',
+    ].join(),
 };
 
 const _namedAlignments = {
@@ -203,12 +218,28 @@ ScenePaint? _readPaint(Expression e, Refuse refuse) {
         center: center ?? SceneAlignment.center,
         radius: radius ?? 1,
       );
+    case ('SweepPaint', var args):
+      var named = _named(args, 'a gradient', refuse);
+      if (named == null) return null;
+      var read = _readStops(e, named, 'SweepPaint', refuse);
+      if (read == null) return null;
+      var center = _readAlignment(named.remove('center'), refuse);
+      var start = _take(named, 'startAngle', refuse);
+      var end = _take(named, 'endAngle', refuse);
+      if (!_rest(named, 'SweepPaint', refuse)) return null;
+      return SweepPaint(
+        colors: read.colors,
+        stops: read.stops,
+        center: center ?? SceneAlignment.center,
+        startAngle: start ?? 0,
+        endAngle: end ?? 360,
+      );
     default:
       refuse(
         e.offset,
         'paint',
-        'a paint is SolidPaint(SceneColor(0x…)), LinearPaint(colors: […]) or '
-            'RadialPaint(colors: […]) — nothing else is on the allowlist',
+        'a paint is SolidPaint(SceneColor(0x…)), or LinearPaint, RadialPaint '
+            'or SweepPaint(colors: […]) — nothing else is on the allowlist',
       );
       return null;
   }

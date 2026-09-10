@@ -179,6 +179,13 @@ sealed class ScenePaint {
       center: SceneAlignment.fromWire(m['center'], SceneAlignment.center),
       radius: (m['r'] as num?)?.toDouble() ?? 1,
     ),
+    Map m when m['k'] == 'sweep' => SweepPaint(
+      colors: _wireColors(m),
+      stops: _wireStops(m),
+      center: SceneAlignment.fromWire(m['center'], SceneAlignment.center),
+      startAngle: (m['a0'] as num?)?.toDouble() ?? 0,
+      endAngle: (m['a1'] as num?)?.toDouble() ?? 360,
+    ),
     _ => null,
   };
 }
@@ -334,6 +341,77 @@ class RadialPaint extends SceneGradient {
 
   @override
   String toString() => 'RadialPaint($colors)';
+}
+
+/// A gradient around a point, the way a clock hand sweeps: 0° is twelve
+/// o'clock and angles run clockwise, in degrees — the unit `rotate` uses.
+/// Flutter's `SweepGradient` starts at three o'clock in radians; the
+/// renderer turns it, so the file never has to.
+///
+/// Not stretched to the box the way [RadialPaint] is: an angle in a
+/// stretched box is not the angle that was typed.
+class SweepPaint extends SceneGradient {
+  const SweepPaint({
+    required super.colors,
+    super.stops,
+    this.center = SceneAlignment.center,
+    this.startAngle = 0,
+    this.endAngle = 360,
+  });
+
+  final SceneAlignment center;
+
+  /// Where the first colour sits.
+  final double startAngle;
+
+  /// Where the last colour sits; past it the last colour holds. 360 more
+  /// than [startAngle] is a full turn.
+  final double endAngle;
+
+  @override
+  SweepPaint withStops(List<SceneColor> colors, List<double>? stops) =>
+      SweepPaint(
+        colors: colors,
+        stops: stops,
+        center: center,
+        startAngle: startAngle,
+        endAngle: endAngle,
+      );
+
+  SweepPaint copyWith({
+    SceneAlignment? center,
+    double? startAngle,
+    double? endAngle,
+  }) => SweepPaint(
+    colors: colors,
+    stops: stops,
+    center: center ?? this.center,
+    startAngle: startAngle ?? this.startAngle,
+    endAngle: endAngle ?? this.endAngle,
+  );
+
+  @override
+  Object toWire() => {
+    'k': 'sweep',
+    ..._stopsWire,
+    if (center != SceneAlignment.center) 'center': center.toWire(),
+    if (startAngle != 0) 'a0': startAngle,
+    if (endAngle != 360) 'a1': endAngle,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SweepPaint &&
+      _sameStops(other) &&
+      other.center == center &&
+      other.startAngle == startAngle &&
+      other.endAngle == endAngle;
+
+  @override
+  int get hashCode => Object.hash(_stopsHash, center, startAngle, endAngle);
+
+  @override
+  String toString() => 'SweepPaint($colors)';
 }
 
 /// Whether two property values are the same value.
