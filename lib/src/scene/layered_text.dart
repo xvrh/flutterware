@@ -155,7 +155,9 @@ class SceneTextStackPainter extends CustomPainter {
     required this.widthBasis,
     required this.heightBehavior,
     this.time,
-    SceneShaderSlots? slots,
+    // Internal: the slots are the mounted LayeredText's, kept across its
+    // rebuilds, and their type is not exported.
+    @internal SceneShaderSlots? slots,
   }) : _slots = slots ?? SceneShaderSlots(),
        super(repaint: _repaintFor(layers, time));
 
