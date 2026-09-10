@@ -275,6 +275,10 @@ Future<CompareOutcome> runComparison({
     previews: result,
     scenarios: scenarios,
     narrowed: options.entries.isNotEmpty,
+    // Read once, here, rather than by whoever writes an output: the page and
+    // the comment must agree about which push they describe.
+    headCommit: await BaseRef.headOf(top),
+    at: DateTime.now(),
   );
   var index = artifact.writeTo(
     p.join(comparisonDirFor(flutterwareDir(), session.worktree), 'index.json'),
@@ -307,7 +311,7 @@ Future<CompareOutcome> runComparison({
       artifact: artifact,
       cache: shotCache,
       against: base.against,
-      head: await BaseRef.headOf(top),
+      head: artifact.headCommit,
       directory: options.reportDir!,
     );
   }

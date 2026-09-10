@@ -165,6 +165,8 @@ class ComparisonArtifact {
     required this.previews,
     this.scenarios,
     this.narrowed = false,
+    this.headCommit,
+    this.at,
   });
 
   final ComparisonResult previews;
@@ -172,6 +174,17 @@ class ComparisonArtifact {
   /// Absent when the project declares no scenarios at all. A run that tried
   /// and could not is present, with a [ScenarioResults.note].
   final ScenarioResults? scenarios;
+
+  /// Where HEAD sat when this ran, and when that was.
+  ///
+  /// Neither is a fact about the comparison; both are facts about *this*
+  /// comparison, which is what a reader arriving from a pull-request comment
+  /// needs before anything else — is this still the branch I am looking at,
+  /// and is it still today. The page could not say either: `head` records the
+  /// worktree's **path**, which means nothing off the machine that ran it.
+  final String? headCommit;
+
+  final DateTime? at;
 
   /// Whether the run was narrowed to named entries (`--entry`).
   ///
@@ -207,6 +220,8 @@ class ComparisonArtifact {
     'version': comparisonReportVersion,
     'base': previews.baseSha,
     'head': previews.headRoot,
+    'headCommit': ?headCommit,
+    'at': ?at?.toUtc().toIso8601String(),
     'ms':
         previews.elapsed.inMilliseconds +
         (scenarios?.elapsed.inMilliseconds ?? 0),

@@ -13,15 +13,20 @@ class CacheShotStore implements ShotStore {
   final ShotCache cache;
 
   @override
-  Future<Shot?> byKey(String key) async {
+  Future<Shot?> byKey(String key, {int? width}) async {
     var bytes = cache.read(key);
     var record = cache.meta(key);
     if (bytes == null || record == null) return null;
-    return decodeRawShot(bytes, width: record.width, height: record.height);
+    return decodeRawShot(
+      bytes,
+      width: record.width,
+      height: record.height,
+      targetWidth: width,
+    );
   }
 
   @override
-  Future<Shot?> byRef(FrameRef ref) async {
+  Future<Shot?> byRef(FrameRef ref, {int? width}) async {
     if (!ref.isDrawable) return null;
     var file = File(ref.path);
     if (!file.existsSync()) return null;
@@ -29,6 +34,7 @@ class CacheShotStore implements ShotStore {
       file.readAsBytesSync(),
       width: ref.width,
       height: ref.height,
+      targetWidth: width,
     );
   }
 }

@@ -262,12 +262,12 @@ Two things came out of the building that the section above did not anticipate:
 Read from a real export served over HTTP (run C: 236 rows, 11 findings, 63 MB).
 Worst first.
 
-1. **There is no combined findings view.** `comment.md` merges both halves with
+1. ✅ **There is no combined findings view.** `comment.md` merges both halves with
    `rankComparedFindings` — worst first, both halves, one table. The page does
    not: it opens on previews, and scenarios is a tab you have to think to
    click. A reader arriving from a pull-request comment wants exactly what the
    comment just showed them, and the ranking function is already published.
-2. **The header is the whole comparison's, over one half's tab.** The scenarios
+2. ✅ **The header is the whole comparison's, over one half's tab.** The scenarios
    tab's rail reads *Changes 0 · All 19* under a header reading *2 failed · 2
    added · 7 changed*. Either the counts follow the tab or they say which half
    they are counting.
@@ -278,7 +278,8 @@ Worst first.
    the flow; give the note the pane.
 4. **The index rail has no thumbnails.** Eleven rows of grey text, in a tool
    whose subject is pictures. Every frame the rail would need is already beside
-   the page.
+   the page. *Partly answered:* the findings view has them, and the rails
+   inside the two halves still do not.
 5. **63 MB per report, and ~95% of it is rows nobody will open.** The
    breakdown: 36 MB CanvasKit, 18 MB preview shots, 4 MB scenario frames. Only
    11 of 236 rows are findings. `--export=changed` was deferred in the August
@@ -287,14 +288,14 @@ Worst first.
    rows whose frames were left out. The CanvasKit third is a hosting question,
    not an export one — identical bytes across every pull request, which git
    deduplicates on the artifact branch and a clone still materialises.
-6. **An added entry has no picture at all.** `ComparisonRunner.plan` settles
+6. ✅ **An added entry has no picture at all.** `ComparisonRunner.plan` settles
    `added` and `removed` without rendering either side, so the row reaches the
    page with no `shots` key and the stage says *"Neither side rendered"*. For
    `removed` that is arguable; for `added` it is backwards — a preview this
    branch introduced is the one a reviewer most wants to look at, and the head
    side is sitting right there in the checkout. Found while verifying the
    multi-package export, and pre-existing.
-7. **The page carries no provenance.** No head sha, no wall clock, no way back
+7. ✅ **The page carries no provenance.** No head sha, no wall clock, no way back
    to the pull request. The receipt line was already on the open list from
    PR #302; a page reached from a comment is the case that needs it.
 8. ✅ **A multi-line note breaks the comment's table.** A compile failure's
@@ -302,6 +303,40 @@ Worst first.
    inside a markdown table cell ends the row — so the table rendered broken
    from that row down. Fixed alongside §2: one line and an ellipsis in the
    cell, the whole message on the page.
+
+**Built (2026-09-10).** The page opens on a **findings** tab — `index.findings`,
+which is `rankComparedFindings`, which is the comment's own table — with base
+and head thumbnails per row and the compiler's first line where there is one.
+A row is a door: tapping hands it to the half that owns it, because the
+five-mode stage and the merged flow already live there and a third copy of
+either is the drift this codebase keeps paying for. The chips over the strip
+count the selected tab, and a receipt above it says
+`91a5daa against origin/master · 263 compared · across 2 packages · in 18.5s ·
+1m ago` — for which the artifact had to start recording the head commit and
+the wall clock, since the only `head` in the file was a worktree **path** on
+somebody else's machine.
+
+Two limits are deliberate and worth knowing before the next pass. Frames are
+decoded at **twice their drawn width** rather than whole — twenty rows of two
+900×700 frames is a hundred megabytes of images drawn at eighty-four pixels —
+which is a new `width` on `ShotStore`; and only the first
+`FindingsTab.framedRows` rows get frames at all, the mosaic's cap, for the
+same reason and in the same place in the argument.
+
+The **added entry** fix is in the runner rather than the page:
+`ComparisonPlan` gained `onlyOnHead`/`onlyOnBase`, and the run draws the side
+that has the entry. Its verdict is still settled without a picture — the row
+is out before anything renders — so what changed is only that the row now has
+something to show. Its two keys are computed the same way as everything
+else's, and the key for the side that does not have the file is one nothing
+ever writes bytes under: fabricating an absence, because a row's `shots` is a
+pair and a pair cannot say *head only*.
+
+**Not done, and why.** The scenario half's added flows still show nothing: a
+picture for one means *replaying* it, which means booting the head harness —
+the thing §1b (a) just stopped doing on a branch that needs no replay, and the
+gate would have to learn that an added scenario is a reason to boot. It is the
+same fix and a different cost, so it is its own bite.
 
 One more, unresolved: on a cold page load the first selection once showed
 *"Neither side rendered"* for an entry whose two PNGs had just been fetched
@@ -317,9 +352,11 @@ underlying cause turns out to be.
    run; the replay path unchanged.
 2. ✅ **Several packages** (§2), including the per-package refusal. The pool
    was reversed rather than built — see §2c.
-3. **`--export=changed` + the combined findings view** (§3.1, §3.5). Together
-   they are what a comment link opens onto. §3.6 — rendering the head side of
-   an added entry — belongs in the same bite.
+3. ✅ **The combined findings view** (§3.1), with §3.2, §3.6 and §3.7 — what a
+   comment link opens onto. `--export=changed` (§3.5) did **not** land with it:
+   trimming the export is about what the page weighs, and the rest of this was
+   about what it says. It is the next one, with §3.3 (the scenario flow's
+   pane) and the rails' own thumbnails.
 4. **The lockfile narrowing** (§1b d). Its own piece — it touches the skip rule,
    which is the part of this feature least forgiving of a mistake.
 5. The cache-list documentation (§1b b), the base sweep (§1c) and the comment

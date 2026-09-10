@@ -59,6 +59,7 @@ class ComparedHalf {
     this.ms = 0,
     this.counts = const {},
     this.because = const {},
+    this.packages = const [],
     this.note,
   });
 
@@ -85,6 +86,15 @@ class ComparedHalf {
   /// nothing to explain.
   final Map<String, int> because;
 
+  /// Which packages this half covered, worktree-relative and in the order
+  /// they were compared.
+  ///
+  /// What lets a page say *across 3 packages* and a reader tell a comparison
+  /// that covered a repository from one that covered a corner of it — a
+  /// question the row ids answer only by being read in full and counted.
+  /// Empty on a comparison written before one could span several.
+  final List<String> packages;
+
   /// Why this half has nothing to say, when it has nothing to say.
   ///
   /// A harness that would not build leaves the same empty list as a project
@@ -108,6 +118,9 @@ class ComparedHalf {
         for (var entry in (json['because'] as Map? ?? const {}).entries)
           '${entry.key}': entry.value as int? ?? 0,
       },
+      packages: [
+        for (var package in json['packages'] as List? ?? const []) '$package',
+      ],
       note: json['note'] as String?,
     );
   }
@@ -288,6 +301,8 @@ class ComparisonIndex {
     required this.previewItems,
     required this.scenarios,
     this.head,
+    this.headCommit,
+    this.at,
     this.ms = 0,
     this.counts = const {},
     this.frames = ComparisonFrames.local,
@@ -307,9 +322,19 @@ class ComparisonIndex {
   /// export wrote one, the abbreviated sha where it did not.
   final String against;
 
-  /// The worktree the comparison ran in. Absent from an export, which is read
-  /// somewhere else by definition.
+  /// The worktree the comparison ran in — a **path**, and so meaningless off
+  /// the machine that ran it. [headCommit] is the one a reader elsewhere can
+  /// use.
   final String? head;
+
+  /// Where HEAD sat when the comparison ran, and when it ran.
+  ///
+  /// What a page reached from a pull-request comment answers first: whether it
+  /// still describes the branch, and whether it still describes today. Absent
+  /// from a comparison written before either was recorded.
+  final String? headCommit;
+
+  final DateTime? at;
 
   /// Both halves together.
   final int ms;
@@ -372,6 +397,11 @@ class ComparisonIndex {
           json['against'] as String? ??
           (base.length > 8 ? base.substring(0, 8) : base),
       head: json['head'] as String?,
+      headCommit: json['headCommit'] as String?,
+      at: switch (json['at']) {
+        String at => DateTime.tryParse(at),
+        _ => null,
+      },
       ms: json['ms'] as int? ?? 0,
       counts: _counts(json['counts']),
       // Absent means `local`: that is what every file written before this key

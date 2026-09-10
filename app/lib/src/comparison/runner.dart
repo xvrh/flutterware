@@ -205,14 +205,31 @@ class ComparisonPlan {
     required this.toRender,
     required this.keys,
     required this.total,
+    this.onlyOnHead = const [],
+    this.onlyOnBase = const [],
     this.because = const {},
   });
 
-  /// Rows whose verdict needed no picture: added, removed, skipped.
+  /// Rows whose **verdict** needed no picture: added, removed, skipped.
+  ///
+  /// Not the same as needing no render. An added entry's verdict is settled
+  /// the moment the two listings disagree, and it is still the entry a reader
+  /// most wants to look at — see [onlyOnHead].
   final List<ComparedItem> settled;
 
   /// The entries that have to be rendered to be answered.
   final List<String> toRender;
+
+  /// Entries this branch **added**: nothing to compare, one side to draw.
+  ///
+  /// Rendered even though the verdict does not need it. The page used to say
+  /// *"Neither side rendered"* over a preview the branch had just introduced,
+  /// which is exactly the row somebody opened the page for — and the head
+  /// side is sitting in the checkout. [onlyOnBase] is its mirror: what a
+  /// branch deleted is worth a last look.
+  final List<String> onlyOnHead;
+
+  final List<String> onlyOnBase;
 
   /// Why [toRender] has to be rendered, folded — see [foldReasons].
   final Map<String, int> because;
@@ -365,16 +382,14 @@ class ComparisonRunner {
       for (var id in headEntries)
         if (baseEntries.contains(id)) id,
     ];
-    for (var id in headEntries) {
-      if (!baseEntries.contains(id)) {
-        settled.add(ComparedItem(id: id, state: ComparedState.added));
-      }
-    }
-    for (var id in baseEntries) {
-      if (!headEntries.contains(id)) {
-        settled.add(ComparedItem(id: id, state: ComparedState.removed));
-      }
-    }
+    var onlyOnHead = [
+      for (var id in headEntries)
+        if (!baseEntries.contains(id)) id,
+    ];
+    var onlyOnBase = [
+      for (var id in baseEntries)
+        if (!headEntries.contains(id)) id,
+    ];
 
     // `side` and `cache` are live objects and stay here; what crosses is the
     // ids, the paths and the one file each entry starts from. A tear-off of
@@ -386,7 +401,11 @@ class ComparisonRunner {
     var decided = await Isolate.run(
       _PlanInputs(
         ids: common,
-        files: {for (var id in common) id: side.fileOf(id)},
+        oneSided: [...onlyOnHead, ...onlyOnBase],
+        files: {
+          for (var id in [...common, ...onlyOnHead, ...onlyOnBase])
+            id: side.fileOf(id),
+        },
         headRoot: headRoot,
         baseRoot: baseRoot,
         packagePath: side.packagePath,
@@ -400,10 +419,32 @@ class ComparisonRunner {
     for (var id in decided.skipped) {
       settled.add(ComparedItem(id: id, state: ComparedState.skipped));
     }
+    // The one-sided rows carry their keys from the start, so the row a screen
+    // draws never changes: only the picture behind the key arrives late.
+    for (var id in onlyOnHead) {
+      settled.add(
+        ComparedItem(
+          id: id,
+          state: ComparedState.added,
+          shots: decided.keys[id],
+        ),
+      );
+    }
+    for (var id in onlyOnBase) {
+      settled.add(
+        ComparedItem(
+          id: id,
+          state: ComparedState.removed,
+          shots: decided.keys[id],
+        ),
+      );
+    }
     return ComparisonPlan(
       settled: settled,
       toRender: decided.toRender,
       keys: decided.keys,
+      onlyOnHead: onlyOnHead,
+      onlyOnBase: onlyOnBase,
       total: settled.length + decided.toRender.length,
       because: decided.because,
     );
@@ -441,12 +482,17 @@ class ComparisonRunner {
     // Only what is not already filed under its key. After the first
     // comparison against a base, that is the head side alone; after an
     // unrelated edit, it can be nothing at all.
+    //
+    // The one-sided entries ride along on the side that has them. Their
+    // verdict was settled without a picture and their row is already out; what
+    // this buys is that the row has something to *show* — an added preview is
+    // the one a reader opened the page for.
     var wantedByBase = [
-      for (var id in toRender)
+      for (var id in [...toRender, ...plan.onlyOnBase])
         if (!cache.has(keys[id]!.base)) id,
     ];
     var wantedByHead = [
-      for (var id in toRender)
+      for (var id in [...toRender, ...plan.onlyOnHead])
         if (!cache.has(keys[id]!.head)) id,
     ];
 
@@ -645,6 +691,7 @@ class ComparisonRunner {
 class _PlanInputs {
   _PlanInputs({
     required this.ids,
+    required this.oneSided,
     required this.files,
     required this.headRoot,
     required this.baseRoot,
@@ -656,6 +703,16 @@ class _PlanInputs {
 
   /// The entries both sides declare — the only ones a skip rule applies to.
   final List<String> ids;
+
+  /// The entries one side declares. No decision to make about them, and a key
+  /// to compute anyway: the side that has one is going to be drawn.
+  ///
+  /// Both keys are computed, and the one for the side that does not have the
+  /// file is a key nothing will ever write bytes under — which is exactly what
+  /// the stage reads as "this side rendered nothing". Fabricating an absence
+  /// rather than expressing one is a compromise the shape forces: a row's
+  /// `shots` is a pair, and a pair cannot say *head only*.
+  final List<String> oneSided;
 
   /// Entry id → its source file, relative to a checkout root. Resolved by the
   /// side before the hop, since only the side knows how.
@@ -699,6 +756,13 @@ class _PlanInputs {
     var toRender = <String>[];
     var reasons = <String>[];
     var keys = <String, ({String base, String head})>{};
+    for (var id in oneSided) {
+      var file = files[id]!;
+      keys[id] = (
+        base: _keyFor(id, baseGraph, baseRoot, file, pixels, digests),
+        head: _keyFor(id, headGraph, headRoot, file, pixels, digests),
+      );
+    }
     for (var id in ids) {
       var file = files[id]!;
       memo.remember(id, headGraph.closureOf(file));

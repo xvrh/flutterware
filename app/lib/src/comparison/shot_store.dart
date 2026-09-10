@@ -27,10 +27,15 @@ class Shot {
 abstract interface class ShotStore {
   /// The frame a preview row filed, by `ShotCache` key — or, on an exported
   /// page, by the relative path the export rewrote the key into.
-  Future<Shot?> byKey(String key);
+  ///
+  /// [width] decodes to that many pixels across instead of the frame's own.
+  /// A stage wants the frame; a list of thumbnails wants a thumbnail, and
+  /// decoding twenty pairs of 900×700 frames to draw them at 84 pixels is a
+  /// hundred megabytes of images nobody can see. Null decodes full size.
+  Future<Shot?> byKey(String key, {int? width});
 
   /// The frame a replay wrote, by [FrameRef].
-  Future<Shot?> byRef(FrameRef ref);
+  Future<Shot?> byRef(FrameRef ref, {int? width});
 }
 
 /// rgba8888 rows into a texture.
@@ -43,6 +48,7 @@ Future<Shot?> decodeRawShot(
   Uint8List bytes, {
   required int width,
   required int height,
+  int? targetWidth,
 }) async {
   if (width <= 0 || height <= 0) return null;
   var buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
@@ -52,7 +58,13 @@ Future<Shot?> decodeRawShot(
     height: height,
     pixelFormat: ui.PixelFormat.rgba8888,
   );
-  var codec = await descriptor.instantiateCodec();
+  var codec = await descriptor.instantiateCodec(
+    // Only ever *down*: a thumbnail asked wider than the frame would be
+    // upscaled into memory to be drawn small again.
+    targetWidth: targetWidth == null || targetWidth >= width
+        ? null
+        : targetWidth,
+  );
   var frame = await codec.getNextFrame();
   codec.dispose();
   descriptor.dispose();
@@ -62,10 +74,10 @@ Future<Shot?> decodeRawShot(
 
 /// An encoded image — the PNG case, which is what an export ships because a
 /// hosted page should not download two and a half megabytes per frame.
-Future<Shot?> decodeEncodedShot(Uint8List bytes) async {
+Future<Shot?> decodeEncodedShot(Uint8List bytes, {int? targetWidth}) async {
   if (bytes.isEmpty) return null;
   try {
-    var codec = await ui.instantiateImageCodec(bytes);
+    var codec = await ui.instantiateImageCodec(bytes, targetWidth: targetWidth);
     var frame = await codec.getNextFrame();
     codec.dispose();
     return Shot(frame.image);
