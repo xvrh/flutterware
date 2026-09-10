@@ -236,7 +236,7 @@ void main() {
 
       await expectLater(
         core().invoke('inventory', arguments: {'flavor': 'nope'}),
-        throwsA(isA<StateError>()),
+        throwsA(isA<ArgumentError>()),
       );
     });
   });

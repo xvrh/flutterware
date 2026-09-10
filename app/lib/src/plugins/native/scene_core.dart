@@ -25,6 +25,7 @@ import '../../scene/scene_file.dart';
 import '../../scene/tokens_file.dart';
 import '../../scene/tokens_library.dart';
 import '../../scene/workspace.dart';
+import '../../session/job.dart';
 import '../../utils/string/plural.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -175,14 +176,14 @@ class SceneCore extends PluginCore {
     var directory = p.normalize(p.join(projectRootFor(package), folder));
     var declaration = File(p.join(directory, sceneGroupFileName));
     if (declaration.existsSync()) {
-      throw StateError(
+      throw ActionRefusal(
         '${p.relative(declaration.path, from: host.worktree.path)} '
         'already exists — that folder is a group',
       );
     }
     if (!p.isWithin(rootFor(package), directory) &&
         p.canonicalize(rootFor(package)) != p.canonicalize(directory)) {
-      throw StateError(
+      throw ActionRefusal(
         '$folder is outside the scanned scope '
         '(${directoryFor(package)}/) and would not be found',
       );
@@ -217,7 +218,7 @@ class SceneCore extends PluginCore {
     var directory = p.normalize(p.join(projectRootFor(package), folder));
     var file = File(p.join(directory, sceneFileNameFor(className)));
     if (file.existsSync()) {
-      throw StateError(
+      throw ActionRefusal(
         '${p.relative(file.path, from: host.worktree.path)} already exists',
       );
     }
@@ -252,7 +253,7 @@ class SceneCore extends PluginCore {
     var directory = p.normalize(p.join(projectRootFor(package), folder));
     var file = File(p.join(directory, tokensFileNameFor(name)));
     if (file.existsSync()) {
-      throw StateError(
+      throw ActionRefusal(
         '${p.relative(file.path, from: host.worktree.path)} already exists',
       );
     }
@@ -331,7 +332,7 @@ class SceneCore extends PluginCore {
       declaration.readAsStringSync(),
       group.declarationPath,
       libraryPath,
-      refuse: (reason) => throw StateError(reason),
+      refuse: (reason) => throw ActionRefusal(reason),
     );
     if (edited != null) declaration.writeAsStringSync(edited);
   }
@@ -342,7 +343,7 @@ class SceneCore extends PluginCore {
       declaration.readAsStringSync(),
       group.declarationPath,
       libraryPath,
-      refuse: (reason) => throw StateError(reason),
+      refuse: (reason) => throw ActionRefusal(reason),
     );
     if (edited != null) declaration.writeAsStringSync(edited);
   }
@@ -466,7 +467,7 @@ class SceneCore extends PluginCore {
   }) async {
     var group = groupFor(package, scenePath);
     if (group == null) {
-      throw StateError(
+      throw ActionRefusal(
         '${p.basename(scenePath)} is in no group — a scene is rendered by '
         "its group's own entry, and no folder above it has a "
         '$sceneGroupFileName',
@@ -477,7 +478,7 @@ class SceneCore extends PluginCore {
       tokens: vocabularyFor(package, group).tokens,
     );
     if (!opened.ok) {
-      throw StateError(
+      throw ActionRefusal(
         'that scene does not parse, so there is nothing to render:\n'
         '${opened.refusals.take(3).join('\n')}',
       );
@@ -491,7 +492,7 @@ class SceneCore extends PluginCore {
       var declared = {for (var param in opened.doc!.params) param.name};
       var unknown = args.keys.where((k) => !declared.contains(k)).toList();
       if (unknown.isNotEmpty) {
-        throw StateError(
+        throw ActionRefusal(
           '${p.basename(scenePath)} declares no parameter '
           '${unknown.join(', ')} — it takes '
           '${declared.isEmpty ? 'none' : declared.join(', ')}',
@@ -500,7 +501,7 @@ class SceneCore extends PluginCore {
       opened.doc!.applyArgs(args);
     }
     if (opened.motions.isEmpty) {
-      throw StateError(
+      throw ActionRefusal(
         '${p.basename(scenePath)} has no motion — a clip of a still scene '
         'would be one frame repeated',
       );
@@ -589,7 +590,7 @@ class SceneCore extends PluginCore {
         return entry;
       }
     }
-    throw StateError(
+    throw ActionRefusal(
       'no scene player in $folder/ — the generated $sceneArgsFileName '
       'declares it; rescan the group',
     );
@@ -873,7 +874,7 @@ class SceneCore extends PluginCore {
     if (target.existsSync()) {
       var opened = TokensLibrary.open(target.path, target.readAsStringSync());
       if (!opened.ok) {
-        throw StateError(
+        throw ActionRefusal(
           '${p.relative(target.path, from: host.worktree.path)} is refused '
           'by the library reader — fix it first: '
           '${opened.refusals.join('; ')}',
@@ -945,7 +946,7 @@ class SceneCore extends PluginCore {
       _ => packages.firstOrNull,
     };
     if (package == null) {
-      throw StateError('this plugin is declared for no package');
+      throw ActionRefusal('this plugin is declared for no package');
     }
     switch (actionId) {
       case 'list':
@@ -1102,12 +1103,20 @@ class SceneCore extends PluginCore {
     null => const {},
     Map<String, Object?> map => map,
     String text when text.trim().isEmpty => const {},
-    String text => switch (jsonDecode(text)) {
+    String text => switch (_decodeOrNull(text)) {
       Map<String, Object?> map => map,
-      _ => throw StateError('args must be a JSON object, not: $text'),
+      _ => throw ArgumentError.value(text, 'args', 'must be a JSON object'),
     },
-    _ => throw StateError('args must be a JSON object'),
+    _ => throw ArgumentError.value(value, 'args', 'must be a JSON object'),
   };
+
+  static Object? _decodeOrNull(String text) {
+    try {
+      return jsonDecode(text);
+    } on FormatException {
+      return null;
+    }
+  }
 
   /// What tells two settings of one scene apart on disk.
   ///

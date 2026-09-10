@@ -6,6 +6,7 @@ import 'package:flutterware_app/src/context.dart';
 import 'package:flutterware_app/src/plugins/plugin_core.dart';
 import 'package:flutterware_app/src/run/inspect.dart';
 import 'package:flutterware_app/src/session/cli.dart';
+import 'package:flutterware_app/src/session/job.dart';
 import 'package:flutterware_app/src/session/session.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
@@ -52,6 +53,22 @@ void main() {
       text,
       isNot(contains('package:flutterware_app')),
       reason: 'no stack, so nobody is sent to debug this package',
+    );
+  });
+
+  test('an action refusing is one line, as written', () async {
+    action = () => throw ActionRefusal(
+      'promo_badge.scene.dart has no motion — a clip of a still scene would '
+      'be one frame repeated',
+    );
+
+    expect(await run(), 1);
+
+    expect(
+      err.toString(),
+      'fw: promo_badge.scene.dart has no motion — a clip of a still scene '
+      'would be one frame repeated\n',
+      reason: 'no "Bad state:" before it and no stack after it',
     );
   });
 

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import '../../session/job.dart';
+
 /// Injectable process seam, same shape as the dependencies plugin's.
 typedef RunProcess = Future<ProcessResult> Function(
   String executable,
@@ -187,7 +189,7 @@ class LintIssueCounter {
     var options = File(p.join(repoRoot, 'analysis_options.yaml'));
     var original = File(p.join(repoRoot, originalName));
     if (original.existsSync()) {
-      throw StateError(
+      throw ActionRefusal(
         'A previous counting run left $originalName behind. '
         'Rescan to recover it, then count again.',
       );

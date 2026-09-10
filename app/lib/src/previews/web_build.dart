@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../session/job.dart';
 import '../utils/base_href.dart';
 import 'catalog_entry.dart';
 import 'web_app_generator.dart';
@@ -62,7 +63,7 @@ class WebCatalogBuilder {
     void Function(String line)? onOutput,
   }) async {
     if (entries.isEmpty) {
-      throw StateError(
+      throw ActionRefusal(
         'There are no catalog entries in $packageRoot to build a page from.',
       );
     }
@@ -93,10 +94,10 @@ class WebCatalogBuilder {
     if (_cancelled) {
       // Said plainly rather than as a non-zero exit code: a build that was
       // stopped on purpose is not a build that broke.
-      throw StateError('The web build was cancelled.');
+      throw ActionRefusal('The web build was cancelled.');
     }
     if (exitCode != 0) {
-      throw StateError(
+      throw ActionRefusal(
         'flutter build web failed (exit $exitCode). The generated sources are '
         'in $sourceDir — the error above points into them.',
       );
@@ -125,7 +126,7 @@ class WebCatalogBuilder {
   /// quietly does that is one you cannot run to find out whether it would.
   void _requireWebSupport() {
     if (Directory(p.join(packageRoot, 'web')).existsSync()) return;
-    throw StateError(
+    throw ActionRefusal(
       'This package has no web/ directory, so Flutter cannot build it for the '
       'web. Enable it once with:\n'
       '  cd $packageRoot && flutter create --platforms=web .',

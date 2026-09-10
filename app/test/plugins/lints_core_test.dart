@@ -16,6 +16,7 @@ import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 import 'package:flutterware_app/src/utils/run_dir.dart';
+import 'package:flutterware_app/src/session/job.dart';
 import 'package:path/path.dart' as p;
 
 /// Everything asserted here is read through [PluginReport] and the actions —
@@ -194,7 +195,7 @@ linter:
       catalogCache: Directory(p.join(scratch.path, 'empty-cache'))
         ..createSync(),
     );
-    await expectLater(lints.invoke('count'), throwsStateError);
+    await expectLater(lints.invoke('count'), throwsA(isA<ActionRefusal>()));
   });
 
   test('an unknown action names what is declared', () async {

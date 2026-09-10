@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
+import '../session/job.dart';
 import '../utils/base_href.dart';
 import '../utils/viewer_bundle.dart';
 import 'web_report.dart';
@@ -77,7 +78,7 @@ class ScenarioWebExporter {
   }) async {
     var stopwatch = Stopwatch()..start();
     await _bundle.build(offline: offline, onOutput: onOutput);
-    if (_bundle.cancelled) throw StateError('The export was cancelled.');
+    if (_bundle.cancelled) throw ActionRefusal('The export was cancelled.');
 
     var outputDir = Directory(output);
     // Cleared rather than merged into: a scenario deleted since the last export

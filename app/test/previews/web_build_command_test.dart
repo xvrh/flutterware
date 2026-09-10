@@ -14,6 +14,7 @@ import 'package:flutterware_app/src/plugins/plugin_host.dart';
 import 'package:flutterware_app/src/shell/workspace.dart';
 import 'package:flutterware_app/src/shell/worktree.dart';
 import 'package:flutterware_app/src/utils/flutter_sdk.dart';
+import 'package:flutterware_app/src/session/job.dart';
 
 /// The command the build dialog shows.
 ///
@@ -122,7 +123,7 @@ Widget a() => const Placeholder();
       await expectLater(
         building,
         throwsA(
-          isA<StateError>().having(
+          isA<ActionRefusal>().having(
             (e) => e.message,
             'message',
             contains('cancelled'),

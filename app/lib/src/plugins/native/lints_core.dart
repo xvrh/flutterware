@@ -13,6 +13,7 @@ import '../../lints/model/issue_counts.dart';
 import '../../lints/model/options_scan.dart';
 import '../../lints/model/rule_catalog.dart';
 import '../../previews/package_config_locator.dart';
+import '../../session/job.dart';
 import '../../utils/run_dir.dart';
 import '../plugin_core.dart';
 import '../plugin_host.dart';
@@ -214,16 +215,16 @@ class LintsCore extends PluginCore {
     await _load(allowNetwork: true);
     var classification = _classification;
     if (classification == null) {
-      throw StateError(_error ?? 'The scan has not run.');
+      throw ActionRefusal(_error ?? 'The scan has not run.');
     }
     if (!classification.hasCatalog) {
-      throw StateError(
+      throw ActionRefusal(
         'No rule catalog for Dart $_dartVersion — the first fetch needs the '
         'network. Nothing to count without a universe to compare to.',
       );
     }
     if (_counting) {
-      throw StateError('A counting run is already in progress.');
+      throw ActionRefusal('A counting run is already in progress.');
     }
 
     var candidates = _candidates(classification);
@@ -303,7 +304,7 @@ class LintsCore extends PluginCore {
     var scan = _scan;
     var classification = _classification;
     if (scan == null || classification == null) {
-      throw StateError(_error ?? 'The scan has not run.');
+      throw ActionRefusal(_error ?? 'The scan has not run.');
     }
     var counts = _counts;
     return LintsStatusResult(

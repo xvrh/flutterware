@@ -8,15 +8,10 @@ import '../session/job.dart';
 /// to read. Same reasoning as `DatabaseUnavailable` on the published side and
 /// `AppNotStarted` beside this one.
 ///
-/// A [ProjectFault], because every refusal here states a fact about the
+/// An [ActionRefusal], because every refusal here states a fact about the
 /// project or the run — an app still building, a panel that does not exist, a
 /// knob `main` does not take — and a stack out of this package would send the
 /// reader to debug the wrong program.
-class RunRefusal implements ProjectFault {
-  RunRefusal(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
+class RunRefusal extends ActionRefusal {
+  RunRefusal(super.message);
 }
