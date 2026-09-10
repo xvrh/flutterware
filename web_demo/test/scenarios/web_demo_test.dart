@@ -31,15 +31,13 @@ void main() {
     await shell.start(recordedProjectRoot);
     await s.pumpWidget(ShellApp(shell));
     await s.tap('Previews', shot: Shot('The catalog'));
-    await s.tap('Menu', shot: Shot('The menu, live'));
-    // Staged as a phone before the tree opens: the shop is a phone app, and
-    // at "Fit" into the half-height stage the tree leaves, a screen that
-    // does not scroll overflows — the example's own finding, which an
-    // embedder guest keeps to itself and a guest drawn inline lands on the
-    // studio.
-    await s.tap('Fit');
-    await s.tap('iPhone 16', shot: Shot('Staged as a phone'));
+    // Already on a phone: the recorded manifest declares one, and the shop
+    // is a phone app. That matters before the tree opens — at "Fit" into the
+    // half-height stage the tree leaves, a screen that does not scroll
+    // overflows, the example's own finding, which an embedder guest keeps to
+    // itself and a guest drawn inline lands on the studio.
+    await s.tap('Menu', shot: Shot('The menu, on a phone'));
     await s.tap('Elements', shot: Shot('Its tree'));
-    await s.tap('Cart', shot: Shot('The cart, on the phone'));
+    await s.tap('Cart', shot: Shot('The cart'));
   });
 }
