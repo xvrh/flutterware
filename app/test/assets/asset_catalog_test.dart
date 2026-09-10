@@ -575,6 +575,85 @@ flutter:
     expect(chain.last.args, ['--x=1', '2']);
   });
 
+  group('shaders', () {
+    test("the root package's shader is keyed as declared", () async {
+      write('app/pubspec.yaml', '''
+name: app
+flutter:
+  shaders:
+    - shaders/glow.frag
+''');
+      write('app/shaders/glow.frag', 'frag');
+
+      var catalog = await resolve();
+
+      expect(catalog.shaders.map((s) => s.key), ['shaders/glow.frag']);
+      expect(catalog.shaders.single.package, isNull);
+      expect(
+        catalog.shaders.single.source,
+        p.join(appRoot(), 'shaders', 'glow.frag'),
+      );
+    });
+
+    test("a dependency's shader is keyed under its package", () async {
+      write('app/pubspec.yaml', '''
+name: app
+dependencies:
+  dep:
+''');
+      write('dep/pubspec.yaml', '''
+name: dep
+flutter:
+  shaders:
+    - shaders/x.frag
+''');
+      write('dep/shaders/x.frag', 'frag');
+
+      var catalog = await resolve();
+
+      expect(
+        catalog.shaders.map((s) => s.key),
+        contains('packages/dep/shaders/x.frag'),
+      );
+    });
+
+    test(
+      'a declared shader that is not on disk is a problem, not a key',
+      () async {
+        write('app/pubspec.yaml', '''
+name: app
+flutter:
+  shaders:
+    - shaders/missing.frag
+''');
+
+        var catalog = await resolve();
+
+        expect(catalog.shaders, isEmpty);
+        expect(catalog.problems.map((p) => p.kind), [
+          AssetProblemKind.missingShaderFile,
+        ]);
+      },
+    );
+
+    test('a shader is not an asset', () async {
+      write('app/pubspec.yaml', '''
+name: app
+flutter:
+  shaders:
+    - shaders/glow.frag
+''');
+      write('app/shaders/glow.frag', 'frag');
+
+      var catalog = await resolve();
+
+      expect(
+        catalog.assets.map((a) => a.key),
+        isNot(contains('shaders/glow.frag')),
+      );
+    });
+  });
+
   group('parseScale', () {
     test('reads a density directory, long form and short', () {
       expect(AssetCatalog.parseScale('assets/2.0x/foo.png'), 2.0);
