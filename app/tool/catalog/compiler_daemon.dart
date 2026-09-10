@@ -938,6 +938,7 @@ class _Daemon {
   /// the next daemon can start from.
   Future<void> _compileLane() async {
     var watch = Stopwatch()..start();
+    var began = DateTime.now();
     // Assigned through a local so the type stays non-null: `_compiler` is
     // nullable, and the value of an assignment carries the field's type.
     var compiler = await _timed('compiler start', _startCompiler);
@@ -981,30 +982,34 @@ class _Daemon {
     // either. Measured on this repo: a values file edited between two daemons
     // rendered the previous version through every capture, while the panel's
     // own scan showed the new one.
+    //
+    // A cold start has the same hole, only narrower: a file edited while the
+    // cold compile ran may have been read before the edit, so it is compared
+    // against when the compile began.
     var sweep = Stopwatch()..start();
     var stale = _invalidator.sweep(
       compiler.sources,
-      compiledAt: compiler.startedFromStamp,
+      compiledAt: compiler.startedFromStamp ?? began,
     );
     _timings['source baseline (${_invalidator.watched} files)'] =
         sweep.elapsedMilliseconds;
     if (stale.isNotEmpty) {
       stderr.writeln(
-        '[catalog] ${stale.length} sources are newer than the warm kernel; '
-        'recompiling them',
+        '[catalog] ${stale.length} sources were edited after the compiler '
+        'read them; recompiling them',
       );
       // Whole program, not a delta: the kernel at `_outputDill` is what a guest
       // loads from disk and what `saveWarmStart` is about to publish, and a
       // delta is not a program.
       compiler.reset();
       cold = await _timed(
-        'warm start repair (${stale.length} edited)',
+        'start repair (${stale.length} edited)',
         () => _compileServingWhatWorks(stale),
       );
       if (!cold.ok) {
         throw StateError(
-          'the catalog compiled from its warm kernel, but recompiling the '
-          '${stale.length} sources edited since did not:\n'
+          'the catalog compiled, but recompiling the ${stale.length} sources '
+          'edited after the compiler read them did not:\n'
           '${cold.output.join('\n')}',
         );
       }

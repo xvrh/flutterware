@@ -87,15 +87,33 @@ void main() {
 
   test('a file first seen after the baseline does not report as edited', () {
     // A source the entry pulled in on its first visit: new to the invalidator,
-    // but the compile that reported it has already built it.
+    // but the compile that reported it ran after the last sweep, and the file
+    // has not moved since before then.
     var demo = write('demo/tile.dart', 'a');
+    var helper = write('demo/shell.dart', 'b');
+    touch(helper, DateTime.now().subtract(const Duration(hours: 1)));
     invalidator.sweep([demo]);
 
-    var helper = write('demo/shell.dart', 'b');
     expect(invalidator.sweep([demo, helper]), isEmpty);
 
     touch(helper, DateTime(2026, 7, 27, 12));
     expect(invalidator.sweep([demo, helper]), [helper]);
+  });
+
+  test('a file first seen after it was edited is reported', () {
+    // A new file: compiled by the request after the first sweep, edited, and
+    // only then swept for the first time. Recording that mtime as the baseline
+    // is recording the edit as the version the compiler holds — it served the
+    // first version until something else touched the file.
+    var demo = write('demo/tile.dart', 'a');
+    var added = write('demo/added.dart', 'first');
+    touch(added, DateTime.now().subtract(const Duration(hours: 1)));
+    invalidator.sweep([demo]);
+
+    File.fromUri(added).writeAsStringSync('second');
+    touch(added, DateTime.now().add(const Duration(minutes: 1)));
+    expect(invalidator.sweep([demo, added]), [added]);
+    expect(invalidator.sweep([demo, added]), isEmpty);
   });
 
   group('after a warm start', () {
