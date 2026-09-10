@@ -6,6 +6,7 @@ import 'package:flutterware/plugins.dart';
 import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
+import '../../embedder/embedded_engine.dart';
 import '../../previews/authoring.dart';
 import '../../previews/catalog_devices.dart';
 import '../../previews/catalog_session.dart';
@@ -207,12 +208,22 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
 
   /// Not worth photographing while any open catalog is still working.
   ///
-  /// Three conditions, and the third is the one that is easy to miss: a session
-  /// can be `ready` with nothing in flight while the guest is still showing the
-  /// *previous* entry, because [CatalogSession.selected] is what was asked for
-  /// and `active` is what the guest managed to load. A capture taken in that
-  /// window is a correct picture of the wrong demo, which is the single worst
-  /// thing a screenshot tool can produce.
+  /// Four conditions, and the two easy to miss are the last of them.
+  ///
+  /// A session can be `ready` with nothing in flight while the guest is still
+  /// showing the *previous* entry, because [CatalogSession.selected] is what
+  /// was asked for and `active` is what the guest managed to load. A capture
+  /// taken in that window is a correct picture of the wrong demo, which is the
+  /// single worst thing a screenshot tool can produce.
+  ///
+  /// And a session goes idle as soon as the guest's VM service answers, which
+  /// is *before* the guest has drawn anything — the ring is mapped, the texture
+  /// is in the widget tree, and it is empty. So the last condition is
+  /// [EmbeddedEngine.hasPainted], and it is the one that produced a black
+  /// phone: every capture in this repository happened to survive it because
+  /// another plugin was wrongly claiming to be busy and held the shutter for
+  /// minutes, while a project without that plugin photographed the empty ring
+  /// and got the device frame's own black where the demo should be.
   ///
   /// A compile error settles rather than waits. The panel is showing the error,
   /// the error is the state, and hanging until the timeout would turn "this
@@ -224,6 +235,14 @@ class PreviewsPlugin extends NativePlugin<PreviewsCore> {
         return session.busyWith ?? 'starting the catalog';
       }
       if (session.busyWith case var busy?) return busy;
+      // Not while it is failing: an engine that died has an error on the stage
+      // and will never paint, and waiting for a frame from it is waiting for
+      // the timeout.
+      if (session.engine case var engine?) {
+        if (engine.phase == EmbeddedEnginePhase.running && !engine.hasPainted) {
+          return 'rendering the guest';
+        }
+      }
       if (session.selectedError != null) continue;
       // Nothing selected is nothing to wait for: the guest holds the entry it
       // was warmed on, and the stage is not showing it. Without the pattern

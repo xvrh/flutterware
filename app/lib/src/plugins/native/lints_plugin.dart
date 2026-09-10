@@ -31,9 +31,7 @@ class LintsPlugin extends NativePlugin<LintsCore> {
   @override
   String? get busyWith {
     if (core.isCounting) return 'counting lint issues';
-    if (core.classification == null && core.error == null) {
-      return 'scanning lint options';
-    }
+    if (core.isScanning) return 'scanning lint options';
     return null;
   }
 
