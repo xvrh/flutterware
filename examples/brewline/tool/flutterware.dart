@@ -25,8 +25,9 @@ void main() => Flutterware.configure((fw) {
     ),
   );
 
-  // The languages every scenario replays in. `test/scenarios/flutter_test_config.dart`
-  // says the same thing to `flutter test`; this says it to the studio.
+  // The languages every scenario replays in. Each folder's
+  // `flutter_test_config.dart` says the same thing to `flutter test`; this
+  // says it to the studio.
   fw.use(
     Scenarios(
       packages: [
@@ -43,7 +44,7 @@ void main() => Flutterware.configure((fw) {
       apps: [
         StoreShotsApp(
           app,
-          file: 'test/scenarios/shop_test.dart',
+          file: 'test/scenarios/mobile/shop_test.dart',
           frame: 'lib/store_frame.dart',
           listings: [
             Listing.appStore(locales: {'en': 'en-US', 'fr': 'fr-FR'}),
@@ -61,6 +62,11 @@ void main() => Flutterware.configure((fw) {
           app,
           catalogs: [
             TranslationCatalog(name: 'shop', files: 'assets/i18n/*.json'),
+            // The listing's headlines. A second catalog rather than more keys
+            // in the first: marketing copy is not UI, and a translator sent
+            // the shop's strings should not find `Tap. Pay. Collect.` among
+            // them.
+            TranslationCatalog(name: 'store', files: 'assets/store/*.json'),
           ],
         ),
       ],
@@ -82,6 +88,14 @@ void main() => Flutterware.configure((fw) {
               'lib/main.dart',
               name: 'Brewline',
               description: 'The coffee shop',
+            ),
+            Entrypoint(
+              'lib/shop_devbar.dart',
+              name: 'Brewline (devbar)',
+              description:
+                  'The shop, with a plugin that pushes a notification into '
+                  'it — the sample for driving an app from the cockpit, '
+                  '`fw` or an agent',
             ),
           ],
         ),

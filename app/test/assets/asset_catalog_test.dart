@@ -5,8 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
 /// The rules in here are Flutter's, not ours, and each test names the one it
-/// pins. `examples/example` carries the same cases as files you can look at —
-/// see `examples/example/assets/README.md` — but the checks live in a temp
+/// pins. `fixtures/probe_app` carries the same cases as files you can look at —
+/// see `fixtures/probe_app/assets/README.md` — but the checks live in a temp
 /// directory so they do not need the workspace to have been resolved.
 void main() {
   late Directory root;

@@ -37,7 +37,8 @@ This is a pub workspace (`workspace:` in root `pubspec.yaml`) with two member pa
 
 - `/` — the published `flutterware` package. Contains the runtime libraries that Flutter apps depend on (`lib/devbar.dart`, `lib/flutter_test.dart`, `lib/feature_flag.dart`, `lib/previews.dart`, `lib/ui_catalog.dart`, `lib/router_outlet.dart`) plus the user-facing CLI entry point `bin/flutterware.dart`.
 - `app/` — `flutterware_app`, the Flutter desktop GUI (`publish_to: none`). Implements the actual tools the user sees: test runner, dependency manager, launcher icon editor, etc.
-- `examples/example` — workspace member used as a sample project.
+- `examples/brewline` — the demo app a stranger clones; a workspace member here (see the toolchain section).
+- `fixtures/probe_app` — flutterware's own fixture: probes and deliberately wrong cases the tools are tested on. Not a sample.
 
 Versions in `pubspec.yaml` (`flutterware`) and `app/pubspec.yaml` (`flutterware_app`) must stay in sync — see the comment in the root pubspec.
 
@@ -72,7 +73,7 @@ Note: `.gitignore` starts with `.*`, so dot-files need an explicit `!` line to b
 
 Let the floor track the pin and it promises the beta of the week. That is how `flutter: '>=3.47.0-0'` came to sit in a package whose last published floor was `>=3.21.0`: a floor naming an unreleased beta is a package nobody on stable can install. Held apart, stable catches up on its own — the floor stays put, stable rises past it, and the package becomes installable there with nobody republishing.
 
-Only the pubspecs that ship carry the promise: the root package and `app/`, which `.pubignore` keeps in the archive. `examples/example` is excluded and records its own real requirement (dot shorthands, Dart 3.10).
+Only the pubspecs that ship carry the promise: the root package and `app/`, which `.pubignore` keeps in the archive. `fixtures/probe_app` is excluded and records its own real requirement (dot shorthands, Dart 3.10).
 
 ```sh
 fvm dart tool/bump_flutter.dart beta        # or stable, or 3.48.0-0.1.pre — moves the pin
@@ -218,8 +219,8 @@ fvm flutter pub get
 cd app && fvm dart run build_runner build --delete-conflicting-outputs
 # (run from the package whose .g.dart files you're regenerating)
 
-# Run the CLI end-to-end against examples/example, forcing a fresh compile
-cd examples/example && fvm dart run flutterware --force-compile -v
+# Run the CLI end-to-end against fixtures/probe_app, forcing a fresh compile
+cd fixtures/probe_app && fvm dart run flutterware --force-compile -v
 ```
 
 ## Formatting

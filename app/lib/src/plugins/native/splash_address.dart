@@ -26,7 +26,7 @@ class SplashPlace {
     this.size,
   });
 
-  /// The workspace-relative package path — `.`, `examples/example`.
+  /// The workspace-relative package path — `.`, `fixtures/probe_app`.
   final String package;
 
   /// Which `flutter_native_splash-<flavor>.yaml` this is about, or null for the

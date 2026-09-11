@@ -25,7 +25,7 @@ import 'package:path/path.dart' as p;
 /// costs when the linked summaries survive the process.
 ///
 /// ```sh
-/// cd app && dart run tool/catalog/resolve_spike.dart ../examples/example
+/// cd app && dart run tool/catalog/resolve_spike.dart ../fixtures/probe_app
 /// dart run tool/catalog/resolve_spike.dart . tool/catalog/demos --store file
 /// ```
 Future<void> main(List<String> args) async {

@@ -67,7 +67,7 @@ void main() {
     },
   );
 
-  // The other two members. `examples/example` is opened live by the test below
+  // The other two members. `fixtures/probe_app` is opened live by the test below
   // and in more detail; the root package and `app` were opened by nothing, and
   // the root package is the one that was reported broken.
   for (var member in const ['..', '.']) {
@@ -86,7 +86,7 @@ void main() {
   }
 
   test('a workspace member classifies against its own resolution', () async {
-    var service = serviceAt('../examples/example');
+    var service = serviceAt('../fixtures/probe_app');
     var dependencies = await service.dependencies.refreshOrThrow();
 
     // The classification has to match what *this member* declares, not what
@@ -97,7 +97,9 @@ void main() {
     // Read off the member's pubspec rather than written down here: name sets
     // say which packages were misclassified, where a count only says that
     // some were.
-    var declared = DeclaredDependencies.of('../examples/example/pubspec.yaml');
+    var declared = DeclaredDependencies.of(
+      '../fixtures/probe_app/pubspec.yaml',
+    );
     expect(
       dependencies.directs.map((d) => d.name).toSet(),
       declared.dependencies,
@@ -145,7 +147,7 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('origins come back filled in, not blank', () async {
-    var service = serviceAt('../examples/example');
+    var service = serviceAt('../fixtures/probe_app');
     var dependencies = await service.dependencies.refreshOrThrow();
 
     // Every one of these used to be null: the lookup went to a lockfile that

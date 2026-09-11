@@ -20,7 +20,7 @@ import 'package:test/test.dart';
 void main() {
   // The server side of the contract. In a real deployment these descriptors
   // live in a pure-Dart package shared with the app; here they mirror
-  // `examples/example/lib/renders.dart` with raw-map args.
+  // `fixtures/probe_app/lib/renders.dart` with raw-map args.
   final monthlyChart = WidgetRender<Map<String, Object?>>(
     'charts/monthly',
     encodeArgs: (args) => args,
@@ -42,7 +42,9 @@ void main() {
   final logs = <String>[];
 
   setUpAll(() async {
-    exampleRoot = p.normalize(p.absolute(p.join('..', 'examples', 'example')));
+    exampleRoot = p.normalize(
+      p.absolute(p.join('..', 'fixtures', 'probe_app')),
+    );
     expect(Directory(exampleRoot).existsSync(), isTrue, reason: exampleRoot);
     outDir = Directory.systemTemp.createTempSync('fw_render_bundle_test');
     try {

@@ -13,9 +13,9 @@ void main() {
   var repoRoot = p.normalize(p.join(Directory.current.path, '..'));
 
   test('this repository is its GUI, not its library or its fixture', () {
-    // `.` is a published library with no platform directories, and
-    // `examples/example` is a stock `flutter create` project — so the only
-    // package here with an icon of its own is the app.
+    // `.` is a published library with no platform directories;
+    // `fixtures/probe_app` and `examples/brewline` both wear real icons and
+    // are demoted for where they live — so the face is the app.
     expect(guessFace(repoRoot)?.package, 'app');
   });
 

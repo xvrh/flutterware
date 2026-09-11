@@ -14,7 +14,7 @@ library;
 class AssetPlace {
   const AssetPlace(this.package, {this.assetKey});
 
-  /// The workspace-relative package path — `.`, `examples/example`.
+  /// The workspace-relative package path — `.`, `fixtures/probe_app`.
   final String package;
 
   /// The asset key as the engine knows it — `assets/logo.png`, or

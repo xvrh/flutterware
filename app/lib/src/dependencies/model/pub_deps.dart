@@ -141,7 +141,7 @@ class PubDepsFailure implements Exception {
 ///
 /// Workspace-wide, and therefore not what to show a user. Every member's
 /// classification is folded into one value, so a package that is direct for
-/// `app` reads as `direct` even while you are looking at `examples/example`,
+/// `app` reads as `direct` even while you are looking at `fixtures/probe_app`,
 /// which does not depend on it at all. Per-member direct/dev/transitive is
 /// computed from the member's own [PubDepsPackage.directDependencies], not read
 /// off here.

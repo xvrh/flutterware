@@ -22,7 +22,6 @@
   "diagnostics": [],
   "unnamed": 0,
   "configFolders": [
-    "test/scenarios/api",
     "test/scenarios/desktop",
     "test/scenarios/mobile"
   ]

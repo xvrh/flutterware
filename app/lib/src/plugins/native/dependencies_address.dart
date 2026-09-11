@@ -21,7 +21,7 @@ library;
 class DependencyPlace {
   const DependencyPlace(this.package, {this.dependency, this.upgrade = false});
 
-  /// The workspace-relative package path — `app`, `examples/example` — whose
+  /// The workspace-relative package path — `app`, `fixtures/probe_app` — whose
   /// dependencies are being shown. The sub-entry the shell's rail selects.
   final String package;
 

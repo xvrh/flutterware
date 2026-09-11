@@ -15,7 +15,7 @@ import 'package:path/path.dart' as p;
 
 /// `scenarios read`: a run's archive in, the same screen every other surface
 /// answers with out. The tree here is a fixture rather than a real capture —
-/// what a real one produces is exercised against `examples/example` by hand;
+/// what a real one produces is exercised against `fixtures/probe_app` by hand;
 /// this pins the reading, the selector and the refusals.
 void main() {
   late Directory worktree;

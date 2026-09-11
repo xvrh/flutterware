@@ -48,11 +48,14 @@ void main() {
     // the plugin and the panel had quietly opened on another entry.
     var complaint = landingError(
       wanted: at('flutterware.previews', [
-        'examples/example',
+        'fixtures/probe_app',
         'demo/buttons.dart#buttons',
       ]),
       landedPlugin: 'flutterware.previews',
-      landedSegments: ['examples/example', 'demo/asset_smoke.dart#assetSmoke'],
+      landedSegments: [
+        'fixtures/probe_app',
+        'demo/asset_smoke.dart#assetSmoke',
+      ],
       declared: ['flutterware.previews'],
     );
 
@@ -72,7 +75,7 @@ void main() {
       landingError(
         wanted: at('flutterware.assets', const []),
         landedPlugin: 'flutterware.assets',
-        landedSegments: ['examples/example'],
+        landedSegments: ['fixtures/probe_app'],
         declared: ['flutterware.assets'],
       ),
       isNull,

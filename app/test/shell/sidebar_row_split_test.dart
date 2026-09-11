@@ -95,9 +95,9 @@ void main() {
     // On a rail wider than the real one, because the claim is about the rule
     // and the metrics here are not the app's: whether this particular name
     // fits at 232 is a question about the font the test binding loaded.
-    await _pump(tester, 'examples/example', _long, width: 400);
+    await _pump(tester, 'fixtures/probe_app', _long, width: 400);
 
-    expect(_clipped(tester, 'examples/example'), isFalse);
+    expect(_clipped(tester, 'fixtures/probe_app'), isFalse);
     // The status is the one that gave, and it is still legible.
     expect(_statusWidth(tester, _long), greaterThanOrEqualTo(48));
   });

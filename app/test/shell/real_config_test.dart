@@ -15,7 +15,7 @@ import 'package:path/path.dart' as p;
 
 /// End to end against this repo's own `tool/flutterware.dart`, with no stubs.
 ///
-/// This is the case M1 got wrong: launching inside `examples/example` walked no
+/// This is the case M1 got wrong: launching inside `fixtures/probe_app` walked no
 /// further, matched no worktree, fell back to the repo root, and found no
 /// config — an empty sidebar with a tab named after the repo branch.
 void main() {
@@ -30,12 +30,15 @@ void main() {
   });
 
   test('a directory with its own config is its own root', () {
-    // `examples/example` is both a workspace member of this repo and a project
+    // `fixtures/probe_app` is both a workspace member of this repo and a project
     // in its own right — it has a `tool/flutterware.dart`. Opening it must give
     // you *its* config, not the monorepo's, or `dart run flutterware` inside a
     // nested app would silently open the wrong project.
-    expect(findRepoRoot('../examples/example'), endsWith('examples/example'));
-    expect(findRepoRoot('../examples/example'), isNot(findRepoRoot('..')));
+    expect(
+      findRepoRoot('../fixtures/probe_app'),
+      endsWith('fixtures/probe_app'),
+    );
+    expect(findRepoRoot('../fixtures/probe_app'), isNot(findRepoRoot('..')));
   });
 
   test('the walk stops at the repository', () async {
@@ -61,7 +64,7 @@ void main() {
     var root = findRepoRoot('..')!;
     expect(
       discoverPackages(root),
-      containsAll(['.', 'app', 'examples/example']),
+      containsAll(['.', 'app', 'fixtures/probe_app']),
     );
   });
 
@@ -73,7 +76,7 @@ void main() {
       '{"version":1,'
       '"plugins":[{"id":"flutterware.dependencies","label":"Dependencies",'
       '"config":{"packages":[{"path":"."},{"path":"app"},'
-      '{"path":"examples/example"}]}}]}',
+      '{"path":"fixtures/probe_app"}]}}]}',
     );
 
     var workspace = Workspace(
@@ -92,7 +95,7 @@ void main() {
     );
     var plugins = buildNativeRegistry().resolve(session.cores);
     var dependencies = plugins.whereType<DependenciesPlugin>().single;
-    expect(dependencies.packages, ['.', 'app', 'examples/example']);
+    expect(dependencies.packages, ['.', 'app', 'fixtures/probe_app']);
 
     // The laziness rule: constructing the plugin and reading its report must
     // not have started any work.
@@ -102,11 +105,15 @@ void main() {
     // across packages would double-count everything shared between them
     // anyway, and the number only exists once the panel asks for it.
     expect(report.status, Status.none);
-    expect(report.children.map((c) => c.id), ['.', 'app', 'examples/example']);
+    expect(report.children.map((c) => c.id), [
+      '.',
+      'app',
+      'fixtures/probe_app',
+    ]);
     expect(report.children.map((c) => c.label), [
       'root',
       'app',
-      'examples/example',
+      'fixtures/probe_app',
     ]);
     expect(report.children.every((c) => c.status.isEmpty), isTrue);
     expect(report.view.toText(), contains('not computed'));

@@ -20,8 +20,8 @@ import 'package:flutterware/ui_catalog.dart';
 // Together these reproduce the demo's own scope, which is the one the
 // annotation was written in. The gap that remains is privacy: a `_kName` in the
 // annotation is visible where it was written and not here.
-import '../../../examples/example/demo/brand.dart';
-import '../../../examples/example/demo/brand.dart' as fw0;
+import '../../../examples/brewline/demo/brand.dart';
+import '../../../examples/brewline/demo/brand.dart' as fw0;
 
 // The annotation, evaluated as Dart rather than interpreted statically.
 // Kept whole rather than reduced: the entrypoint calls Flutter's own

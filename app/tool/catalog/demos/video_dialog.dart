@@ -46,7 +46,7 @@ Widget videoRendered() => _Case(
   rendered: Artifact(
     kind: Artifact.mp4,
     address: Address.parse('fw:///worktrees/demo/flutterware.scenarios/shop'),
-    path: 'examples/example/build/flutterware/video/order-a-cappuccino.mp4',
+    path: 'examples/brewline/build/flutterware/video/order-a-cappuccino.mp4',
     meta: const {'frames': 331, 'fps': 30, 'bytes': 767000, 'renderMs': 4239},
   ),
 );
@@ -101,7 +101,7 @@ class _CaseState extends State<_Case> {
         onOptions: (options) => setState(() => _options = options),
         command: scenarioVideoCommand(
           pluginId: 'flutterware.scenarios',
-          package: 'examples/example',
+          package: 'fixtures/probe_app',
           file: 'test/scenarios/mobile/shop_test.dart',
           scenario: 'Order a cappuccino',
           nameThePackage: true,

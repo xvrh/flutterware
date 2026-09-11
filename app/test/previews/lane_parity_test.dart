@@ -39,7 +39,7 @@ void main() {
     var flutterRoot = Platform.environment['FLUTTER_ROOT'];
     expect(flutterRoot, isNotNull, reason: 'flutter test always sets it');
     var repoRoot = Directory.current.parent.path;
-    var packageRoot = p.join(repoRoot, 'examples', 'example');
+    var packageRoot = p.join(repoRoot, 'fixtures', 'probe_app');
 
     var scan = CatalogScanner(projectRoot: packageRoot).scan();
     // Buttons: laid out rather than painted, which is what a layout comparison

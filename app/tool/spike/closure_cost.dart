@@ -5,7 +5,7 @@
 /// entry's closure independently reads the same file once per entry. This
 /// measures that against reading each unique file once, on a real catalog.
 ///
-///     cd app && fvm dart run tool/spike/closure_cost.dart [app|examples/example]
+///     cd app && fvm dart run tool/spike/closure_cost.dart [app|fixtures/probe_app]
 ///
 /// Findings land in docs/superpowers/specs/ — this file is the instrument,
 /// not the product.

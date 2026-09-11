@@ -12,7 +12,7 @@ import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:flutterware_app/src/session/job.dart';
 import 'package:path/path.dart' as p;
 
-/// End-to-end: the real `examples/example` package, a real `flutter_tester`,
+/// End-to-end: the real `fixtures/probe_app` package, a real `flutter_tester`,
 /// a real run. Slow (a cold harness compile), so everything is exercised in
 /// one warm sequence rather than one test per assertion.
 void main() {
@@ -25,7 +25,7 @@ void main() {
     );
     // app/ → the repo root, the workspace this test runs in.
     var repoRoot = Directory.current.parent.path;
-    var packageRoot = p.join(repoRoot, 'examples', 'example');
+    var packageRoot = p.join(repoRoot, 'fixtures', 'probe_app');
     var outDir = Directory.systemTemp.createTempSync('scenario_run').path;
 
     // A project clock, so the run below proves `fw.clock(...)` reaches the
@@ -995,7 +995,7 @@ void main() {
   test('a failed cold start is forgotten, not memoized', () async {
     var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
     var repoRoot = Directory.current.parent.path;
-    var packageRoot = p.join(repoRoot, 'examples', 'example');
+    var packageRoot = p.join(repoRoot, 'fixtures', 'probe_app');
     var outDir = Directory.systemTemp.createTempSync('scenario_cold').path;
 
     // An empty directory is the cheapest cold-start failure there is — no

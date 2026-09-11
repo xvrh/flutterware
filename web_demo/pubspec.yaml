@@ -1,5 +1,5 @@
 name: flutterware_web_demo
-description: The studio's web demo — the shell over a recording of the example, with the example's previews compiled in. Never published.
+description: The studio's web demo — the shell over a recording of the demo app, with the demo app's previews compiled in. Never published.
 publish_to: none
 
 environment:
@@ -8,21 +8,21 @@ environment:
 resolution: workspace
 
 # Its own package because it imports both halves: the studio, which cannot
-# depend on an example, and the example's previews, which must not depend
+# depend on a demo app, and the demo app's previews, which must not depend
 # on the studio — a dev dependency that way drags the studio's native plugins
-# into the example app's registrants. `app/tool/demo/build_web.dart` builds
+# into the demo app's registrants. `app/tool/demo/build_web.dart` builds
 # it; `app/tool/demo/web_entries.dart` writes `demo/entries.g.dart`. Outside
-# `lib/`, because the wrappers reach the example's previews by relative path
+# `lib/`, because the wrappers reach the demo app's previews by relative path
 # and a `package:` URI cannot leave its package.
 dependencies:
+  brewline:
+    path: ../examples/brewline
   flutter:
     sdk: flutter
   flutterware:
     path: ..
   flutterware_app:
     path: ../app
-  flutterware_example:
-    path: ../examples/example
 
 dev_dependencies:
   flutter_lints:

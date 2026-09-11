@@ -231,12 +231,12 @@ void main() {
     test(
       'an entry inside a workspace package is found on both sides',
       () async {
-        side = _FakeSide(packagePath: 'examples/example');
+        side = _FakeSide(packagePath: 'fixtures/probe_app');
         side.declared['*'] = ['demo/card.dart#card'];
 
         var result = await compare(
-          base: checkout('base', {'examples/example/demo/card.dart': '1'}),
-          head: checkout('head', {'examples/example/demo/card.dart': '2'}),
+          base: checkout('base', {'fixtures/probe_app/demo/card.dart': '1'}),
+          head: checkout('head', {'fixtures/probe_app/demo/card.dart': '2'}),
         );
 
         expect(result.rendered, 2);
@@ -632,7 +632,7 @@ class _FakeSide implements ComparisonSide {
   _FakeSide({this.packagePath = '.'});
 
   /// Where the package sits inside each checkout — `.` for a single-package
-  /// project, `examples/example` in a workspace.
+  /// project, `fixtures/probe_app` in a workspace.
   @override
   final String packagePath;
 

@@ -24,7 +24,7 @@ void main() {
       '{"version":1,'
       '"plugins":[{"id":"flutterware.dependencies","label":"Dependencies",'
       '"config":{"packages":[{"path":"."},{"path":"app"},'
-      '{"path":"examples/example"}]}}]}',
+      '{"path":"fixtures/probe_app"}]}}]}',
     );
 
     var workspace = Workspace(

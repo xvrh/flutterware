@@ -18,7 +18,7 @@ doc: `docs/superpowers/specs/2026-07-30-server-inspection-design.md`,
 decisions 5 and 11).
 
 A live, runnable version of the shelf + logging snippets is
-[`examples/example/bin/example_server.dart`](../examples/example/bin/example_server.dart).
+[`fixtures/probe_app/bin/example_server.dart`](../fixtures/probe_app/bin/example_server.dart).
 
 Everything below is inert in release builds (`dart compile` / `dart build`)
 and on machines without `~/.flutterware/run`; there is no init call — the

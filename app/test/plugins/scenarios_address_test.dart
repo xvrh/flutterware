@@ -3,9 +3,9 @@ import 'package:flutterware_app/src/plugins/native/scenarios_address.dart';
 
 void main() {
   test('round-trips the package list', () {
-    var segments = scenarioSegments('examples/example');
-    expect(segments, ['examples/example']);
-    expect(scenarioPlace(segments), const ScenarioPlace('examples/example'));
+    var segments = scenarioSegments('fixtures/probe_app');
+    expect(segments, ['fixtures/probe_app']);
+    expect(scenarioPlace(segments), const ScenarioPlace('fixtures/probe_app'));
   });
 
   test('round-trips a file', () {
@@ -22,7 +22,7 @@ void main() {
 
   test('round-trips a scenario', () {
     var place = const ScenarioPlace(
-      'examples/example',
+      'fixtures/probe_app',
       file: 'test/scenarios/counter_test.dart',
       scenario: 'Counter',
     );
@@ -36,7 +36,7 @@ void main() {
 
   test('round-trips a step', () {
     var place = const ScenarioPlace(
-      'examples/example',
+      'fixtures/probe_app',
       file: 'test/scenarios/counter_test.dart',
       scenario: 'Counter',
       step: 3,
@@ -57,7 +57,7 @@ void main() {
   // position inside somebody else's record.
   test('a segment past the step is ignored', () {
     var place = scenarioPlace([
-      'examples/example',
+      'fixtures/probe_app',
       'test',
       'scenarios',
       'counter_test.dart',
@@ -78,16 +78,16 @@ void main() {
   });
 
   test('round-trips the help page', () {
-    var segments = scenarioSegments('examples/example', help: true);
-    expect(segments, ['examples/example', 'help']);
+    var segments = scenarioSegments('fixtures/probe_app', help: true);
+    expect(segments, ['fixtures/probe_app', 'help']);
     expect(
       scenarioPlace(segments),
-      const ScenarioPlace('examples/example', help: true),
+      const ScenarioPlace('fixtures/probe_app', help: true),
     );
     // And it is a place of its own, not the package list wearing a flag.
     expect(
-      scenarioPlace(['examples/example']),
-      isNot(const ScenarioPlace('examples/example', help: true)),
+      scenarioPlace(['fixtures/probe_app']),
+      isNot(const ScenarioPlace('fixtures/probe_app', help: true)),
     );
   });
 

@@ -969,7 +969,7 @@ void main() {
   });
 }
 
-/// The 48×48 fixture from `examples/example`.
+/// The 48×48 fixture from `fixtures/probe_app`.
 final _png = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAARklEQVR42u3YMQ0AIAwAwepgI/hE'
   'Ro1ioB5YoMklL+Dmj7H2VwVQa9DM8yQgICAgICAgICAgICAgICAgICAgICAgJx/osgK8LWl1SxSv'

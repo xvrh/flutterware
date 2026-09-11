@@ -86,7 +86,7 @@ jobs:
         # daemon handshake, launching no guest, so it needs no GPU — which is
         # exactly why the step below cannot block.
         run: dart run ../../app/bin/fw.dart run previews check
-        working-directory: examples/example
+        working-directory: fixtures/probe_app
 
       - name: "and finds it when started by package name"
         # The same resolution, from the other way this package is started: by
@@ -101,7 +101,7 @@ jobs:
         # code; talking MCP from a workflow step would test the transport, not
         # the resolution.
         run: dart run flutterware_app:fw run previews check
-        working-directory: examples/example
+        working-directory: fixtures/probe_app
 
       - name: "the compiler daemon, as a process"
         # Everything in `app/integration_test/` that needs no GPU: the daemon
@@ -259,7 +259,7 @@ jobs:
       # job exists for. `fw` exits 1 when the audit reports `ok: false`, so a
       # broken example entry — or a tester that cannot come up — fails the job.
       - run: dart run flutterware_app:fw run previews audit
-        working-directory: examples/example
+        working-directory: fixtures/probe_app
       # The 3D lane, walked: a scene with a model, two screens and a
       # crossfade, rendered frame by frame through flutter_scene on the
       # tester. The audit above renders the 3D probes as stills; this is the
@@ -295,11 +295,11 @@ jobs:
       - run: flutter --version
       - run: flutter pub get
       - run: dart run flutterware_app:fw run previews audit
-        working-directory: examples/example
+        working-directory: fixtures/probe_app
       # Scenarios share the harness previews audit on, so a Windows break in
       # either is usually a break in both — but only this one spawns a run.
       - run: dart run flutterware_app:fw run scenarios run --steps=none
-        working-directory: examples/example
+        working-directory: fixtures/probe_app
       # The 3D lane on Windows. One file a step, unlike Linux: run together
       # they exited 1 with all nine tests passing, no error printed, six of
       # the results uncounted and a flutter_tester left orphaned — a suite
@@ -324,7 +324,7 @@ jobs:
     # 2026-09-10-studio-over-a-fake-project-design.md`. Three things this job
     # keeps true, each of which broke silently before it existed: the
     # recording in `app/demo/fixture/` is what `tool/demo/record.dart` produces
-    # from `examples/example` today (a scan format that moved without the
+    # from `fixtures/probe_app` today (a scan format that moved without the
     # recording moving would otherwise read as a fixture bug); the studio's own
     # scenario walks the shell under the harness; and the shell still compiles
     # for the web, which one `dart:ffi` import anywhere in its closure ends.

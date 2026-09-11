@@ -59,7 +59,7 @@ class ThumbnailKeys {
   late final String root = p.dirname(p.dirname(_packageConfig));
   late final String _packageConfig = requirePackageConfig(packageRoot);
 
-  /// [packageRoot] as the closure expresses it — `app`, `examples/example`.
+  /// [packageRoot] as the closure expresses it — `app`, `fixtures/probe_app`.
   late final String packagePath = p.relative(packageRoot, from: root);
 
   /// Everything that decides pixels and no compile mentions — assets,

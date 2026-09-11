@@ -41,7 +41,7 @@ void main() {
     var service = DependenciesService(
       PackageRef(
         AppContext(logger: LogClient.print()),
-        '../examples/example',
+        '../fixtures/probe_app',
         // Never invoked: the injected runProcess answers instead.
         FlutterSdkPath('/tmp/flutter'),
       ),
@@ -70,7 +70,7 @@ void main() {
           body: AddressRoot(
             address: address,
             onChanged: (next) => address.value = next,
-            child: DependenciesScreen(service, package: 'examples/example'),
+            child: DependenciesScreen(service, package: 'fixtures/probe_app'),
           ),
         ),
       ),

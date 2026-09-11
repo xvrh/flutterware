@@ -16,7 +16,7 @@ void main() {
 
   var dependencies = Dependencies.resolve(
     pubspec: Pubspec.parse(
-      'name: flutterware_example\nenvironment:\n  sdk: ^3.6.0\n',
+      'name: flutterware_probes\nenvironment:\n  sdk: ^3.6.0\n',
     ),
     pubDeps: pubDeps,
     lock: null,

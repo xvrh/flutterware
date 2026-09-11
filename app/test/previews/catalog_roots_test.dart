@@ -20,7 +20,7 @@ PluginManifest get _manifest => const PluginManifest([
     config: {
       'packages': [
         {'path': 'app', 'directory': 'tool/catalog'},
-        {'path': 'examples/example'},
+        {'path': 'fixtures/probe_app'},
       ],
     },
   ),
@@ -52,7 +52,7 @@ PluginHost _hostFor(String id) => PluginHost(
 
 void main() {
   test('a package with no declared directory gets the whole package', () {
-    expect(catalogRootsFrom(_manifest)['examples/example'], [
+    expect(catalogRootsFrom(_manifest)['fixtures/probe_app'], [
       defaultCatalogRoot,
     ]);
   });

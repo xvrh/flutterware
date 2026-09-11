@@ -16,7 +16,27 @@ export 'shop_strings.dart';
 /// under every language: `tap(ShopKeys.addToCart)` does not care what the
 /// button says.
 class ShopApp extends StatefulWidget {
-  const ShopApp({super.key, this.navigatorKey, this.overlay});
+  const ShopApp({
+    super.key,
+    this.navigatorKey,
+    this.overlay,
+    this.home,
+    this.cart,
+    this.themeMode,
+    this.locale,
+  });
+
+  /// The first screen — the welcome screen unless a preview asks for another,
+  /// which is how one of the shop's screens is drawn on its own with the
+  /// shop's theme, strings and cart around it.
+  final Widget? home;
+
+  /// A cart to start with, so a preview of the cart has something in it.
+  final Cart? cart;
+
+  /// Both null in the app, where the platform decides. A preview turns them.
+  final ThemeMode? themeMode;
+  final Locale? locale;
 
   /// Reaches the navigator from outside the widget tree. Ordinary app
   /// machinery: a notification tapped on a lock screen is delivered to a
@@ -32,7 +52,7 @@ class ShopApp extends StatefulWidget {
 }
 
 class _ShopAppState extends State<ShopApp> {
-  final _cart = Cart();
+  late final _cart = widget.cart ?? Cart();
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +68,8 @@ class _ShopAppState extends State<ShopApp> {
       ],
       theme: shopTheme(Brightness.light),
       darkTheme: shopTheme(Brightness.dark),
+      themeMode: widget.themeMode,
+      locale: widget.locale,
       navigatorKey: widget.navigatorKey,
       // Above the navigator, so every pushed route sees the cart.
       builder: (context, child) => CartScope(
@@ -64,7 +86,7 @@ class _ShopAppState extends State<ShopApp> {
                 ],
               ),
       ),
-      home: const WelcomeScreen(),
+      home: widget.home ?? const WelcomeScreen(),
     );
   }
 }

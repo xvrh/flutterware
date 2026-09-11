@@ -157,7 +157,7 @@ Future<CompareOutcome> runComparison({
 
   // The two sides are two *checkouts*, not two package directories: a base
   // checkout mirrors the whole worktree, so a package has to be named
-  // relative to its top level. Running this from inside `examples/example`
+  // relative to its top level. Running this from inside `fixtures/probe_app`
   // reported every entry as added until it did.
   var top = await BaseRef.topLevelOf(session.worktree.path);
   String relative(String packageInWorktree) => p.relative(

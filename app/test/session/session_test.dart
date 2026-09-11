@@ -82,7 +82,12 @@ void main() {
   test('opening a session computes nothing', () {
     var dependencies =
         session.coreById(dependenciesPluginId)! as DependenciesCore;
-    expect(dependencies.packages, ['.', 'app', 'examples/example']);
+    expect(dependencies.packages, [
+      '.',
+      'app',
+      'fixtures/probe_app',
+      'examples/brewline',
+    ]);
     for (var path in dependencies.packages) {
       expect(dependencies.isRealised(path), isFalse);
     }
@@ -203,7 +208,7 @@ void main() {
     var result =
         (await dependencies.invoke(
               'list',
-              arguments: {'package': 'examples/example'},
+              arguments: {'package': 'fixtures/probe_app'},
             ))!
             as DependencyListResult;
     var entries = result.packages.single.dependencies;
@@ -224,7 +229,9 @@ void main() {
     // The counts are per-member, not per-workspace — derived from the member's
     // own pubspec rather than written down here, so adding a dependency to the
     // sample project does not fail a test about where packages come from.
-    var declared = DeclaredDependencies.of('../examples/example/pubspec.yaml');
+    var declared = DeclaredDependencies.of(
+      '../fixtures/probe_app/pubspec.yaml',
+    );
     expect(result.packages.single.direct, declared.dependencies.length);
     expect(result.packages.single.dev, declared.devs.length);
     expect(
@@ -238,7 +245,7 @@ void main() {
         session.coreById(dependenciesPluginId)! as DependenciesCore;
     await dependencies.invoke(
       'list',
-      arguments: {'package': 'examples/example'},
+      arguments: {'package': 'fixtures/probe_app'},
     );
 
     var hits = searchReport(dependencies.report, 'auto_size', worktree: 'wt');
@@ -250,7 +257,7 @@ void main() {
     expect(hit.reason, SearchReason.item);
     expect(hit.address.plugin, dependenciesPluginId);
     expect(hit.address.segments, [
-      'examples/example',
+      'fixtures/probe_app',
       'packages',
       'auto_size_text',
     ]);

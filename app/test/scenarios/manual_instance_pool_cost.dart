@@ -20,7 +20,7 @@ import 'package:path/path.dart' as p;
 void main() {
   test('prices a pool of 1, 2 and 6 concurrent instances', () async {
     var repoRoot = Directory.current.parent.path;
-    var example = p.join(repoRoot, 'examples', 'example');
+    var example = p.join(repoRoot, 'examples', 'brewline');
     var probeRoot = p.join(repoRoot, 'build', 'pool-probe');
 
     Future<int> testerMemoryMb() async {

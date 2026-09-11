@@ -28,7 +28,7 @@ void main() {
   test('the model probe renders on the embedder guest', () async {
     var appRoot = Directory.current.path;
     var repoRoot = p.dirname(appRoot);
-    var exampleRoot = p.join(repoRoot, 'examples', 'example');
+    var exampleRoot = p.join(repoRoot, 'fixtures', 'probe_app');
     var cache = FlutterCache.fromRunningSdk();
     var dartExecutable = p.join(cache.flutterRoot, 'bin', 'dart');
     var config = DaemonConfig(

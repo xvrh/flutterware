@@ -4,7 +4,7 @@
 /// importing the other's world.
 ///
 /// A **recording** is a fixture the real tool produced from a real project:
-/// the launcher-icon scan of `examples/example` with the files it names
+/// the launcher-icon scan of `fixtures/probe_app` with the files it names
 /// copied in beside it, and a run of some of its scenarios with every frame
 /// and tree the harness wrote. The studio's own catalog demos, its scenario
 /// tests and the web demo all open one. See

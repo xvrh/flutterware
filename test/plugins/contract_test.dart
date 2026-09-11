@@ -112,7 +112,7 @@ Tests  3 failing
         id: 'flutterware.scenarios',
         label: 'Scenarios',
         children: [
-          PluginChild(id: 'examples/example', label: 'examples/example'),
+          PluginChild(id: 'fixtures/probe_app', label: 'fixtures/probe_app'),
           PluginChild(
             id: 'app',
             label: 'app',
@@ -122,7 +122,7 @@ Tests  3 failing
           PluginChild(id: 'tools', label: 'tools'),
         ],
         view: PluginView([
-          ViewSection('examples/example', [ViewField('Scenarios', '8')]),
+          ViewSection('fixtures/probe_app', [ViewField('Scenarios', '8')]),
           ViewSection('app', [ViewField('Scenarios', '0')]),
           // Titled by id where the child spells it `root` — one package, and
           // the child's spelling is the one worth keeping.
@@ -133,7 +133,7 @@ Tests  3 failing
       expect(scoped.toText(), '''
 Scenarios
   tools
-  examples/example
+  fixtures/probe_app
     Scenarios: 8
   app  no config
     Scenarios: 0
@@ -144,7 +144,7 @@ Scenarios
       // still its own line.
       expect(scoped.toText(includeView: false), '''
 Scenarios
-  examples/example
+  fixtures/probe_app
   app  no config
   root  4 assets
   tools''');

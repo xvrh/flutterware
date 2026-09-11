@@ -579,7 +579,7 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
     /// The sample's root, or null when it is not checked out beside us.
     String? sampleRoot() {
       var example = p.normalize(
-        p.join(Directory.current.path, '..', 'examples', 'example'),
+        p.join(Directory.current.path, '..', 'fixtures', 'probe_app'),
       );
       return Directory(example).existsSync() ? example : null;
     }
@@ -589,7 +589,7 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
       // purpose — this guards discovery against a real tree, and should not
       // fail when someone regenerates the sample's icons.
       var example = p.normalize(
-        p.join(Directory.current.path, '..', 'examples', 'example'),
+        p.join(Directory.current.path, '..', 'fixtures', 'probe_app'),
       );
       if (!Directory(example).existsSync()) {
         markTestSkipped('sample project not present');
@@ -598,7 +598,7 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
 
       var result = scanIcons(
         packageRoot: example,
-        packagePath: 'examples/example',
+        packagePath: 'fixtures/probe_app',
       );
 
       expect(result.isEmpty, isFalse);
@@ -618,7 +618,7 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
 
     /// Tight, unlike the read above, because these *are* fixtures: the sample
     /// carries one icon set per shape this scan has to get right, and
-    /// `examples/example/README.md` says which is which. A change here is a
+    /// `fixtures/probe_app/README.md` says which is which. A change here is a
     /// change to the sample, and the two are meant to be edited together.
     group('its icon sets', () {
       IconScan? sample({String? flavor}) {
@@ -626,7 +626,7 @@ ${monochrome == null ? '' : '  <monochrome android:drawable="$monochrome"/>'}
         if (root == null) return null;
         return scanIcons(
           packageRoot: root,
-          packagePath: 'examples/example',
+          packagePath: 'fixtures/probe_app',
           flavor: flavor,
         );
       }

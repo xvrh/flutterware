@@ -36,7 +36,7 @@ Future<void> _walk(String file, int atLeast) async {
   {
     var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
     var packageRoot = p.normalize(
-      p.join(Directory.current.path, '..', 'examples', 'example'),
+      p.join(Directory.current.path, '..', 'fixtures', 'probe_app'),
     );
     var opened = parseSceneFile(
       File(p.join(packageRoot, 'demo', file)).readAsStringSync(),
