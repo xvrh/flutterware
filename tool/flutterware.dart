@@ -12,6 +12,7 @@ import 'package:flutterware/plugins.dart';
 const root = Pkg('.');
 const app = Pkg('app');
 const example = Pkg('examples/example');
+const brewline = Pkg('examples/brewline');
 const webDemo = Pkg('web_demo');
 
 void main() => Flutterware.configure((fw) {
@@ -51,8 +52,9 @@ void main() => Flutterware.configure((fw) {
 
   // **Which of the three packages is this repository, and its picture.** `app`
   // — the desktop GUI — because that is the thing a window of flutterware is
-  // showing you. `.` is the published library and `examples/example` is a
-  // fixture; neither is what you point at to say "that project".
+  // showing you. `.` is the published library, `examples/example` is a
+  // fixture and `examples/brewline` is the demo app; none of them is what you
+  // point at to say "that project".
   //
   // The icon is the macOS art rather than a source file because that is where
   // `app/tool/icon/generate.dart` writes the largest version of it.
@@ -64,9 +66,11 @@ void main() => Flutterware.configure((fw) {
   );
 
   fw.use(
-    Dependencies(packages: DependenciesPackage.each([root, app, example])),
+    Dependencies(
+      packages: DependenciesPackage.each([root, app, example, brewline]),
+    ),
   );
-  fw.use(Assets(packages: AssetsPackage.each([root, app, example])));
+  fw.use(Assets(packages: AssetsPackage.each([root, app, example, brewline])));
   // The example app's render points — `lib/renders.dart` binds a chart
   // widget and a report document; the panel renders them on the same guest
   // a server would get from `fw render bundle`.
@@ -118,6 +122,15 @@ void main() => Flutterware.configure((fw) {
             PreviewCanvas('demo/home_page.dart'),
           ],
         ),
+        // The demo app, as its own `tool/flutterware.dart` declares it: the
+        // shop's screens and its icon, on the two phones it ships on.
+        .new(
+          brewline,
+          directory: 'demo',
+          canvases: [
+            PreviewCanvas('', devices: [Devices.iphone16, Devices.androidTall]),
+          ],
+        ),
       ],
     ),
   );
@@ -126,16 +139,16 @@ void main() => Flutterware.configure((fw) {
   // in it, found wherever it was written; `demo/` holds the one this
   // project has.
   fw.use(Scene(packages: [.new(example)]));
-  // `example` only. `root` is a library and `app` is this GUI — neither has a
+  // The two apps. `root` is a library and `app` is this GUI — neither has a
   // native splash to resolve, which is why `NativeSplash` offers no `each`.
-  fw.use(NativeSplash(packages: [.new(example)]));
-  // `example` again, and for the same reason: only a package that is an app
-  // has launcher icons to look at.
-  fw.use(LauncherIcon(packages: [.new(example)]));
+  fw.use(NativeSplash(packages: [.new(example), .new(brewline)]));
+  // The same two, and for the same reason: only a package that is an app has
+  // launcher icons to look at. The fixture's are the wrong cases the viewer
+  // is tested on; the demo app's are one clean set.
+  fw.use(LauncherIcon(packages: [.new(example), .new(brewline)]));
 
-  // **The demo shop's store listing.** `examples/example` is the only member
-  // that is an app rather than a tool, so it is the only one that could have a
-  // listing at all.
+  // **The demo shop's store listing.** `examples/brewline` is the app with a
+  // listing; the fixture has screens nobody would put in a store.
   //
   // Both stores are declared even though Google Play's phone cannot be
   // exported yet: its canvas is 1080×2160 and an `android-tall` renders
@@ -153,7 +166,7 @@ void main() => Flutterware.configure((fw) {
     StoreShots(
       apps: [
         StoreShotsApp(
-          example,
+          brewline,
           file: 'test/scenarios/mobile/shop_test.dart',
           // The listing's own composition — a panorama with tilted devices
           // that lean across the joins. See the file; it is the demo the
@@ -328,15 +341,6 @@ void main() => Flutterware.configure((fw) {
               flavorByPlatform: {RunPlatform.android: 'free'},
             ),
             Entrypoint(
-              'lib/shop_devbar.dart',
-              name: 'Brewline (devbar)',
-              description:
-                  'The shop, with a plugin that pushes a notification into '
-                  'it — the sample for driving an app from the cockpit, '
-                  '`fw` or an agent',
-              flavorByPlatform: {RunPlatform.android: 'free'},
-            ),
-            Entrypoint(
               'lib/network_spike.dart',
               name: 'Network spike',
               description:
@@ -371,14 +375,35 @@ void main() => Flutterware.configure((fw) {
             ),
           ],
         ),
+        // The demo app: no flavors, so nothing to pair, and the same two
+        // entry points its own config declares.
+        .new(
+          brewline,
+          entrypoints: [
+            Entrypoint(
+              'lib/main.dart',
+              name: 'Brewline',
+              description: 'The coffee shop',
+            ),
+            Entrypoint(
+              'lib/shop_devbar.dart',
+              name: 'Brewline (devbar)',
+              description:
+                  'The shop, with a plugin that pushes a notification into '
+                  'it — the sample for driving an app from the cockpit, '
+                  '`fw` or an agent',
+            ),
+          ],
+        ),
       ],
     ),
   );
-  // `example` only, for now — the sample scenarios live there.
+  // The fixture's scenarios pin the runner; the demo app's are the sample.
   fw.use(
     Scenarios(
       packages: [
         .new(example, languages: ['en', 'fr']),
+        .new(brewline, languages: ['en', 'fr']),
         // The studio itself, over a recording of the example — see
         // `app/lib/src/demo/`. Narrowed to its own folder: `app/test/` is
         // hundreds of widget tests, and only these are scenarios. The folder
@@ -392,7 +417,7 @@ void main() => Flutterware.configure((fw) {
     ),
   );
 
-  // **The demo shop's copy, and where it lives.** `examples/example` funnels
+  // **The demo shop's copy, and where it lives.** `examples/brewline` funnels
   // every string through one function, and its scenario config hands that
   // funnel `indexTranslations('shop')` — so a run can say which key is on
   // which screen. This declares the other half: where the words themselves
@@ -401,7 +426,7 @@ void main() => Flutterware.configure((fw) {
     Translations(
       packages: [
         TranslationsPackage(
-          example,
+          brewline,
           catalogs: [
             TranslationCatalog(name: 'shop', files: 'assets/i18n/*.json'),
             // The listing's headlines. A second catalog rather than more keys

@@ -1,11 +1,11 @@
 import 'package:flutterware/plugins.dart';
 
-/// The sample project, configured as a project in its own right.
+/// The fixture, configured as a project in its own right.
 ///
 /// It is also a member of flutterware's own pub workspace, which is why the
 /// repo root has a config too. Opening this directory gives you what a user
 /// with a single Flutter app sees; opening the repo root gives you the monorepo
-/// case. Neither is a special mode — a config is whatever `tool/flutterware.dart`
+/// case. The sample a stranger clones is `examples/brewline`, next door. Neither is a special mode — a config is whatever `tool/flutterware.dart`
 /// is found beside the directory you opened.
 const app = Pkg('.');
 
@@ -115,14 +115,6 @@ void main() => Flutterware.configure((fw) {
               'lib/devbar_example.dart',
               name: 'Devbar',
               description: 'Every devbar plugin, on a demo screen',
-            ),
-            Entrypoint(
-              'lib/shop_devbar.dart',
-              name: 'Brewline (devbar)',
-              description:
-                  'The shop, with a plugin that pushes a notification into '
-                  'it — the sample for driving an app from the cockpit, '
-                  '`fw` or an agent',
             ),
           ],
         ),

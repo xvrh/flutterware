@@ -82,7 +82,12 @@ void main() {
   test('opening a session computes nothing', () {
     var dependencies =
         session.coreById(dependenciesPluginId)! as DependenciesCore;
-    expect(dependencies.packages, ['.', 'app', 'examples/example']);
+    expect(dependencies.packages, [
+      '.',
+      'app',
+      'examples/example',
+      'examples/brewline',
+    ]);
     for (var path in dependencies.packages) {
       expect(dependencies.isRealised(path), isFalse);
     }

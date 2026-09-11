@@ -33,9 +33,8 @@ const storeLocales = {'en': 'en-US', 'fr': 'fr-FR'};
 
 /// One locale's banner copy, by key, from the `store` catalog.
 ///
-/// Read off disk synchronously and for the same reason `lib/src/store_copy.dart`
-/// does: a scene's `build` cannot await, and copy that arrived a frame late
-/// would be photographed as an empty band.
+/// Read off disk synchronously: a scene's `build` cannot await, and copy that
+/// arrived a frame late would be photographed as an empty band.
 String storeCopy(String key, String locale) =>
     _catalog(locale)[key] ?? _catalog('en')[key] ?? '';
 

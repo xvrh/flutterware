@@ -25,7 +25,7 @@ void main() {
     if (directory.existsSync()) directory.deleteSync(recursive: true);
 
     var runner = ScenarioRunner(
-      packageRoot: p.join(repoRoot, 'examples', 'example'),
+      packageRoot: p.join(repoRoot, 'examples', 'brewline'),
       directory: 'test/scenarios',
       flutterSdkRoot: Platform.environment['FLUTTER_ROOT']!,
     );

@@ -1,5 +1,5 @@
 import 'package:flutterware/flutter_test.dart';
-import 'package:flutterware_example/shop/shop_app.dart';
+import 'package:brewline/shop/shop_app.dart';
 
 import 'brewline_reel.dart';
 

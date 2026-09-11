@@ -18,7 +18,7 @@ const phones = ScenarioProfile(
   languages: ['en', 'fr'],
 );
 
-/// Brewline on a wide window. Fewer languages on purpose — a profile carries
+/// The app on a wide window. Fewer languages on purpose — a profile carries
 /// the languages that go with *its* pool, and a desktop build that ships
 /// English only should not be told to screenshot French.
 const desktop = ScenarioProfile(

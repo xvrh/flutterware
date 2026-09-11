@@ -1,9 +1,10 @@
 # flutterware_example
 
-flutterware's sample project. It exists to be *looked at* by the tools in
-`app/` — the asset inspector, the launcher-icon viewer, the previews catalog,
-the scenario runner — so a fair amount of what is in here is fixture rather
-than app.
+flutterware's fixture. It exists to be *looked at* by the tools in `app/` —
+the asset inspector, the launcher-icon viewer, the previews catalog, the
+scenario runner, the scene editor — so most of what is in here is a probe or a
+wrong case rather than an app. **The sample a stranger clones is
+[`examples/brewline`](../brewline/README.md), next door.**
 
 **Several fixtures are wrong on purpose.** Fixing one breaks the case it stands
 for. What each is meant to expose is written down beside it:
@@ -36,18 +37,15 @@ because it forks nothing. A build of it ships main's icons.
 main's themed icon is still on disk, still inherited, and no longer reachable —
 which is the finding the panel raises on that plate.
 
-The art is the shop's own icon, `demo/brand.dart` — a preview the studio
-photographs, which `app/tool/demo/brand_icons.dart` then writes into every
-file above at the size the file already has (see that script for the two
-commands). Re-tinted per set — brown for main, green for `pro`, red for
+The art is a cup, tinted per set — brown for main, green for `pro`, red for
 `kiosk`, purple for `partner` — so the sets are told apart at a glance, and
 the iOS ones keep the opaque, alpha-free PNGs the App Store insists on. The
-files' *shapes* are the fixtures; the script never adds or removes one.
+files' *shapes* are the fixtures, and nothing regenerates them.
 
 The Android half is wired for real, in `android/app/build.gradle.kts`. The iOS
 half stops at the catalogs: pointing a build configuration at
 `AppIcon-pro.appiconset` means `ASSETCATALOG_COMPILER_APPICON_NAME` in
-`project.pbxproj`, and adding flavor configurations by hand to a sample app buys
+`project.pbxproj`, and adding flavor configurations by hand to a fixture buys
 nothing — **nothing in flutterware reads the pbxproj**, which is the same reason
 the chips cannot claim to be the flavor list.
 

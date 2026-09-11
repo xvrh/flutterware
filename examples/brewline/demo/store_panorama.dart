@@ -16,7 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/plugins.dart';
 import 'package:flutterware/store.dart';
-import 'package:flutterware_example/store_frame.dart';
+import 'package:brewline/store_frame.dart';
 
 const _slugs = ['welcome', 'menu', 'cart', 'order-placed', 'empty-cart'];
 

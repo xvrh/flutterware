@@ -14,6 +14,7 @@ import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'src/database/app_database.dart';
 import 'src/devbar/info_panel.dart';
 import 'src/devbar/storage_panel.dart';
 
@@ -34,14 +35,23 @@ final pickerFeature = FeatureFlag.picker<ApiEnvironment>(
   options: {for (var entry in ApiEnvironment.values) entry: entry.name},
 );
 
-void main() {
-  runApp(_EntryPoint());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(_EntryPoint(database: await AppDatabase.open()));
 }
 
 class _EntryPoint extends StatelessWidget {
+  const _EntryPoint({this.database});
+
+  final AppDatabase? database;
+
   @override
   Widget build(BuildContext context) {
-    return MyDevBar(availableUsers: ['John', 'Jane', 'Jack'], child: MyApp());
+    return MyDevBar(
+      availableUsers: ['John', 'Jane', 'Jack'],
+      database: database,
+      child: MyApp(),
+    );
   }
 }
 
@@ -49,7 +59,17 @@ class MyDevBar extends StatelessWidget {
   final Widget child;
   final List<String> availableUsers;
 
-  MyDevBar({super.key, required this.child, required this.availableUsers});
+  /// The db panel's subject, when the entry point opened one. The recipe
+  /// from 2026-08-12-sqlite-watch-design.md: the app hands over
+  /// query/updates/watch; flutterware imports no sqlite.
+  final AppDatabase? database;
+
+  MyDevBar({
+    super.key,
+    required this.child,
+    required this.availableUsers,
+    this.database,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +88,18 @@ class MyDevBar extends StatelessWidget {
         InfoPlugin.new,
         StoragePlugin.new,
         DeviceFramePlugin.init(),
+        if (database case var database?)
+          DatabasePlugin.init(
+            database: DatabaseAdapter(
+              query: (sql, args) => database.db.getAll(sql, args),
+              updates: database.db.updates.map((u) => u.tables),
+              watch: (sql) =>
+                  database.db.watch(sql, throttle: Duration(milliseconds: 250)),
+              // The write door, deliberately present here: providing the
+              // function is the whole opt-in, and the cockpit marks it danger.
+              execute: (sql, args) => database.db.execute(sql, args),
+            ),
+          ),
       ],
       flags: [
         superCoolFeature.withDefaultValue,
