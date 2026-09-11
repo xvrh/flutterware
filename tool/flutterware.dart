@@ -340,14 +340,6 @@ void main() => Flutterware.configure((fw) {
               description: 'Every devbar plugin, on a demo screen',
               flavorByPlatform: {RunPlatform.android: 'free'},
             ),
-            Entrypoint(
-              'lib/network_spike.dart',
-              name: 'Network spike',
-              description:
-                  'Self-contained http traffic generator for the '
-                  'ext.dart.io http-profile spike',
-              flavorByPlatform: {RunPlatform.android: 'free'},
-            ),
             // Outside `lib/`, which is the reason it is declared: the wrapper
             // that installs the run guest names this file by path and the enum
             // beside it by path, so a launch of it is the live check that a

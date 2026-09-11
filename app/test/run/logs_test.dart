@@ -39,7 +39,7 @@ void main() {
     // not as an `app.log`, which is what this was written against first.
     var path = write([
       'Launching lib/main.dart on macOS in debug mode...',
-      '✓ Built build/macos/Build/Products/Debug/flutterware_example.app',
+      '✓ Built build/macos/Build/Products/Debug/brewline.app',
       'flutter: FWPROBE stdout line',
       event('app.started', {'appId': 'a'}),
       'flutter: FWPROBE tick 1',
@@ -47,7 +47,7 @@ void main() {
 
     expect(readRunLog(path).map((l) => '${l.source.name}: ${l.text}'), [
       'tool: Launching lib/main.dart on macOS in debug mode...',
-      'tool: ✓ Built build/macos/Build/Products/Debug/flutterware_example.app',
+      'tool: ✓ Built build/macos/Build/Products/Debug/brewline.app',
       'app: FWPROBE stdout line',
       'app: FWPROBE tick 1',
     ]);

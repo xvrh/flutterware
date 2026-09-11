@@ -280,7 +280,7 @@ class _Tab3 extends StatelessWidget {
                   children: [
                     Icon(Icons.home, size: 18),
                     const SizedBox(width: 10),
-                    Text('flutterware_example'),
+                    Text('brewline'),
                   ],
                 ),
               ),
@@ -307,7 +307,7 @@ class _Tab3 extends StatelessWidget {
                 children: [
                   Icon(Icons.home, size: 18),
                   const SizedBox(width: 10),
-                  Text('flutterware_example'),
+                  Text('brewline'),
                 ],
               ),
             ),
