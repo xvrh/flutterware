@@ -109,9 +109,16 @@ Future<void> main(List<String> args) async {
     entity.deleteSync(recursive: true);
   }
   for (var file in tracked) {
-    var target = p.join(work, p.relative(file, from: source));
+    var relative = p.relative(file, from: source);
+    var target = p.join(work, relative);
     Directory(p.dirname(target)).createSync(recursive: true);
-    File(p.join(root, file)).copySync(target);
+    if (relative == 'pubspec.yaml') {
+      File(target).writeAsStringSync(
+        _standalonePubspec(File(p.join(root, file)).readAsStringSync()),
+      );
+    } else {
+      File(p.join(root, file)).copySync(target);
+    }
   }
 
   File(p.join(work, '.gitignore')).writeAsStringSync(_gitignore);
@@ -136,6 +143,42 @@ Future<void> main(List<String> args) async {
   await _run('git', ['commit', '-m', 'Sync from flutterware@$sha'], cwd: work);
   await _run('git', ['push', 'origin', 'HEAD'], cwd: work);
   stdout.writeln('\nPushed. ${remote.replaceFirst(RegExp(r'\.git$'), '')}');
+}
+
+/// The one transformation on the way out.
+///
+/// The demo is a workspace member here, so the root `pub get` resolves it
+/// against this checkout while its pubspec keeps naming the published
+/// `flutterware`. A clone has no workspace root, and pub refuses a
+/// `resolution: workspace` with nothing above it — so that line goes, with
+/// the comment block that explains it. Everything else is copied as is.
+///
+/// Then the guard: a projection that still names a path, or a resolution, is
+/// a demo nobody can clone, and it fails silently until a stranger tries.
+String _standalonePubspec(String pubspec) {
+  var lines = pubspec.split('\n');
+  var at = lines.indexWhere(
+    (l) => RegExp(r'^resolution:\s*workspace').hasMatch(l),
+  );
+  if (at < 0) {
+    _fail(
+      '$source/pubspec.yaml declares no `resolution: workspace`; '
+      'is the demo still a workspace member?',
+    );
+  }
+  var from = at;
+  while (from > 0 && lines[from - 1].startsWith('#')) {
+    from--;
+  }
+  lines.removeRange(from, at + 1);
+  var out = lines.join('\n');
+  for (var (i, line) in out.split('\n').indexed) {
+    if (RegExp(r'^\s*resolution:').hasMatch(line) ||
+        RegExp(r"""^\s+path:\s*["']?\.{0,2}/""").hasMatch(line)) {
+      _fail('pubspec.yaml line ${i + 1} would not resolve in a clone: $line');
+    }
+  }
+  return out;
 }
 
 /// The published repository's own root ignore file.

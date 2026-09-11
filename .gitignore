@@ -38,11 +38,3 @@ generated_plugin_registrant.dart
 /doc/ideas
 # FVM Version Cache
 .fvm/
-# The demo app develops against this checkout via a local override; the
-# committed pubspec names the published version, which is what a stranger
-# cloning it resolves.
-examples/brewline/pubspec_overrides.yaml
-# And the lock resolved against that override pins `flutterware` to `path:
-# "../.."`, which is a path nobody who clones the demo has. An app would
-# normally commit its lock; this one cannot until it resolves from pub.
-examples/brewline/pubspec.lock

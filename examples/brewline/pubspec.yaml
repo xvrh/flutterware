@@ -1,6 +1,10 @@
 name: brewline
 description: A small coffee-shop app, wired up with flutterware — clone it and run one command.
 publish_to: none
+# A member of the flutterware workspace while it is developed here, so that
+# the checkout above is the `flutterware` it resolves. `tool/publish_example.dart`
+# drops this line on the way out: a clone has no workspace to belong to.
+resolution: workspace
 version: 1.0.0
 
 environment:
