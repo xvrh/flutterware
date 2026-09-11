@@ -1,6 +1,13 @@
 # One sample app: brewline absorbs the shop, example becomes a fixture
 
-*2026-09-11. Analysis and proposal; nothing here is built yet.*
+*2026-09-11. Analysis and proposal, then the record of what landed.*
+
+**Status.** Steps one to four landed on master on 2026-09-11: #339 (brewline
+joins the workspace, the export is tested in CI) and #343 (brewline is the
+recorded project, the fixture loses the shop, the rename to
+`fixtures/probe_app`). The polish step followed in one PR: the two spikes
+deleted, the old package name gone from the app's mock strings. What remains
+open is listed at the end.
 
 ## The situation
 
@@ -206,10 +213,19 @@ reviewer should see the deletions on their own first.)
    `flutterware_example` → `flutterware_probes`. The native projects keep
    their product name: nothing reads a pubspec name from them, and a
    pbxproj edit buys nothing.
-5. **Polish.** Whatever the recording made visible on the web page gets
-   fixed; the publication plan and the fake-project spec are updated to
-   describe the new layout; the spikes (`network_spike`, `drive_spike`) go
-   if nothing still needs them.
+5. **Polish.** The spikes (`network_spike`, `drive_spike`) go — nothing
+   referenced them but the manifest — and the app's mock strings stop naming
+   the old package. Done.
+
+## Still open
+
+- The store hero scene stays in the fixture drawing its placeholder: the
+  fixture no longer exports a store listing, and scenes are not ready to
+  live in brewline. It moves when they are.
+- `attachment_test.dart` exists in both packages: the runner's own test runs
+  the fixture's copy, and brewline's is the receipt demo.
+- The fixture's native projects keep the product name `flutterware_example`;
+  the historical specs under `docs/` keep the old paths.
 
 ## Decisions (2026-09-11)
 

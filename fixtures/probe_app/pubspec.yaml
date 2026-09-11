@@ -54,8 +54,8 @@ dependencies:
   flutter_secure_storage: ^10.0.0
   flutterware:
     path: ../..
-  # For lib/network_spike.dart — the http-profile spike's traffic generator.
   hooks: ^2.2.0
+  # `test/scenarios/events_test.dart` signs in over a real request.
   http:
   logging:
   os_detect:
