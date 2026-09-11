@@ -1153,7 +1153,7 @@ String _hexColor(Match match) {
 
 /// One entry's tree, as of one build of it.
 class InspectTree {
-  const InspectTree({required this.entryId, this.root});
+  const InspectTree({required this.entryId, this.root, this.format});
 
   /// Reads either spelling — see [toJson] for what `compact` changes and why
   /// a reader has to know both.
@@ -1162,9 +1162,13 @@ class InspectTree {
       Map root => root.cast<String, Object?>(),
       _ => null,
     };
-    if (root == null) return InspectTree(entryId: json['entry'] as String?);
+    var format = json['format'] as int?;
+    if (root == null) {
+      return InspectTree(entryId: json['entry'] as String?, format: format);
+    }
     return InspectTree(
       entryId: json['entry'] as String?,
+      format: format,
       root: json['compact'] == true
           ? _readCompact(root, '', [
               for (var file in json['files'] as List? ?? const []) '$file',
@@ -1251,6 +1255,17 @@ class InspectTree {
   /// until a frame is asked for, so a tree read before one is an answer about
   /// nothing rather than an error.
   final InspectNode? root;
+
+  /// Which way of describing a widget produced this tree — see
+  /// `GuestInspector.treeFormat`. Null for a tree read before formats were
+  /// recorded, or read by something other than the guest's own walk.
+  ///
+  /// What lets a comparison tell a changed widget from a changed *reader*. Its
+  /// two sides are captured by two checkouts' own `package:flutterware`, and
+  /// a version that learned to spell `Text.rich` as `Text("…")` reported every
+  /// one of them as changed against the version before it — a hundred rows
+  /// on a branch that only bumped the dependency, and not one pixel moved.
+  final int? format;
 
   /// Every node, depth-first, root included.
   Iterable<InspectNode> get nodes sync* {
@@ -1540,7 +1555,7 @@ class InspectTree {
     }
     if (filter.noise) from = from._withoutScaffolding();
     if (filter.maxDepth case var depth?) from = from._toDepth(depth);
-    return InspectTree(entryId: entryId, root: from);
+    return InspectTree(entryId: entryId, root: from, format: format);
   }
 
   /// The tree as JSON, in one of two spellings.
@@ -1567,11 +1582,14 @@ class InspectTree {
   /// than `7.261507987976074`. Only in this spelling: the comparison caches
   /// diff trees field by field and a rounded number would read as a change.
   Map<String, Object?> toJson({bool compact = false}) {
-    if (!compact) return {'entry': entryId, 'root': root?.toJson()};
+    if (!compact) {
+      return {'entry': entryId, 'format': ?format, 'root': root?.toJson()};
+    }
     var files = <String, int>{};
     var written = root?._toCompactJson('', files);
     return {
       'entry': entryId,
+      'format': ?format,
       'compact': true,
       // Filled by the walk above, so it is read after it.
       'files': [for (var file in files.keys) file],

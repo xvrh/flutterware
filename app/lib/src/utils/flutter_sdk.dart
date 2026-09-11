@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -51,6 +52,40 @@ class FlutterSdkPath {
 
   static Future<bool> isValid(FlutterSdkPath sdk) async {
     return File(sdk.flutter).existsSync() && File(sdk.dart).existsSync();
+  }
+
+  /// Which Flutter this is — `3.48.0-0.2.pre` — as the SDK itself records it,
+  /// or null when it records nothing yet.
+  String? get version => _versionFile()?['frameworkVersion'] as String?;
+
+  /// What this SDK draws like, for a cache key: its framework and engine
+  /// revisions, or [root] when it has not recorded them.
+  ///
+  /// Not the root, which is what keys used to carry. A path names where an
+  /// SDK sits rather than which one it is, and a CI image keeps Flutter at the
+  /// same path across every upgrade — so a shot cache restored onto the next
+  /// image served pictures the previous engine had drawn.
+  String get identity {
+    var file = _versionFile();
+    var framework = file?['frameworkRevision'];
+    var engine = file?['engineRevision'];
+    if (framework is! String || engine is! String) return root;
+    return '$framework/$engine';
+  }
+
+  /// `bin/cache/flutter.version.json`, which the tool writes the first time it
+  /// runs in this SDK. Every SDK a comparison runs under has run the tool
+  /// already — it is what resolved the checkouts.
+  Map<String, Object?>? _versionFile() {
+    var file = File(p.join(root, 'bin', 'cache', 'flutter.version.json'));
+    try {
+      var json = jsonDecode(file.readAsStringSync());
+      return json is Map<String, Object?> ? json : null;
+    } on FileSystemException {
+      return null;
+    } on FormatException {
+      return null;
+    }
   }
 
   /// The SDK this project runs under: **the one that started us**.

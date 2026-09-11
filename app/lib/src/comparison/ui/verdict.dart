@@ -148,7 +148,18 @@ class ComparisonVerdict extends StatelessWidget {
     // `hidesAll`, and a third time inside `visible` — in a build that runs
     // once per row as a comparison streams in. `ComparisonIndex.ok`'s own
     // docstring is about this shape.
-    var perFinding = [for (var item in findings) item.deltas];
+    //
+    // A tree read by two versions of the walk is left out here, ahead of
+    // everything: it cannot make a finding (`TreeChannel.significant`), and a
+    // `tree` chip counting it would claim a channel spoke that the verdict
+    // did not listen to. The detail pages still draw it.
+    var perFinding = [
+      for (var item in findings)
+        [
+          for (var delta in item.deltas)
+            if (delta.channel != 'tree' || !(item.tree?.skewed ?? false)) delta,
+        ],
+    ];
 
     // Counted twice on purpose. `fired` is what a reader can still see, and is
     // what the chips read; `total` ignores every rule, and is what an excluded

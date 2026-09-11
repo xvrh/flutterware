@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutterware/comparison_report.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import 'artifact.dart';
 import 'cancel.dart';
@@ -563,26 +563,18 @@ class ComparisonController extends ChangeNotifier {
     }
   }
 
-  /// Trims the shared shot cache, off this isolate, and says nothing about it.
+  /// Trims what comparisons leave behind — see [sweepComparisonLeftovers].
   ///
   /// At the end of a run rather than the start of one: this is where the cache
   /// just grew, and a sweep that ran first would be deciding what to keep
   /// without knowing what the run was about to ask for. A cancelled or refused
   /// run gets it too — it rendered and cached whatever it reached before it
-  /// stopped.
+  /// stopped. Nothing waits for it: this isolate is drawing the rows.
   ///
-  /// On its own isolate because the walk is `statSync` per file and this one
-  /// is drawing the rows. Nothing waits for the answer and nothing reports it:
-  /// the entries it drops are ones no comparison has read in a fortnight, and
-  /// a failure to drop them is not news.
-  Future<void> _sweepShots() async {
-    var root = environment.shots.root;
-    try {
-      await Isolate.run(() => ShotCache(root).sweep());
-    } on Object {
-      // Housekeeping.
-    }
-  }
+  /// The shot cache sits directly under the root every comparison store
+  /// shares, so its parent is that root.
+  Future<void> _sweepShots() =>
+      sweepComparisonLeftovers(p.dirname(environment.shots.root));
 
   /// Asks [kind]'s run to stop at its next seam. The rows it has stay up.
   void stop(ComparisonHalfKind kind) => _cancels[kind]?.cancel();
@@ -594,6 +586,10 @@ class ComparisonController extends ChangeNotifier {
     return ComparisonArtifact(
       previews: result,
       scenarios: scenarios.scenarioResults,
+      caveats: comparisonCaveats(
+        previews: result,
+        scenarios: scenarios.scenarioResults,
+      ),
     );
   }
 

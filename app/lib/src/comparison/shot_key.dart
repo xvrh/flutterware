@@ -56,7 +56,14 @@ class ShotKey {
   /// every project with more than one dependency. Nothing about the pictures
   /// changed — the *keys* did, and a key that means something different is a
   /// key that must not be reused.
-  static const revision = 'v9';
+  /// v10 — the SDK is keyed by its framework and engine revisions rather than
+  /// by its path, and a record says which tree format its tree was captured
+  /// in. A v9 record has no such field, so it would read as captured before
+  /// formats existed whatever captured it; re-rendering once is cheaper than
+  /// reasoning about which ones that is true of. Scenario replays are filed
+  /// under these keys from here on, so a change to how the scenario harness
+  /// is generated or run bumps this too.
+  static const revision = 'v10';
 
   /// [closure] is a [SourceClosure.fingerprint]; [sdk] identifies the SDK both
   /// sides are rendered with; [axes] and [knobs] are whatever was applied.

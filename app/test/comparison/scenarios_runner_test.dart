@@ -39,14 +39,18 @@ void main() {
     return dir.path;
   }
 
-  ScenariosRunner runnerFor({required String base, required String head}) =>
-      ScenariosRunner(
-        headRoot: head,
-        baseRoot: base,
-        source: source,
-        cache: cache,
-        locks: null,
-      );
+  ScenariosRunner runnerFor({
+    required String base,
+    required String head,
+    String sdk = 'test-sdk',
+  }) => ScenariosRunner(
+    headRoot: head,
+    baseRoot: base,
+    source: source,
+    cache: cache,
+    locks: null,
+    sdk: sdk,
+  );
 
   group('the plan', () {
     test('a scenario nothing touched is skipped, and never replayed', () async {
@@ -113,6 +117,7 @@ void main() {
         source: source,
         cache: cache,
         locks: null,
+        sdk: 'test-sdk',
         only: const ['test/cart.dart#Cart'],
       ).plan();
 
@@ -149,6 +154,7 @@ void main() {
         source: source,
         cache: cache,
         locks: LockSides(packagePath: '.', roots: [headRoot, baseRoot]),
+        sdk: 'test-sdk',
       ).plan();
     }
 
@@ -392,6 +398,7 @@ void main() {
         source: source,
         cache: cache,
         locks: null,
+        sdk: 'test-sdk',
         onScenario: (s) => seen.add(s.scenario),
       ).run(outDir: root.path);
 
@@ -410,6 +417,193 @@ void main() {
       expect(results.items.first.state, ComparedState.broke);
       expect(results.ran, 1);
       expect(results.skipped, 1);
+    });
+  });
+
+  // Measured on a consumer's second push with identical inputs: the previews
+  // came from the store and every one of 135 scenarios replayed again on both
+  // sides, 262s of a run with findings. A replay is a pure function of what
+  // its key hashes, so it is filed like a picture.
+  group('the store', () {
+    late String base;
+    late String head;
+
+    setUp(() {
+      source.scannedBase = ['test/shop.dart#Checkout'];
+      source.scannedHead = ['test/shop.dart#Checkout'];
+      source.declared = ['test/shop.dart#Checkout'];
+      base = checkout('base', {'test/shop.dart': '1'});
+      head = checkout('head', {'test/shop.dart': '2'});
+    });
+
+    test('a second run with the same inputs replays nothing', () async {
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source
+        ..replayed.clear()
+        ..listed = 0;
+
+      var again = await runnerFor(
+        base: base,
+        head: head,
+      ).run(outDir: root.path);
+
+      expect(source.replayed, isEmpty);
+      expect(source.listed, 0, reason: 'no harness should have been started');
+      expect(again.ran, 1);
+      expect(again.replays, 0);
+      expect(again.items.single.state, ComparedState.same);
+    });
+
+    test('a filed side is read back and only the other replays', () async {
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source.replayed.clear();
+      File(p.join(head, 'test/shop.dart')).writeAsStringSync('3');
+
+      var results = await runnerFor(
+        base: base,
+        head: head,
+      ).run(outDir: root.path);
+
+      expect(source.replayed, ['test/shop.dart#Checkout:head']);
+      expect(results.replays, 1);
+    });
+
+    test('a filed frame points into the store', () async {
+      var results = await runnerFor(
+        base: base,
+        head: head,
+      ).run(outDir: root.path);
+
+      var frames = results.items.single.frames.values.single;
+      expect(p.isWithin(cache.root, frames.base!.path), isTrue);
+      expect(File(frames.head!.path).existsSync(), isTrue);
+    });
+
+    test('a replay filed under another SDK is not served', () async {
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source.replayed.clear();
+
+      await runnerFor(
+        base: base,
+        head: head,
+        sdk: 'another-sdk',
+      ).run(outDir: root.path);
+
+      expect(source.replayed, hasLength(2));
+    });
+
+    test('a replay under other settings is not served', () async {
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source
+        ..replayed.clear()
+        ..settings = {'clock': '2030-01-01T00:00:00.000Z'};
+
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+
+      expect(source.replayed, hasLength(2));
+    });
+
+    test('a replay whose requests went out is never filed', () async {
+      source.events = [
+        {
+          'channel': 'network',
+          'title': 'GET https://example.com/avatar.png',
+          'data': {'answered': 'live'},
+        },
+      ];
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source.replayed.clear();
+
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+
+      expect(source.replayed, hasLength(2));
+    });
+
+    test('a replay answered from the recording is filed', () async {
+      source.events = [
+        {
+          'channel': 'network',
+          'title': 'GET https://example.com/menu.json',
+          'data': {'answered': 'replay'},
+        },
+      ];
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source.replayed.clear();
+
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+
+      expect(source.replayed, isEmpty);
+    });
+
+    // Measured on this repository's own suite: two scenarios log their
+    // requests through a fake client, and counting those as live kept them
+    // replaying on every run.
+    test("a request the app logged itself is not the network's", () async {
+      source.events = [
+        {
+          'channel': 'network',
+          'title': 'POST https://api.example.com/sessions',
+          'detail': '200',
+        },
+      ];
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source.replayed.clear();
+
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+
+      expect(source.replayed, isEmpty);
+    });
+
+    test('a replay the harness abandoned is never filed', () async {
+      source.abandon = true;
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source.replayed.clear();
+
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+
+      expect(source.replayed, hasLength(2));
+    });
+
+    test('a filed replay whose frames were swept is replayed', () async {
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+      source.replayed.clear();
+      for (var file in Directory(cache.root).listSync(recursive: true)) {
+        if (file is File && !file.path.endsWith('.json')) file.deleteSync();
+      }
+
+      await runnerFor(base: base, head: head).run(outDir: root.path);
+
+      expect(source.replayed, hasLength(2));
+    });
+
+    // The recording is read at run time and imported by nothing, so it was
+    // invisible to the skip rule: a re-recorded endpoint changed what the
+    // scenario drew and the scenario was skipped.
+    test('a changed network recording is not skipped', () async {
+      var files = {'test/shop.dart': 'same'};
+      var baseRoot = checkout('base_rec', {
+        ...files,
+        'test/scenarios/network/get_menu.json': '{"status": 200}',
+      });
+      var headRoot = checkout('head_rec', {
+        ...files,
+        'test/scenarios/network/get_menu.json': '{"status": 500}',
+      });
+
+      var plan = await ScenariosRunner(
+        headRoot: headRoot,
+        baseRoot: baseRoot,
+        source: source,
+        cache: cache,
+        locks: null,
+        sdk: 'test-sdk',
+        pixels: PixelInputs.ofScenarios(
+          packagePath: '.',
+          roots: [headRoot, baseRoot],
+        ),
+      ).plan();
+
+      expect(plan.toRun, ['test/shop.dart#Checkout']);
     });
   });
 }
@@ -458,25 +652,35 @@ class _FakeSource implements ScenarioSource {
   String? config;
 
   @override
-  String? configOf(String id) => config;
+  String? configOf(String id, {required bool base}) => config;
 
   @override
-  Future<List<ScenarioStepShot>> shots(
+  Map<String, String> settings = const {};
+
+  /// The events every replayed step carries.
+  List<Map<String, Object?>> events = const [];
+
+  /// Whether the harness gives up on every scenario it replays.
+  var abandon = false;
+
+  @override
+  Future<ScenarioReplay> shots(
     String id, {
     required bool base,
     required String outDir,
   }) async {
     replayed.add('$id:${base ? 'base' : 'head'}');
     await gate?.call(base);
-    return [
+    return ScenarioReplay([
       ScenarioStepShot(
         step: const AlignableStep(index: 1, position: '#1', name: 'Open'),
         rgba: Uint8List(4 * 4 * 4),
         width: 4,
         height: 4,
+        events: events,
         failure: !base && id == failOn ? 'nothing matches "Pay"' : null,
       ),
-    ];
+    ], complete: !abandon);
   }
 
   @override

@@ -88,10 +88,13 @@ class ComparedHalf {
   });
 
   /// What the half actually did, in its own unit — the previews half counts
-  /// *renders*, up to two per entry because a row has two sides; the scenario
-  /// half counts whole scenarios replayed. Named per half in the file
-  /// (`rendered` and `ran`) and read into one field here, because the question
-  /// the two numbers answer is the same one: did the skip rule earn its keep.
+  /// *renders* and the scenario half *replays*, up to two per row because a
+  /// row has two sides and a side already in the store costs nothing. Named
+  /// per half in the file (`rendered` and `replayed`) and read into one field
+  /// here, because the question the two numbers answer is the same one: did
+  /// the skip rule and the store earn their keep. A scenario half written
+  /// before replays were filed says `ran` instead — whole scenarios, replayed
+  /// on both sides.
   final int worked;
 
   /// Rows the skip rule answered without looking at a picture.
@@ -130,8 +133,10 @@ class ComparedHalf {
   static ComparedHalf fromJson(Map<String, Object?> json) {
     var counts = _counts(json['counts']);
     return ComparedHalf(
-      // `rendered` is the previews half's word, `ran` the scenario half's.
-      worked: (json['rendered'] ?? json['ran']) as int? ?? 0,
+      // `rendered` is the previews half's word, `replayed` the scenario
+      // half's — and `ran` what the scenario half said before it had one.
+      worked:
+          (json['rendered'] ?? json['replayed'] ?? json['ran']) as int? ?? 0,
       // The scenario half records this; the previews half never has, because
       // its own counts already carry it. Read from there rather than left at
       // zero, which is a number and therefore reads as an answer.
@@ -332,6 +337,7 @@ class ComparisonIndex {
     this.frames = ComparisonFrames.local,
     this.exported = ExportedFrames.all,
     this.narrowed = false,
+    this.caveats = const [],
     this.previewsHalf = const ComparedHalf(),
     this.scenariosHalf,
     this.export,
@@ -393,6 +399,17 @@ class ComparisonIndex {
   /// every file written before the key existed is.
   final bool narrowed;
 
+  /// What a reader has to know before believing the verdict, one sentence
+  /// each: the ways the two sides were *measured* differently rather than
+  /// drawn differently — trees read by two versions of flutterware, two
+  /// pinned Flutter SDKs rendered with one.
+  ///
+  /// Not a gap: a verdict with caveats is still a verdict, and [ok] and
+  /// [verdictGap] are unmoved by them. A gate that wants to refuse on one
+  /// checks this is empty itself. Empty for a file written before the key
+  /// existed.
+  final List<String> caveats;
+
   final ComparedHalf previewsHalf;
 
   /// Absent when the project declares no scenarios at all. A half that tried
@@ -450,6 +467,9 @@ class ComparisonIndex {
           : ComparisonFrames.local,
       exported: ExportedFrames.fromName(json['exported']),
       narrowed: json['narrowed'] == true,
+      caveats: [
+        for (var caveat in json['caveats'] as List? ?? const []) '$caveat',
+      ],
       previewsHalf: ComparedHalf.fromJson(previews),
       scenariosHalf: scenarios == null
           ? null

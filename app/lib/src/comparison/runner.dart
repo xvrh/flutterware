@@ -9,7 +9,6 @@ import 'package:flutterware/src/inspect/node.dart';
 import 'cancel.dart';
 import 'closure.dart';
 import 'import_graph.dart';
-import '../utils/flutter_sdk.dart';
 import 'shot_cache.dart';
 import 'shot_key.dart';
 import 'skip.dart';
@@ -62,6 +61,7 @@ class RenderedEntry {
     required this.width,
     required this.height,
     this.tree,
+    this.treeFormat,
     this.complaint,
   });
 
@@ -70,6 +70,9 @@ class RenderedEntry {
   final int width;
   final int height;
   final InspectNode? tree;
+
+  /// The format [tree] was read in — see `InspectTree.format`.
+  final int? treeFormat;
 
   /// What the framework said while drawing it, when it drew it anyway — an
   /// overflow, a missing font. The picture is comparable and the complaint is
@@ -286,6 +289,7 @@ class ComparisonRunner {
     required this.baseSha,
     required this.side,
     required this.cache,
+    required this.sdk,
     this.packageConfig,
     this.only,
     this.onItem,
@@ -304,6 +308,23 @@ class ComparisonRunner {
 
   final ComparisonSide side;
   final ShotCache cache;
+
+  /// The SDK both sides are rendered with, as `FlutterSdkPath.identity` names
+  /// it — so switching SDKs invalidates the cache rather than handing back
+  /// pictures the current engine would not draw.
+  ///
+  /// Handed in rather than found. It was found, with `findSdk`, which answers
+  /// null inside the studio — a compiled app has no SDK above its binary — so
+  /// every picture the panel rendered was keyed `unknown`: shared with no
+  /// `fw compare`, and served unchanged across an SDK upgrade.
+  ///
+  /// **Not checked against what the base commit wanted.** Two checkouts that
+  /// pin different Flutter versions differ in every pixel for reasons that are
+  /// not the branch's, and both are rendered with this one: the SDK is
+  /// whichever one the invocation names, and teaching a comparison to invoke
+  /// an older one is not built. What is built is saying so — see
+  /// `SdkPin.caveat`.
+  final String sdk;
 
   /// Relative path of the package config inside each checkout, for resolving
   /// `package:` imports. Null falls back to the conventional location.
@@ -346,22 +367,6 @@ class ComparisonRunner {
   /// slow screen but a dead window — `plan` is one uninterruptible microtask,
   /// since nothing in the loop awaits.
   Future<ComparisonPlan> plan() async {
-    // Keyed on the SDK this session runs under, which is the one both sides
-    // are rendered with — so switching SDKs invalidates the cache rather than
-    // handing back pictures the current engine would not draw.
-    //
-    // **It is not checked against what the base commit wanted, and that is a
-    // known gap.** Two checkouts that pinned different Flutter versions differ
-    // in every pixel for reasons that are not the branch's, and this used to
-    // refuse the comparison over it. Detecting that meant resolving an SDK
-    // from a pointer inside the base checkout — discovery, which flutterware
-    // no longer does anywhere: the SDK is whichever one the invocation names.
-    // Teaching a comparison how to *invoke* an older SDK (a `comparison`
-    // entry in `tool/flutterware.dart` naming `fvm flutter`, say) is the real
-    // fix, and it is not built. Until it is, a cross-version comparison runs
-    // and reports SDK churn as change, unwarned.
-    var sdkKey = (await FlutterSdkPath.findSdk())?.root ?? 'unknown';
-
     onProgress?.call('listing the entries on both sides');
     var headEntries = await side.entries(headRoot);
     var baseEntries = await side.entries(baseRoot);
@@ -411,7 +416,7 @@ class ComparisonRunner {
         packagePath: side.packagePath,
         packageConfig: packageConfig,
         memoDirectory: cache.memo.directory,
-        sdkKey: sdkKey,
+        sdkKey: sdk,
       ).decide,
     );
 
@@ -647,6 +652,7 @@ class ComparisonRunner {
         headHeight: headMeta.height,
       ),
       tree: TreeDiff.of(_treeOf(key.base), _treeOf(key.head)),
+      treeSkewed: baseMeta.treeFormat != headMeta.treeFormat,
     );
   }
 
@@ -678,6 +684,7 @@ class ComparisonRunner {
             height: frame.height,
             entryId: frame.entryId,
             complaint: frame.complaint,
+            treeFormat: frame.treeFormat,
           ),
         );
         if (frame.tree case var tree?) {

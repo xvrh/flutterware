@@ -102,6 +102,9 @@ extension type RuleSet(List<ComparisonRule> rules) {
           delta.subchannel == EventChannel.systemSubchannel) {
         continue;
       }
+      // The same for a tree read by two versions of the walk — see
+      // [TreeChannel.significant].
+      if (delta.channel == 'tree' && (item.tree?.skewed ?? false)) continue;
       any = true;
       if (!hides(delta)) return false;
     }

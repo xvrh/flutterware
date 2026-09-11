@@ -46,6 +46,7 @@ void main() {
     required String head,
     List<String>? only,
   }) => ComparisonRunner(
+    sdk: 'test-sdk',
     headRoot: head,
     baseRoot: base,
     baseSha: 'abc123',
@@ -62,6 +63,7 @@ void main() {
   group('the plan costs only hashing', () {
     ComparisonRunner runnerFor({required String base, required String head}) =>
         ComparisonRunner(
+          sdk: 'test-sdk',
           headRoot: head,
           baseRoot: base,
           baseSha: 'abc123',
@@ -348,6 +350,7 @@ void main() {
     // The picture is a bonus; the verdict must not wait for it.
     test('is settled by the plan before anything renders', () async {
       var plan = await ComparisonRunner(
+        sdk: 'test-sdk',
         headRoot: head,
         baseRoot: base,
         baseSha: 'abc123',
@@ -519,6 +522,7 @@ void main() {
       };
 
       await ComparisonRunner(
+        sdk: 'test-sdk',
         headRoot: checkout('head', {'demo/a.dart': '2', 'demo/b.dart': '2'}),
         baseRoot: checkout('base', {'demo/a.dart': '1', 'demo/b.dart': '1'}),
         baseSha: 'abc123',
@@ -538,6 +542,7 @@ void main() {
       ComparisonPlan? seen;
 
       await ComparisonRunner(
+        sdk: 'test-sdk',
         headRoot: checkout('head', {'demo/a.dart': '2', 'demo/b.dart': 'x'}),
         baseRoot: checkout('base', {'demo/a.dart': '1', 'demo/b.dart': 'x'}),
         baseSha: 'abc123',
@@ -558,6 +563,7 @@ void main() {
       var lines = <String>[];
 
       await ComparisonRunner(
+        sdk: 'test-sdk',
         headRoot: checkout('head', {'demo/a.dart': '2'}),
         baseRoot: checkout('base', {'demo/a.dart': '1'}),
         baseSha: 'abc123',
@@ -578,6 +584,7 @@ void main() {
       var reported = <String>[];
 
       var run = ComparisonRunner(
+        sdk: 'test-sdk',
         headRoot: checkout('head', {'demo/a.dart': '2', 'demo/b.dart': '2'}),
         baseRoot: checkout('base', {'demo/a.dart': '1', 'demo/b.dart': '1'}),
         baseSha: 'abc123',
@@ -607,6 +614,58 @@ void main() {
     expect(json['rendered'], 0);
     expect((json['counts']! as Map)['skipped'], 1);
     expect((json['items']! as List).single, containsPair('state', 'skipped'));
+  });
+
+  // Each side is read by its own checkout's `package:flutterware`, so a branch
+  // that bumps it compares two walks. What they disagree about is how a widget
+  // is described, and that is not the branch's doing.
+  group('two walks', () {
+    RenderedEntry read(String entry, {int? format, String? description}) {
+      var frame = _frame(entry, description: description);
+      return RenderedEntry(
+        entryId: entry,
+        rgba: frame.rgba,
+        width: frame.width,
+        height: frame.height,
+        tree: frame.tree,
+        treeFormat: format,
+      );
+    }
+
+    test('a tree read differently does not make a finding', () async {
+      side.declared['*'] = ['demo/card.dart#card'];
+      var base = checkout('base', {'demo/card.dart': '1'});
+      side.frame = (entry, at) => at == base
+          ? read(entry)
+          : read(entry, format: 1, description: 'Card("Pay")');
+
+      var result = await compare(
+        base: base,
+        head: checkout('head', {'demo/card.dart': '2'}),
+      );
+
+      var card = itemFor(result, 'demo/card.dart#card');
+      expect(card.state, ComparedState.same);
+      expect(card.tree!.skewed, isTrue);
+    });
+
+    test('one walk on both sides still reports the tree', () async {
+      side.declared['*'] = ['demo/card.dart#card'];
+      var base = checkout('base', {'demo/card.dart': '1'});
+      side.frame = (entry, at) => at == base
+          ? read(entry, format: 1)
+          : read(entry, format: 1, description: 'Card("Pay")');
+
+      var result = await compare(
+        base: base,
+        head: checkout('head', {'demo/card.dart': '2'}),
+      );
+
+      expect(
+        itemFor(result, 'demo/card.dart#card').state,
+        ComparedState.changed,
+      );
+    });
   });
 }
 
@@ -698,6 +757,7 @@ class _FakeSide implements ComparisonSide {
           width: drawn.width,
           height: drawn.height,
           tree: drawn.tree,
+          treeFormat: drawn.treeFormat,
           complaint: complain?.call(entry, checkout),
         ),
       );

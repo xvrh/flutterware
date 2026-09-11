@@ -76,6 +76,27 @@ class ShotCache {
     staging.renameSync(path);
   }
 
+  /// Files the picture already on disk at [source] under [key], by moving it
+  /// there — or, where it cannot be moved, by writing [bytes].
+  ///
+  /// For a frame a replay has just written: copying megabytes that are about
+  /// to be deleted is the one cost a move does not have. A rename is atomic,
+  /// so the key never names a half-moved file; across filesystems it fails,
+  /// and [write] is the answer to that.
+  void adopt(String key, File source, Uint8List bytes, ShotRecord record) {
+    var path = _pathFor(key);
+    Directory(p.dirname(path)).createSync(recursive: true);
+    File('$path.json').writeAsStringSync(jsonEncode(record.toJson()));
+    try {
+      source.renameSync(path);
+    } on FileSystemException {
+      write(key, bytes, record);
+    }
+  }
+
+  /// Where [key]'s picture lives, whether or not anything is there.
+  String pathOf(String key) => _pathFor(key);
+
   /// The tree taken off the same frame, filed beside it.
   ///
   /// Same key, because it is the same render: a tree that came from a
@@ -183,7 +204,7 @@ class ShotCache {
   /// The path an entry's files share: the bytes' own path, which its two
   /// sidecars extend.
   static String _groupOf(String path) {
-    for (var suffix in const ['.tree.json', '.json', '.part']) {
+    for (var suffix in const ['.tree.json', '.replay.json', '.json', '.part']) {
       if (path.endsWith(suffix)) {
         return path.substring(0, path.length - suffix.length);
       }
@@ -220,6 +241,7 @@ class ShotRecord {
     required this.height,
     this.entryId,
     this.complaint,
+    this.treeFormat,
   });
 
   factory ShotRecord.fromJson(Map<String, Object?> json) => ShotRecord(
@@ -228,6 +250,7 @@ class ShotRecord {
     height: json['height'] as int? ?? 0,
     entryId: json['entry'] as String?,
     complaint: json['complaint'] as String?,
+    treeFormat: json['treeFormat'] as int?,
   );
 
   /// `raw` — rgba8888 rows, [width]×[height]×4 — or `png`.
@@ -254,11 +277,18 @@ class ShotRecord {
   /// survives exactly one comparison.
   final String? complaint;
 
+  /// The format the tree beside this picture was read in — see
+  /// `InspectTree.format`. Kept for the reason [complaint] is: a cached frame
+  /// is served without the guest that read it, and two sides whose trees were
+  /// read by different walks have to be told apart without one.
+  final int? treeFormat;
+
   Map<String, Object?> toJson() => {
     'format': format,
     'width': width,
     'height': height,
     'entry': ?entryId,
     'complaint': ?complaint,
+    'treeFormat': ?treeFormat,
   };
 }

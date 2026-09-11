@@ -9,6 +9,7 @@ import '../plugins/native/previews_results.dart';
 import '../plugins/native/scenarios_core.dart';
 import '../session/session.dart';
 import '../utils/base_href.dart';
+import '../utils/flutter_sdk.dart';
 import '../utils/run_dir.dart';
 import 'artifact.dart';
 import 'base_checkout.dart';
@@ -18,6 +19,7 @@ import 'previews_side.dart';
 import 'runner.dart';
 import 'scenarios_runner.dart';
 import 'scenarios_side.dart';
+import 'sdk_pins.dart';
 import 'shot_cache.dart';
 import 'skip.dart';
 import 'web_export.dart';
@@ -184,8 +186,8 @@ Future<CompareOutcome> runComparison({
       // checkout has none. The base is given the SDK this session runs under,
       // which is the only SDK flutterware has: the one the invocation named.
       //
-      // Nothing checks whether the base commit wanted a different one — see
-      // the note on the cache key in `ComparisonRunner.plan`.
+      // Nothing makes the base use the one it pinned instead; the verdict
+      // says so when the two differ — see `SdkPin.caveat`.
       var link = Link(p.join(path, '.fvm', 'flutter_sdk'));
       if (!link.existsSync()) {
         Directory(p.dirname(link.path)).createSync(recursive: true);
@@ -227,6 +229,7 @@ Future<CompareOutcome> runComparison({
       baseRoot: checkout.path,
       baseSha: base.sha,
       cache: shotCache,
+      sdk: sdk.identity,
       only: options.entries.isEmpty ? null : options.entries,
       side: PreviewsSide(
         flutterSdkRoot: sdk.root,
@@ -269,7 +272,7 @@ Future<CompareOutcome> runComparison({
     relative: relative,
     top: top,
     baseRoot: checkout.path,
-    sdkRoot: sdk.root,
+    sdk: sdk,
     only: options.entries,
     cache: shotCache,
     qualify: qualify,
@@ -277,12 +280,25 @@ Future<CompareOutcome> runComparison({
   );
   if (scenarios != null) onScenarios?.call(scenarios);
 
+  // Read from the first package compared: a pin lives at the top of a
+  // repository far more often than beside one of its packages, and the walk
+  // up from any of them reaches it.
+  var pinned = relative([...previewsPackages, ...scenariosPackages].first);
   // Written once both halves are in. The artifact is the whole verdict, so a
   // file holding only the previews would be a file that answers "did this
   // branch break anything" wrongly.
   var artifact = ComparisonArtifact(
     previews: result,
     scenarios: scenarios,
+    caveats: comparisonCaveats(
+      previews: result,
+      scenarios: scenarios,
+      sdk: SdkPin.caveat(
+        base: SdkPin.of(checkout.path, packagePath: pinned),
+        head: SdkPin.of(top, packagePath: pinned),
+        running: sdk.version,
+      ),
+    ),
     narrowed: options.entries.isNotEmpty,
     // Read once, here, rather than by whoever writes an output: the page and
     // the comment must agree about which push they describe.
@@ -325,6 +341,11 @@ Future<CompareOutcome> runComparison({
       directory: options.reportDir!,
     );
   }
+
+  // Last, once everything this run wrote has been read back into the outputs:
+  // a sweep that ran first would be deciding what to keep without knowing
+  // what the run was about to ask for.
+  await sweepComparisonLeftovers(flutterwareDir());
 
   return CompareOutcome(
     artifact: artifact,
@@ -595,7 +616,7 @@ Future<ScenarioResults?> _compareScenarios({
   required String Function(String packageInWorktree) relative,
   required String top,
   required String baseRoot,
-  required String sdkRoot,
+  required FlutterSdkPath sdk,
   required List<String> only,
   required ShotCache cache,
   required bool qualify,
@@ -615,7 +636,7 @@ Future<ScenarioResults?> _compareScenarios({
         packagePath: relative(package),
         top: top,
         baseRoot: baseRoot,
-        sdkRoot: sdkRoot,
+        sdk: sdk,
         only: only,
         cache: cache,
         qualify: qualify,
@@ -634,18 +655,18 @@ Future<ScenarioResults> _comparePackageScenarios({
   required String packagePath,
   required String top,
   required String baseRoot,
-  required String sdkRoot,
+  required FlutterSdkPath sdk,
   required List<String> only,
   required ShotCache cache,
   required bool qualify,
   void Function(String line)? onProgress,
 }) async {
   var watch = Stopwatch()..start();
-  var side = ScenariosSide(
-    flutterSdkRoot: sdkRoot,
+  var side = ScenariosSide.of(
+    core,
+    package: package,
     packagePath: packagePath,
-    directory: core.scanRootFor(package),
-    projectClock: core.host.projectClock,
+    flutterSdkRoot: sdk.root,
   );
   var source = LiveScenarioSource(
     side: side,
@@ -660,7 +681,8 @@ Future<ScenarioResults> _comparePackageScenarios({
             baseRoot: baseRoot,
             source: source,
             cache: cache,
-            pixels: PixelInputs.of(
+            sdk: sdk.identity,
+            pixels: PixelInputs.ofScenarios(
               packagePath: side.packagePath,
               roots: [top, baseRoot],
             ),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -65,5 +66,52 @@ void main() {
       isNot(contains(tmp.path)),
       reason: 'no source below the temp root may answer',
     );
+  });
+
+  // A cache key. A CI image keeps Flutter at one path across every upgrade, so
+  // a key naming the path served the previous engine's pictures to the next.
+  group('what an SDK is, rather than where', () {
+    FlutterSdkPath recorded(String at, Map<String, String> version) {
+      var sdk = FlutterSdkPath(fakeSdk(at));
+      File(p.join(at, 'bin', 'cache', 'flutter.version.json'))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(jsonEncode(version));
+      return sdk;
+    }
+
+    test('two SDKs at one path are two identities', () {
+      var at = p.join(tmp.path, 'sdk');
+      var older = recorded(at, {
+        'frameworkVersion': '3.47.0',
+        'frameworkRevision': 'aaa',
+        'engineRevision': 'eee',
+      });
+      var olderIdentity = older.identity;
+      var newer = recorded(at, {
+        'frameworkVersion': '3.48.0',
+        'frameworkRevision': 'bbb',
+        'engineRevision': 'fff',
+      });
+
+      expect(newer.root, older.root);
+      expect(newer.identity, isNot(olderIdentity));
+      expect(newer.version, '3.48.0');
+    });
+
+    test('one SDK at two paths is one identity', () {
+      var version = {'frameworkRevision': 'aaa', 'engineRevision': 'eee'};
+
+      expect(
+        recorded(p.join(tmp.path, 'a'), version).identity,
+        recorded(p.join(tmp.path, 'b'), version).identity,
+      );
+    });
+
+    test('an SDK that recorded nothing falls back to its path', () {
+      var sdk = FlutterSdkPath(fakeSdk(p.join(tmp.path, 'bare')));
+
+      expect(sdk.identity, sdk.root);
+      expect(sdk.version, isNull);
+    });
   });
 }

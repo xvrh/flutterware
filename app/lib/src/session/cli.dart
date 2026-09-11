@@ -702,6 +702,9 @@ class FwCli {
           }),
         );
       } else {
+        for (var caveat in outcome.artifact.caveats) {
+          out.writeln('  note: $caveat');
+        }
         if (exported != null) {
           out.writeln(
             '  exported ${exported.frames} frame'
@@ -817,8 +820,12 @@ class FwCli {
         );
       }
     }
+    // The replays beside the runs, as the previews line puts renders beside
+    // entries: a side the store already had costs nothing, and this is the
+    // number that says whether it did.
     out.writeln(
-      '${results.items.length} scenarios, ${results.ran} run, '
+      '${results.items.length} scenarios, ${results.ran} run'
+      '${results.ran == 0 ? '' : ' (${results.replays} replayed)'}, '
       '${results.skipped} skipped in ${results.elapsed.inMilliseconds}ms',
     );
     _printBecause(results.because, unit: 'scenario', plural: 'scenarios');

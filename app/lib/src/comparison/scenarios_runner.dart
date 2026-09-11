@@ -9,8 +9,10 @@ import '../embedder/build_directory.dart';
 import 'cancel.dart';
 import 'closure.dart';
 import 'import_graph.dart';
+import 'replay_store.dart';
 import 'scenarios_side.dart';
 import 'shot_cache.dart';
+import 'shot_key.dart';
 import 'skip.dart';
 
 /// One side-pair of scenarios, as the runner needs to talk to them.
@@ -40,13 +42,16 @@ abstract interface class ScenarioSource {
   /// Where a scenario's source lives, relative to a checkout root.
   String fileOf(String id);
 
-  /// The folder config that governs [id] on the head side, relative to a
-  /// checkout root — or null where none does. See
-  /// `ScenariosSide.configOf`.
-  String? configOf(String id);
+  /// The folder config that governs [id] on one side, relative to a checkout
+  /// root — or null where none does. See `ScenariosSide.configOf`.
+  String? configOf(String id, {required bool base});
+
+  /// What every replay runs under that no source file says — the project's
+  /// clock and network — as a cache key spells it.
+  Map<String, String> get settings;
 
   /// Replays [id] on one side and reads back every step it captured.
-  Future<List<ScenarioStepShot>> shots(
+  Future<ScenarioReplay> shots(
     String id, {
     required bool base,
     required String outDir,
@@ -94,10 +99,14 @@ class LiveScenarioSource implements ScenarioSource {
   String fileOf(String id) => side.fileOf(id);
 
   @override
-  String? configOf(String id) => side.configOf(headRoot, id);
+  String? configOf(String id, {required bool base}) =>
+      side.configOf(base ? baseRoot : headRoot, id);
 
   @override
-  Future<List<ScenarioStepShot>> shots(
+  Map<String, String> get settings => side.settings;
+
+  @override
+  Future<ScenarioReplay> shots(
     String id, {
     required bool base,
     required String outDir,
@@ -137,14 +146,19 @@ class ScenariosPlan {
     required this.settled,
     required this.toRun,
     required this.total,
+    this.keys = const {},
     this.because = const {},
   });
 
   /// Scenarios answered without replaying: added, removed, skipped.
   final List<ScenarioComparison> settled;
 
-  /// The ids that have to be replayed on both sides.
+  /// The ids that have to be compared from both sides' frames — replayed, or
+  /// read from the [ReplayStore] under [keys].
   final List<String> toRun;
+
+  /// Each of [toRun]'s replays, as the store files it on either side.
+  final Map<String, ({String base, String head})> keys;
 
   final int total;
 
@@ -166,6 +180,7 @@ class ScenariosRunner {
     required this.source,
     required this.cache,
     required this.locks,
+    required this.sdk,
     this.pixels,
     this.only,
     this.onScenario,
@@ -178,6 +193,50 @@ class ScenariosRunner {
   final String baseRoot;
   final ScenarioSource source;
   final ShotCache cache;
+
+  /// The SDK both sides replay under — `ComparisonRunner.sdk`, and for the
+  /// same reason: it is in every replay's key.
+  final String sdk;
+
+  late final _store = ReplayStore(cache);
+
+  /// The base checkout's import graph, read the first time a scenario needs a
+  /// key — a run that skips everything never reads it — and then kept: a plan
+  /// can decide twice, and the base does not move in between.
+  late final _baseImports = ImportGraph.read(
+    root: baseRoot,
+    packageConfig: p.join(baseRoot, '.dart_tool', 'package_config.json'),
+  );
+
+  /// One side's replay key: its closure — the scenario, its folder config and
+  /// everything they import on that side — with the pixel inputs and the lock
+  /// slice folded in, the SDK, and the settings no file says.
+  ///
+  /// The rule `ShotKey` states for a picture holds for a replay: **if it can
+  /// change a pixel, it is in the key.** That is what makes serving a filed
+  /// replay the same answer as replaying it.
+  String _keyFor(
+    String id,
+    ImportGraph graph,
+    String root,
+    String file,
+    String? config,
+    LockReach? lock,
+    DigestCache digests,
+  ) => ShotKey.of(
+    kind: 'scenario',
+    entryId: id,
+    closure: SourceClosure.of(
+      {
+        ...graph.closureOf(file),
+        if (config != null) ...graph.closureOf(config),
+      },
+      root: root,
+      digests: digests,
+    ).merge(pixels?.inRoot(root)).merge(lock?.inRoot(root)).fingerprint,
+    sdk: sdk,
+    extra: source.settings,
+  );
 
   /// The pixel inputs the closure does not name — see [PixelInputs]. A
   /// parameter rather than derived here because [source] deliberately hides
@@ -226,9 +285,11 @@ class ScenariosRunner {
   /// `skip:` and about names no parser can read.
   ///
   /// The scan is therefore never trusted to *decide* a replay, only to decide
-  /// that there is none. What it can get wrong on that path is `added` and
-  /// `removed` — and only on a run where nothing is replayed, since the next
-  /// run that replays anything re-asks the harness.
+  /// that there is none — either because nothing changed, or because every
+  /// replay the change needs is already filed in the [ReplayStore]. What it can
+  /// get wrong on that path is `added` and `removed` — and only on a run where
+  /// nothing is replayed, since the next run that replays anything re-asks the
+  /// harness.
   Future<ScenariosPlan> plan({ImportGraph? graph}) async {
     cancel?.check();
     var imports =
@@ -260,6 +321,13 @@ class ScenariosRunner {
         digests: digests,
       );
       if (provisional.toRun.isEmpty) return provisional;
+      // A second push whose inputs did not move: every replay the change
+      // needs is filed, so no harness has to start to answer it.
+      if (provisional.keys.values.every(
+        (key) => _store.has(key.base) && _store.has(key.head),
+      )) {
+        return provisional;
+      }
     }
 
     // Both at once, because they are two harnesses: a separate checkout, a
@@ -305,6 +373,7 @@ class ScenariosRunner {
 
     var settled = <ScenarioComparison>[];
     var toRun = <String>[];
+    var keys = <String, ({String base, String head})>{};
     var reasons = <String>[];
     for (var id in headIds) {
       if (!baseIds.contains(id)) {
@@ -318,10 +387,14 @@ class ScenariosRunner {
       // anything the scenario imports — so both the closure and the reach
       // are taken over the pair.
       var file = source.fileOf(id);
-      var config = source.configOf(id);
+      var config = source.configOf(id, base: false);
       cache.memo.remember(id, {
         ...imports.closureOf(file),
         if (config != null) ...imports.closureOf(config),
+      });
+      var lock = locks?.forPackages({
+        ...imports.packagesOf(file),
+        if (config != null) ...imports.packagesOf(config),
       });
       var decision = SkipDecision.of(
         entryId: id,
@@ -330,10 +403,7 @@ class ScenariosRunner {
         headRoot: headRoot,
         pixels: pixels,
         digests: digests,
-        lock: locks?.forPackages({
-          ...imports.packagesOf(file),
-          if (config != null) ...imports.packagesOf(config),
-        }),
+        lock: lock,
       );
       if (decision.skip) {
         settled.add(
@@ -342,6 +412,23 @@ class ScenariosRunner {
         continue;
       }
       toRun.add(id);
+      // Each side keyed over its **own** closure, as a preview's shot is:
+      // the base draws what the base imports, and a key taken over the
+      // head's imports would miss a file only the base still reads — two
+      // bases differing there would share one replay. The reach stays the
+      // head's, as it is everywhere a lock is sliced.
+      keys[id] = (
+        base: _keyFor(
+          id,
+          _baseImports,
+          baseRoot,
+          file,
+          source.configOf(id, base: true),
+          lock,
+          digests,
+        ),
+        head: _keyFor(id, imports, headRoot, file, config, lock, digests),
+      );
       if (decision.reason case var reason?) reasons.add(reason);
     }
     for (var id in baseIds) {
@@ -356,9 +443,55 @@ class ScenariosRunner {
       settled: settled,
       toRun: toRun,
       total: settled.length + toRun.length,
+      keys: keys,
       because: foldReasons(reasons),
     );
   }
+
+  /// Replays one side of [id], and files it under [key] when it can be served
+  /// again.
+  ///
+  /// Two replays cannot: one the harness abandoned (see
+  /// [ScenarioReplay.complete]), and one whose requests reached the network.
+  /// Everything else a replay reads is in its key — under `FakeAsync`, with the
+  /// clock pinned and the network off or answered from a committed recording,
+  /// two replays of one key draw the same frames. A `live` request is the one
+  /// input nothing can hash: filing it would hand the next push today's answer
+  /// from yesterday's server.
+  Future<List<ScenarioStepShot>> _replay(
+    String id,
+    String? key, {
+    required bool base,
+    required String outDir,
+  }) async {
+    var replay = await source.shots(id, base: base, outDir: outDir);
+    if (key == null ||
+        !replay.complete ||
+        replay.steps.isEmpty ||
+        replay.steps.any(_reachedNetwork)) {
+      return replay.steps;
+    }
+    return _store.write(key, replay.steps);
+  }
+
+  /// Whether a step's requests went out to a real network — `live` or
+  /// `record`, as the funnel answers on each request's event.
+  ///
+  /// Only the funnel's word counts. Every request that can leave a scenario
+  /// passes through it, and it has labelled each one since it existed; before
+  /// it, `flutter_test` answered every request with a 400 and none left at
+  /// all. A network event with no `answered` is the app's own logging — an
+  /// interceptor, a fake client — and counting it as live kept the replays of
+  /// every scenario that logs its requests out of the store.
+  static bool _reachedNetwork(ScenarioStepShot step) =>
+      step.events.any((event) {
+        if (event['channel'] != 'network') return false;
+        var answered = switch (event['data']) {
+          Map data => data['answered'],
+          _ => null,
+        };
+        return answered == 'live' || answered == 'record';
+      });
 
   /// Replays what [plan] left and aligns the two runs.
   ///
@@ -393,28 +526,46 @@ class ScenariosRunner {
       report(settled);
     }
     var done = 0;
+    var replays = 0;
     for (var id in plan.toRun) {
       cancel?.check();
       done++;
       var name = id.contains('#') ? id.substring(id.indexOf('#') + 1) : id;
       var count = '$done of ${plan.toRun.length}';
-      onProgress?.call('replaying "$name" on both sides · $count');
-      var replayed = await Future.wait([
-        source.shots(id, base: true, outDir: outDir),
-        source.shots(id, base: false, outDir: outDir),
+      var key = plan.keys[id];
+      var filedBase = key == null ? null : _store.read(key.base);
+      var filedHead = key == null ? null : _store.read(key.head);
+      var where = switch ((filedBase, filedHead)) {
+        (null, null) => 'on both sides',
+        (null, _) => 'on the base',
+        (_, null) => 'on this side',
+        _ => null,
+      };
+      onProgress?.call(
+        where == null
+            ? 'reading "$name" from the cache · $count'
+            : 'replaying "$name" $where · $count',
+      );
+      var sides = await Future.wait([
+        if (filedBase case var steps?)
+          Future.value(steps)
+        else
+          _replay(id, key?.base, base: true, outDir: outDir),
+        if (filedHead case var steps?)
+          Future.value(steps)
+        else
+          _replay(id, key?.head, base: false, outDir: outDir),
       ]);
+      replays += [filedBase, filedHead].where((side) => side == null).length;
       report(
-        compareScenarioSteps(
-          scenario: id,
-          base: replayed[0],
-          head: replayed[1],
-        ),
+        compareScenarioSteps(scenario: id, base: sides[0], head: sides[1]),
       );
     }
 
     return ScenarioResults.of(
       items: items,
       ran: plan.toRun.length,
+      replays: replays,
       skipped: plan.settled
           .where((s) => s.state == ComparedState.skipped)
           .length,

@@ -394,6 +394,43 @@ class _Receipt extends StatelessWidget {
       ...?index.scenariosHalf?.packages,
     };
     var compared = index.previewItems.length + index.scenarios.length;
+    var receipt = _line(context, compared, packages);
+    if (index.caveats.isEmpty) return receipt;
+    // Under the receipt, in the page's own voice: what the pull-request comment
+    // quotes under its heading, for the reader who came straight here.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        receipt,
+        for (var caveat in index.caveats)
+          Padding(
+            padding: const EdgeInsets.only(top: FwSpacing.xs),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: FwIconSize.xs,
+                  color: colors.warningText,
+                ),
+                const SizedBox(width: FwSpacing.xs),
+                Expanded(
+                  child: Text(
+                    caveat,
+                    style: context.type.micro.copyWith(
+                      color: colors.warningText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _line(BuildContext context, int compared, Set<String> packages) {
+    var colors = context.colors;
     var parts = [
       '$compared compared',
       if (packages.length > 1) 'across ${packages.length} packages',

@@ -52,6 +52,7 @@ void main() {
     ),
     scenarios: ScenarioResults.of(
       ran: 1,
+      replays: 1,
       skipped: 0,
       elapsed: const Duration(seconds: 4),
       items: [
@@ -162,8 +163,20 @@ void main() {
     expect(index.counts, {ComparedState.changed: 2, ComparedState.same: 1});
     expect(index.previewsHalf.worked, 2);
     expect(index.previewsHalf.ms, 178);
+    // The replays, not the scenarios: one side came from the store.
     expect(index.scenariosHalf!.worked, 1);
     expect(index.scenariosHalf!.counts, {ComparedState.changed: 1});
+  });
+
+  test('a scenario half from before replays were filed reads its runs', () {
+    var written = artifact().toJson();
+    var scenarios = {...written['scenarios']! as Map<String, Object?>}
+      ..remove('replayed')
+      ..['ran'] = 3;
+
+    var index = ComparisonIndex.fromJson({...written, 'scenarios': scenarios});
+
+    expect(index.scenariosHalf!.worked, 3);
   });
 
   // The previews half has never written a `skipped` key — its counts already

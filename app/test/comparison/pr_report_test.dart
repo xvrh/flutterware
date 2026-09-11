@@ -42,6 +42,29 @@ void main() {
     items: items,
   );
 
+  // A caveat qualifies a clean verdict as much as a red one: "nothing changed"
+  // over trees the base read another way is the one a reader most needs the
+  // reason for.
+  test('a caveat sits under the heading, whatever the heading says', () {
+    var report = writePrReport(
+      artifact: ComparisonArtifact(
+        previews: previews(const []),
+        caveats: const ['The base pins Flutter 3.47.0 and this branch 3.48.0.'],
+      ),
+      cache: cache,
+      against: 'origin/master',
+      directory: temp.path,
+    );
+    var comment = File(report.commentPath).readAsStringSync();
+
+    var heading = comment.indexOf('### Comparison against');
+    var caveat = comment.indexOf('> The base pins Flutter 3.47.0');
+    var verdict = comment.indexOf('Nothing changed');
+    expect(heading, isNonNegative);
+    expect(caveat, greaterThan(heading));
+    expect(verdict, greaterThan(caveat));
+  });
+
   // A half whose harness would not build leaves no rows, and until this the
   // comment printed that silence as a pass — the one thing a pull-request gate
   // must never do.

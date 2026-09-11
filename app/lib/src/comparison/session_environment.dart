@@ -168,8 +168,8 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
         // under, which is the only SDK flutterware has: the one the invocation
         // named.
         //
-        // Nothing checks whether the base commit wanted a different one — see
-        // the note on the cache key in `ComparisonRunner.plan`.
+        // Nothing makes the base use the one it pinned instead — see
+        // `ComparisonRunner.sdk`.
         var link = Link(p.join(path, '.fvm', 'flutter_sdk'));
         if (!link.existsSync()) {
           Directory(p.dirname(link.path)).createSync(recursive: true);
@@ -283,7 +283,8 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
               baseRoot: baseRoot,
               source: source,
               cache: _cache,
-              pixels: PixelInputs.of(
+              sdk: flutterSdk.identity,
+              pixels: PixelInputs.ofScenarios(
                 packagePath: side.packagePath,
                 roots: [topLevel, baseRoot],
               ),
@@ -371,6 +372,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
       baseRoot: baseRoot,
       baseSha: base.sha,
       cache: _cache,
+      sdk: flutterSdk.identity,
       onItem: onItem,
       onPlan: onPlan,
       onProgress: onProgress,
@@ -386,16 +388,12 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
     );
   }
 
-  ScenariosSide _scenariosSide(String package) {
-    var core = _scenarios!;
-    return ScenariosSide(
-      flutterSdkRoot: flutterSdk.root,
-      packagePath: _relative(package),
-      directory: core.scanRootFor(package),
-      projectClock: core.host.projectClock,
-      projectNetwork: core.host.projectNetwork,
-    );
-  }
+  ScenariosSide _scenariosSide(String package) => ScenariosSide.of(
+    _scenarios!,
+    package: package,
+    packagePath: _relative(package),
+    flutterSdkRoot: flutterSdk.root,
+  );
 
   /// Writes the artifact where `fw compare` writes it, so the GUI and the CLI
   /// leave one file rather than two.

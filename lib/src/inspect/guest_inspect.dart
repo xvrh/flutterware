@@ -44,6 +44,23 @@ class GuestInspector {
 
   final String? Function() entryIdOf;
 
+  /// Which way of describing a widget this walk writes, stamped on every tree
+  /// it reads as [InspectTree.format].
+  ///
+  /// **Bump it whenever the same widgets would read back differently** — a
+  /// description spelled out where it was not, a node the walk now keeps or
+  /// drops, a key read another way. A comparison's two sides are captured by
+  /// two checkouts' own copies of this class, and the stamp is the only thing
+  /// that lets it tell a widget that changed from a walk that did: the tree
+  /// differences between two formats are carried, and do not count.
+  /// `test/inspect/tree_format_test.dart` fails when the reading of a fixed set
+  /// of widgets moves and this did not.
+  ///
+  /// 1 — the first stamped. `Text.rich` and `RichText` describe themselves
+  /// by their words, which is why the stamp exists: a tree read before it
+  /// carries none, and against one it reported every such node as changed.
+  static const treeFormat = 1;
+
   /// Registers the extensions. Call once, before `runApp`, beside the knobs and
   /// axes ones — an extension has to outlive every entry switch.
   void registerExtensions() {
@@ -220,7 +237,7 @@ class GuestInspector {
       );
       if (decoded is! Map) {
         return (
-          tree: InspectTree(entryId: entryId, root: null),
+          tree: InspectTree(entryId: entryId, format: treeFormat),
           byRenderObject: byRenderObject,
         );
       }
@@ -238,6 +255,7 @@ class GuestInspector {
       return (
         tree: InspectTree(
           entryId: entryId,
+          format: treeFormat,
           root: _convert(
             demo,
             '',
