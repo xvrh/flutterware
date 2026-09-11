@@ -38,11 +38,10 @@ void main() {
     await tester.tap(find.text('Launcher icon'));
     await tester.pumpAndSettle();
 
-    // The example app's icons, read from the recording rather than the disk:
-    // a plate per role that has files, and the flavors it declares as chips.
+    // The demo app's icons, read from the recording rather than the disk: a
+    // plate per role that has files, under the platform that ships it.
     expect(find.byType(IconPlate), findsWidgets);
     expect(find.text('Android'), findsWidgets);
-    expect(find.text('kiosk'), findsOneWidget);
     expect(find.text('Reading the icons…'), findsNothing);
     expect(find.textContaining('Could not read'), findsNothing);
   });

@@ -208,8 +208,22 @@ happens once and the demo is never broken in between.
 
 - **Harness path and package name:** `fixtures/probe_app`,
   `flutterware_probes`.
-- **The receipt attachment** stays a PDF; `pdf` comes along to brewline.
-- **The one flavor:** `kiosk`.
+- **The receipt attachment:** `pdf` was cleared to come along, and turned out
+  not to be needed — the scenario attaches JSON and text, so brewline gains
+  no dependency for it.
+- **No flavor after all.** A Gradle flavor makes a bare `flutter run` on
+  Android refuse until it is given `--flavor`, and the flutter tool applies a
+  pubspec `default-flavor` on every platform, where it demands an Xcode
+  scheme (measured 2026-08-31). Either way a demo whose promise is "clone and
+  run" fails its first run. Brewline ships one adaptive icon set, drawn from
+  `demo/brand.dart`, and the icon sheet has one row until a flavor earns a
+  second. The studio's own scenario walks the panel's roles instead of a
+  flavor chip.
+- **The strings' bundle prefix** stays a static (`ShopStrings.assetPackage`)
+  rather than a parameter of `load`: the web demo compiles brewline's preview
+  file unchanged, and that file constructs the app, so the host has nowhere
+  to pass a parameter through. One line in the host, documented on the
+  static.
 - **Recording source.** From `examples/brewline` in the checkout, not from
   the clone under `build/`: paths are re-rooted to `/recording` either way,
   and the CI recording check re-records from the source tree.

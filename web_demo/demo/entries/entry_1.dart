@@ -3,7 +3,7 @@
 // so anything the annotation names has to resolve here too.
 import 'package:flutter/material.dart';
 import 'package:flutterware/previews.dart';
-import 'package:flutterware_example/shop/shop_app.dart';
+import 'package:brewline/shop/shop_app.dart';
 // Unconditional: the getters below are typed, and a demo file is not obliged
 // to import widgets itself. `widget_previews.dart` is here for the same reason
 // and for one more — a demo annotated with Flutter's own `@Preview` never
@@ -21,8 +21,8 @@ import 'package:flutterware/ui_catalog.dart';
 // Together these reproduce the demo's own scope, which is the one the
 // annotation was written in. The gap that remains is privacy: a `_kName` in the
 // annotation is visible where it was written and not here.
-import '../../../examples/example/demo/shop.dart';
-import '../../../examples/example/demo/shop.dart' as fw1;
+import '../../../examples/brewline/demo/shop.dart';
+import '../../../examples/brewline/demo/shop.dart' as fw1;
 
 // The annotation, evaluated as Dart rather than interpreted statically.
 // Kept whole rather than reduced: the entrypoint calls Flutter's own

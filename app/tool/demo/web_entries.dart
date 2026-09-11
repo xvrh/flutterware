@@ -29,8 +29,8 @@ import 'package:path/path.dart' as p;
 ///
 /// **Curated, not everything.** The page shows the coffee shop — the same
 /// app the recorded scenarios walk — so the entries are the ones in
-/// [webDemoEntryIds] and no other; the example's probes stay out of the
-/// demo. Each is still checked for what a browser can run: `dart:ffi` does
+/// [webDemoEntryIds] and no other; nothing of the demo app that is not the
+/// shop. Each is still checked for what a browser can run: `dart:ffi` does
 /// not compile for the web at all; a scene needs the GPU and its host reads
 /// the disk; the shop's database is native. A curated entry whose import
 /// closure — followed through the example and through `package:flutterware`
@@ -43,7 +43,7 @@ import 'package:path/path.dart' as p;
 void main(List<String> arguments) {
   var appRoot = p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
   var repoRoot = p.dirname(appRoot);
-  var example = p.join(repoRoot, 'examples', 'example');
+  var example = p.join(repoRoot, 'examples', 'brewline');
   var out = p.join(repoRoot, 'web_demo', 'demo');
   var wrappers = p.join(out, 'entries');
   if (Directory(wrappers).existsSync()) {
@@ -268,6 +268,6 @@ class _Cleanliness {
     for (var line in pubspec) {
       if (line.startsWith('name:')) return line.substring(5).trim();
     }
-    return 'flutterware_example';
+    return 'brewline';
   }
 }

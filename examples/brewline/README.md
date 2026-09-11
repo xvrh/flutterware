@@ -17,15 +17,21 @@ needs no SDK of its own: the `dart` you type is the `dart` it uses, so
 ## What to look at
 
 **Previews** — `demo/shop.dart` has one entry per screen, annotated with
-Flutter's own `@Preview`. They open framed on a phone because
-`tool/flutterware.dart` says the app is one; nothing is written on the
-annotations.
+Flutter's own `@Preview`, plus one sheet of a component in all its states.
+They open framed on a phone because `tool/flutterware.dart` says the app is
+one; nothing is written on the annotations. `demo/brand.dart` is the launcher
+icon: the icon files under `android/`, `ios/`, `macos/` and `web/` are
+pictures of it, taken by `tool/brand_icons.dart`.
 
-**Scenarios** — `test/scenarios/shop_test.dart` is a `flutter_test` that
-screenshots itself. `flutter test` runs it like any other test; the studio runs
-the same file and draws the flow, including the `split` that fans out into every
-way through the menu. Every step leaves a picture, a widget tree and the visible
-texts, in both languages.
+**Scenarios** — `test/scenarios/mobile/shop_test.dart` is a `flutter_test`
+that screenshots itself. `flutter test` runs it like any other test; the
+studio runs the same file and draws the flow, including the `split` that fans
+out into every way through the menu. Every step leaves a picture, a widget
+tree and the visible texts, in both languages. The folder next to it,
+`desktop/`, replays the same shop in a window, and each folder's
+`flutter_test_config.dart` says what it runs on. The other files show one
+thing each: the keyboard coming up, a list scrolled to a row that is not
+built yet, a screen caught mid-animation, a receipt attached to a step.
 
 **Translations** — the words are in `assets/i18n/`, and because the scenarios
 record which key each screen asked for, the panel can say where a string
@@ -35,7 +41,9 @@ actually appears.
 what it weighs, and what the platforms will actually show.
 
 **Run** — launch the app on a device and drive it: by hand, from `fw`, or from
-an agent over MCP.
+an agent over MCP. The second entry point, `lib/shop_devbar.dart`, puts a
+devbar on the shop with a plugin that pushes a notification into it — the
+sample for driving an app from outside itself.
 
 ## The command line and agents
 
@@ -57,9 +65,13 @@ opening this repo finds the same tools without being told.
 
 ```
 lib/shop/        the app — welcome, menu, drink, cart, confirmation
-demo/            @Preview entries, one per screen
-test/scenarios/  the scenario, and the config that says which devices and
-                 languages it replays on
+lib/shop_devbar.dart    the app with a devbar, and the push plugin behind it
+demo/            @Preview entries: the screens, a component sheet, the icon
+test/scenarios/  the scenarios, a folder per kind of device, each with the
+                 config that says what it replays on
 assets/i18n/     the words, English and French
+assets/brand/    the icon art, photographed from demo/brand.dart
+assets/splash/   the splash art; flutter_native_splash.yaml places it
 tool/flutterware.dart   which tools this project gets, and how they are aimed
+tool/brand_icons.dart   writes the icon art into every platform's icon files
 ```

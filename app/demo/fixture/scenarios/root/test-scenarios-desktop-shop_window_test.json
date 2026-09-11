@@ -1,12 +1,12 @@
 {
-  "ms": 317,
+  "ms": 284,
   "scenarios": [
     {
       "file": "test/scenarios/desktop/shop_window_test.dart",
       "name": "Order a cold brew on a laptop",
       "ok": true,
       "device": "window-wide",
-      "ms": 317,
+      "ms": 284,
       "steps": [
         {
           "index": 1,

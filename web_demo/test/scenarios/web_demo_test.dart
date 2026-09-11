@@ -7,7 +7,7 @@ import 'package:flutterware_app/src/demo/recorded_project.dart';
 import 'package:flutterware_app/src/demo/recording.dart';
 // ignore: implementation_imports
 import 'package:flutterware_app/src/shell/shell_view.dart';
-import 'package:flutterware_example/shop/shop_strings.dart';
+import 'package:brewline/shop/shop_strings.dart';
 import 'package:path/path.dart' as p;
 
 import '../../demo/entries.g.dart';
@@ -19,14 +19,14 @@ import '../../demo/entries.g.dart';
 /// The previews are drawn inline — a guest in this very tree, no process —
 /// which is what lets the walk settle under FakeAsync.
 void main() {
-  // As the page does: the shop's strings are the example's assets, bundled
+  // As the page does: the shop's strings are the demo app's assets, bundled
   // under its package name in this program.
-  ShopStrings.assetPackage = 'flutterware_example';
+  ShopStrings.assetPackage = 'brewline';
   final recording = FileScenarioArtifacts(
     p.normalize(p.join(Directory.current.path, '..', 'app', 'demo', 'fixture')),
   );
 
-  scenario('Previews of the example, drawn inline', (s) async {
+  scenario('Previews of the demo app, drawn inline', (s) async {
     var shell = recordedShell(recording: recording, previews: webDemoPreviews);
     await shell.start(recordedProjectRoot);
     await s.pumpWidget(ShellApp(shell));
