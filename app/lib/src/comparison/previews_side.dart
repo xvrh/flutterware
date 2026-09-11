@@ -53,7 +53,7 @@ class PreviewsSide implements ComparisonSide {
   final String flutterSdkRoot;
 
   /// The package inside each checkout, relative — `.` for a single-package
-  /// project, `examples/example` in a workspace.
+  /// project, `fixtures/probe_app` in a workspace.
   @override
   final String packagePath;
 

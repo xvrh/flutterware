@@ -18,7 +18,7 @@ import 'package:path/path.dart' as p;
 /// only proves the guest survives the messages, which is what let keyboard
 /// input look fine while every key sat undelivered in a framework queue.
 ///
-/// Needs the previews in `examples/example/demo/input.dart`, which report their
+/// Needs the previews in `fixtures/probe_app/demo/input.dart`, which report their
 /// state as `Text` so a tree read can see it.
 ///
 /// Usage: `dart run tool/embedder/input_probe.dart [projectRoot]`
@@ -26,7 +26,7 @@ Future<void> main(List<String> args) async {
   var packageRoot = Directory.current.path;
   var projectRoot = args.isNotEmpty
       ? args[0]
-      : p.normalize(p.join(packageRoot, '..', 'examples', 'example'));
+      : p.normalize(p.join(packageRoot, '..', 'fixtures', 'probe_app'));
   // <sdk>/bin/cache/dart-sdk/bin/dartvm — four levels up from the bin holding
   // the running dart.
   var flutterSdkRoot = p.normalize(

@@ -24,7 +24,7 @@ import 'shell.dart';
 /// One thing cannot be here: a picture with pixels in it. A layer needs a
 /// real file on disk to paint, so every composition below is colour and
 /// geometry. The images are exercised by running the app against
-/// `examples/example`, which is generated and has all four surfaces.
+/// `fixtures/probe_app`, which is generated and has all four surfaces.
 
 @Preview(name: 'Header', group: 'Splash', wrapper: wrapInApp)
 Widget splashHeader() => const _Headers();
@@ -51,7 +51,7 @@ class _Headers extends StatelessWidget {
         _Case(
           'Generated and current',
           SplashPanelHeader(
-            package: 'examples/example',
+            package: 'fixtures/probe_app',
             configPath: 'flutter_native_splash.yaml',
             state: SplashGeneratedState.current,
             fileCount: 66,
@@ -63,7 +63,7 @@ class _Headers extends StatelessWidget {
         _Case(
           'Generated, then the config moved',
           SplashPanelHeader(
-            package: 'examples/example',
+            package: 'fixtures/probe_app',
             configPath: 'pubspec.yaml',
             fromPubspec: true,
             state: SplashGeneratedState.stale,
@@ -77,7 +77,7 @@ class _Headers extends StatelessWidget {
         _Case(
           'Never generated',
           SplashPanelHeader(
-            package: 'examples/example',
+            package: 'fixtures/probe_app',
             configPath: 'flutter_native_splash.yaml',
             state: SplashGeneratedState.never,
             fileCount: 0,

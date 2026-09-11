@@ -21,10 +21,10 @@ void main() {
     addTearDown(tester.view.reset);
 
     var robotoRegular = _fileBytes(
-      'examples/example/assets/fonts/Roboto-Regular.ttf',
+      'fixtures/probe_app/assets/fonts/Roboto-Regular.ttf',
     );
     var robotoBold = _fileBytes(
-      'examples/example/assets/fonts/Roboto-Bold.ttf',
+      'fixtures/probe_app/assets/fonts/Roboto-Bold.ttf',
     );
     var robotoItalic = _fileBytes(
       'app/lib/src/utils/fonts/Roboto/Roboto-Italic.ttf',

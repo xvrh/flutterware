@@ -60,14 +60,14 @@ void main() {
   }
 
   test('every member of a workspace shares one process', () async {
-    var project = resolved('workspace', members: ['app', 'examples/example']);
+    var project = resolved('workspace', members: ['app', 'fixtures/probe_app']);
     var runner = counting();
     var store = PubDepsStore(runProcess: runner.run);
 
     // Together, the way `computeAll` asks: the whole point is that a wave of
     // members costs one process rather than one each.
     await Future.wait([
-      for (var member in ['.', 'app', 'examples/example'])
+      for (var member in ['.', 'app', 'fixtures/probe_app'])
         store.load(
           flutterExecutable: '/sdk/flutter',
           directory: p.join(project, member),

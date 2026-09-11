@@ -25,12 +25,12 @@ void main() {
     }
 
     test('and so does a package path containing slashes', () {
-      var segments = catalogSegments('examples/example', 'demo/x.dart#x');
+      var segments = catalogSegments('fixtures/probe_app', 'demo/x.dart#x');
       // The package is one segment; only the entry id is spread.
-      expect(segments, ['examples/example', 'demo', 'x.dart#x']);
+      expect(segments, ['fixtures/probe_app', 'demo', 'x.dart#x']);
       expect(
         catalogPlace(segments),
-        CatalogPlace('examples/example', entryId: 'demo/x.dart#x'),
+        CatalogPlace('fixtures/probe_app', entryId: 'demo/x.dart#x'),
       );
     });
   });

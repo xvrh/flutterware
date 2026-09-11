@@ -11,7 +11,7 @@ import 'package:test/test.dart';
 /// the web demo.
 void main() {
   final scan = IconScan(
-    packagePath: 'examples/example',
+    packagePath: 'fixtures/probe_app',
     flavor: 'kiosk',
     flavors: const [
       IconFlavor('kiosk', {
@@ -98,7 +98,7 @@ void main() {
     var back = IconScan.fromJson(jsonDecode(wire) as Map<String, Object?>);
 
     expect(back.toJson(), equals(scan.toJson()));
-    expect(back.packagePath, 'examples/example');
+    expect(back.packagePath, 'fixtures/probe_app');
     expect(back.flavor, 'kiosk');
     expect(back.flavors.first.sources, {
       IconFlavorSource.androidSourceSet,

@@ -42,7 +42,7 @@ class SplashScan {
     this.hasDevDependency = true,
   });
 
-  /// Workspace-relative — `.`, `examples/example`.
+  /// Workspace-relative — `.`, `fixtures/probe_app`.
   final String packagePath;
 
   /// The default config first, then one per flavor file. Empty when the project

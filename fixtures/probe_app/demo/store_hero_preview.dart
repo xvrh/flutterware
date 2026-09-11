@@ -18,8 +18,8 @@ import 'package:flutter/widget_previews.dart';
 import 'package:flutterware/previews.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_example/scene3d_renderers.dart';
-import 'package:flutterware_example/store_hero.dart';
+import 'package:flutterware_probes/scene3d_renderers.dart';
+import 'package:flutterware_probes/store_hero.dart';
 
 import 'store_hero.scene.dart';
 

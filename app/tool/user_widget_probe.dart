@@ -9,7 +9,7 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 
 void main(List<String> args) {
-  var root = Directory('../examples/example/lib');
+  var root = Directory('../fixtures/probe_app/lib');
   var units = <String, CompilationUnit>{};
   for (var file
       in root

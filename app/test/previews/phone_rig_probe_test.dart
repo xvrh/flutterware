@@ -45,7 +45,7 @@ void main() {
   test('a compute answers a second body of one harness', () async {
     var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
     var packageRoot = p.normalize(
-      p.join(Directory.current.path, '..', 'examples', 'example'),
+      p.join(Directory.current.path, '..', 'fixtures', 'probe_app'),
     );
     const entryId = 'demo/compute_probe.dart#computeProbe';
     var scan = CatalogScanner(
@@ -99,7 +99,7 @@ void main() {
 Future<void> _cost(String entryId, CaptureViewport viewport) async {
   var flutterRoot = Platform.environment['FLUTTER_ROOT']!;
   var packageRoot = p.normalize(
-    p.join(Directory.current.path, '..', 'examples', 'example'),
+    p.join(Directory.current.path, '..', 'fixtures', 'probe_app'),
   );
   var scan = CatalogScanner(
     projectRoot: packageRoot,
@@ -147,7 +147,7 @@ Future<void> _probe(String entryId, {bool screen = true}) async {
     var flutterRoot = Platform.environment['FLUTTER_ROOT'];
     expect(flutterRoot, isNotNull, reason: 'flutter test always sets it');
     var packageRoot = p.normalize(
-      p.join(Directory.current.path, '..', 'examples', 'example'),
+      p.join(Directory.current.path, '..', 'fixtures', 'probe_app'),
     );
     var scan = CatalogScanner(
       projectRoot: packageRoot,

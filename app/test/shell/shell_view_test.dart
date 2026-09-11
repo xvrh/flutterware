@@ -367,10 +367,10 @@ void main() {
     await tester.pumpAndSettle();
     var before = tester.state(find.byType(Scaffold));
 
-    shell.selectChild('a.deps', 'examples/example');
+    shell.selectChild('a.deps', 'fixtures/probe_app');
     await tester.pumpAndSettle();
 
-    expect(find.text('panel:a.deps/examples/example'), findsOneWidget);
+    expect(find.text('panel:a.deps/fixtures/probe_app'), findsOneWidget);
     expect(tester.state(find.byType(Scaffold)), same(before));
   });
 
@@ -575,8 +575,8 @@ void main() {
             h,
             children: const [
               PluginChild(
-                id: 'examples/example',
-                label: 'examples/example',
+                id: 'fixtures/probe_app',
+                label: 'fixtures/probe_app',
                 status: Status.warn('10 assets · 347 kB · 2 problems'),
               ),
             ],
@@ -600,7 +600,7 @@ void main() {
       // the `Expanded` label at zero — a row that says how much and not *what*.
       var label = find.descendant(
         of: find.byKey(sidebarKey),
-        matching: find.text('examples/example'),
+        matching: find.text('fixtures/probe_app'),
       );
       expect(label, findsOneWidget);
       expect(tester.getSize(label).width, greaterThan(0));

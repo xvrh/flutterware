@@ -60,7 +60,7 @@ class _ChoiceListState extends State<_ChoiceList> {
             FwChoiceRow(
               value: 'demo',
               label: 'demo',
-              detail: 'examples/example/demo · 8 scenes',
+              detail: 'fixtures/probe_app/demo · 8 scenes',
             ),
             FwChoiceRow(
               value: 'marketing',
@@ -92,7 +92,7 @@ class _ChoiceListState extends State<_ChoiceList> {
             FwChoiceRow(
               value: 'demo',
               label: 'demo',
-              detail: 'examples/example/demo · 8 scenes',
+              detail: 'fixtures/probe_app/demo · 8 scenes',
             ),
             FwChoiceRow(value: 'new', label: 'A new folder…'),
           ],

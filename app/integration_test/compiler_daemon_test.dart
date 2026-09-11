@@ -632,7 +632,7 @@ void main() {
       dartExecutable: dartExecutable,
       config: DaemonConfig.forPackage(
         appToolDirectory: appRoot,
-        packageRoot: p.join(p.dirname(appRoot), 'examples', 'example'),
+        packageRoot: p.join(p.dirname(appRoot), 'fixtures', 'probe_app'),
         flutterSdkRoot: flutterRoot,
         roots: const ['demo'],
       ),
@@ -666,7 +666,7 @@ void main() {
     // Its own project rather than the shared daemon's, so stopping and starting
     // a daemon three times here does not pull the compiler out from under
     // every other test in this file.
-    var projectRoot = p.join(p.dirname(appRoot), 'examples', 'example');
+    var projectRoot = p.join(p.dirname(appRoot), 'fixtures', 'probe_app');
     var otherConfig = DaemonConfig.forPackage(
       appToolDirectory: appRoot,
       packageRoot: projectRoot,
@@ -1019,7 +1019,7 @@ Widget fixtureBroken() => const Placeholder();
         dartExecutable: dartExecutable,
         config: DaemonConfig.forPackage(
           appToolDirectory: appRoot,
-          packageRoot: p.join(p.dirname(appRoot), 'examples', 'example'),
+          packageRoot: p.join(p.dirname(appRoot), 'fixtures', 'probe_app'),
           flutterSdkRoot: flutterRoot,
           roots: const ['demo'],
         ),

@@ -29,7 +29,7 @@ void main() {
       expect(pubDeps.packages, hasLength(174));
       expect(
         pubDeps.members.map((e) => e.name),
-        containsAll(['flutterware_example', 'flutterware', 'flutterware_app']),
+        containsAll(['flutterware_probes', 'flutterware', 'flutterware_app']),
       );
       // The trap this model exists to route around: `root` names the workspace
       // root package regardless of which member the command ran in.
@@ -44,7 +44,7 @@ void main() {
 
     test('devDependencies are populated only for members', () {
       expect(
-        pubDeps.memberNamed('flutterware_example')!.devDependencies,
+        pubDeps.memberNamed('flutterware_probes')!.devDependencies,
         isNotEmpty,
       );
       expect(pubDeps['test']!.devDependencies, isEmpty);
@@ -58,7 +58,7 @@ void main() {
 
   group('scoping to one member', () {
     test('classifies against the member, not the workspace', () {
-      var dependencies = resolveFor('flutterware_example');
+      var dependencies = resolveFor('flutterware_probes');
 
       // The regression. This member declares 14 dependencies and 4 dev
       // dependencies; the workspace resolves 174 packages. Deriving direct-ness
@@ -73,7 +73,7 @@ void main() {
     });
 
     test('excludes what only a sibling member reaches', () {
-      var names = resolveFor('flutterware_example').dependencies
+      var names = resolveFor('flutterware_probes').dependencies
           .map((e) => e.name)
           .toSet();
 
@@ -94,10 +94,10 @@ void main() {
     });
 
     test('a member is never listed among its own dependencies', () {
-      var dependencies = resolveFor('flutterware_example');
+      var dependencies = resolveFor('flutterware_probes');
       expect(
         dependencies.dependencies.map((e) => e.name),
-        isNot(contains('flutterware_example')),
+        isNot(contains('flutterware_probes')),
       );
     });
 
@@ -107,7 +107,7 @@ void main() {
       // dev_dependencies to leak. Traversal follows directDependencies for
       // exactly this reason: pub does not resolve a dependency's dev deps for
       // its consumers, so propagating them would invent edges.
-      var names = resolveFor('flutterware_example').dependencies
+      var names = resolveFor('flutterware_probes').dependencies
           .map((e) => e.name)
           .toSet();
       expect(names, contains('flutterware'));
@@ -139,7 +139,7 @@ void main() {
 
   group('dependants', () {
     test('are confined to the reachable subgraph', () {
-      var dependencies = resolveFor('flutterware_example');
+      var dependencies = resolveFor('flutterware_probes');
       for (var dependency in dependencies.dependencies) {
         for (var dependant in dependency.dependants) {
           expect(
@@ -155,27 +155,27 @@ void main() {
     });
 
     test('a chain starts at the member and ends at the package', () {
-      var dependencies = resolveFor('flutterware_example');
+      var dependencies = resolveFor('flutterware_probes');
       var async = dependencies['async']!;
 
       expect(async.isTransitive, isTrue);
       expect(async.dependencyPaths, isNotEmpty);
       for (var path in async.dependencyPaths) {
-        expect(path.first, 'flutterware_example');
+        expect(path.first, 'flutterware_probes');
         expect(path.last, 'async');
       }
     });
 
     test('a direct dependency reports the one-hop chain first', () {
-      var dependencies = resolveFor('flutterware_example');
+      var dependencies = resolveFor('flutterware_probes');
       expect(dependencies['flutterware']!.dependencyPaths.first, [
-        'flutterware_example',
+        'flutterware_probes',
         'flutterware',
       ]);
     });
 
     test('chains are cached rather than recomputed', () {
-      var dependency = resolveFor('flutterware_example')['async']!;
+      var dependency = resolveFor('flutterware_probes')['async']!;
       expect(
         identical(dependency.dependencyPaths, dependency.dependencyPaths),
         isTrue,
@@ -211,23 +211,23 @@ packages:
 ''');
 
     test('resolved version comes from the lock, not the package pubspec', () {
-      var dependencies = resolveFor('flutterware_example', lock: lock);
+      var dependencies = resolveFor('flutterware_probes', lock: lock);
       expect(dependencies['path']!.resolvedVersion, '1.9.1');
     });
 
     test('a constraint is carried for what the member declared', () {
-      var dependencies = resolveFor('flutterware_example', lock: lock);
+      var dependencies = resolveFor('flutterware_probes', lock: lock);
       // The example declares bare `path:`, which is the constraint `any`.
       expect(dependencies['path']!.constraint, 'any');
     });
 
     test('a transitive dependency has no constraint from this member', () {
-      var dependencies = resolveFor('flutterware_example', lock: lock);
+      var dependencies = resolveFor('flutterware_probes', lock: lock);
       expect(dependencies['async']!.constraint, isNull);
     });
 
     test('SDK packages are not described by their version', () {
-      var flutter = resolveFor('flutterware_example', lock: lock)['flutter']!;
+      var flutter = resolveFor('flutterware_probes', lock: lock)['flutter']!;
       expect(flutter.hasMeaningfulVersion, isFalse);
       expect(flutter.origin, isA<SdkOrigin>());
       expect(flutter.origin.label, 'Flutter SDK');
@@ -248,7 +248,7 @@ packages:
     test('a package with no lock entry still reports a source', () {
       // No lock at all — the case that used to produce a blank cell for every
       // package of every workspace member.
-      var dependencies = resolveFor('flutterware_example');
+      var dependencies = resolveFor('flutterware_probes');
       var path = dependencies['path']!;
       expect(path.origin, isA<HostedOrigin>());
       expect(path.node.source, 'hosted');

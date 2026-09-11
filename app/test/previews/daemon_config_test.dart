@@ -38,7 +38,7 @@ void main() {
       ..parent.createSync(recursive: true)
       ..writeAsStringSync('{"configVersion": 2, "packages": []}');
     appTool = p.join(temp.path, 'app');
-    package = p.join(temp.path, 'examples', 'example');
+    package = p.join(temp.path, 'fixtures', 'probe_app');
     for (var dir in [appTool, package]) {
       Directory(dir).createSync(recursive: true);
     }

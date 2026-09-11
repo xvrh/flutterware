@@ -34,7 +34,7 @@ library;
 class CatalogPlace {
   const CatalogPlace(this.package, {this.entryId, this.directory});
 
-  /// The workspace-relative package path — `app`, `examples/example`.
+  /// The workspace-relative package path — `app`, `fixtures/probe_app`.
   final String package;
 
   /// The entry's id, which is `path/to/file.dart#symbol`. Null when the address

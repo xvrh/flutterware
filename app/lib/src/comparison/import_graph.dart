@@ -22,7 +22,7 @@ import 'package:path/path.dart' as p;
 /// That is what lets a comparison put every row's verdict on screen and only
 /// then begin rendering the few that need it.
 ///
-/// Measured on this repo, `examples/example`: the first entry costs **171ms**
+/// Measured on this repo, `fixtures/probe_app`: the first entry costs **171ms**
 /// and reaches 118 files — its own, the shell's, and `package:flutterware`'s,
 /// which is a path dependency inside the checkout and so counts. Every entry
 /// after it costs **~1ms**, because their closures overlap and each file is

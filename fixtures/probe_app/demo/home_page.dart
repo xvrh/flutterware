@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
-import 'package:flutterware_example/main.dart';
+import 'package:flutterware_probes/main.dart';
 
 import 'shell.dart';
 

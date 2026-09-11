@@ -41,7 +41,7 @@ import 'package:path/path.dart' as p;
 /// which is how keyboard *input* looked implemented for months while every key
 /// sat in a framework queue.
 ///
-/// Needs the previews in `examples/example/demo/input.dart`, whose first field
+/// Needs the previews in `fixtures/probe_app/demo/input.dart`, whose first field
 /// autofocuses — see `staging_probe.dart`, which shares this harness.
 ///
 /// Usage: `dart run tool/embedder/fake_keyboard_probe.dart [projectRoot]`
@@ -49,7 +49,7 @@ Future<void> main(List<String> args) async {
   var packageRoot = Directory.current.path;
   var projectRoot = args.isNotEmpty
       ? args[0]
-      : p.normalize(p.join(packageRoot, '..', 'examples', 'example'));
+      : p.normalize(p.join(packageRoot, '..', 'fixtures', 'probe_app'));
   var flutterSdkRoot = p.normalize(
     p.join(p.dirname(Platform.resolvedExecutable), '..', '..', '..', '..'),
   );

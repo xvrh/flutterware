@@ -1,4 +1,4 @@
-# flutterware_example
+# flutterware_probes
 
 flutterware's fixture. It exists to be *looked at* by the tools in `app/` —
 the asset inspector, the launcher-icon viewer, the previews catalog, the

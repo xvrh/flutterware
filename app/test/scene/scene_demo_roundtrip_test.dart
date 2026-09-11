@@ -10,7 +10,7 @@ import 'package:flutterware_app/src/scene/scene_file.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
-  var dir = Directory(p.join('..', 'examples', 'example', 'demo'));
+  var dir = Directory(p.join('..', 'fixtures', 'probe_app', 'demo'));
   // The demos read their group's tokens — the libraries `demo/scenes.dart`
   // lists — read the way the studio reads them, declaration first.
   var scan = discoverPackage(dir.path);

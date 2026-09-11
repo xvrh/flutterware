@@ -52,7 +52,7 @@ String storeShotPath(
   String deviceClass = 'iphone-6-9',
 }) {
   var root = _find(
-    'build/flutterware/store/flutterware_example/unframed/'
+    'build/flutterware/store/flutterware_probes/unframed/'
     '$store/$deviceClass/${storeLocales[locale] ?? locale}/$shot.png',
   );
   return root?.path ?? '';
@@ -81,7 +81,7 @@ File? _find(String path) {
   for (var up = 0; up < 4; up++) {
     for (var candidate in [
       File('${directory.path}/$path'),
-      File('${directory.path}/examples/example/$path'),
+      File('${directory.path}/fixtures/probe_app/$path'),
     ]) {
       if (candidate.existsSync()) return candidate;
     }

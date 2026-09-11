@@ -16,7 +16,7 @@ import 'package:path/path.dart' as p;
 /// project owns the demos, the package config and the assets.
 ///
 /// ```sh
-/// cd app && dart run tool/catalog/probe_project.dart ../examples/example
+/// cd app && dart run tool/catalog/probe_project.dart ../fixtures/probe_app
 /// ```
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {

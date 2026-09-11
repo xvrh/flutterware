@@ -185,8 +185,10 @@ knob.
 
 ## Sequencing
 
-Four pull requests, each green on its own, in this order so the churn
-happens once and the demo is never broken in between.
+Five pull requests, each green on its own, in this order so the churn
+happens once and the demo is never broken in between. (Four were planned;
+the rename was split out of the third because 107 files move with it and a
+reviewer should see the deletions on their own first.)
 
 1. **Brewline joins the workspace; the export is tested.** Workspace member,
    publish script strips one line, CI clone-and-test step, override
@@ -197,12 +199,17 @@ happens once and the demo is never broken in between.
    `build_web.dart`, `recorded_project.dart`, `web_demo/`, the studio
    scenario and the README screenshot tooling point at it; the fixture is
    re-recorded. The largest of the four.
-3. **Example becomes the harness.** Shop remnants and spikes deleted,
-   harness scenarios rewritten off the shop, rename to
-   `fixtures/probe_app`, root manifest split between the two packages.
-4. **Polish.** The reel moves to brewline; whatever the recording made
-   visible on the web page gets fixed; the publication plan and the
-   fake-project spec are updated to describe the new layout.
+3. **Example becomes the harness.** Shop remnants deleted, harness
+   scenarios rewritten off the shop, the reel and the store panorama moved
+   to brewline, root manifest split between the two packages.
+4. **The rename.** `examples/example` → `fixtures/probe_app`, package
+   `flutterware_example` → `flutterware_probes`. The native projects keep
+   their product name: nothing reads a pubspec name from them, and a
+   pbxproj edit buys nothing.
+5. **Polish.** Whatever the recording made visible on the web page gets
+   fixed; the publication plan and the fake-project spec are updated to
+   describe the new layout; the spikes (`network_spike`, `drive_spike`) go
+   if nothing still needs them.
 
 ## Decisions (2026-09-11)
 

@@ -76,7 +76,7 @@ class DevbarBridge {
   /// `network`, then `network#2`, then `network#3`.
   ///
   /// The common case — one devbar — reads clean, and the multi-devbar case
-  /// (`examples/example/lib/multi_devbar_variables.dart` is one) cannot have
+  /// (`fixtures/probe_app/lib/multi_devbar_variables.dart` is one) cannot have
   /// the second instance silently replace the first's panel. A suffix rather
   /// than an index prefix, so the id an agent sees in the ordinary app is the
   /// id the plugin declared.

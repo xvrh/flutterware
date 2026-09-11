@@ -122,22 +122,19 @@ void main() {
     expect(loaded, isTrue);
   });
 
-  test(
-    'a decode that starts mid-settle is landed before the entry is judged',
-    () {
-      // The blind spot the audit shared with a scenario's capture: the harness
-      // turns the real event loop once, at boot, and a demo that holds a
-      // placeholder for half a second starts its load *after* that — on fake
-      // time, which the real loop never sees. Anything the load then reported —
-      // the whole point of an audit — arrived after the errors were read.
-      //
-      // Measured on `examples/example/demo/vector_smoke.dart`: with this entry
-      // shaped as a `VectorGraphic` pointing at an asset no build ships, the
-      // audit reported it clean, because the read that would have thrown never
-      // completed.
-      expect(decoded, isTrue);
-    },
-  );
+  test('a decode that starts mid-settle is landed before the entry is judged', () {
+    // The blind spot the audit shared with a scenario's capture: the harness
+    // turns the real event loop once, at boot, and a demo that holds a
+    // placeholder for half a second starts its load *after* that — on fake
+    // time, which the real loop never sees. Anything the load then reported —
+    // the whole point of an audit — arrived after the errors were read.
+    //
+    // Measured on `fixtures/probe_app/demo/vector_smoke.dart`: with this entry
+    // shaped as a `VectorGraphic` pointing at an asset no build ships, the
+    // audit reported it clean, because the read that would have thrown never
+    // completed.
+    expect(decoded, isTrue);
+  });
 
   test('a row says the harness ran out of clock, not that the entry leaks', () {
     expect(

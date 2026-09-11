@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutterware_example/main.dart';
+import 'package:flutterware_probes/main.dart';
 
 import 'src/seed.dart';
 

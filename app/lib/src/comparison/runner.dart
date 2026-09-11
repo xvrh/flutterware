@@ -35,7 +35,7 @@ abstract interface class ComparisonSide {
   /// Asked of the side rather than derived from the id, because an id is
   /// relative to its *package* and a checkout can hold several: in a
   /// workspace, `demo/buttons.dart#buttons` lives at
-  /// `examples/example/demo/buttons.dart`. Deriving it here made every entry
+  /// `fixtures/probe_app/demo/buttons.dart`. Deriving it here made every entry
   /// look like a missing file, which hashes the same on both sides — so a
   /// comparison of a genuinely changed preview skipped it and reported no
   /// change at all.

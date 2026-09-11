@@ -29,7 +29,7 @@ import 'package:path/path.dart' as p;
 /// A screenshot cannot see this, and neither can a smoke test that only proves
 /// the guest survived the message.
 ///
-/// Needs the previews in `examples/example/demo/input.dart`, whose field
+/// Needs the previews in `fixtures/probe_app/demo/input.dart`, whose field
 /// echoes its content as a `Text` — see `input_probe.dart`.
 ///
 /// Usage: `dart run tool/embedder/staging_probe.dart [projectRoot]`
@@ -37,7 +37,7 @@ Future<void> main(List<String> args) async {
   var packageRoot = Directory.current.path;
   var projectRoot = args.isNotEmpty
       ? args[0]
-      : p.normalize(p.join(packageRoot, '..', 'examples', 'example'));
+      : p.normalize(p.join(packageRoot, '..', 'fixtures', 'probe_app'));
   var flutterSdkRoot = p.normalize(
     p.join(p.dirname(Platform.resolvedExecutable), '..', '..', '..', '..'),
   );

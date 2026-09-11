@@ -77,7 +77,7 @@ void main() {
     var service = DependenciesService(
       PackageRef(
         AppContext(logger: LogClient.print()),
-        '../examples/example',
+        '../fixtures/probe_app',
         FlutterSdkPath('/tmp/flutter'),
       ),
       runProcess: (executable, arguments, {workingDirectory}) async =>
@@ -218,7 +218,7 @@ void main() {
   testWidgets('a declared package nothing references says so, carefully', (
     tester,
   ) async {
-    // `auto_size_text` is declared by examples/example and never imported —
+    // `auto_size_text` is declared by fixtures/probe_app and never imported —
     // the real case, not a synthetic one.
     await pumpDetail(tester, 'auto_size_text');
 

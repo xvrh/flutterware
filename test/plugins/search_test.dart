@@ -12,8 +12,8 @@ PluginReport _report() => PluginReport(
   children: const [
     PluginChild(id: 'app', label: 'app'),
     PluginChild(
-      id: 'examples/example',
-      label: 'examples/example',
+      id: 'fixtures/probe_app',
+      label: 'fixtures/probe_app',
       status: Status.warn('no entries'),
     ),
   ],
@@ -34,7 +34,7 @@ PluginReport _report() => PluginReport(
       ]),
       ViewSection('Diagnostics', [ViewText('demo/broken.dart: 1 error')]),
     ]),
-    ViewSection('examples/example', [
+    ViewSection('fixtures/probe_app', [
       ViewField('Entrypoint', 'demo/main.dart'),
       ViewTable(
         ['Package', 'Version'],
@@ -74,11 +74,11 @@ void main() {
     });
 
     test('a package, addressed one segment deeper', () {
-      var hits = searchReport(_report(), 'examples', worktree: 'main');
+      var hits = searchReport(_report(), 'fixtures', worktree: 'main');
       var package = hits.firstWhere((h) => h.reason == SearchReason.package);
 
-      expect(package.title, 'examples/example');
-      expect(package.address.segments, ['examples/example']);
+      expect(package.title, 'fixtures/probe_app');
+      expect(package.address.segments, ['fixtures/probe_app']);
       expect(package.subtitle, 'no entries', reason: 'the status comes along');
     });
 

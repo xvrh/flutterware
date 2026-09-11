@@ -545,7 +545,7 @@ class _Resolver {
   ///
   /// Not recursive, and that is Flutter's rule rather than a shortcut here:
   /// declaring `assets/` leaves `assets/icons/star.png` out of the bundle while
-  /// leaving it plainly visible on disk. `examples/example` carries a fixture
+  /// leaving it plainly visible on disk. `fixtures/probe_app` carries a fixture
   /// for it.
   void _addAsset(
     String packageRoot,
