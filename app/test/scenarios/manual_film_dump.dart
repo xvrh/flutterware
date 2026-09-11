@@ -7,7 +7,7 @@ import 'package:flutterware_app/src/scenarios/film_encode.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:path/path.dart' as p;
 
-/// Renders `examples/example`'s shop scenario as a **film** and leaves the mp4
+/// Renders `examples/brewline`'s shop scenario as a **film** and leaves the mp4
 /// and a still per beat where they can be looked at — the "did anybody watch
 /// it" check no assertion can make.
 ///
@@ -35,7 +35,7 @@ void main() {
     if (directory.existsSync()) directory.deleteSync(recursive: true);
 
     var runner = ScenarioRunner(
-      packageRoot: p.join(repoRoot, 'examples', 'example'),
+      packageRoot: p.join(repoRoot, 'examples', 'brewline'),
       directory: 'test/scenarios',
       flutterSdkRoot: Platform.environment['FLUTTER_ROOT']!,
     );

@@ -62,6 +62,11 @@ void main() => Flutterware.configure((fw) {
           app,
           catalogs: [
             TranslationCatalog(name: 'shop', files: 'assets/i18n/*.json'),
+            // The listing's headlines. A second catalog rather than more keys
+            // in the first: marketing copy is not UI, and a translator sent
+            // the shop's strings should not find `Tap. Pay. Collect.` among
+            // them.
+            TranslationCatalog(name: 'store', files: 'assets/store/*.json'),
           ],
         ),
       ],

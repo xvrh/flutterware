@@ -8,7 +8,7 @@ import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 import 'package:flutterware_example/model_view.dart' as v3d;
 import 'package:flutterware_example/scene3d_renderers.dart' as v3d;
-import 'package:flutterware_example/shop/shop_app.dart' as app;
+import 'package:flutterware_example/scene_widgets.dart' as app;
 import 'package:flutterware_example/shot_image.dart' as shots;
 
 import 'brand.tokens.dart';
@@ -19,7 +19,7 @@ final scenes = SceneGroup(
     ExternalWidget(
       'DrinkBadge',
       args: [const Arg<double>('size', 56)],
-      build: (a) => app.DrinkBadge(app.drinks[1], size: a.number('size') ?? 56),
+      build: (a) => app.Badge(glyph: '☕', size: a.number('size') ?? 56),
     ),
     ExternalWidget(
       'Spinner',
@@ -65,7 +65,7 @@ final scenes = SceneGroup(
         const Arg<String>('label', 'Order now'),
         const Arg<ButtonStyle>('style'),
       ],
-      build: (a) => app.OrderButton(
+      build: (a) => app.CtaButton(
         label: a.text('label') ?? 'Order now',
         style: a.raw('style') as ButtonStyle?,
       ),
