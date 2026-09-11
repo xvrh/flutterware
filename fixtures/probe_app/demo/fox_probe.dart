@@ -7,7 +7,7 @@
 // motion drives them.
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
-import 'package:flutterware_example/model_view.dart';
+import 'package:flutterware_probes/model_view.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/previews/playhead.dart';
 

@@ -24,7 +24,7 @@ import 'shell.dart';
 /// One variant is missing and cannot be here: a font that renders. A real
 /// specimen needs real font bytes, and the app bundles none — so the font entry
 /// below exercises the *failure* path, and the working one is verified by
-/// running the app against `examples/example`, which ships two weights of
+/// running the app against `fixtures/probe_app`, which ships two weights of
 /// Roboto for exactly this.
 
 @Preview(name: 'List', group: 'Asset inspector', wrapper: wrapInApp)
@@ -451,7 +451,7 @@ final _problems = [
   ),
 ];
 
-/// The 48×48 fixture from `examples/example`, inline so the demo needs no file.
+/// The 48×48 fixture from `fixtures/probe_app`, inline so the demo needs no file.
 final _png = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAIAAADYYG7QAAAARklEQVR42u3YMQ0AIAwAwepgI/hE'
   'Ro1ioB5YoMklL+Dmj7H2VwVQa9DM8yQgICAgICAgICAgICAgICAgICAgICAgJx/osgK8LWl1SxSv'

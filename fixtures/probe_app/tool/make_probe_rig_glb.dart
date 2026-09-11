@@ -14,7 +14,7 @@
 //
 // glTF is right-handed with +Y up and +Z toward the viewer; flutter_scene's
 // importer flips Z under a handedness root, so the +Z face here faces the
-// engine's default camera. Run from `examples/example`:
+// engine's default camera. Run from `fixtures/probe_app`:
 //
 //     fvm dart run tool/make_probe_rig_glb.dart
 import 'dart:convert';

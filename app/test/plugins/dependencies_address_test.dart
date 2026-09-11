@@ -13,7 +13,7 @@ void main() {
       const DependencyPlace('app'),
       const DependencyPlace('app', dependency: 'collection'),
       const DependencyPlace('app', upgrade: true),
-      const DependencyPlace('examples/example', dependency: 'flutter_lints'),
+      const DependencyPlace('fixtures/probe_app', dependency: 'flutter_lints'),
     ];
 
     for (var place in places) {
@@ -52,8 +52,8 @@ void main() {
     });
 
     test('a package path keeps its slashes, as one segment', () {
-      expect(dependencySegments('examples/example', dependency: 'meta'), [
-        'examples/example',
+      expect(dependencySegments('fixtures/probe_app', dependency: 'meta'), [
+        'fixtures/probe_app',
         'packages',
         'meta',
       ]);

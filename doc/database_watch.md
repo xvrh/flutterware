@@ -15,7 +15,7 @@ you wire it to whatever database library you use and own those five lines.
 
 `PowerSyncDatabase` implements sqlite_async's interface, so the same lines
 cover both. A live version is
-[`examples/example/lib/devbar_example.dart`](../examples/example/lib/devbar_example.dart).
+[`fixtures/probe_app/lib/devbar_example.dart`](../fixtures/probe_app/lib/devbar_example.dart).
 
 ```dart
 import 'package:flutterware/devbar.dart';

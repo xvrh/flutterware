@@ -22,7 +22,7 @@ import 'package:test/test.dart';
 /// and this is the only check that can see it, because it needs a real guest
 /// decoding a real file behind a real capture.
 ///
-/// The subject is `examples/example`'s `asset_smoke` demo, whose fixture
+/// The subject is `fixtures/probe_app`'s `asset_smoke` demo, whose fixture
 /// images are flat Material blue (`#2196F3`) — a colour the demo's text,
 /// chrome and background never use, so "the images arrived" is countable as
 /// "the capture has thousands of pixels of it".
@@ -30,7 +30,7 @@ void main() {
   test('a capture of asset_smoke contains its images', () async {
     var appRoot = Directory.current.path;
     var repoRoot = p.dirname(appRoot);
-    var exampleRoot = p.join(repoRoot, 'examples', 'example');
+    var exampleRoot = p.join(repoRoot, 'fixtures', 'probe_app');
     var cache = FlutterCache.fromRunningSdk();
     var dartExecutable = p.join(cache.flutterRoot, 'bin', 'dart');
     var config = DaemonConfig(

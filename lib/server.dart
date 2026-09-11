@@ -6,7 +6,7 @@
 /// inert in release builds and on machines without flutterware. Adapters for
 /// shelf, SQL
 /// drivers and `package:logging` are copy-paste snippets over these
-/// primitives; see the design doc and `examples/example/bin/example_server.dart`.
+/// primitives; see the design doc and `fixtures/probe_app/bin/example_server.dart`.
 ///
 /// The attacher side — [scanServerHandles], [attachToServer],
 /// [ServerAttachClient] — is what the GUI, `fw` and MCP read a live server

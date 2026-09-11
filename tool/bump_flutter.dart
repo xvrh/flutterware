@@ -40,7 +40,7 @@ const _releaseIndex =
 
 /// Only the pubspecs that reach a user carry the promise.
 ///
-/// `examples/example` is excluded on purpose: `.pubignore` keeps `examples/`
+/// `fixtures/probe_app` is excluded on purpose: `.pubignore` keeps `fixtures/`
 /// out of the archive, so its floor is nobody's promise, and it records a real
 /// requirement of its own (dot shorthands, Dart 3.10) that a workspace-wide
 /// rewrite would flatten. [_check] still holds it to being satisfiable, and
@@ -107,7 +107,7 @@ int _check(Directory root) {
 
   for (var relative in [
     ..._shipping,
-    'examples/example/pubspec.yaml',
+    'fixtures/probe_app/pubspec.yaml',
     'examples/brewline/pubspec.yaml',
   ]) {
     var file = File(p.join(root.path, relative));

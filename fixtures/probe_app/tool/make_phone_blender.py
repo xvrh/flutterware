@@ -3,7 +3,7 @@
 # `make_probe_rig_blender.py` builds a *probe* — a box with a lid, whose job is
 # to answer questions about the pipeline. This builds the thing a listing
 # actually shows: a phone with rounded corners, a camera bump and a screen a
-# scene binds a screenshot to. Run headless, from `examples/example`:
+# scene binds a screenshot to. Run headless, from `fixtures/probe_app`:
 #
 #     /Applications/Blender.app/Contents/MacOS/Blender --background \
 #         --python tool/make_phone_blender.py

@@ -14,7 +14,7 @@ import '../ui/theme.dart';
 /// long enough label leaves the status nothing, and nothing does not read as
 /// "no status", it reads as a row that lost one. With one set any higher, the
 /// status stops yielding and starts competing, which is the arrangement that
-/// truncated `examples/example` down to `examples/…`.
+/// truncated `fixtures/probe_app` down to `examples/…`.
 const _statusFloor = 48.0;
 
 /// How a row [available] wide — [reserved] of it already spoken for by the

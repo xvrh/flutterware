@@ -212,10 +212,10 @@ void main() {
   test('start opens the worktree the launch directory is inside', () async {
     var shell = _controller();
     // The repro: `dart run flutterware` in a nested project of a *linked*
-    // worktree. `examples/example` equals no worktree path, and matching by
+    // worktree. `fixtures/probe_app` equals no worktree path, and matching by
     // equality opened the main checkout — a plausible-looking window onto
     // somebody else's branch.
-    await shell.start('/repo-explorer/examples/example');
+    await shell.start('/repo-explorer/fixtures/probe_app');
 
     expect(shell.openWorktrees.map((w) => w.branch), ['feature/explorer']);
     expect(shell.launchFallback, isNull);
@@ -310,18 +310,18 @@ void main() {
     };
 
     test('rather than to whichever one sorts first', () async {
-      var shell = _controller(cores: coresWith(['app', 'examples/example']));
+      var shell = _controller(cores: coresWith(['app', 'fixtures/probe_app']));
       await shell.start('/repo');
 
-      shell.selectChild('a.one', 'examples/example');
+      shell.selectChild('a.one', 'fixtures/probe_app');
       shell.selectPlugin('a.two');
       shell.selectPlugin('a.one');
 
-      expect(shell.selectedChildId, 'examples/example');
+      expect(shell.selectedChildId, 'fixtures/probe_app');
     });
 
     test('and to the first one when you have never been', () async {
-      var shell = _controller(cores: coresWith(['app', 'examples/example']));
+      var shell = _controller(cores: coresWith(['app', 'fixtures/probe_app']));
       await shell.start('/repo');
 
       shell.selectPlugin('a.one');
@@ -333,7 +333,7 @@ void main() {
       // The remembered id is checked against what the plugin says *now*, which
       // is what keeps a package a config edit removed — or one an address
       // simply made up — from becoming a rail link to nowhere.
-      var shell = _controller(cores: coresWith(['app', 'examples/example']));
+      var shell = _controller(cores: coresWith(['app', 'fixtures/probe_app']));
       await shell.start('/repo');
 
       shell.selectChild('a.one', 'packages/gone');

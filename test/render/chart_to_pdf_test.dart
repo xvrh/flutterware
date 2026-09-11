@@ -28,9 +28,9 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    var roboto = File('examples/example/assets/fonts/Roboto-Regular.ttf')
+    var roboto = File('fixtures/probe_app/assets/fonts/Roboto-Regular.ttf')
         .readAsBytesSync();
-    var robotoBold = File('examples/example/assets/fonts/Roboto-Bold.ttf')
+    var robotoBold = File('fixtures/probe_app/assets/fonts/Roboto-Bold.ttf')
         .readAsBytesSync();
     await tester.runAsync(
       () =>

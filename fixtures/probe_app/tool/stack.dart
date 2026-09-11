@@ -30,7 +30,7 @@ const _base = 'http://localhost:$_port';
 
 /// State and logs live under `.dart_tool/`, which is already ignored and
 /// already the directory a Dart project throws away when it wants a clean one.
-const _dir = '.dart_tool/flutterware_example_stack';
+const _dir = '.dart_tool/flutterware_probes_stack';
 
 final _stateFile = File('$_dir/state.json');
 final _logFile = File('$_dir/server.log');

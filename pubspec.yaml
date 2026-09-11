@@ -12,7 +12,7 @@ environment:
 
 workspace:
   - app
-  - examples/example
+  - fixtures/probe_app
   - examples/brewline
   - web_demo
 

@@ -700,7 +700,7 @@ class ReviewIndexRow extends StatelessWidget {
                       // beside the name it used to share the squeeze with it,
                       // and once a clock and a drift dot joined the line, a
                       // 320 px column ellipsised *both* — leaving
-                      // `example_server.da…` next to `examples/example…`, which
+                      // `example_server.da…` next to `fixtures/probe_app…`, which
                       // is two half-truths where the point was to keep one
                       // whole one. `name:line` is what tells two rows apart;
                       // the whole path is a hover away, and the quoted line

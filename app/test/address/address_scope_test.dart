@@ -113,9 +113,9 @@ void main() {
       AddressHandle(
         AddressView(_catalog()),
         (a) => written = a,
-      ).setSegments(['examples/example']);
+      ).setSegments(['fixtures/probe_app']);
 
-      expect(written!.segments, ['examples/example']);
+      expect(written!.segments, ['fixtures/probe_app']);
     });
 
     test('a namespace can be emptied, which is how a lifetime ends', () {

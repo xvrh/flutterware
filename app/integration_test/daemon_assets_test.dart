@@ -22,7 +22,7 @@ import 'package:test/test.dart';
 /// `asset_refresh_test.dart`, which is where the GPU is.
 ///
 /// **Its subject is a project of its own**, built below rather than borrowed.
-/// This used to catalog `examples/example`, and so hashed to the same
+/// This used to catalog `fixtures/probe_app`, and so hashed to the same
 /// [DaemonAddress] as the second-project tests in `compiler_daemon_test.dart`
 /// — which is the daemon working as designed, one process per catalog however
 /// many clients want it. But `dart test` runs the two files at once, and one
@@ -45,7 +45,7 @@ void main() {
 
   setUpAll(() async {
     var appRoot = Directory.current.path;
-    var exampleRoot = p.join(p.dirname(appRoot), 'examples', 'example');
+    var exampleRoot = p.join(p.dirname(appRoot), 'fixtures', 'probe_app');
     var cache = FlutterCache.fromRunningSdk();
     dartExecutable = p.join(cache.flutterRoot, 'bin', 'dart');
 

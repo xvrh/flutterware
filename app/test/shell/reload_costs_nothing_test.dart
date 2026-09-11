@@ -26,12 +26,12 @@ import 'package:flutterware_app/src/utils/flutter_sdk.dart';
 /// reused.
 String _manifest({String depsDir = 'app'}) =>
     '{"version":1,'
-    '"packages":[{"path":"."},{"path":"app"},{"path":"examples/example"}],'
+    '"packages":[{"path":"."},{"path":"app"},{"path":"fixtures/probe_app"}],'
     '"plugins":['
     '{"id":"flutterware.dependencies","label":"Dependencies",'
     '"config":{"packages":[{"path":"$depsDir"}]}},'
     '{"id":"flutterware.previews","label":"Previews",'
-    '"config":{"packages":[{"path":"examples/example"}]}}'
+    '"config":{"packages":[{"path":"fixtures/probe_app"}]}}'
     ']}';
 
 class _StubLoader implements ManifestLoader {
@@ -111,7 +111,7 @@ void main() {
     var worktree = shell.selected!;
     var before = shell.sessionFor(worktree)!.plugins.first;
 
-    loader.manifest = _manifest(depsDir: 'examples/example');
+    loader.manifest = _manifest(depsDir: 'fixtures/probe_app');
     await shell.reloadConfig();
 
     expect(

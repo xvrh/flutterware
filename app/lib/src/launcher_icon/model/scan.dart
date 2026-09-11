@@ -229,7 +229,7 @@ class IconScan {
 
   Map<String, Object?> toJson() => _$IconScanToJson(this);
 
-  /// Workspace-relative — `.`, `examples/example`.
+  /// Workspace-relative — `.`, `fixtures/probe_app`.
   final String packagePath;
 
   /// The flavor this scan read, or null for the default.

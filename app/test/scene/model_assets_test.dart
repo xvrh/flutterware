@@ -9,7 +9,7 @@ import 'package:path/path.dart' as p;
 /// tables alone.
 void main() {
   var packageRoot = p.normalize(
-    p.join(Directory.current.path, '..', 'examples', 'example'),
+    p.join(Directory.current.path, '..', 'fixtures', 'probe_app'),
   );
 
   test('the Blender rig names its three meshes and its one clip', () {

@@ -6,7 +6,7 @@ import 'package:path/path.dart' as p;
 ///
 /// Walking up rather than looking in [packageRoot] is not a convenience: in a
 /// pub **workspace** only the root has a `.dart_tool/`, so a member package —
-/// `examples/example` here — has no config of its own and resolving from its
+/// `fixtures/probe_app` here — has no config of its own and resolving from its
 /// own directory finds nothing.
 ///
 /// The config the catalog needs is whichever one resolves *all three* of

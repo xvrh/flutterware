@@ -6,10 +6,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
-import 'package:flutterware_example/model_view.dart' as v3d;
-import 'package:flutterware_example/scene3d_renderers.dart' as v3d;
-import 'package:flutterware_example/scene_widgets.dart' as app;
-import 'package:flutterware_example/shot_image.dart' as shots;
+import 'package:flutterware_probes/model_view.dart' as v3d;
+import 'package:flutterware_probes/scene3d_renderers.dart' as v3d;
+import 'package:flutterware_probes/scene_widgets.dart' as app;
+import 'package:flutterware_probes/shot_image.dart' as shots;
 
 import 'brand.tokens.dart';
 

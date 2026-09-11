@@ -27,13 +27,13 @@ void main() {
     }
 
     test('and so does a package path containing slashes', () {
-      var segments = assetSegments('examples/example', 'assets/logo.png');
+      var segments = assetSegments('fixtures/probe_app', 'assets/logo.png');
       // The package is one segment; only the key is spread, so the two cannot
       // run together and be read back wrong.
-      expect(segments, ['examples/example', 'assets', 'logo.png']);
+      expect(segments, ['fixtures/probe_app', 'assets', 'logo.png']);
       expect(
         assetPlace(segments),
-        AssetPlace('examples/example', assetKey: 'assets/logo.png'),
+        AssetPlace('fixtures/probe_app', assetKey: 'assets/logo.png'),
       );
     });
   });
@@ -60,7 +60,7 @@ void main() {
     var address = Address(
       worktree: 'main',
       plugin: 'flutterware.assets',
-      segments: assetSegments('examples/example', 'assets/images/logo.png'),
+      segments: assetSegments('fixtures/probe_app', 'assets/images/logo.png'),
       axes: {'density': '3.0x'},
     );
 
@@ -68,7 +68,7 @@ void main() {
 
     expect(
       assetPlace(parsed.segments),
-      AssetPlace('examples/example', assetKey: 'assets/images/logo.png'),
+      AssetPlace('fixtures/probe_app', assetKey: 'assets/images/logo.png'),
     );
     // The axes are applied state, not identity: the same asset at another
     // density is the same asset.

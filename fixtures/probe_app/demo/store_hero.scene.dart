@@ -15,8 +15,8 @@ class StoreHero({
   final String headline = 'Your coffee,\nready before you are',
   final String subtitle = 'Order ahead. Skip the line. Earn rewards.',
   final String cta = 'Get the app',
-  final String shotFront = 'build/flutterware/store/flutterware_example/unframed/app-store/iphone-6-9/en-US/01-welcome.png',
-  final String shotBack = 'build/flutterware/store/flutterware_example/unframed/app-store/iphone-6-9/en-US/02-menu.png',
+  final String shotFront = 'build/flutterware/store/flutterware_probes/unframed/app-store/iphone-6-9/en-US/01-welcome.png',
+  final String shotBack = 'build/flutterware/store/flutterware_probes/unframed/app-store/iphone-6-9/en-US/02-menu.png',
   final SceneTokens tokens = const SceneTokens(),
 }) extends SceneDefinition {
   late final glow = ShapeNode(

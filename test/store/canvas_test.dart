@@ -124,7 +124,7 @@ void main() {
 
     test('carries the app through the config whole', () {
       var app = const StoreShotsApp(
-        Pkg('examples/example'),
+        Pkg('fixtures/probe_app'),
         name: 'shop',
         listings: [
           Listing.appStore(locales: {'en': 'en-US'}),
@@ -132,7 +132,7 @@ void main() {
         file: 'test/store/listing_test.dart',
       );
       var read = StoreShotsApp.fromJson(app.toJson());
-      expect(read.path, 'examples/example');
+      expect(read.path, 'fixtures/probe_app');
       expect(read.name, 'shop');
       expect(read.file, 'test/store/listing_test.dart');
       expect(read.layout, StoreLayout.fastlane);

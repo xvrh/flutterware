@@ -19,7 +19,7 @@ import '../../launcher_icon/model/role.dart';
 class IconPlace {
   const IconPlace(this.package, {this.flavor, this.role, this.mask});
 
-  /// The workspace-relative package path — `.`, `examples/example`.
+  /// The workspace-relative package path — `.`, `fixtures/probe_app`.
   final String package;
 
   /// Which Android source set (`android/app/src/<flavor>/`), or null for the

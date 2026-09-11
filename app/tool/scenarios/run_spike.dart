@@ -23,7 +23,7 @@ Future<void> main(List<String> args) async {
 
   var packageRoot = p.dirname(p.dirname(p.dirname(p.fromUri(Platform.script))));
   var repoRoot = p.dirname(packageRoot);
-  var exampleDir = p.join(repoRoot, 'examples', 'example');
+  var exampleDir = p.join(repoRoot, 'fixtures', 'probe_app');
   var cache = FlutterCache.fromRunningSdk();
 
   var buildDir = p.join(packageRoot, 'build', 'scenarios');
@@ -43,7 +43,7 @@ Future<void> main(List<String> args) async {
   if (out.existsSync()) out.deleteSync(recursive: true);
   out.createSync(recursive: true);
 
-  // The asset bundle comes from examples/example — a real project with real
+  // The asset bundle comes from fixtures/probe_app — a real project with real
   // fonts (two Roboto weights) and uses-material-design, so FontManifest.json
   // is the honest input. Slow, changes rarely, cached.
   await _ensureAssetBundle(

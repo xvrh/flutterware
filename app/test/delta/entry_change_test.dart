@@ -326,8 +326,8 @@ void main() {
       expect(worktreeRelative('app/', 'demo/a.dart'), 'app/demo/a.dart');
       expect(worktreeRelative('app', 'demo/a.dart'), 'app/demo/a.dart');
       expect(
-        worktreeRelative('examples/example', 'test/s.dart'),
-        'examples/example/test/s.dart',
+        worktreeRelative('fixtures/probe_app', 'test/s.dart'),
+        'fixtures/probe_app/test/s.dart',
       );
     },
   );

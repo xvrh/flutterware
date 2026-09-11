@@ -5,7 +5,7 @@ import 'package:flutterware_app/src/scenarios/axes.dart';
 import 'package:flutterware_app/src/scenarios/runner.dart';
 import 'package:path/path.dart' as p;
 
-/// Records `examples/example`'s scenarios with motion and leaves the artifacts
+/// Records `fixtures/probe_app`'s scenarios with motion and leaves the artifacts
 /// where they can be looked at — the "did anybody watch it run" check that a
 /// green assertion cannot make.
 ///
@@ -24,7 +24,7 @@ void main() {
     if (directory.existsSync()) directory.deleteSync(recursive: true);
 
     var runner = ScenarioRunner(
-      packageRoot: p.join(repoRoot, 'examples', 'example'),
+      packageRoot: p.join(repoRoot, 'fixtures', 'probe_app'),
       directory: 'test/scenarios',
       flutterSdkRoot: Platform.environment['FLUTTER_ROOT']!,
     );

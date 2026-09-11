@@ -101,7 +101,7 @@ class _CaseState extends State<_Case> {
         onOptions: (options) => setState(() => _options = options),
         command: scenarioVideoCommand(
           pluginId: 'flutterware.scenarios',
-          package: 'examples/example',
+          package: 'fixtures/probe_app',
           file: 'test/scenarios/mobile/shop_test.dart',
           scenario: 'Order a cappuccino',
           nameThePackage: true,

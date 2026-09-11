@@ -75,7 +75,7 @@ class SessionComparisonEnvironment implements ComparisonEnvironment {
   final String appToolDirectory;
 
   /// The repository top level, which is what a base checkout mirrors. **Not
-  /// the package directory**: a comparison run from inside `examples/example`
+  /// the package directory**: a comparison run from inside `fixtures/probe_app`
   /// reported every entry as added until this was the checkout root.
   final String topLevel;
 

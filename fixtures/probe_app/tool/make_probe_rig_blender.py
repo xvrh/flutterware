@@ -5,7 +5,7 @@
 # its default UVs, an action named `Open` — and lets the exporter decide how
 # names, axes, UVs and clips come out. That output is what a modeller's file
 # looks like, and the walk test over it is what makes the surface convention
-# real. Run headless, from `examples/example`:
+# real. Run headless, from `fixtures/probe_app`:
 #
 #     /Applications/Blender.app/Contents/MacOS/Blender --background \
 #         --python tool/make_probe_rig_blender.py

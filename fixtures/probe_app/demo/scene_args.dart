@@ -546,8 +546,8 @@ class StoreHeroArgs extends SceneRefArgs {
     this.headline = 'Your coffee,\nready before you are',
     this.subtitle = 'Order ahead. Skip the line. Earn rewards.',
     this.cta = 'Get the app',
-    this.shotFront = 'build/flutterware/store/flutterware_example/unframed/app-store/iphone-6-9/en-US/01-welcome.png',
-    this.shotBack = 'build/flutterware/store/flutterware_example/unframed/app-store/iphone-6-9/en-US/02-menu.png',
+    this.shotFront = 'build/flutterware/store/flutterware_probes/unframed/app-store/iphone-6-9/en-US/01-welcome.png',
+    this.shotBack = 'build/flutterware/store/flutterware_probes/unframed/app-store/iphone-6-9/en-US/02-menu.png',
     this.tokens = const SceneTokens(),
   });
 

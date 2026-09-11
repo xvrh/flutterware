@@ -55,7 +55,7 @@ Widget sidebarRowStates() => const _Rail(
     _Labelled(
       'with a status',
       SidebarChildRow(
-        label: 'examples/example',
+        label: 'fixtures/probe_app',
         status: Status.info('building'),
         selected: false,
         onTap: _noop,
@@ -64,7 +64,7 @@ Widget sidebarRowStates() => const _Rail(
     _Labelled(
       'selected — the ⋮ stays without the pointer',
       _WithCommands(
-        label: 'examples/example',
+        label: 'fixtures/probe_app',
         status: Status.info('building'),
         selected: true,
       ),
@@ -104,7 +104,7 @@ Widget sidebarRowStates() => const _Rail(
             selected: true,
           ),
           _WithCommands(
-            label: 'examples/example',
+            label: 'fixtures/probe_app',
             status: Status.warn('10 assets · 347 kB · 2 problems'),
             selected: true,
           ),
@@ -129,7 +129,7 @@ Widget sidebarRowStates() => const _Rail(
             onTap: _noop,
           ),
           SidebarChildRow(
-            label: 'examples/example',
+            label: 'fixtures/probe_app',
             status: Status.info('reloading 3 files…'),
             selected: false,
             onTap: _noop,

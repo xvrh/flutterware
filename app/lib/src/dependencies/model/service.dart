@@ -191,7 +191,7 @@ class NotOnPubDev implements Exception {
 /// Per-member, deliberately. `pub deps` reports a workspace-wide
 /// `kind` that folds every member's answer into one value, so a package that is
 /// direct for `app` reads as direct while you are looking at
-/// `examples/example`, which may not depend on it at all.
+/// `fixtures/probe_app`, which may not depend on it at all.
 enum DependencyKind {
   /// In this package's `dependencies:`.
   direct,
@@ -208,7 +208,7 @@ enum DependencyKind {
 /// In a workspace the resolution is shared: `pub deps` reports 174 packages and
 /// three roots for this repo whichever member you run it in. Everything here is
 /// filtered down to the subgraph reachable from one member, because the
-/// alternative — which is what shipped — is `examples/example` claiming its
+/// alternative — which is what shipped — is `fixtures/probe_app` claiming its
 /// siblings' dependencies as its own and reporting 170 direct, 0 transitive
 /// where the answer is 14 and 4.
 class Dependencies implements Disposable {

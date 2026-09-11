@@ -12,7 +12,7 @@
 /// and never edited directly — anything committed over there is lost on the
 /// next run, which is what `--delete` below means.
 ///
-/// The alternative was curating `examples/example` on the way out. It was
+/// The alternative was curating `fixtures/probe_app` on the way out. It was
 /// rejected: that package is flutterware's fixture, and most of its previews
 /// are engine probes (`gpu_smoke`, `fox_probe`, `model_probe`) that would give
 /// a stranger a debug harness as their first impression. A demo is a different
