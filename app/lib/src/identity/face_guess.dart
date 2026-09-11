@@ -71,11 +71,20 @@ import 'stock_icons.dart';
         icon: best,
         dressed: dressed,
         platforms: platforms,
-        // A demo inside a package is never the repository's app, however well
-        // dressed — both monorepos tested had one that would otherwise rank.
+        // A demo or a fixture inside a package is never the repository's app,
+        // however well dressed — both monorepos tested had one that would
+        // otherwise rank, and this one's fixture wears a painted icon.
         demo: p
             .split(relative)
-            .any((s) => s == 'example' || s == 'examples' || s == 'demo'),
+            .any(
+              (s) => const {
+                'example',
+                'examples',
+                'demo',
+                'fixture',
+                'fixtures',
+              }.contains(s),
+            ),
       ),
     );
   }
