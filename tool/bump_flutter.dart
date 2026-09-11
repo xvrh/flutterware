@@ -43,7 +43,8 @@ const _releaseIndex =
 /// `examples/example` is excluded on purpose: `.pubignore` keeps `examples/`
 /// out of the archive, so its floor is nobody's promise, and it records a real
 /// requirement of its own (dot shorthands, Dart 3.10) that a workspace-wide
-/// rewrite would flatten. [_check] still holds it to being satisfiable.
+/// rewrite would flatten. [_check] still holds it to being satisfiable, and
+/// `examples/brewline` with it: the demo's floor is a stranger's, not ours.
 const _shipping = ['pubspec.yaml', 'app/pubspec.yaml'];
 
 Future<void> main(List<String> args) async {
@@ -104,7 +105,11 @@ int _check(Directory root) {
   var release = _Release.ofPin(root);
   var problems = <String>[];
 
-  for (var relative in [..._shipping, 'examples/example/pubspec.yaml']) {
+  for (var relative in [
+    ..._shipping,
+    'examples/example/pubspec.yaml',
+    'examples/brewline/pubspec.yaml',
+  ]) {
     var file = File(p.join(root.path, relative));
     var environment =
         (loadYaml(file.readAsStringSync()) as YamlMap)['environment']

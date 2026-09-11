@@ -204,15 +204,12 @@ happens once and the demo is never broken in between.
    visible on the web page gets fixed; the publication plan and the
    fake-project spec are updated to describe the new layout.
 
-## Open decisions
+## Decisions (2026-09-11)
 
-- **Harness path and package name.** `fixtures/probe_app` and
-  `flutterware_probes` are proposals. Keeping the path and renaming only the
-  package is less churn but leaves a fixture under `examples/`.
-- **The receipt attachment.** Text instead of `pdf` keeps brewline at three
-  dependencies. If the PDF is the point, `pdf` comes along.
-- **The one flavor.** `kiosk` is a coffee-shop story; any single flavor
-  serves the panel equally.
+- **Harness path and package name:** `fixtures/probe_app`,
+  `flutterware_probes`.
+- **The receipt attachment** stays a PDF; `pdf` comes along to brewline.
+- **The one flavor:** `kiosk`.
 - **Recording source.** From `examples/brewline` in the checkout, not from
   the clone under `build/`: paths are re-rooted to `/recording` either way,
   and the CI recording check re-records from the source tree.

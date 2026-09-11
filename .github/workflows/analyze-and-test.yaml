@@ -46,18 +46,6 @@ jobs:
       # other half, a floor lower than what the code needs, is a claim only
       # running an older SDK could disprove, and nothing here does.
       - run: dart tool/bump_flutter.dart --check
-      # `examples/brewline` is not a workspace member: it is the demo a stranger
-      # clones, so its pubspec names the published `flutterware`. Analyzed here
-      # against this checkout instead — the code under review is what the
-      # demo's snippets have to compile against, published or not — through
-      # the same gitignored override a laptop writes (see CLAUDE.md). Without
-      # it `flutter analyze` walks into an unresolved package and reports its
-      # every import as an error.
-      - name: Resolve the demo app against this checkout
-        working-directory: examples/brewline
-        run: |
-          printf 'dependency_overrides:\n  flutterware:\n    path: ../..\n' > pubspec_overrides.yaml
-          flutter pub get
       - run: flutter analyze
       - run: flutter test
         working-directory: app
@@ -191,6 +179,43 @@ jobs:
             exit 1
           fi
           echo "pana: $granted/$max"
+
+  demo_export:
+    name: Demo export
+    # `examples/brewline` is the demo a stranger clones. It is a workspace
+    # member here, which is what lets the root resolve it against this
+    # checkout, and `tool/publish_example.dart` projects its tracked tree to a
+    # repository of its own with the one workspace line removed. This job is
+    # the only thing that proves the projection stands on its own: it resolves,
+    # analyzes and runs its tests from the clone the script stages, not from
+    # the checkout. The override is the clone's, never the demo's — the code
+    # under review is what its snippets have to compile against, published or
+    # not.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Read the pinned Flutter version
+        id: pin
+        run: |
+          version="$(sed -n 's/.*"flutter"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' .fvmrc)"
+          if [ -z "$version" ]; then echo "::error::.fvmrc names no Flutter version"; exit 1; fi
+          case "$version" in *-*) channel=beta ;; *) channel=stable ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ steps.pin.outputs.version }}
+          channel: ${{ steps.pin.outputs.channel }}
+      - run: flutter pub get
+      - name: Stage the projection
+        run: dart tool/publish_example.dart --dry-run
+      - name: The clone resolves, analyzes and tests on its own
+        working-directory: build/flutterware_example
+        run: |
+          printf 'dependency_overrides:\n  flutterware:\n    path: ../..\n' > pubspec_overrides.yaml
+          flutter pub get
+          flutter analyze
+          flutter test
 
   previews_audit_linux:
     name: Previews audit on Linux
