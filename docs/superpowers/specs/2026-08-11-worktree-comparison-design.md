@@ -724,6 +724,19 @@ checkouts *before* rendering anything, and refuse with both versions named. This
 is a real gap and it is accepted deliberately: it gets revisited when `fw`
 handles SDK management.
 
+**Reversed twice since; what holds on 2026-09-11.** The refusal went when
+flutterware stopped discovering SDKs — a detector that resolved one from the
+base's pin was discovery by another name — and for a while a cross-version
+comparison ran unwarned. It now runs *and says so*: `SdkPin` reads each
+checkout's pin as text, never to choose an SDK, and the verdict carries a
+caveat naming both pins and the SDK that drew both sides. The same verdict
+field carries the sibling skew this section did not foresee: the base is
+captured by the base's own `package:flutterware`, so a bump to it changes how
+widget trees are *read*. `GuestInspector.treeFormat` stamps each tree, and
+tree differences between two formats are carried without counting — measured
+on a consumer's bump that touched only docs and the pubspec, 109 rows had
+been reported changed with not one pixel moved.
+
 ## 12. Build order
 
 1. ✅ **Derived step labels** (§7a) — `c7bb9d9c`. Independent, improves four

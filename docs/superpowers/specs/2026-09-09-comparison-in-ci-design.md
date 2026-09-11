@@ -119,7 +119,8 @@ checkout does not have — a restored one is a directory git does not believe in
 The doc says so now, because it is exactly the optimisation somebody reads this
 section and tries.
 
-**(c) Scenario frames are not content-addressed.** `ScenariosRunner` takes a
+**(c) ✅ Scenario frames are not content-addressed** (built 2026-09-11 — see
+§4). `ScenariosRunner` takes a
 `ShotCache` and uses it for `cache.memo` — the closure memo — and nothing else.
 It never reads or writes a frame. So the base side of every scenario is
 replayed on every comparison, even though it is a pure function of (base sha,
@@ -459,3 +460,26 @@ underlying cause turns out to be.
 Deliberately not scheduled: caching scenario frames by `ShotKey` (§1b c). It is
 right, but with (1) landed the base harness mostly does not start at all, and
 the remaining win should be measured before it is built.
+
+**Measured by a consumer, and built 2026-09-11.** On a second push with
+identical inputs, the previews half came from the store (0 rendered, 8.5s
+against 119s) and all 135 scenarios replayed on both sides — 262s, the whole
+cost of a run with findings. The build differs from (c) as written in three
+ways worth knowing:
+
+- **The unit is a side's replay, not a frame.** `ReplayStore` files one
+  scenario's step list under a key per side, taken over *that* side's closure
+  (the base graph for the base, as previews already did), and each step's
+  frame and tree as ordinary shots beneath it. A list whose frames were swept
+  reads as absent and the side replays.
+- **The scan gate answers a fully filed plan too.** When every scenario the
+  change needs is filed on both sides, no harness starts — the second-push
+  case costs a plan. When anything must replay, both harnesses are still
+  listed live, as (a) requires; only the missing sides replay.
+- **Two replays are never filed:** one the harness abandoned, and one whose
+  requests reached a live network (read off the `answered` the funnel puts on
+  each request's event; the app's own network logging carries none and says
+  nothing either way — counting it as live kept two of this repository's
+  scenarios replaying on every run). Everything else a replay reads is
+  in the key — the project's clock and network setting included, and the
+  committed network recording, which the skip rule could not see either.

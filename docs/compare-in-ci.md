@@ -156,9 +156,15 @@ to want to see. That is why the default is `all`.
 ## What to know before turning it on
 
 - **The two caches, and what each buys.** `~/.flutterware/shots` holds the
-  rendered pictures, content-addressed: without it a runner renders *both
-  sides of every entry, every run*, and with it the skip rule answers most
-  entries in milliseconds. `~/.flutterware/kernels` holds the **seed kernel** —
+  rendered pictures and the scenario replays, content-addressed: without it a
+  runner renders and replays *both sides of every row, every run*, and with it
+  a push whose inputs did not move replays nothing, and a base is replayed
+  once however many pull requests compare against it. A replay whose requests
+  went out to a live network, or one the harness gave up on, is never filed.
+  `fw compare` trims it at the end of every run — anything unread for two
+  weeks, then the oldest past 2GB — so a restored cache stays bounded without
+  a cleanup step of your own; so do the base checkouts and each checkout
+  path's comparison directory. `~/.flutterware/kernels` holds the **seed kernel** —
   a compiled kernel of the half of the program no checkout owns, the SDK and
   the pub cache — and it is what a cold harness compile starts from instead of
   starting from nothing. Measured on this repository, a scenario harness
@@ -170,6 +176,15 @@ to want to see. That is why the default is `all`.
   fresh CI checkout does not have, so a restored one is a directory git does
   not believe in. It is also disposable by design: it gets checked out again
   in seconds, and the pictures that took the time are in the shot cache.
+- **Both sides are rendered with the SDK you run `fw compare` under**, and the
+  base with its own `package:flutterware`. A branch that moves either compares
+  two instruments as well as two commits, and the verdict says so rather than
+  leaving you a guard to write: widget-tree differences between two versions
+  of flutterware's reader are listed but not counted, and a base whose
+  `.fvmrc` (or `.fvm/fvm_config.json`, or `.tool-versions`) pins a different
+  Flutter from this branch's gets a sentence saying its pixels may be the
+  SDK's. Both land under the comment's heading, on the page, and in
+  `index.json` as `caveats`.
 - **`fetch-depth: 0`.** The base is the merge base with the default branch; a
   shallow clone has no common commit and the compare refuses, naming the ref.
 - **The very first comment of a repository may briefly 404 its page link**:

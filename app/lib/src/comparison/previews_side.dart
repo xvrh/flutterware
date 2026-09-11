@@ -176,13 +176,15 @@ class PreviewsSide implements ComparisonSide {
             failed[row.id] = row.failure ?? 'did not render';
             return;
           }
+          var tree = _tree(row.tree);
           await onFrame(
             RenderedEntry(
               entryId: row.id,
               rgba: File(image).readAsBytesSync(),
               width: row.width,
               height: row.height,
-              tree: _tree(row.tree),
+              tree: tree?.root,
+              treeFormat: tree?.format,
               // The framework's word first: a failure with errors beside it
               // is usually the test runner restating one of them.
               complaint: errors.firstOrNull?.exception ?? row.failure,
@@ -226,16 +228,15 @@ class PreviewsSide implements ComparisonSide {
     return failed;
   }
 
-  static InspectNode? _tree(String? path) {
+  /// The tree the harness wrote beside a frame, with the format it was read
+  /// in — see [InspectTree.format].
+  static InspectTree? _tree(String? path) {
     if (path == null) return null;
     var file = File(path);
     if (!file.existsSync()) return null;
     try {
       var json = jsonDecode(file.readAsStringSync());
-      if (json is! Map<String, Object?>) return null;
-      // The harness writes `InspectTree.toJson`, whose root is the node.
-      var root = json['root'];
-      return root is Map<String, Object?> ? InspectNode.fromJson(root) : null;
+      return json is Map<String, Object?> ? InspectTree.fromJson(json) : null;
     } on FormatException {
       return null;
     }

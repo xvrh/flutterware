@@ -11,6 +11,7 @@ import 'package:flutterware/src/inspect/node.dart';
 // ignore: implementation_imports
 import 'package:flutterware/src/scenarios/network_mode.dart';
 
+import '../plugins/native/scenarios_core.dart';
 import '../scenarios/discovery.dart';
 import '../scenarios/harness_entrypoint.dart';
 import '../scenarios/runner.dart';
@@ -31,6 +32,26 @@ class ScenariosSide {
     this.projectClock,
     this.projectNetwork,
   });
+
+  /// One of [core]'s packages as a side, run the way the project says its
+  /// scenarios run.
+  ///
+  /// The one way both surfaces build a side. Each used to build its own, and
+  /// `fw compare`'s forgot the project's `fw.network(...)`: CI replayed every
+  /// scenario with the network off while the studio replayed it as declared,
+  /// and a comparison is only as good as its two runs being the same run.
+  factory ScenariosSide.of(
+    ScenariosCore core, {
+    required String package,
+    required String packagePath,
+    required String flutterSdkRoot,
+  }) => ScenariosSide(
+    flutterSdkRoot: flutterSdkRoot,
+    packagePath: packagePath,
+    directory: core.scanRootFor(package),
+    projectClock: core.host.projectClock,
+    projectNetwork: core.host.projectNetwork,
+  );
 
   final String flutterSdkRoot;
 
@@ -60,6 +81,14 @@ class ScenariosSide {
   /// both sides of a comparison have to reach the same thing, or the diff is
   /// about the network rather than about the branch.
   final ScenarioNetwork? projectNetwork;
+
+  /// [projectClock] and [projectNetwork], as a replay's key spells them: both
+  /// decide what every scenario draws, and neither is in any file a closure
+  /// reaches.
+  Map<String, String> get settings => {
+    'clock': projectClock?.toUtc().toIso8601String() ?? 'pinned',
+    'network': projectNetwork?.name ?? 'default',
+  };
 
   /// An id is `<file>#<scenario>` — the same grammar a preview entry uses, and
   /// the same reason: the file alone does not name one, since a file holds
@@ -167,7 +196,7 @@ class ScenariosSide {
   /// The clock is pinned so two runs a day apart produce the same pictures —
   /// by the runner now, from [projectClock] or the default, so there is
   /// nothing to pass here.
-  Future<List<ScenarioStepShot>> run(
+  Future<ScenarioReplay> run(
     ScenarioRunner runner,
     String id, {
     required String outDir,
@@ -179,17 +208,20 @@ class ScenariosSide {
       scenario: hash < 0 ? null : id.substring(hash + 1),
       captureRaw: true,
     );
+    // A scenario that blew its deadline: the report is what it reached.
+    var complete = response['abandoned'] != true;
     var scenarios = (response['scenarios'] as List?) ?? const [];
     var outcome = scenarios.firstOrNull;
-    if (outcome is! Map) return const [];
-    return [
+    if (outcome is! Map) return ScenarioReplay(const [], complete: complete);
+    return ScenarioReplay([
       for (var step in (outcome['steps'] as List?) ?? const [])
         if (step is Map) _shotOf(step.cast<String, Object?>()),
-    ];
+    ], complete: complete);
   }
 
   static ScenarioStepShot _shotOf(Map<String, Object?> step) {
     var image = step['image'] as String?;
+    var tree = _tree(step['tree'] as String?);
     return ScenarioStepShot(
       step: AlignableStep(
         index: step['index']! as int,
@@ -206,7 +238,8 @@ class ScenariosSide {
       rgba: step['format'] == 'raw' && image != null ? _bytes(image) : null,
       width: step['width'] as int? ?? 0,
       height: step['height'] as int? ?? 0,
-      tree: _tree(step['tree'] as String?),
+      tree: tree?.root,
+      treeFormat: tree?.format,
       texts: (step['texts'] as List?)?.cast<String>() ?? const [],
       events: _events(step['events'] as String?),
       failure: step['failure'] as String?,
@@ -225,16 +258,15 @@ class ScenariosSide {
     return file.existsSync() ? file.readAsBytesSync() : null;
   }
 
-  static InspectNode? _tree(String? path) {
+  /// The tree the harness wrote beside a frame, with the format it was read
+  /// in — see [InspectTree.format].
+  static InspectTree? _tree(String? path) {
     if (path == null) return null;
     var file = File(path);
     if (!file.existsSync()) return null;
     try {
       var json = jsonDecode(file.readAsStringSync());
-      if (json is! Map<String, Object?>) return null;
-      // The harness writes `InspectTree.toJson`, whose root is the node.
-      var root = json['root'];
-      return root is Map<String, Object?> ? InspectNode.fromJson(root) : null;
+      return json is Map<String, Object?> ? InspectTree.fromJson(json) : null;
     } on FormatException {
       return null;
     }

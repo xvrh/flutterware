@@ -28,6 +28,7 @@ class ScenarioStepShot {
     this.width = 0,
     this.height = 0,
     this.tree,
+    this.treeFormat,
     this.texts = const [],
     this.events = const [],
     this.failure,
@@ -40,6 +41,9 @@ class ScenarioStepShot {
   final int width;
   final int height;
   final InspectNode? tree;
+
+  /// The format [tree] was read in — see `InspectTree.format`.
+  final int? treeFormat;
   final List<String> texts;
   final List<Map<String, Object?>> events;
 
@@ -54,6 +58,18 @@ class ScenarioStepShot {
   /// scenarios and the reason their key covers the scenario rather than the
   /// step.
   final FrameRef? frame;
+}
+
+/// What one side's replay of one scenario produced.
+class ScenarioReplay {
+  const ScenarioReplay(this.steps, {this.complete = true});
+
+  final List<ScenarioStepShot> steps;
+
+  /// False when the harness gave up on the scenario — it blew its deadline,
+  /// and what it hands back is how far it got, which is not where it would
+  /// get next time. Compared like any other replay, and never filed.
+  final bool complete;
 }
 
 /// Compares two runs of one scenario.
@@ -140,6 +156,7 @@ ComparedItem _compare(
             headHeight: head.height,
           ),
     tree: TreeDiff.of(base.tree, head.tree),
+    treeSkewed: base.treeFormat != head.treeFormat,
     baseTexts: base.texts,
     headTexts: head.texts,
     baseEvents: base.events,

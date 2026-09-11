@@ -102,6 +102,50 @@ void main() {
     expect(item.state, ComparedState.changed);
   });
 
+  // Measured on a branch that only bumped flutterware: 109 rows changed and
+  // not one pixel moved, every delta a `Text.rich` the newer walk had learned
+  // to spell out. Two walks' readings are carried, and do not decide.
+  group('a tree read by two versions of the walk', () {
+    ComparedItem skewed({int head = 0}) => ComparedItem.of(
+      id: 'a#b',
+      pixels: pixels(head: head),
+      tree: TreeDiff.of(
+        node('Text', description: null),
+        node('Text', description: 'Text("Pay")'),
+      ),
+      treeSkewed: true,
+    );
+
+    test('does not make a finding on its own', () {
+      var item = skewed();
+
+      expect(item.state, ComparedState.same);
+      expect(item.channelsFired, isEmpty);
+    });
+
+    test('is still carried, for a reader to look at', () {
+      var item = skewed();
+
+      expect(item.tree!.changed, isTrue);
+      expect(item.tree!.significant, isFalse);
+      expect(item.deltas.map((d) => d.channel), ['tree']);
+    });
+
+    test('leaves the pixels to decide', () {
+      var item = skewed(head: 255);
+
+      expect(item.state, ComparedState.changed);
+      expect(item.channelsFired, ['pixels']);
+    });
+
+    test('survives the file', () {
+      var read = ComparedItem.fromJson(skewed().toJson());
+
+      expect(read.tree!.skewed, isTrue);
+      expect(read.tree!.diff.deltas, isNotEmpty);
+    });
+  });
+
   group('the severity ladder', () {
     // The one result the tool exists to catch: a percentage next to it would
     // be answering a smaller question.

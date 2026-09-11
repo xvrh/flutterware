@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutterware/comparison_report.dart';
 import 'package:crypto/crypto.dart';
@@ -7,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../shell/worktree.dart';
 import 'runner.dart';
+import 'shot_cache.dart';
 import 'skip.dart';
 
 /// One worktree's corner of the shared comparisons cache: `index.json` and
@@ -26,6 +28,110 @@ String comparisonDirFor(String cacheRoot, Worktree worktree) => p.join(
       '${sha1.convert(utf8.encode(p.canonicalize(worktree.path))).toString().substring(0, 12)}',
 );
 
+/// What a reader has to know before believing a verdict: the ways its two
+/// sides were measured differently, rather than drawn differently.
+///
+/// Both come from one fact — the base is rendered by the base checkout's own
+/// `package:flutterware`, with whichever SDK this comparison was started
+/// with — and both used to surface only as findings nobody could tell from
+/// the branch's own:
+///
+/// - **Trees read by two versions of the walk.** Their differences are
+///   carried and do not count (see `TreeChannel.significant`), so a row can
+///   read `same` beside tree deltas; this says why, and how many.
+/// - **Two pinned SDKs**, from [sdk] — see `SdkPin.caveat`.
+List<String> comparisonCaveats({
+  required ComparisonResult previews,
+  ScenarioResults? scenarios,
+  String? sdk,
+}) {
+  bool uncounted(ComparedItem item) =>
+      (item.tree?.skewed ?? false) && item.tree!.changed;
+  var rows =
+      previews.items.where(uncounted).length +
+      [
+        for (var scenario in scenarios?.items ?? const <ScenarioComparison>[])
+          ...scenario.items,
+      ].where(uncounted).length;
+  var trees = rows == 0
+      ? null
+      : 'Widget-tree differences on '
+            '${rows == 1 ? '1 row are' : '$rows rows are'} left out of the '
+            'verdict: the base read its trees with a different version of '
+            'flutterware, so they differ in how widgets are described as well '
+            'as in what changed. Pixels and texts still count.';
+  return [?trees, ?sdk];
+}
+
+/// Trims what comparisons leave under [cacheRoot] — the shot cache and every
+/// worktree's [comparisonDirFor] — off this isolate, and says nothing about
+/// it.
+///
+/// Run at the end of every comparison, by both surfaces. Only the studio's
+/// panel used to sweep, and only the shots: a CI host runs nothing but
+/// `fw compare`, so the store it restores and saves between jobs grew without
+/// bound, and so did one comparison directory per checkout path. The third
+/// store, the base checkouts, sweeps itself — `BaseCheckout.ensure`.
+///
+/// Every failure is swallowed: the entries it drops are ones nothing has
+/// asked for in a fortnight, and failing to drop them is not news.
+Future<void> sweepComparisonLeftovers(String cacheRoot) async {
+  try {
+    await Isolate.run(() {
+      ShotCache(p.join(cacheRoot, 'shots')).sweep();
+      sweepComparisonDirs(cacheRoot);
+    });
+  } on Object {
+    // Housekeeping.
+  }
+}
+
+/// Drops every worktree's comparison directory that nothing has written in
+/// [keepFor], and returns how many.
+///
+/// Judged by the newest file directly inside it, which every run rewrites —
+/// `index.json`, a panel's `last-*.json` — rather than by the directory's own
+/// mtime, which moves only when an entry is added or removed. A directory
+/// with no file of its own is judged by itself.
+///
+/// Keyed by checkout path, which a runner handing each job a fresh one turns
+/// into a directory per job. Two weeks is the same age the other two stores
+/// forget at, so a worktree compared once and abandoned leaves nothing behind
+/// that outlives its pictures.
+int sweepComparisonDirs(
+  String cacheRoot, {
+  Duration keepFor = const Duration(days: 14),
+  DateTime? now,
+}) {
+  var root = Directory(p.join(cacheRoot, 'comparisons'));
+  var cutoff = (now ?? DateTime.now()).subtract(keepFor);
+  List<FileSystemEntity> found;
+  try {
+    found = root.listSync();
+  } on FileSystemException {
+    return 0;
+  }
+  var swept = 0;
+  for (var entity in found) {
+    if (entity is! Directory) continue;
+    try {
+      DateTime? touched;
+      for (var child in entity.listSync()) {
+        if (child is! File) continue;
+        var modified = child.statSync().modified;
+        if (touched == null || modified.isAfter(touched)) touched = modified;
+      }
+      touched ??= entity.statSync().modified;
+      if (!touched.isBefore(cutoff)) continue;
+      entity.deleteSync(recursive: true);
+      swept++;
+    } on FileSystemException {
+      // Another comparison sweeping, or writing, the same directory.
+    }
+  }
+  return swept;
+}
+
 /// The scenario half of a comparison, as the artifact records it.
 ///
 /// The twin of [ComparisonResult] and deliberately not the same class: a
@@ -38,6 +144,7 @@ class ScenarioResults {
     required this.ran,
     required this.skipped,
     required this.elapsed,
+    this.replays = 0,
     this.note,
     this.because = const {},
     this.packages = const [],
@@ -61,6 +168,7 @@ class ScenarioResults {
     return ScenarioResults.of(
       items: [for (var half in halves) ...half.results.items],
       ran: halves.fold(0, (sum, half) => sum + half.results.ran),
+      replays: halves.fold(0, (sum, half) => sum + half.results.replays),
       skipped: halves.fold(0, (sum, half) => sum + half.results.skipped),
       elapsed: elapsed,
       note: notes.isEmpty ? null : notes.join('\n'),
@@ -73,8 +181,14 @@ class ScenarioResults {
   /// on one side only.
   final List<ScenarioComparison> items;
 
-  /// How many were actually replayed on both sides.
+  /// How many were compared from both sides' frames — replayed, or read back
+  /// from the `ReplayStore`.
   final int ran;
+
+  /// How many sides were actually replayed: up to two per scenario in [ran],
+  /// and none for a side the store already had. The scenario twin of
+  /// [ComparisonResult.rendered].
+  final int replays;
 
   final int skipped;
   final Duration elapsed;
@@ -103,6 +217,7 @@ class ScenarioResults {
           for (var item in items) item.inPackage(package, qualify: qualify),
         ],
         ran: ran,
+        replays: replays,
         skipped: skipped,
         elapsed: elapsed,
         note: note,
@@ -120,6 +235,7 @@ class ScenarioResults {
     required int ran,
     required int skipped,
     required Duration elapsed,
+    int replays = 0,
     String? note,
     Map<String, int> because = const {},
     List<String> packages = const [],
@@ -130,6 +246,7 @@ class ScenarioResults {
         return byState != 0 ? byState : a.scenario.compareTo(b.scenario);
       }),
     ran: ran,
+    replays: replays,
     skipped: skipped,
     elapsed: elapsed,
     note: note,
@@ -139,6 +256,7 @@ class ScenarioResults {
 
   Map<String, Object?> toJson() => {
     'ran': ran,
+    'replayed': replays,
     'skipped': skipped,
     'because': ?(because.isEmpty ? null : because),
     'packages': ?(packages.isEmpty ? null : packages),
@@ -167,9 +285,14 @@ class ComparisonArtifact {
     this.narrowed = false,
     this.headCommit,
     this.at,
+    this.caveats = const [],
   });
 
   final ComparisonResult previews;
+
+  /// What a reader has to know before believing the verdict, one sentence
+  /// each — see [comparisonCaveats].
+  final List<String> caveats;
 
   /// Absent when the project declares no scenarios at all. A run that tried
   /// and could not is present, with a [ScenarioResults.note].
@@ -238,6 +361,7 @@ class ComparisonArtifact {
     // this. See [ComparisonFrames].
     'frames': ComparisonFrames.local.name,
     if (narrowed) 'narrowed': true,
+    'caveats': ?(caveats.isEmpty ? null : caveats),
     'previews': previews.toJson(),
     'scenarios': ?scenarios?.toJson(),
   };

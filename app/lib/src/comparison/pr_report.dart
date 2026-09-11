@@ -448,13 +448,23 @@ String _comment(
     previewStates: artifact.previews.items.map((item) => item.state),
     narrowed: artifact.narrowed,
   );
+  // Under the heading, whatever it says: a caveat qualifies a clean verdict as
+  // much as a red one — "nothing changed" over a tree the base read another
+  // way is the sentence a reader most needs the reason for.
+  void caveats() {
+    for (var caveat in artifact.caveats) {
+      buffer.writeln('> $caveat\n');
+    }
+  }
+
   if (findings.isEmpty && gap == null) {
-    buffer
-      ..writeln('### Comparison against `$against`\n')
-      ..writeln('Nothing changed — $receipt.');
+    buffer.writeln('### Comparison against `$against`\n');
+    caveats();
+    buffer.writeln('Nothing changed — $receipt.');
   } else if (findings.isEmpty) {
+    buffer.writeln('### Comparison against `$against` — **no verdict**\n');
+    caveats();
     buffer
-      ..writeln('### Comparison against `$against` — **no verdict**\n')
       ..writeln('$gap.\n')
       ..writeln(
         '[**Open the full comparison →**]($viewerUrlPlaceholder) · $receipt\n',
@@ -465,6 +475,7 @@ String _comment(
         if (_isFinding(entry.key)) '${entry.value} ${entry.key.name}',
     ].join(' · ');
     buffer.writeln('### Comparison against `$against` — **$summary**\n');
+    caveats();
     // Above the link rather than folded away with the table: a reader who
     // stops at the pictures has to know part of the run answered nothing.
     if (gap != null) buffer.writeln('> **No verdict** — $gap.\n');

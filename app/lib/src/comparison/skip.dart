@@ -1,5 +1,8 @@
 import 'dart:io';
 
+// ignore: implementation_imports
+import 'package:flutterware/src/scenarios/network_store.dart'
+    show defaultScenarioNetworkStore;
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
@@ -70,6 +73,29 @@ class PixelInputs {
     required String packagePath,
     required List<String> roots,
   }) => PixelInputs(pixelInputsOf(packagePath: packagePath, roots: roots));
+
+  /// [PixelInputs.of] for scenarios: the same list, and the recording a
+  /// `replay` scenario answers its requests from.
+  ///
+  /// The recording is committed, read at run time, and imported by nothing —
+  /// so a re-recorded endpoint changed what a scenario drew while every file
+  /// the skip rule watched stayed the same, and the scenario was skipped. The
+  /// package's default store only: one moved elsewhere by `FW_NETWORK_STORE`
+  /// or a define is named where nothing here can read it.
+  factory PixelInputs.ofScenarios({
+    required String packagePath,
+    required List<String> roots,
+  }) => PixelInputs(
+    {
+      ...pixelInputsOf(packagePath: packagePath, roots: roots),
+      for (var root in roots)
+        ..._filesIn(
+          root,
+          p.join(packagePath, defaultScenarioNetworkStore),
+          (_) => true,
+        ),
+    }.toList()..sort(),
+  );
 
   /// Root-relative, and the same list for every checkout: a path only one side
   /// has still has to be looked for on the other, where it reads as missing.

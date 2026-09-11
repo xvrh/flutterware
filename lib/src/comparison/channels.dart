@@ -161,7 +161,7 @@ class ComparedItem {
   /// verdict just learned to ignore.
   List<String> get channelsFired => [
     if (pixels?.changed ?? false) 'pixels',
-    if (tree?.changed ?? false) 'tree',
+    if (tree?.significant ?? false) 'tree',
     if (texts?.changed ?? false) 'texts',
     if (events?.significant ?? false) 'events',
   ];
@@ -240,6 +240,7 @@ class ComparedItem {
     String? label,
     PixelDiff? pixels,
     TreeDiff? tree,
+    bool treeSkewed = false,
     List<String> baseTexts = const [],
     List<String> headTexts = const [],
     List<Map<String, Object?>> baseEvents = const [],
@@ -270,7 +271,9 @@ class ComparedItem {
 
     var textChannel = TextChannel.of(base: baseTexts, head: headTexts);
     var eventChannel = EventChannel.of(base: baseEvents, head: headEvents);
-    var treeChannel = tree == null ? null : TreeChannel(tree);
+    var treeChannel = tree == null
+        ? null
+        : TreeChannel(tree, skewed: treeSkewed);
     var pixelChannel = pixels == null ? null : PixelChannel(pixels);
     // Events weigh in through [EventChannel.significant]: `system` chatter is
     // compared and carried, but a step it is the whole of stays `same`. The
@@ -279,7 +282,7 @@ class ComparedItem {
     // decide the state.
     var changed =
         (pixelChannel?.changed ?? false) ||
-        (treeChannel?.changed ?? false) ||
+        (treeChannel?.significant ?? false) ||
         textChannel.changed ||
         eventChannel.significant;
 
@@ -376,15 +379,26 @@ class PixelChannel {
 }
 
 class TreeChannel {
-  const TreeChannel(this.diff);
+  const TreeChannel(this.diff, {this.skewed = false});
 
   final TreeDiff diff;
+
+  /// Whether the two trees were read by different versions of the walk —
+  /// their `InspectTree.format`s differ.
+  ///
+  /// A comparison's sides are captured by two checkouts' own
+  /// `package:flutterware`, so a branch that bumps it compares one walk's
+  /// reading against another's. Measured on a consumer's bump, where only the
+  /// docs and the pubspec moved: 109 rows changed, not one pixel, every delta
+  /// a `Text.rich` the newer walk had learned to spell out.
+  final bool skewed;
 
   static TreeChannel fromJson(Map<String, Object?> json) => TreeChannel(
     TreeDiff([
       for (var delta in json['deltas'] as List? ?? const [])
         TreeDelta.fromJson((delta as Map).cast<String, Object?>()),
     ]),
+    skewed: json['skewed'] == true,
   );
 
   /// A tree that differs *only* below a resized ancestor has not changed —
@@ -392,7 +406,17 @@ class TreeChannel {
   bool get changed =>
       diff.deltas.any((delta) => delta.kind != TreeDeltaKind.shifted);
 
+  /// Whether this channel can make a finding: it [changed], and both sides
+  /// were read the same way.
+  ///
+  /// The twin of [EventChannel.significant]. A [skewed] tree is still
+  /// compared and its deltas still carried — a real change hides among the
+  /// walk's own — but a row it is the whole of stays `same`, and the pixels
+  /// and the texts, which no walk produces, still decide.
+  bool get significant => changed && !skewed;
+
   Map<String, Object?> toJson() => {
+    if (skewed) 'skewed': skewed,
     'deltas': [for (var delta in diff.deltas.take(50)) delta.toJson()],
     if (diff.deltas.length > 50) 'deltasDropped': diff.deltas.length - 50,
   };
