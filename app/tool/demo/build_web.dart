@@ -41,7 +41,7 @@ Future<void> main(List<String> args) async {
     );
     exit(1);
   }
-  // The example's previews, as a table the page compiles in — regenerated
+  // The demo app's previews, as a table the page compiles in — regenerated
   // on every build so the page never ships a stale one.
   var generated = await Process.start(
     sdk.dart,
@@ -50,8 +50,8 @@ Future<void> main(List<String> args) async {
     mode: ProcessStartMode.inheritStdio,
   );
   if (await generated.exitCode case var code when code != 0) exit(code);
-  // Built from the demo's own package, which imports both this one and the
-  // example's previews. The output lands here, where the deploy and the
+  // Built from the web demo's own package, which imports both this one and
+  // the demo app's previews. The output lands here, where the deploy and the
   // browser test expect it.
   var result = await Process.start(
     sdk.flutter,

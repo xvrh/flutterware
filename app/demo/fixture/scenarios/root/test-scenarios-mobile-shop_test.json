@@ -1,12 +1,12 @@
 {
-  "ms": 2287,
+  "ms": 1988,
   "scenarios": [
     {
       "file": "test/scenarios/mobile/shop_test.dart",
       "name": "Around the shop",
       "ok": true,
       "device": "iphone-16",
-      "ms": 1984,
+      "ms": 1720,
       "steps": [
         {
           "index": 1,
@@ -807,7 +807,7 @@
       "name": "Order a cappuccino",
       "ok": true,
       "device": "iphone-16",
-      "ms": 293,
+      "ms": 258,
       "steps": [
         {
           "index": 1,
@@ -1035,7 +1035,7 @@
             "4.90 €",
             "Total",
             "4.90 €",
-            "Xavier",
+            "Ada",
             "Name on the cup",
             "Place order",
             "Your order"
@@ -1055,7 +1055,7 @@
             "system": 22
           },
           "eventTitles": [],
-          "digest": "6c32814a0d7db230",
+          "digest": "424112eb8350e448",
           "keyboard": 336.0
         },
         {
@@ -1075,7 +1075,7 @@
           "keys": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/7-Order_placed.keys.json",
           "semantics": "scenarios/root/test-scenarios-mobile-shop_test/order-a-cappuccino/7-Order_placed.semantics.json",
           "texts": [
-            "Thanks, Xavier!",
+            "Thanks, Ada!",
             "Your order is on its way.",
             "Back to menu"
           ],
@@ -1094,7 +1094,7 @@
             "system": 3
           },
           "eventTitles": [],
-          "digest": "46b2c8c8bb4392a3"
+          "digest": "9d0285d9ad9ccb39"
         }
       ],
       "stepCount": 7,

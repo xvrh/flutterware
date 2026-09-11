@@ -106,7 +106,7 @@ void main() {
     // beside the page, which is the whole of what the deploy has to get
     // right.
     await screen.tap('Launcher icon');
-    await screen.waitFor('kiosk');
+    await screen.waitFor('Themed icon');
     await _waitUntil(
       () => fetched.entries.any(
         (e) => e.key.contains('launcher_icon/files/') && e.value == 200,
@@ -122,16 +122,11 @@ void main() {
     );
     expect(await screen.texts(), isNot(contains(contains('Could not read'))));
 
-    // A flavor, which is a second scan and a second set of pictures.
-    await screen.tap('kiosk');
-    await _waitUntil(
-      () => fetched.entries.any(
-        (e) => e.key.contains('root.kiosk.json') && e.value == 200,
-      ),
-      what: 'the kiosk scan fetched',
-    );
+    // A role picked: the stage draws that one's pictures, fetched the same
+    // way.
+    await screen.tap('Themed icon');
     await screen.settle();
-    await screen.shot('kiosk-flavor');
+    await screen.shot('themed-icon');
 
     // The second recorded panel: a scenario run, its frames fetched the same
     // way. Opening a scenario "runs" it, which over a recording is a read.
@@ -168,7 +163,7 @@ void main() {
     );
     await screen.shot('zoomed-with-the-wheel');
 
-    // Previews is not recorded: the example's entries are compiled into the
+    // Previews is not recorded: the demo app's entries are compiled into the
     // page and drawn by the panel as widgets of this very program.
     await screen.tap('Previews');
     await screen.waitFor('Menu');

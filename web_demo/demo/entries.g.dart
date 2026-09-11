@@ -22,8 +22,8 @@ const webDemoEntries = <CatalogEntry>[
     annotation: "Preview(name: 'App icon', group: 'Brewline')",
     name: 'App icon',
     group: 'Brewline',
-    line: 12,
-    endLine: 13,
+    line: 13,
+    endLine: 14,
   ),
   CatalogEntry(
     path: 'demo/shop.dart',
@@ -32,8 +32,8 @@ const webDemoEntries = <CatalogEntry>[
         "Preview(name: 'Drink badges', group: 'Brewline', wrapper: wrapInShop)",
     name: 'Drink badges',
     group: 'Brewline',
-    line: 53,
-    endLine: 54,
+    line: 75,
+    endLine: 76,
   ),
   CatalogEntry(
     path: 'demo/shop.dart',
@@ -42,8 +42,8 @@ const webDemoEntries = <CatalogEntry>[
         "Preview(name: 'Welcome', group: 'Brewline', wrapper: wrapInShop)",
     name: 'Welcome',
     group: 'Brewline',
-    line: 31,
-    endLine: 32,
+    line: 52,
+    endLine: 53,
   ),
   CatalogEntry(
     path: 'demo/shop.dart',
@@ -51,8 +51,8 @@ const webDemoEntries = <CatalogEntry>[
     annotation: "Preview(name: 'Menu', group: 'Brewline', wrapper: wrapInShop)",
     name: 'Menu',
     group: 'Brewline',
-    line: 34,
-    endLine: 35,
+    line: 55,
+    endLine: 56,
   ),
   CatalogEntry(
     path: 'demo/shop.dart',
@@ -61,17 +61,18 @@ const webDemoEntries = <CatalogEntry>[
         "Preview(name: 'A drink', group: 'Brewline', wrapper: wrapInShop)",
     name: 'A drink',
     group: 'Brewline',
-    line: 37,
-    endLine: 38,
+    line: 58,
+    endLine: 59,
   ),
   CatalogEntry(
     path: 'demo/shop.dart',
     symbol: 'shopCart',
-    annotation: "Preview(name: 'Cart', group: 'Brewline', wrapper: wrapInShop)",
+    annotation:
+        "Preview(name: 'Cart', group: 'Brewline', wrapper: wrapWithFullCart)",
     name: 'Cart',
     group: 'Brewline',
-    line: 40,
-    endLine: 41,
+    line: 61,
+    endLine: 62,
   ),
   CatalogEntry(
     path: 'demo/shop.dart',
@@ -80,8 +81,8 @@ const webDemoEntries = <CatalogEntry>[
         "Preview(name: 'Order placed', group: 'Brewline', wrapper: wrapInShop)",
     name: 'Order placed',
     group: 'Brewline',
-    line: 43,
-    endLine: 47,
+    line: 65,
+    endLine: 69,
   ),
 ];
 

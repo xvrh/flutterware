@@ -29,11 +29,11 @@ void main() {
     await shell.start(recordedProjectRoot);
     await s.pumpWidget(ShellApp(shell), shot: Shot('Home'));
     await s.tap('Launcher icon', shot: Shot('Launcher icons'));
-    await s.tap('kiosk', shot: Shot('Kiosk flavor'));
+    await s.tap('Themed icon', shot: Shot('The themed icon'));
     await s.tap('Dependencies', shot: Shot('Not recorded'));
   });
 
-  /// A scenario of the scenarios panel: the recorded run of the example's
+  /// A scenario of the scenarios panel: the recorded run of the demo app's
   /// coffee shop, drawn by the studio, photographed by the harness. Opening a
   /// scenario runs it, and over a recording that run is a read — which is
   /// what lets this walk settle under FakeAsync.

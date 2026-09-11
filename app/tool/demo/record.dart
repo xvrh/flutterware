@@ -23,8 +23,9 @@ import 'package:path/path.dart' as p;
 /// cd app && fvm dart run tool/demo/record.dart [project-dir]
 /// ```
 ///
-/// The project defaults to `examples/example`, recorded **as if it were the
-/// root of its own repository**: its package path in the recording is `.`.
+/// The project defaults to `examples/brewline`, the demo app, recorded **as
+/// if it were the root of its own repository**: its package path in the
+/// recording is `.`.
 /// That is what a reader's project usually looks like, and it keeps the
 /// recorded project's workspace to one package nothing on disk has to
 /// confirm.
@@ -51,7 +52,7 @@ Future<void> main(List<String> arguments) async {
     }
   }
   var project = projectArg == null
-      ? p.join(p.dirname(appRoot), 'examples', 'example')
+      ? p.join(p.dirname(appRoot), 'examples', 'brewline')
       : p.normalize(p.absolute(projectArg));
   var out = p.join(appRoot, 'demo', 'fixture');
 
@@ -75,7 +76,7 @@ Future<void> main(List<String> arguments) async {
   );
 }
 
-/// Which scenario files of the example are recorded: the coffee shop's
+/// Which scenario files of the demo app are recorded: the coffee shop's
 /// walks, on a phone and in a window. Enough to show a flow, a device frame
 /// of each kind and a step page, without the whole suite's pictures in git.
 const recordedScenarioFiles = [

@@ -43,6 +43,12 @@ class ShopStrings {
   /// knows it. A scenario sets it to `indexExpansions('shop')`.
   static String Function(String key, String expanded)? wrapExpanded;
 
+  /// The package the strings are bundled under when the shop's screens are
+  /// compiled into another app — flutterware's studio does that for its web
+  /// demo — or null when this is the app. An asset of a dependency is
+  /// addressed as `packages/<name>/…`, and only the host knows which it is.
+  static String? assetPackage;
+
   static const LocalizationsDelegate<ShopStrings> delegate = _Delegate();
 
   static ShopStrings of(BuildContext context) =>
@@ -130,7 +136,13 @@ class _Delegate extends LocalizationsDelegate<ShopStrings> {
 
   static Future<Map<String, String>> _read(String locale) async {
     if (_cache[locale] case var cached?) return cached;
-    var source = await rootBundle.loadString('assets/i18n/$locale.json');
+    var prefix = switch (ShopStrings.assetPackage) {
+      var package? => 'packages/$package/',
+      null => '',
+    };
+    var source = await rootBundle.loadString(
+      '${prefix}assets/i18n/$locale.json',
+    );
     return _cache[locale] = {
       for (var entry in (jsonDecode(source) as Map).entries)
         if (entry.value is String) '${entry.key}': entry.value as String,

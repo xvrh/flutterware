@@ -10,10 +10,11 @@
 /// socket or walks a directory; the one filesystem touch left, the facts
 /// store, points at a path that is not there and is built to shrug.
 ///
-/// The recorded project is **`examples/example` as if it were its own
-/// repository** — one package at `.`, which is what a reader's project usually
-/// is and what keeps the workspace free of anything the disk would have to
-/// confirm. See `tool/demo/record.dart` for how the recording is made.
+/// The recorded project is **`examples/brewline`, the demo app, as if it were
+/// its own repository** — one package at `.`, which is what a reader's project
+/// usually is and what keeps the workspace free of anything the disk would
+/// have to confirm. See `tool/demo/record.dart` for how the recording is
+/// made.
 library;
 
 import 'dart:async';
