@@ -13,6 +13,13 @@ void writeUrlFragment(String fragment) {
   web.window.history.replaceState(null, '', Uri(fragment: fragment).toString());
 }
 
+/// Moves the page's fragment to [fragment] as a new history entry, so the
+/// back button returns to the one before it. Spelled like [writeUrlFragment],
+/// and like it fires no `hashchange`: the page already knows where it went.
+void pushUrlFragment(String fragment) {
+  web.window.history.pushState(null, '', Uri(fragment: fragment).toString());
+}
+
 /// The decoded fragment, each time the browser itself changes it — a
 /// hand-edited address, or history the page did not write.
 Stream<String> get urlFragmentChanges {

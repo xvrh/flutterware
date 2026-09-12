@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:web/web.dart' as web;
 
 import '../previews/inline_guest.dart';
 import '../shell/shell_view.dart';
+import 'page_title.dart';
+import 'page_url.dart';
 import 'recorded_project.dart';
 import 'recording.dart';
 
@@ -36,7 +39,7 @@ void runWebDemo({InlinePreviews? previews}) {
   // The same reason the export viewer gives: the engine's default strategy
   // rewrites the URL at boot, and this page has nowhere it wants to go.
   setUrlStrategy(null);
-  WidgetsFlutterBinding.ensureInitialized();
+  var binding = _PageBinding();
   // Semantics on from the first frame, not behind the "enable accessibility"
   // placeholder the engine draws otherwise. It is what a screen reader gets,
   // and it is the only DOM a browser test can find a tab by: the page is
@@ -49,11 +52,80 @@ void runWebDemo({InlinePreviews? previews}) {
   var recording = HttpScenarioArtifacts(
     Uri.parse(web.document.baseURI).resolve('demo/fixture/'),
   );
-  // The page's own title; the index this is built into is the example's.
-  web.document.title = 'flutterware';
   var shell = recordedShell(recording: recording, previews: previews);
+  // Where the page is, in its URL and its tab — see [PageUrl] and
+  // [pageTitle]. Both for the life of the page.
+  var url = PageUrl(shell)..attach();
+  binding.onSemanticsAction = url.pressed;
+  followPageTitle(shell, (title) => web.document.title = title);
   runApp(ShellApp(shell));
-  unawaited(shell.start(recordedProjectRoot));
+  unawaited(
+    shell.start(
+      recordedProjectRoot,
+      landing: PageUrl.addressOf(Uri.base.fragment),
+    ),
+  );
+}
+
+/// The binding, with the page's title taken out of every `Title` widget's
+/// hands.
+///
+/// A `MaterialApp` writes its `title` into the document when it mounts, and
+/// the page holds two: the shell's, and the one inside every preview that
+/// wraps itself in an app — which mounts later, and so wins. The tab said
+/// the previewed app's name from the first preview opened until the page was
+/// closed. On the web that write is one platform message, so it is dropped
+/// here and [followPageTitle] is the only thing that names the page. The
+/// theme colour the same message carries goes with it, which is the same
+/// leak in another tag.
+///
+/// It also reports semantics actions, for [PageUrl.pressed]: with semantics on,
+/// a click on anything tappable reaches the framework as one of those rather
+/// than as pointer events.
+class _PageBinding extends WidgetsFlutterBinding {
+  VoidCallback? onSemanticsAction;
+
+  @override
+  BinaryMessenger createBinaryMessenger() =>
+      _TitleDropped(super.createBinaryMessenger());
+
+  @override
+  void performSemanticsAction(SemanticsActionEvent action) {
+    onSemanticsAction?.call();
+    super.performSemanticsAction(action);
+  }
+}
+
+class _TitleDropped extends BinaryMessenger {
+  const _TitleDropped(this._inner);
+
+  final BinaryMessenger _inner;
+
+  static const _codec = JSONMethodCodec();
+
+  @override
+  Future<ByteData?>? send(String channel, ByteData? message) {
+    if (channel == SystemChannels.platform.name &&
+        message != null &&
+        _codec.decodeMethodCall(message).method ==
+            'SystemChrome.setApplicationSwitcherDescription') {
+      return Future.value(_codec.encodeSuccessEnvelope(null));
+    }
+    return _inner.send(channel, message);
+  }
+
+  @override
+  void setMessageHandler(String channel, MessageHandler? handler) =>
+      _inner.setMessageHandler(channel, handler);
+
+  @override
+  Future<void> handlePlatformMessage(
+    String channel,
+    ByteData? data,
+    PlatformMessageResponseCallback? callback,
+  ) =>
+      // ignore: deprecated_member_use
+      _inner.handlePlatformMessage(channel, data, callback);
 }
 
 /// Held for the life of the page; disposing it would turn semantics back off.

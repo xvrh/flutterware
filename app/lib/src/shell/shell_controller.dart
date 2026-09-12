@@ -633,7 +633,12 @@ class ShellController extends ChangeNotifier {
   ///
   /// The deepest containing worktree wins, so a checkout parked inside another
   /// opens itself rather than its host.
-  Future<void> start(String launchDirectory) async {
+  ///
+  /// [landing] is somewhere to arrive instead of the launch worktree's home — a
+  /// link the page was opened on. Gone to rather than gone to *afterwards*, so
+  /// the window never draws the home screen on its way there. One that names
+  /// no worktree git reports is ignored, and the launch worktree opens as usual.
+  Future<void> start(String launchDirectory, {Address? landing}) async {
     // Still walked up: this is what [WorktreeDiscovery] runs git in, and in a
     // directory that is not a repository at all it is the single worktree the
     // discovery falls back to — so it wants the project root, not `lib/src`.
@@ -671,6 +676,23 @@ class ShellController extends ChangeNotifier {
         );
         _launchFallback = fallback;
         _logger.warning(fallback.message);
+      }
+    }
+
+    if (landing != null) {
+      var name = landing.worktree;
+      var worktree = name == null ? null : worktreeNamed(name);
+      // The tab opened here rather than by `go`, so its load can be awaited
+      // like [open]'s is: a caller of `start` expects a session to be there.
+      var loaded =
+          worktree != null &&
+              !isOpen(worktree) &&
+              !Address.shellSessionless.contains(landing.plugin)
+          ? _openTab(worktree)
+          : null;
+      if (go(landing) != GoResult.worktreeUnknown) {
+        await loaded;
+        return;
       }
     }
     if (launch != null) await open(launch);
