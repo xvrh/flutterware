@@ -183,7 +183,61 @@ void main() {
 
     expect(errors, isEmpty, reason: errors.join('\n'));
   });
+
+  test('a link opens the page on the place it names, and back returns', () async {
+    var page = await browser.newPage();
+    await page.setViewport(DeviceViewport(width: 1400, height: 900));
+    var errors = <String>[];
+    page.onError.listen((e) => errors.add('page error: ${e.message}'));
+    page.onConsole.listen((m) {
+      if (m.type == ConsoleMessageType.error) {
+        errors.add('console error: ${m.text}');
+      }
+    });
+    var screen = _Screen(page, shots, errors: errors);
+    var root = 'http://${server.address.host}:${server.port}$baseHref';
+
+    // What the address bar says for the confirmation screen's preview: the
+    // root package is `.`, which only survives in a fragment, and the entry's
+    // own `#` is escaped.
+    await page.goto(
+      '$root#/worktrees/~/flutterware.previews/./demo/shop.dart%23shopConfirmation',
+      wait: Until.load,
+    );
+    await screen.waitFor('Thanks, Ada!');
+    await screen.shot('linked-preview');
+    // The tab names the entry as search does, not as the previewed app's own
+    // `MaterialApp` would.
+    const linked = 'Brewline / Order placed · Previews · flutterware';
+    await _waitUntil(
+      () async => await page.title == linked,
+      what: 'the title to name the linked preview (was "${await page.title}")',
+    );
+
+    // A click is a history entry; the catalog settling on it is not.
+    await screen.tap('Menu');
+    await screen.waitFor('Cappuccino');
+    await _waitUntil(
+      () async => (await _href(page)).contains('shop.dart%23shopMenu'),
+      what: 'the URL to follow the click (was ${await _href(page)})',
+    );
+    await screen.shot('clicked-to-another-preview');
+
+    await page.goBack();
+    await screen.waitFor('Thanks, Ada!');
+    expect(await _href(page), contains('shop.dart%23shopConfirmation'));
+    await _waitUntil(
+      () async => await page.title == linked,
+      what: 'the title to follow back (was "${await page.title}")',
+    );
+    await screen.shot('back-to-the-link');
+
+    expect(errors, isEmpty, reason: errors.join('\n'));
+  });
 }
+
+Future<String> _href(Page page) =>
+    page.evaluate<String>('() => window.location.href');
 
 /// `tool/demo/build_web.dart`, through the SDK running this test.
 Future<String> _build(String packageRoot) async {
