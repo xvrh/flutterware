@@ -15,7 +15,6 @@
   so it loads them first with
   `await tester.runAsync(() => precacheSceneShaders(scene));`.
 
-
 ## 0.6.0
 
 Development tooling for Flutter projects: a desktop app, a command line and an

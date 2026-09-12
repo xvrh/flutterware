@@ -6,7 +6,7 @@ measurements below are unchanged; the decisions read as built, with what the
 plan corrected and what building it found folded in. It answers the five
 questions left open by Phase 3 of
 `docs/superpowers/plans/2026-09-10-scene-text-layer-gradients.md`, each by
-measurement, then decides the shape. `examples/example` carries the result: a
+measurement, then decides the shape. `fixtures/probe_app` carries the result: a
 foil headline, `demo/foil_title.scene.dart`, painted by `shaders/foil.frag`.
 
 ## The goal
@@ -272,7 +272,7 @@ comments on the uniform's line without disturbing anything.
 7. **The editor waits** — `_apply` awaits loads, scene plugin `SettleSource`.
 8. **The inspector** — Shader kind in the paint picker, asset picker over
    declared shaders, uniform controls from reflection and annotations.
-9. **An example shader** in `examples/example` with a scene using it, and the
+9. **An example shader** in `fixtures/probe_app` (then `examples/example`) with a scene using it, and the
    spike files removed.
 
 ## Risks
