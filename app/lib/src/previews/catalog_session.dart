@@ -23,6 +23,7 @@ import 'daemon_phase.dart';
 import 'inspect_client.dart';
 import 'live_session.dart';
 import 'protocol.dart';
+import 'shader_reload.dart';
 
 enum CatalogSessionPhase { starting, ready, error }
 
@@ -2282,13 +2283,16 @@ class CatalogSession extends ChangeNotifier {
   void _onAssetsChanged(AssetsChanged change) {
     var vm = _channel;
     if (vm == null) return;
-    _fireAndForget(() async {
-      await vm.callExtension(
-        'ext.flutter.evict',
-        args: {'value': 'AssetManifest.bin'},
-      );
-      await vm.callExtension('ext.flutter.reassemble');
-    }(), 'refresh assets');
+    _fireAndForget(
+      reloadGuestAssets(
+        change,
+        (method, [args]) => vm.callExtension(method, args: args ?? const {}),
+        onShaderError: (key, e) {
+          if (!_disposed) debugPrint('[catalog] reloading $key: $e');
+        },
+      ),
+      'refresh assets',
+    );
   }
 
   void _onEngineChanged() {

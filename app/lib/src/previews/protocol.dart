@@ -42,6 +42,16 @@ class _DurationMillis implements JsonConverter<Duration, int> {
 
 const _millis = _DurationMillis();
 
+/// The strings in a list, and nothing for anything else — so a field added
+/// after the message decodes the same from a daemon that never sent it.
+List<String> _assetKeys(Object? json) => switch (json) {
+  List<Object?> keys => [
+    for (var key in keys)
+      if (key is String) key,
+  ],
+  _ => const [],
+};
+
 /// client → daemon.
 sealed class DaemonRequest implements ProtocolMessage {
   const DaemonRequest();
@@ -415,7 +425,7 @@ class CatalogChanged extends DaemonResponse {
 /// relaunch does.
 @JsonSerializable()
 class AssetsChanged extends DaemonResponse {
-  const AssetsChanged({required this.fontsChanged});
+  const AssetsChanged({required this.fontsChanged, this.shaders = const []});
 
   factory AssetsChanged.fromJson(Map<String, dynamic> json) =>
       _$AssetsChangedFromJson(json);
@@ -423,6 +433,17 @@ class AssetsChanged extends DaemonResponse {
   static const wireName = 'assets-changed';
 
   final bool fontsChanged;
+
+  /// The project shaders whose compiled program this rebuild replaced, by
+  /// asset key.
+  ///
+  /// Neither an eviction nor a reassemble reaches these: `dart:ui` keeps a
+  /// loaded program by key for the life of the isolate, so a guest has to be
+  /// told which keys to read again. A shader that stopped compiling is not
+  /// listed — the guest keeps drawing its last good program. Empty from a
+  /// daemon older than the field.
+  @JsonKey(fromJson: _assetKeys)
+  final List<String> shaders;
 
   @override
   String get type => wireName;

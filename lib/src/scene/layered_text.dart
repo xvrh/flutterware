@@ -21,17 +21,21 @@
 // repaint and a size that changes costs a relayout.
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'core/values.dart';
 import 'flutter_bridge.dart';
 import 'gradient_shader.dart';
+import 'shader_programs.dart';
 
 /// A text node's paragraph, painted once per layer.
 ///
 /// With no layers this is exactly the `Text.rich` it always was — the stack
-/// is opt-in, and the ordinary case pays nothing for it.
-class LayeredText extends StatelessWidget {
+/// is opt-in, and the ordinary case pays nothing for it. The state exists
+/// only to keep the shaders a shader pass draws with across frames; without
+/// a stack it holds nothing.
+class LayeredText extends StatefulWidget {
   const LayeredText({
     super.key,
     required this.span,
@@ -39,6 +43,7 @@ class LayeredText extends StatelessWidget {
     required this.layers,
     required this.textAlign,
     required this.maxLines,
+    this.time,
   });
 
   final InlineSpan span;
@@ -50,11 +55,39 @@ class LayeredText extends StatelessWidget {
   final TextAlign textAlign;
   final int? maxLines;
 
+  /// Scene time for a shader pass's `uTime`. Listened to only when the stack
+  /// holds a shader pass; null is zero.
+  final ValueListenable<Duration>? time;
+
+  @override
+  State<LayeredText> createState() => _LayeredTextState();
+}
+
+class _LayeredTextState extends State<LayeredText> {
+  final _slots = SceneShaderSlots();
+
   TextOverflow get _overflow =>
-      maxLines == null ? TextOverflow.clip : TextOverflow.ellipsis;
+      widget.maxLines == null ? TextOverflow.clip : TextOverflow.ellipsis;
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    // A reassemble follows every shader reload: a slot's uniform handles may
+    // name uniforms the reload dropped, and a shader first seen broken may
+    // be fixed now, so both are asked for again.
+    _slots.clear();
+    SceneShaderPrograms.instance.forgetFailures();
+  }
+
+  @override
+  void dispose() {
+    _slots.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    var LayeredText(:span, :style, :layers, :textAlign, :maxLines) = widget;
     // What a `Text` would actually draw with, resolved HERE and handed to
     // both halves.
     //
@@ -98,6 +131,8 @@ class LayeredText extends StatelessWidget {
         // reason: every metric input, or two layouts.
         widthBasis: ambient.textWidthBasis,
         heightBehavior: ambient.textHeightBehavior,
+        time: widget.time,
+        slots: _slots,
       ),
       child: text,
     );
@@ -119,7 +154,12 @@ class SceneTextStackPainter extends CustomPainter {
     required this.scaler,
     required this.widthBasis,
     required this.heightBehavior,
-  });
+    this.time,
+    // Internal: the slots are the mounted LayeredText's, kept across its
+    // rebuilds, and their type is not exported.
+    @internal SceneShaderSlots? slots,
+  }) : _slots = slots ?? SceneShaderSlots(),
+       super(repaint: _repaintFor(layers, time));
 
   final InlineSpan span;
   final TextStyle style;
@@ -132,15 +172,35 @@ class SceneTextStackPainter extends CustomPainter {
   final TextWidthBasis widthBasis;
   final TextHeightBehavior? heightBehavior;
 
+  /// Scene time, read by a shader pass as `uTime`; null is zero.
+  final ValueListenable<Duration>? time;
+  final SceneShaderSlots _slots;
+
+  /// Only a shader pass is drawn by the clock or waits on a load, so only a
+  /// stack holding one listens to either — text without one never repaints
+  /// for time.
+  static Listenable? _repaintFor(
+    List<TextLayer> layers,
+    ValueListenable<Duration>? time,
+  ) => layers.any((l) => l.paint is ShaderPaint)
+      ? Listenable.merge([SceneShaderPrograms.instance, ?time])
+      : null;
+
+  @visibleForTesting
+  Listenable? get repaintsOn => _repaintFor(layers, time);
+
   @override
   void paint(Canvas canvas, Size size) {
-    for (var layer in layers) {
+    for (var pass = 0; pass < layers.length; pass++) {
+      var layer = layers[pass];
       var moved = layer.dx != 0 || layer.dy != 0;
       if (moved) {
         canvas.save();
         canvas.translate(layer.dx, layer.dy);
       }
-      if (_perLine(layer)) {
+      if (layer.paint case ShaderPaint shader) {
+        _paintShader(canvas, pass, layer, shader, size);
+      } else if (_perLine(layer)) {
         _paintPerLine(canvas, layer, size);
       } else if (layer.blend != SceneBlendMode.normal) {
         // On the layer's paint, not the paragraph's: a blend there is
@@ -183,7 +243,6 @@ class SceneTextStackPainter extends CustomPainter {
         .withPaint(null)
         .copyWith(opacity: 1, blend: SceneBlendMode.normal);
     var mask = _painterFor(coverage, size, mask: true);
-    var lines = mask.computeLineMetrics();
     // How far past the box this pass's own spill can still reach: a stroke
     // widens the outline by its width, a blur by roughly three sigmas, and
     // the glyphs themselves can overhang their line by about a font size. A
@@ -197,6 +256,28 @@ class SceneTextStackPainter extends CustomPainter {
       Paint()..blendMode = layer.blend.flutter,
     );
     mask.paint(canvas, Offset.zero);
+    for (var (:box, :band) in _lineBands(mask, size, margin)) {
+      canvas.drawRect(
+        band,
+        Paint()
+          ..blendMode = BlendMode.srcIn
+          ..shader = sceneGradientShader(gradient, box, opacity: layer.opacity),
+      );
+    }
+    canvas.restore();
+  }
+
+  /// Each line of [mask]: its [box] — the line's own ink extent, which is
+  /// what a per-line paint is measured against — and the [band] that paint is
+  /// drawn over, running to the midpoint of the gap to its neighbours and, at
+  /// the ends, [margin] past the painter's [size].
+  static List<({Rect box, Rect band})> _lineBands(
+    TextPainter mask,
+    Size size,
+    double margin,
+  ) {
+    var lines = mask.computeLineMetrics();
+    var bands = <({Rect box, Rect band})>[];
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       var top = line.baseline - line.ascent;
@@ -207,16 +288,78 @@ class SceneTextStackPainter extends CustomPainter {
       var bandBottom = i == lines.length - 1
           ? size.height + margin
           : (bottom + lines[i + 1].baseline - lines[i + 1].ascent) / 2;
-      canvas.drawRect(
-        Rect.fromLTRB(-margin, bandTop, size.width + margin, bandBottom),
-        Paint()
-          ..blendMode = BlendMode.srcIn
-          ..shader = sceneGradientShader(
-            gradient,
-            Rect.fromLTRB(line.left, top, line.left + line.width, bottom),
-            opacity: layer.opacity,
-          ),
-      );
+      bands.add((
+        box: Rect.fromLTRB(line.left, top, line.left + line.width, bottom),
+        band: Rect.fromLTRB(-margin, bandTop, size.width + margin, bandBottom),
+      ));
+    }
+    return bands;
+  }
+
+  /// A pass painted by a fragment shader, always through a mask.
+  ///
+  /// A paragraph freezes its foreground shader's uniforms when it is built
+  /// (measured on Skia and Impeller), so a shader handed to the glyph paint
+  /// would never see a new `uTime` without a relayout. So the glyphs go in as
+  /// coverage, the same as a per-line gradient's, and the shader is drawn over
+  /// them fresh on every paint. The box is placed by the transform — the
+  /// canvas moves to the box's corner and the rect is drawn from zero — so
+  /// `FlutterFragCoord()` runs over `[0, uSize]` wherever the pass sits.
+  ///
+  /// With no program — still loading, failed, or no asset named — the pass
+  /// draws nothing at all, not even its coverage: a blank pass is an honest
+  /// "not yet", where a stand-in would be a wrong frame that looks right.
+  void _paintShader(
+    Canvas canvas,
+    int pass,
+    TextLayer layer,
+    ShaderPaint paint,
+    Size size,
+  ) {
+    var program = paint.asset.isEmpty
+        ? null
+        : SceneShaderPrograms.instance.program(paint.asset);
+    if (program == null) return;
+    var coverage = layer
+        .withPaint(null)
+        .copyWith(opacity: 1, blend: SceneBlendMode.normal);
+    var mask = _painterFor(coverage, size, mask: true);
+    var margin = _spillMargin(layer);
+    var whole = Offset.zero & size;
+    // Opacity on the layer: what the shader writes is the author's, and
+    // nothing drawn through it could fade it.
+    canvas.saveLayer(
+      whole.inflate(margin),
+      Paint()
+        ..blendMode = layer.blend.flutter
+        ..color = Color.fromRGBO(0, 0, 0, layer.opacity),
+    );
+    mask.paint(canvas, Offset.zero);
+    var boxes = layer.box == SceneLayerBox.line
+        ? _lineBands(mask, size, margin)
+        : [(box: whole, band: whole.inflate(margin))];
+    var seconds =
+        (time?.value ?? Duration.zero).inMicroseconds /
+        Duration.microsecondsPerSecond;
+    for (var line = 0; line < boxes.length; line++) {
+      var (:box, :band) = boxes[line];
+      var slot = _slots.slot(program, paint.asset, pass, line)
+        ..setUniforms(
+          paint,
+          size: box.size,
+          color: style.color ?? const Color(0xFF000000),
+          seconds: seconds,
+        );
+      canvas
+        ..save()
+        ..translate(box.left, box.top)
+        ..drawRect(
+          band.shift(-box.topLeft),
+          Paint()
+            ..blendMode = BlendMode.srcIn
+            ..shader = slot.shader,
+        )
+        ..restore();
     }
     canvas.restore();
   }
@@ -301,6 +444,10 @@ class SceneTextStackPainter extends CustomPainter {
             Offset.zero & size,
             opacity: layer.opacity,
           );
+        case ShaderPaint():
+          // Never painted through the glyph paint — see [_paintShader], which
+          // takes every shader pass before it gets here.
+          paint.color = const Color(0x00000000);
         case null:
           // No paint of its own: the text's colour, which is what lets one
           // stack serve several colours.
@@ -326,7 +473,8 @@ class SceneTextStackPainter extends CustomPainter {
       old.textDirection != textDirection ||
       old.scaler != scaler ||
       old.widthBasis != widthBasis ||
-      old.heightBehavior != heightBehavior;
+      old.heightBehavior != heightBehavior ||
+      old.time != time;
 }
 
 Color _faded(Color c, double opacity) =>

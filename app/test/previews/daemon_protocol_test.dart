@@ -156,6 +156,46 @@ void main() {
       expect(decoded.seed, isNull);
       expect(decoded.warmStart, isFalse);
     });
+
+    test('an asset change names the shaders it recompiled', () {
+      // A live guest holds a program per key until it is told to read that
+      // key again, so the keys are the whole of what it needs to hear.
+      var sent = AssetsChanged(
+        fontsChanged: false,
+        shaders: ['shaders/glow.frag'],
+      );
+      var back = DaemonResponse.decode(
+        tryDecodeLine(encodeLine(sent))!,
+      ) as AssetsChanged;
+      expect(back.shaders, ['shaders/glow.frag']);
+      expect(back.fontsChanged, isFalse);
+    });
+
+    test('an asset change from an older daemon names none', () {
+      // The JSON a daemon from before shaders were bundled sends.
+      var back = DaemonResponse.decode(
+        tryDecodeLine('{"type":"assets-changed","fontsChanged":true}')!,
+      ) as AssetsChanged;
+      expect(back.shaders, isEmpty);
+      expect(back.fontsChanged, isTrue);
+    });
+
+    test('an unreadable shader list decodes to the keys it can read', () {
+      for (var (shaders, expected) in [
+        ('"shaders/glow.frag"', <String>[]),
+        ('null', <String>[]),
+        ('{"a":1}', <String>[]),
+        ('["shaders/glow.frag", 3, null]', ['shaders/glow.frag']),
+      ]) {
+        var back = DaemonResponse.decode(
+          tryDecodeLine(
+            '{"type":"assets-changed","fontsChanged":false,'
+            '"shaders":$shaders}',
+          )!,
+        ) as AssetsChanged;
+        expect(back.shaders, expected, reason: shaders);
+      }
+    });
   });
 
   group('reading a phase back into words', () {

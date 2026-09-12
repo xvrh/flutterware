@@ -132,10 +132,16 @@ Map<String, dynamic> _$CatalogChangedToJson(CatalogChanged instance) =>
     };
 
 AssetsChanged _$AssetsChangedFromJson(Map<String, dynamic> json) =>
-    AssetsChanged(fontsChanged: json['fontsChanged'] as bool);
+    AssetsChanged(
+      fontsChanged: json['fontsChanged'] as bool,
+      shaders: json['shaders'] == null ? const [] : _assetKeys(json['shaders']),
+    );
 
 Map<String, dynamic> _$AssetsChangedToJson(AssetsChanged instance) =>
-    <String, dynamic>{'fontsChanged': instance.fontsChanged};
+    <String, dynamic>{
+      'fontsChanged': instance.fontsChanged,
+      'shaders': instance.shaders,
+    };
 
 DaemonCompiled _$DaemonCompiledFromJson(Map<String, dynamic> json) =>
     DaemonCompiled(

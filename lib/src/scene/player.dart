@@ -18,8 +18,8 @@ enum MotionPlayerStatus { idle, playing, paused, completed }
 /// any direction, from any state, without starting anything. Playing owns a
 /// ticker: [play] runs to the end, [reverse] runs back to zero, [repeat]
 /// keeps going. [pause] keeps the picture, [finish] jumps to the end pose
-/// and holds it, and [stop] is cancel — the fx drops and the authored values
-/// were never touched.
+/// and holds it, and [stop] is cancel — the fx drops, the authored values
+/// were never touched, and scene time is back at zero.
 ///
 /// A [ChangeNotifier], so `AnimatedBuilder(animation: player)` redraws a
 /// scrubber or a play button. The SCENE needs none of that: applying a frame
@@ -201,9 +201,13 @@ class MotionPlayer with ChangeNotifier {
     _end(MotionPlayerStatus.completed);
   }
 
-  /// Cancel: the fx drops, the base was never touched.
+  /// Cancel: the fx drops, the base was never touched, and the clock is at
+  /// zero again — nothing plays, so a shader pass drawn by the clock shows
+  /// the authored moment too.
   void stop() {
-    playable.clearFx();
+    playable
+      ..clearFx()
+      ..clock.value = Duration.zero;
     _position = Duration.zero;
     _remaining = 0;
     _end(MotionPlayerStatus.idle);
@@ -216,6 +220,7 @@ class MotionPlayer with ChangeNotifier {
       ..dispose();
     playable
       ..clearFx()
+      ..clock.value = Duration.zero
       ..releaseDriver(this);
     _status = MotionPlayerStatus.idle;
     var pending = _finished;

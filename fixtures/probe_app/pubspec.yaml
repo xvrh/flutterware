@@ -126,6 +126,10 @@ flutter:
     # What hook/build.dart converts it into. Managed by the hook; ignored.
     - flutter_scene_generated/
 
+  # A scene text layer's paint — demo/foil_title.scene.dart.
+  shaders:
+    - shaders/foil.frag
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
 

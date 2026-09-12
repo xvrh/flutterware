@@ -14,6 +14,7 @@ import 'package:path/path.dart' as paths;
 
 import '../externals_file.dart';
 import '../model_assets.dart';
+import '../shader_library.dart';
 
 import '../../ui/context_menu.dart';
 import '../../ui/disclosure.dart';
@@ -49,6 +50,7 @@ class SceneInspector extends StatelessWidget {
     this.externals = const [],
     this.axesFor,
     this.packageRoot,
+    this.shaders,
     this.onOpenParam,
     this.onEnterNested,
   });
@@ -59,6 +61,10 @@ class SceneInspector extends StatelessWidget {
   /// file, or a mesh or clip in one, finds what there is to pick. Null in
   /// a test that has no package; the pickers then say so.
   final String? packageRoot;
+
+  /// The package's declared shaders, for a text layer painted with one.
+  /// Null in a test that has no package; the shader picker then says so.
+  final SceneShaders? shaders;
 
   /// Opens a parameter below the canvas — where a bound property's row
   /// leads.
@@ -957,6 +963,7 @@ class SceneInspector extends StatelessWidget {
         overridden: !inheritsFromStyle(doc, t, 'layers'),
         onReset: () => editor.resetToStyle(t, 'layers'),
       ),
+      shaders: shaders,
       onChanged: (next, {required label, mergeKey}) =>
           editor.perform(label, () => t.layers = next, mergeKey: mergeKey),
     ),

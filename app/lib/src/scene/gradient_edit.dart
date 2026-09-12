@@ -5,13 +5,14 @@ import 'dart:math' as math;
 
 import 'package:flutterware/scene_authoring.dart';
 
-/// The five things a pass can be painted with, as the picker offers them.
+/// The six things a pass can be painted with, as the picker offers them.
 enum ScenePaintKind {
   text('Text colour'),
   solid('Colour'),
   linear('Linear'),
   radial('Radial'),
-  sweep('Sweep');
+  sweep('Sweep'),
+  shader('Shader');
 
   const ScenePaintKind(this.label);
 
@@ -23,6 +24,7 @@ enum ScenePaintKind {
     LinearPaint() => linear,
     RadialPaint() => radial,
     SweepPaint() => sweep,
+    ShaderPaint() => shader,
   };
 }
 
@@ -39,7 +41,7 @@ ScenePaint? convertPaint(
   var (List<SceneColor> colors, List<double>? stops) = switch (from) {
     SceneGradient g => (g.colors, g.stops),
     SolidPaint(:var color) => ([color, _clear(color)], null),
-    null => ([own, _clear(own)], null),
+    ShaderPaint() || null => ([own, _clear(own)], null),
   };
   return switch (kind) {
     ScenePaintKind.text => null,
@@ -47,6 +49,7 @@ ScenePaint? convertPaint(
     ScenePaintKind.linear => LinearPaint(colors: colors, stops: stops),
     ScenePaintKind.radial => RadialPaint(colors: colors, stops: stops),
     ScenePaintKind.sweep => SweepPaint(colors: colors, stops: stops),
+    ScenePaintKind.shader => const ShaderPaint(''),
   };
 }
 

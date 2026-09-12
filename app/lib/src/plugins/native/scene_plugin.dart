@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../../address/address_scope.dart';
 import '../../embedder/embedded_engine.dart';
+import '../../embedder/flutter_cache.dart';
 import '../../embedder/guest_texture.dart';
 import '../../previews/catalog_session.dart';
 import '../../previews/compiler_daemon_client.dart';
@@ -26,6 +27,7 @@ import '../../scene/editor.dart';
 import '../../scene/guest.dart';
 import '../../scene/import/variables.dart';
 import '../../scene/scene_file.dart';
+import '../../scene/shader_library.dart';
 import '../../scene/playback.dart';
 import '../../scene/tokens_file.dart';
 import '../../scene/tokens_library.dart';
@@ -76,8 +78,32 @@ class ScenePlugin extends NativePlugin<SceneCore> {
         return session;
       });
 
+  /// Every package's declared shaders and their uniforms, compiled with the
+  /// workspace's own SDK. Made when a scene is first opened; a package's
+  /// declared shaders start compiling when its scene first builds.
+  SceneShaderLibrary get shaderLibrary => _shaderLibrary ??= SceneShaderLibrary(
+    cache: FlutterCache(p.join(host.workspace.flutterSdk.root, 'bin', 'cache')),
+  );
+  SceneShaderLibrary? _shaderLibrary;
+
   void unawaitedStart(CatalogSession session) {
     session.start(width: 2048, height: 1000).ignore();
+  }
+
+  /// The panel mounted over this plugin, which is what holds the guest.
+  _ScenePanelState? _panel;
+
+  /// A scene open on a guest that is still booting, or on a canvas that has
+  /// not yet drawn what the document says — see [SceneGuest.busyWith]. With
+  /// no scene open there is no guest to wait for: the listing is the panel.
+  @override
+  String? get busyWith {
+    var guest = _panel?._guest;
+    if (guest == null) return null;
+    if (guest.session.phase == CatalogSessionPhase.starting) {
+      return guest.session.busyWith ?? 'starting the guest';
+    }
+    return guest.busyWith;
   }
 
   @override
@@ -85,6 +111,7 @@ class ScenePlugin extends NativePlugin<SceneCore> {
     for (var session in _sessions.values) {
       session.dispose();
     }
+    _shaderLibrary?.dispose();
     super.dispose();
   }
 
@@ -323,6 +350,7 @@ class _ScenePanelState extends State<_ScenePanel>
   @override
   void initState() {
     super.initState();
+    widget.plugin._panel = this;
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -347,6 +375,8 @@ class _ScenePanelState extends State<_ScenePanel>
   void didUpdateWidget(_ScenePanel old) {
     super.didUpdateWidget(old);
     if (old.plugin == widget.plugin) return;
+    if (identical(old.plugin._panel, this)) old.plugin._panel = null;
+    widget.plugin._panel = this;
     var package = _package;
     // The new core has computed nothing; the old one's scan is gone with it.
     if (package != null) _core.track(package);
@@ -665,6 +695,7 @@ class _ScenePanelState extends State<_ScenePanel>
 
   @override
   void dispose() {
+    if (identical(widget.plugin._panel, this)) widget.plugin._panel = null;
     WidgetsBinding.instance.removeObserver(this);
     _resizeSettle?.cancel();
     // Before the playbacks and the guest: closing the panel is the last
@@ -1302,6 +1333,9 @@ class _ScenePanelState extends State<_ScenePanel>
             key: ValueKey(workspace.active.path),
             editor,
             packageRoot: _core.rootFor(_package!),
+            shaders: widget.plugin.shaderLibrary.forPackage(
+              _core.rootFor(_package!),
+            ),
             externals: _externals(),
             axesFor: _fontAxes,
             tokens: _tokensHost(workspace),

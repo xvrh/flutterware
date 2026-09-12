@@ -238,6 +238,87 @@ void main() {
       expect(parsed.refusals.single.message, contains('SceneLayerBox.line'));
     });
 
+    test('a shader paint round-trips through the file', () {
+      var layers = <TextLayer>[
+        const FillLayer(
+          paint: ShaderPaint(
+            'shaders/foil.frag',
+            uniforms: {
+              'uAngle': [0.4],
+              'uTint': [1, 0.8, 0.2],
+            },
+          ),
+          box: SceneLayerBox.line,
+        ),
+      ];
+      var out = _emit(layers);
+      expect(
+        out,
+        contains("'uAngle': [0.4]"),
+        reason: 'the file is Dart: a float is a List<double> there too',
+      );
+      expect(_read(out), layers);
+      expect(_emit(_read(out)), out, reason: 'emit ∘ parse is the identity');
+    });
+
+    test(
+      'a shader asset with a quote, a backslash and a dollar round-trips',
+      () {
+        var layers = <TextLayer>[
+          const FillLayer(paint: ShaderPaint(r"a'b\c\$d.frag")),
+        ];
+        var out = _emit(layers);
+        expect(_read(out), layers);
+        expect(_emit(_read(out)), out, reason: 'emit ∘ parse is the identity');
+      },
+    );
+
+    test('refuses a shader paint whose asset is not a string literal', () {
+      var parsed = parseSceneFile(
+        _scene('[FillLayer(paint: ShaderPaint(asset))]'),
+      );
+      expect(parsed.refusals.single.construct, 'paint');
+      expect(
+        parsed.refusals.single.message,
+        contains("ShaderPaint('shaders/foil.frag')"),
+      );
+    });
+
+    test('refuses a bare float where a shader uniform wants a list', () {
+      var parsed = parseSceneFile(
+        _scene("[FillLayer(paint: ShaderPaint('a.frag', uniforms: {'u': 1}))]"),
+      );
+      expect(parsed.refusals.single.construct, "uniform 'u'");
+      expect(parsed.refusals.single.message, contains('[0.4] for a float'));
+    });
+
+    test('refuses a shader uniform with too many components', () {
+      var parsed = parseSceneFile(
+        _scene(
+          "[FillLayer(paint: ShaderPaint('a.frag', "
+          "uniforms: {'u': [1, 2, 3, 4, 5]}))]",
+        ),
+      );
+      expect(parsed.refusals.single.construct, "uniform 'u'");
+    });
+
+    test('refuses a shader uniform with an unquoted key', () {
+      var parsed = parseSceneFile(
+        _scene("[FillLayer(paint: ShaderPaint('a.frag', uniforms: {u: 1}))]"),
+      );
+      expect(parsed.refusals.single.construct, 'uniforms');
+    });
+
+    test('refuses a shader paint field it does not have, by name', () {
+      var parsed = parseSceneFile(
+        _scene("[FillLayer(paint: ShaderPaint('a.frag', tint: 1))]"),
+      );
+      expect(
+        parsed.refusals.single.message,
+        contains('ShaderPaint has no "tint"'),
+      );
+    });
+
     test('a blended pass says so, and nothing when it is normal', () {
       var layers = <TextLayer>[
         const FillLayer(

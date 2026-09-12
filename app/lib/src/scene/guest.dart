@@ -12,8 +12,13 @@ import 'dart:convert';
 
 import 'package:flutter/painting.dart' show Size;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart'
+    show AppLifecycleListener, AppLifecycleState, WidgetsBinding;
 import 'package:vector_math/vector_math_64.dart' show Matrix4;
 import 'package:flutterware/scene_authoring.dart';
+// ignore: implementation_imports
+import 'package:flutterware/src/scene/shader_programs.dart'
+    show sceneShaderAssets;
 
 import '../previews/catalog_session.dart';
 import 'args_codegen.dart';
@@ -34,8 +39,13 @@ const sceneHostEntrySymbol = sceneCanvasHostSymbol;
 /// one and they all share the symbol.
 class SceneGuest {
   SceneGuest(this.session, this.editor, {required this.groupDirectory}) {
+    _paintsWithClock = sceneShaderAssets(editor.doc).isNotEmpty;
+    _shown = _isShown(WidgetsBinding.instance.lifecycleState);
+    _lifecycle = AppLifecycleListener(onStateChange: _onLifecycle);
+    _pollAssets();
     editor.doc.addListener(_push);
-    editor.addListener(_push);
+    editor.addListener(_onEditor);
+    editor.playheadClock.addListener(_onPlayhead);
     session.addListener(_onSession);
     // A session that is already up notifies nobody about it: ask now, or a
     // guest created over a running session shows what it was showing.
@@ -90,6 +100,44 @@ class SceneGuest {
   /// booting state rather than a blank artboard.
   bool get isLive => _everApplied;
 
+  /// The shader programs the canvas's last answer was still loading. A pass
+  /// paints nothing until its program lands, so while this is not empty the
+  /// texture is an honest picture of the wrong thing.
+  var _pendingShaders = const <String>[];
+
+  /// Asks again while [_pendingShaders] is not empty: the host answers once
+  /// per push, and a program that lands later says so to nobody.
+  Timer? _shaderRetry;
+  var _disposed = false;
+
+  /// Whether the host has answered a push at all, with a picture or with
+  /// why not.
+  var _answered = false;
+
+  /// Why no host is going to answer: it does not compile, the switch to it
+  /// failed, or the group declares none. What [_onSession] last found.
+  String? _hostProblem;
+
+  /// What the canvas is still waiting on, or null when what it shows is
+  /// what the document says — read by the plugin's settle source.
+  ///
+  /// Busy from the start until the host first answers, not only while a
+  /// push is out: before its first draw the guest retries every 500ms, and
+  /// the quiet between two failed pushes was long enough for a capture to
+  /// photograph the booting canvas. Not when nothing is coming — a host that
+  /// cannot answer would hold every capture to its timeout.
+  String? get busyWith {
+    if (_inflight) return 'drawing the scene';
+    if (!_answered &&
+        _hostProblem == null &&
+        session.phase != CatalogSessionPhase.error) {
+      return 'drawing the scene';
+    }
+    return _pendingShaders.isEmpty
+        ? null
+        : 'loading ${_pendingShaders.join(', ')}';
+  }
+
   /// Puts the scene host on the guest whenever it is not already there —
   /// including over whatever the session picked for itself while booting,
   /// which is how a rebooted session came up showing the catalog's first
@@ -99,6 +147,7 @@ class SceneGuest {
 
   void _onSession() {
     if (session.phase != CatalogSessionPhase.ready) return;
+    _hostProblem = null;
     if (!identical(session.engine, _engine)) {
       _engine = session.engine;
       // A guest that restarted or reloaded holds no scene until it is sent
@@ -112,12 +161,15 @@ class SceneGuest {
       // A host that does not compile is a guest showing its last good
       // build, silently — the status line is where that has to be said.
       if (session.compileErrorFor(entry) case var error?) {
+        _hostProblem = error;
         status.value = 'guest: the host does not compile — $error';
       } else if (session.lastSwitch?.error case var error?) {
+        _hostProblem = error;
         status.value = 'guest: $error';
       }
       return;
     }
+    _hostProblem = 'no scene host';
     status.value =
         'guest: no scene host in $groupDirectory/ — the generated '
         '$sceneArgsFileName declares it; rescan the group';
@@ -130,7 +182,77 @@ class SceneGuest {
   /// changes.
   void push() => _push();
 
+  /// Whether a shader paints the document, which then changes with the
+  /// playhead alone: a motion that animates nothing but `uTime` writes no
+  /// fx, so no document flush ever pushes it.
+  ///
+  /// Asked when the EDITOR notifies — every edit, undo and redo does —
+  /// rather than when the document does, which is every fx flush and so
+  /// every tick of a playing motion.
+  var _paintsWithClock = false;
+
+  void _onEditor() {
+    _paintsWithClock = sceneShaderAssets(editor.doc).isNotEmpty;
+    _pollAssets();
+    _push();
+  }
+
+  /// How often the daemon is asked to look at the assets while a shader
+  /// paints the document.
+  static const assetPollInterval = Duration(seconds: 1);
+
+  /// The daemon has no watcher: it rebuilds the bundle — and tells the guest
+  /// which shaders to reload — only when a client asks it something. The
+  /// previews panel polls while it is on screen; nothing asked on the scene
+  /// editor's behalf, so a `.frag` saved beside an open scene reached the
+  /// canvas only at the next restart. Polled only while a shader paints the
+  /// document, since that is the edit loop it is for.
+  Timer? _assetPoll;
+
+  /// Whether the studio is on screen, which the poll also waits for: a
+  /// window left minimised over a shader document would otherwise have the
+  /// daemon rebundle once a second for as long as it stays down. Not
+  /// `inactive` — a studio beside the editor the `.frag` is saved in has
+  /// lost focus, and is the loop the poll is for.
+  var _shown = true;
+  late final AppLifecycleListener _lifecycle;
+
+  static bool _isShown(AppLifecycleState? state) =>
+      state != AppLifecycleState.hidden && state != AppLifecycleState.paused;
+
+  /// Back on screen, the daemon is asked at once rather than a second later:
+  /// whatever was saved while the window was down is what the user is
+  /// coming back to see.
+  void _onLifecycle(AppLifecycleState state) {
+    var shown = _isShown(state);
+    if (shown == _shown) return;
+    _shown = shown;
+    if (shown &&
+        _paintsWithClock &&
+        session.phase == CatalogSessionPhase.ready) {
+      session.refresh();
+    }
+    _pollAssets();
+  }
+
+  void _pollAssets() {
+    if (!_paintsWithClock || !_shown) {
+      _assetPoll?.cancel();
+      _assetPoll = null;
+      return;
+    }
+    _assetPoll ??= Timer.periodic(assetPollInterval, (_) {
+      if (session.phase == CatalogSessionPhase.ready) session.refresh();
+    });
+  }
+
+  void _onPlayhead() {
+    if (_paintsWithClock) _push();
+  }
+
   void _push() {
+    if (_disposed) return;
+    _shaderRetry?.cancel();
     if (_inflight) {
       _dirty = true;
       return;
@@ -154,14 +276,23 @@ class SceneGuest {
               ]),
               if (artboard case var size?)
                 'artboard': jsonEncode([size.width, size.height]),
+              'time':
+                  '${editor.playhead.inMicroseconds / Duration.microsecondsPerSecond}',
             },
           )
           // A call that never answers would hold `_inflight` for good, and a
           // canvas that stops following edits is indistinguishable from a
           // frozen editor. Measured round trips are 10–300ms; a second is
           // already a guest in trouble, and the status line should say so.
+          // The host's wait for shader programs is bounded at 2s, inside this.
           .timeout(const Duration(seconds: 3))
           .then((reply) {
+            if (_disposed) return;
+            if (reply != null) _answered = true;
+            _pendingShaders = _pendingIn(reply);
+            if (_pendingShaders.isNotEmpty) {
+              _shaderRetry = Timer(const Duration(milliseconds: 250), _push);
+            }
             var rtt = clock.elapsedMicroseconds / 1000;
             if (reply != null && reply['error'] == null) {
               _everApplied = true;
@@ -181,6 +312,10 @@ class SceneGuest {
             }
           })
           .catchError((Object e) {
+            if (_disposed) return;
+            // No re-push follows a failure, so a list kept from the last
+            // answer would hold a capture until the next edit.
+            _pendingShaders = const [];
             if (_everApplied) {
               status.value = e is TimeoutException
                   ? 'guest: no answer in 3s — the host may be stuck'
@@ -196,6 +331,17 @@ class SceneGuest {
           }),
     );
   }
+
+  /// The asset keys a reply names as still loading; anything unreadable is
+  /// none, since a host that predates the list is one that never waits.
+  static List<String> _pendingIn(Map<String, dynamic>? reply) =>
+      switch (reply?['pendingShaders']) {
+        List names => [
+          for (var n in names)
+            if (n is String) n,
+        ],
+        _ => const [],
+      };
 
   /// The guest is the only renderer, so its laid-out rects are the editor's
   /// geometry: selection, hit targets and handles all read what it measured.
@@ -221,11 +367,16 @@ class SceneGuest {
   }
 
   void dispose() {
+    _disposed = true;
+    _lifecycle.dispose();
+    _assetPoll?.cancel();
+    _shaderRetry?.cancel();
     _viewSettle?.cancel();
     rendered.dispose();
     _retry?.cancel();
     editor.doc.removeListener(_push);
-    editor.removeListener(_push);
+    editor.removeListener(_onEditor);
+    editor.playheadClock.removeListener(_onPlayhead);
     session.removeListener(_onSession);
     status.dispose();
   }

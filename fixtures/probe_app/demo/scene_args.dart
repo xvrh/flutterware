@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import 'arcade_poster.scene.dart';
 import 'banner.scene.dart';
+import 'foil_title.scene.dart';
 import 'invoice.scene.dart';
 import 'ohoh.scene.dart';
 import 'onboarding.scene.dart';
@@ -266,6 +267,29 @@ class BannerSceneArgs extends SceneRefArgs {
 
 class BannerSceneTracks extends SceneExtTracks {
   const BannerSceneTracks();
+
+  @override
+  Map<String, MotionTrack> toMap() => {};
+}
+
+class FoilTitleArgs extends SceneRefArgs {
+  const FoilTitleArgs();
+
+  @override
+  String get entry => 'FoilTitle';
+
+  @override
+  FoilTitleArgs merge(SceneArgs fx) => FoilTitleArgs();
+
+  @override
+  Map<String, Object?> toMap() => {};
+
+  @override
+  SceneDefinition build() => FoilTitle();
+}
+
+class FoilTitleTracks extends SceneExtTracks {
+  const FoilTitleTracks();
 
   @override
   Map<String, MotionTrack> toMap() => {};
@@ -708,6 +732,7 @@ Widget scenePlayer() => Builder(
     nested: const {
       'ArcadePoster': ArcadePosterArgs(),
       'BannerScene': BannerSceneArgs(),
+      'FoilTitle': FoilTitleArgs(),
       'Invoice': InvoiceArgs(),
       'Ohoh': OhohArgs(),
       'Onboarding': OnboardingArgs(),

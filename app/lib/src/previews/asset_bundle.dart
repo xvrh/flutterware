@@ -12,6 +12,7 @@ import '../assets/model/asset_catalog.dart';
 import '../embedder/flutter_cache.dart';
 import '../utils/run_dir.dart';
 import 'asset_transformer.dart';
+import 'project_shaders.dart';
 
 /// What one [AssetBundleBuilder.build] did to the directory, so a caller can
 /// decide whether anyone needs telling.
@@ -19,7 +20,13 @@ import 'asset_transformer.dart';
 /// [fontsChanged] is separate because fonts need more than cache eviction:
 /// the engine registers `FontManifest.json` when it starts, so a changed one
 /// reaches a *running* guest only through heavier means than a repaint.
-typedef BundleSync = ({bool changed, bool fontsChanged});
+///
+/// [shaders] is separate for the same kind of reason: `dart:ui` keeps a
+/// loaded `FragmentProgram` per key, so a running guest goes on drawing the
+/// old program until it is told which keys now stand for other bytes. Only
+/// the project's own shaders are listed; the framework's change with the
+/// engine, and a new engine is a new guest.
+typedef BundleSync = ({bool changed, bool fontsChanged, Set<String> shaders});
 
 /// The backends `impellerc` writes runtime stage data for: the **union** of
 /// every stage list flutter_tools has, in its order.
@@ -50,8 +57,9 @@ const shaderStages = [
 ];
 
 /// [shaderStages] as a directory-name fragment, so editing that list is the
-/// whole of invalidating the cache.
-final _stagesKey = sha1
+/// whole of invalidating the cache — the framework's shaders and the
+/// project's alike.
+final shaderStagesKey = sha1
     .convert(utf8.encode(shaderStages.join(' ')))
     .toString()
     .substring(0, 8);
@@ -100,29 +108,63 @@ List<String> frameworkShaderSources(FlutterCache cache) {
 /// scratch named for the process alone is one path two invocations write at the
 /// same time. A cold cache is the only time either compiles, which used to mean
 /// a fresh machine and now means the first run after any change to [stages].
+///
+/// [reflection], when given, is where `impellerc`'s `--reflection-json` lands:
+/// every uniform the shader declares, with its location and type. It goes
+/// through the same scratch and is renamed in **before** the binary, so a
+/// caller that takes the binary's existence to mean "done" never finds a
+/// binary without its reflection.
+///
+/// Whatever it throws, it leaves no scratch behind.
 Future<void> compileShader({
   required FlutterCache cache,
   required String source,
   required String destination,
   required List<String> stages,
+  String? reflection,
 }) async {
   var scratch = '$destination.$pid.${_scratchSerial++}';
-  var result = await Process.run(cache.impellerc, [
-    ...stages,
-    '--iplr',
-    '--sl=$scratch',
-    '--spirv=$scratch.spirv',
-    '--input=$source',
-    '--input-type=frag',
-    '--include=${p.dirname(source)}',
-    '--include=${cache.shaderLib}',
-  ]);
-  if (result.exitCode != 0) {
-    throw StateError('impellerc failed on $source:\n${result.stderr}');
+  try {
+    var result = await Process.run(cache.impellerc, [
+      ...stages,
+      '--iplr',
+      '--sl=$scratch',
+      '--spirv=$scratch.spirv',
+      if (reflection != null) '--reflection-json=$scratch.json',
+      '--input=$source',
+      '--input-type=frag',
+      '--include=${p.dirname(source)}',
+      '--include=${cache.shaderLib}',
+    ]);
+    if (result.exitCode != 0) {
+      throw StateError('impellerc failed on $source:\n${result.stderr}');
+    }
+    // A by-product nothing reads; the tool deletes it too.
+    File('$scratch.spirv').deleteSync();
+    if (reflection != null) File('$scratch.json').renameSync(reflection);
+    File(scratch).renameSync(destination);
+  } finally {
+    // Only a throw leaves any of these: a success renamed or deleted each.
+    for (var leftover in [scratch, '$scratch.spirv', '$scratch.json']) {
+      var file = File(leftover);
+      if (file.existsSync()) file.deleteSync();
+    }
   }
-  // A by-product nothing reads; the tool deletes it too.
-  File('$scratch.spirv').deleteSync();
-  File(scratch).renameSync(destination);
+}
+
+/// Project shader failures already written to `stderr`: the cache entry a
+/// compile failed for, or the key and error of a failure that was not the
+/// compiler's — so a broken `.frag` is reported once per edit rather than
+/// once per rebundle.
+final _reportedShaderFailures = <String>{};
+
+/// Project shader keys already reported as shadowing a framework shader.
+final _reportedShaderCollisions = <String>{};
+
+@visibleForTesting
+void resetShaderReportsForTesting() {
+  _reportedShaderFailures.clear();
+  _reportedShaderCollisions.clear();
 }
 
 /// Assembles the asset directory the embedder guest reads, without invoking
@@ -163,7 +205,8 @@ Future<void> compileShader({
 /// is flutter_tools' `ShaderCompiler`, but for [shaderStages] rather than for
 /// one target platform's — so the bytes are deliberately *not* the tool's, and
 /// `tool/catalog/bundle_probe.dart` says so in those terms rather than
-/// demanding they match.
+/// demanding they match. The project's own `flutter: shaders:` go the same
+/// way, cached by content rather than by name — see [compileProjectShader].
 ///
 /// In place, and never delete-and-recreate. The engine opens every asset
 /// relative to a file descriptor of this directory, so replacing the
@@ -243,8 +286,13 @@ class AssetBundleBuilder {
     _writeManifests(output, catalog, nativeAssetsManifest, sync);
     _linkPayloads(output, catalog, await _transformed(catalog), sync);
     await _linkCompiledShaders(output, sync);
+    await _linkProjectShaders(output, catalog, sync);
     _prune(output, sync);
-    return (changed: sync.changed, fontsChanged: sync.fontsChanged);
+    return (
+      changed: sync.changed,
+      fontsChanged: sync.fontsChanged,
+      shaders: sync.shaders,
+    );
   }
 
   /// Where each transformed file's bytes actually are, keyed by the file's own
@@ -500,7 +548,7 @@ class AssetBundleBuilder {
     var cacheDir = p.join(
       flutterwareDir(),
       'shaders',
-      '${cache.engineRevision}-$_stagesKey',
+      '${cache.engineRevision}-$shaderStagesKey',
     );
     await Future.wait([
       for (var source in sources)
@@ -523,6 +571,88 @@ class AssetBundleBuilder {
       stages: shaderStages,
     );
     return compiled;
+  }
+
+  /// The shaders the project's pubspecs declare under `flutter: shaders:`,
+  /// compiled by [compileProjectShader] and linked at their declared keys.
+  ///
+  /// A shader that does not compile is left out rather than failing the
+  /// build. The bundle serves every preview, and a `.frag` mid-edit is broken
+  /// most of the time it is being written. Left out, its key is pruned, so a
+  /// load that has not happened yet finds nothing and its pass paints
+  /// nothing. A guest that already holds the program is not told — the key
+  /// is not in [BundleSync.shaders], and `dart:ui` keeps what it loaded — so
+  /// it goes on drawing the last good program until the file compiles again,
+  /// when the key is linked afresh and reported. [compileProjectShader]
+  /// remembers the failure, so a file that stays broken costs a hash per
+  /// rebundle rather than a compile.
+  ///
+  /// A key the framework's shaders already hold is not linked: the framework
+  /// loads `shaders/ink_sparkle.frag` by that exact name, and a project file
+  /// under it would have every Material ripple run the project's program.
+  Future<void> _linkProjectShaders(
+    String output,
+    AssetCatalog catalog,
+    _Sync sync,
+  ) async {
+    var framework = {
+      for (var source in frameworkShaderSources(cache))
+        'shaders/${p.basename(source)}',
+    };
+    var work = <Future<void>>[];
+    for (var shader in catalog.shaders) {
+      if (framework.contains(shader.key)) {
+        if (_reportedShaderCollisions.add(shader.key)) {
+          stderr.writeln(
+            'flutterware: ${shader.key} is the name of a framework shader, '
+            "which keeps it; the project's file is not bundled. Rename it.",
+          );
+        }
+        continue;
+      }
+      work.add(_linkProjectShader(output, shader, sync));
+    }
+    await Future.wait(work);
+  }
+
+  Future<void> _linkProjectShader(
+    String output,
+    ResolvedShader shader,
+    _Sync sync,
+  ) async {
+    CompiledShader compiled;
+    try {
+      compiled = await compileProjectShader(
+        cache: cache,
+        source: shader.source,
+      );
+    } on ProjectShaderError catch (error) {
+      if (_reportedShaderFailures.add(error.entry)) {
+        stderr.writeln(
+          'flutterware: ${shader.key} does not compile, so it is left out of '
+          'the bundle until it does.\n${error.message.trimRight()}',
+        );
+      }
+      return;
+    } on FileSystemException catch (error) {
+      // Deleted or renamed since the catalog read it; the next build's
+      // catalog will not list it.
+      if (!File(shader.source).existsSync()) return;
+      // The file is there, so this is the cache or the compiler's output:
+      // not the project's to fix, and not remembered, so the next rebundle
+      // tries again.
+      var reason = error.osError?.message ?? error.message;
+      if (_reportedShaderFailures.add('${shader.key}\n$reason')) {
+        stderr.writeln(
+          'flutterware: ${shader.key} could not be compiled, so it is left '
+          'out of the bundle.\n$error',
+        );
+      }
+      return;
+    }
+    if (_link(output, shader.key, compiled.binary, sync)) {
+      sync.shaders.add(shader.key);
+    }
   }
 
   /// Writes [bytes] at [relative] when they differ from what is there.
@@ -555,13 +685,15 @@ class AssetBundleBuilder {
   ///
   /// A link already pointing there is left alone — its mtime is nothing, but
   /// leaving it is what makes the no-change rebundle report no change.
-  void _link(String output, String relative, String target, _Sync sync) {
-    if (!File(target).existsSync()) return;
+  ///
+  /// Returns whether it created or retargeted the link.
+  bool _link(String output, String relative, String target, _Sync sync) {
+    if (!File(target).existsSync()) return false;
     sync.desired.add(relative);
     var at = p.join(output, relative);
     var link = Link(at);
     if (link.existsSync()) {
-      if (link.targetSync() == target) return;
+      if (link.targetSync() == target) return false;
       link.deleteSync();
     } else if (File(at).existsSync()) {
       // A regular file squatting on the name — a hand-copied payload, or a
@@ -571,6 +703,7 @@ class AssetBundleBuilder {
     Directory(p.dirname(at)).createSync(recursive: true);
     link.createSync(target);
     sync.changed = true;
+    return true;
   }
 
   /// Deletes what a previous build owned and this one does not.
@@ -603,4 +736,7 @@ class _Sync {
   final desired = <String>{};
   var changed = false;
   var fontsChanged = false;
+
+  /// Project shader keys whose link this build created or retargeted.
+  final shaders = <String>{};
 }

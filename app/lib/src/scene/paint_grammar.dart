@@ -72,7 +72,16 @@ String _paint(ScenePaint p) => switch (p) {
       if (endAngle != 360) ', endAngle: ${_num(endAngle)}',
       ')',
     ].join(),
+  ShaderPaint(:var asset, :var uniforms) => [
+    'ShaderPaint(${_string(asset)}',
+    if (uniforms.isNotEmpty)
+      ', uniforms: {${[for (var e in uniforms.entries) '${_string(e.key)}: [${e.value.map(_num).join(', ')}]'].join(', ')}}',
+    ')',
+  ].join(),
 };
+
+String _string(String s) =>
+    "'${s.replaceAll(r'\', r'\\').replaceAll("'", r"\'").replaceAll(r'$', r'\$')}'";
 
 const _namedAlignments = {
   'topLeft': SceneAlignment.topLeft,
@@ -279,15 +288,98 @@ ScenePaint? _readPaint(Expression e, Refuse refuse) {
         startAngle: start ?? 0,
         endAngle: end ?? 360,
       );
+    case ('ShaderPaint', var args):
+      return _readShader(e, args, refuse);
     default:
       refuse(
         e.offset,
         'paint',
-        'a paint is SolidPaint(SceneColor(0x…)), or LinearPaint, RadialPaint '
-            'or SweepPaint(colors: […]) — nothing else is on the allowlist',
+        'a paint is SolidPaint(SceneColor(0x…)); LinearPaint, RadialPaint or '
+            "SweepPaint(colors: […]); or ShaderPaint('shaders/….frag') — "
+            'nothing else is on the allowlist',
       );
       return null;
   }
+}
+
+ScenePaint? _readShader(Expression at, ArgumentList args, Refuse refuse) {
+  var positional = [
+    for (var a in args.arguments)
+      if (a is! NamedArgument) a,
+  ];
+  if (positional.length != 1 || positional.single is! SimpleStringLiteral) {
+    refuse(
+      at.offset,
+      'paint',
+      'a shader paint names its asset first, as the pubspec declares it — '
+          "ShaderPaint('shaders/foil.frag')",
+    );
+    return null;
+  }
+  var asset = (positional.single as SimpleStringLiteral).value;
+  var named = <String, Expression>{
+    for (var a in args.arguments)
+      if (a is NamedArgument) a.name.lexeme: a.argumentExpression,
+  };
+  var uniforms = const <String, List<double>>{};
+  if (named.remove('uniforms') case var u?) {
+    var read = _readUniforms(u, refuse);
+    if (read == null) return null;
+    uniforms = read;
+  }
+  if (!_rest(named, 'ShaderPaint', refuse)) return null;
+  return ShaderPaint(asset, uniforms: uniforms);
+}
+
+Map<String, List<double>>? _readUniforms(Expression e, Refuse refuse) {
+  if (e is! SetOrMapLiteral) {
+    refuse(
+      e.offset,
+      'uniforms',
+      "a map of uniform names to values — {'uAngle': [0.4], 'uTint': [1, 0.8, 0.2]}",
+    );
+    return null;
+  }
+  var out = <String, List<double>>{};
+  for (var entry in e.elements) {
+    if (entry is! MapLiteralEntry || entry.key is! SimpleStringLiteral) {
+      refuse(
+        entry.offset,
+        'uniforms',
+        "a uniform's name in quotes, like 'uAngle'",
+      );
+      return null;
+    }
+    var name = (entry.key as SimpleStringLiteral).value;
+    var value = _uniformValue(entry.value);
+    if (value == null) {
+      refuse(
+        entry.value.offset,
+        "uniform '$name'",
+        'a list of one to four numbers, one per component — [0.4] for a '
+            'float, [1, 0.8, 0.2] for a vec3',
+      );
+      return null;
+    }
+    out[name] = value;
+  }
+  return out;
+}
+
+// Every value is a list, a float's too: the file is Dart, and a uniform is a
+// List<double> there — a bare number would not compile.
+List<double>? _uniformValue(Expression e) {
+  if (e is! ListLiteral || e.elements.isEmpty || e.elements.length > 4) {
+    return null;
+  }
+  var out = <double>[];
+  for (var x in e.elements) {
+    if (x is! Expression) return null;
+    var v = _number(x);
+    if (v == null) return null;
+    out.add(v);
+  }
+  return out;
 }
 
 /// A gradient's colours and where they sit, taken out of [named].

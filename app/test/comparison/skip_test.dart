@@ -422,6 +422,84 @@ void main() {
       var paths = pixelInputsOf(packagePath: 'pkg', roots: [head]);
       expect(paths, contains('pkg/pubspec.yaml'));
     });
+
+    // A project shader is compiled into the bundle every lane renders from,
+    // and nothing that compiles Dart names a `.frag` or what it includes. So
+    // a branch that edited only a shader had its base's key, and its base's
+    // picture came back as "same".
+    group('a declared shader', () {
+      var pubspec =
+          'name: pkg\n'
+          'flutter:\n'
+          '  shaders:\n'
+          '    - shaders/foil.frag\n';
+      var foil =
+          '#include <flutter/runtime_effect.glsl>\n'
+          '#include "lib/noise.glsl"\n'
+          'void main() {}\n';
+      Map<String, String> shaderPackage({
+        String source = '',
+        String noise = 'float k = 1.0;\n',
+        String unused = 'void main() {}\n',
+      }) => {
+        'pkg/lib/a.dart': 'const a = 1;',
+        'pkg/pubspec.yaml': pubspec,
+        'pkg/shaders/foil.frag': source.isEmpty ? foil : source,
+        'pkg/shaders/lib/noise.glsl': noise,
+        'pkg/shaders/unused.frag': unused,
+      };
+
+      SkipDecision decide(String base, String head) => SkipDecision.of(
+        entryId: 'e',
+        memo: memoWith('e', ['pkg/lib/a.dart']),
+        baseRoot: base,
+        headRoot: head,
+        pixels: PixelInputs.of(packagePath: 'pkg', roots: [head, base]),
+      );
+
+      test('is an input, with the local includes it reaches', () {
+        var head = checkout('shader_list', shaderPackage());
+
+        var paths = pixelInputsOf(packagePath: 'pkg', roots: [head]);
+
+        expect(
+          paths,
+          containsAll(['pkg/shaders/foil.frag', 'pkg/shaders/lib/noise.glsl']),
+        );
+        expect(paths, isNot(contains('pkg/shaders/unused.frag')));
+        // The engine's own library is not the project's to hash.
+        expect(paths.where((path) => path.contains('runtime_effect')), isEmpty);
+      });
+
+      test('an edit to the .frag alone defeats the skip', () {
+        var decision = decide(
+          checkout('shader_base', shaderPackage()),
+          checkout('shader_head', shaderPackage(source: '$foil// brighter\n')),
+        );
+
+        expect(decision.skip, isFalse);
+        expect(decision.changed, ['pkg/shaders/foil.frag']);
+      });
+
+      test('an edit to an include alone defeats the skip', () {
+        var decision = decide(
+          checkout('include_base', shaderPackage()),
+          checkout('include_head', shaderPackage(noise: 'float k = 2.0;\n')),
+        );
+
+        expect(decision.skip, isFalse);
+        expect(decision.changed, ['pkg/shaders/lib/noise.glsl']);
+      });
+
+      test('a shader nothing declares moves nothing', () {
+        var decision = decide(
+          checkout('unused_base', shaderPackage()),
+          checkout('unused_head', shaderPackage(unused: 'void main() { }\n')),
+        );
+
+        expect(decision.skip, isTrue);
+      });
+    });
   });
 
   group('the key', () {

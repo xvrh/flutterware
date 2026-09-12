@@ -54,6 +54,16 @@ Object? sample(SceneProp p) => switch (p.kind) {
         endAngle: 300,
       ),
     ),
+    FillLayer(
+      paint: ShaderPaint(
+        'shaders/foil.frag',
+        uniforms: {
+          'uAngle': [0.4],
+          'uTint': [1, 0.8, 0.2],
+        },
+      ),
+      box: SceneLayerBox.line,
+    ),
     FillLayer(),
   ],
   ScenePropKind.axes => const {'wght': 640.0, 'wdth': 85.0},

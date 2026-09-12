@@ -6,17 +6,19 @@ import 'package:flutterware/src/scenarios/network_store.dart'
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+import '../previews/project_shaders.dart';
 import 'closure.dart';
 import 'lock_inputs.dart';
 
 /// The pixel inputs no compile ever names, for the package at [packagePath].
 ///
 /// The Dart closure knows every import; it knows nothing about the bytes of
-/// an asset, the resolution in a lockfile or an `.arb` bundle, and all three
-/// decide pixels. Until these were passed, a worktree that changed only an
-/// asset computed the same shot key as its base and the comparison served the
-/// base's picture back as "same" — a regression reported as clean, which is
-/// the outcome the cache's own doc calls worse than no comparison.
+/// an asset, a project shader and the includes it pulls in, the resolution in
+/// a lockfile or an `.arb` bundle, and all of them decide pixels. Until these
+/// were passed, a worktree that changed only an asset computed the same shot
+/// key as its base and the comparison served the base's picture back as
+/// "same" — a regression reported as clean, which is the outcome the cache's
+/// own doc calls worse than no comparison.
 ///
 /// Returned as root-relative paths whose *content* is hashed per side; a path
 /// absent on one side hashes as [SourceClosure.missing], so a deleted asset
@@ -135,6 +137,41 @@ Iterable<String> _declaredAssets(String root, String packagePath) sync* {
         }
       }
     }
+  }
+  if (flutter['shaders'] case List shaders) {
+    for (var shader in shaders) {
+      if (shader is String) yield* _shaderFiles(root, packagePath, shader);
+    }
+  }
+}
+
+/// A declared shader and every local `#include` it reaches in [root].
+///
+/// The program a pass paints with is compiled from all of them, so an edit
+/// to an include alone is a new picture. The walk is
+/// [projectShaderHashWithFiles]'s — the one the compile cache keys on, which
+/// looks where `impellerc` looks — so this names exactly the files a compile
+/// read. The declared path is listed even when it is not there, like any
+/// asset: missing on one side is a change.
+Iterable<String> _shaderFiles(
+  String root,
+  String packagePath,
+  String shader,
+) sync* {
+  var declared = p.join(packagePath, shader);
+  yield declared;
+  var source = p.join(root, declared);
+  if (!File(source).existsSync()) return;
+  List<String> files;
+  try {
+    files = projectShaderHashWithFiles(source).files;
+  } on FileSystemException {
+    // A file that went while it was walked; the declared path still reads.
+    return;
+  }
+  var absoluteRoot = p.normalize(p.absolute(root));
+  for (var file in files) {
+    yield p.relative(file, from: absoluteRoot);
   }
 }
 

@@ -1370,7 +1370,10 @@ class _Daemon {
     var sync = await _ensureAssetBundle();
     if (!sync.changed) return;
     _refreshSessionMirrors();
-    var message = AssetsChanged(fontsChanged: sync.fontsChanged);
+    var message = AssetsChanged(
+      fontsChanged: sync.fontsChanged,
+      shaders: [...sync.shaders],
+    );
     for (var session in [..._sessions]) {
       session.send(message);
     }

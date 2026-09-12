@@ -273,4 +273,106 @@ void main() {
     expect(small.last.paint, isA<LinearPaint>());
     expect(small.first.paint, isNull, reason: 'the text keeps its own colour');
   });
+
+  group('shader paint', () {
+    const foil = ShaderPaint(
+      'shaders/foil.frag',
+      uniforms: {
+        'uAngle': [0.4],
+        'uTint': [1, 0.8, 0.2],
+      },
+    );
+
+    test('survives the wire', () {
+      expect(ScenePaint.fromWire(foil.toWire()), foil);
+      expect(foil.toWire(), {
+        'k': 'shader',
+        'asset': 'shaders/foil.frag',
+        'u': {
+          'uAngle': [0.4],
+          'uTint': [1, 0.8, 0.2],
+        },
+      });
+      expect(const ShaderPaint('a.frag').toWire(), {
+        'k': 'shader',
+        'asset': 'a.frag',
+      });
+    });
+
+    test('is a value: equal uniforms are equal paints', () {
+      expect(
+        ShaderPaint(
+          'a.frag',
+          uniforms: {
+            'u': [1.0],
+          },
+        ),
+        ShaderPaint(
+          'a.frag',
+          uniforms: {
+            'u': [1.0],
+          },
+        ),
+      );
+      expect(
+        ShaderPaint(
+          'a.frag',
+          uniforms: {
+            'u': [1.0],
+          },
+        ).hashCode,
+        ShaderPaint(
+          'a.frag',
+          uniforms: {
+            'u': [1.0],
+          },
+        ).hashCode,
+      );
+      expect(
+        ShaderPaint(
+          'a.frag',
+          uniforms: {
+            'u': [1.0],
+          },
+        ),
+        isNot(
+          ShaderPaint(
+            'a.frag',
+            uniforms: {
+              'u': [2.0],
+            },
+          ),
+        ),
+      );
+    });
+
+    test('a wire with no asset is no paint', () {
+      expect(ScenePaint.fromWire({'k': 'shader'}), isNull);
+      expect(ScenePaint.fromWire({'k': 'shader', 'asset': 3}), isNull);
+    });
+
+    test('a bad uniform is skipped, the rest kept', () {
+      var read = ScenePaint.fromWire({
+        'k': 'shader',
+        'asset': 'a.frag',
+        'u': {
+          'good': [1, 2],
+          'bare': 3,
+          'long': [1, 2, 3, 4, 5],
+          'words': ['x'],
+          4: [1],
+        },
+      });
+      expect(
+        read,
+        const ShaderPaint(
+          'a.frag',
+          uniforms: {
+            'good': [1, 2],
+            'bare': [3],
+          },
+        ),
+      );
+    });
+  });
 }

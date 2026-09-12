@@ -1,0 +1,548 @@
+// What the inspector reads before it can draw a control per uniform: the
+// package's declared shaders, and what each one's compiler reflection and
+// its own `// @...` comments say about each uniform.
+import 'dart:async';
+import 'dart:io';
+
+import 'package:fake_async/fake_async.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutterware_app/src/embedder/flutter_cache.dart';
+import 'package:flutterware_app/src/previews/project_shaders.dart';
+import 'package:flutterware_app/src/scene/shader_library.dart';
+import 'package:flutterware_app/src/utils/run_dir.dart';
+import 'package:path/path.dart' as p;
+
+const reflection = '''
+{"uniforms": [
+  {"name": "uSize", "location": 0, "type": {"type_name": "ShaderType::kFloat", "vec_size": 2, "columns": 1}},
+  {"name": "uAngle", "location": 3, "type": {"type_name": "ShaderType::kFloat", "vec_size": 1, "columns": 1}},
+  {"name": "uTime", "location": 1, "type": {"type_name": "ShaderType::kFloat", "vec_size": 1, "columns": 1}},
+  {"name": "uShine", "location": 2, "type": {"type_name": "ShaderType::kFloat", "vec_size": 3, "columns": 1}}
+], "sampled_images": []}''';
+
+const source = '''
+uniform vec2 uSize;
+uniform float uTime;
+uniform vec3 uShine; // @color @default 1 0.85 0.4
+uniform float uAngle; // @range 0 6.283 @default 0.6
+''';
+
+void main() {
+  late Directory root;
+  setUp(() => root = Directory.systemTemp.createTempSync('fw_shader_library'));
+  tearDown(() => root.deleteSync(recursive: true));
+
+  String write(String relative, String content) {
+    var file = File(p.join(root.path, relative))..createSync(recursive: true);
+    file.writeAsStringSync(content);
+    return file.path;
+  }
+
+  // Same-second writes can look untouched to a filesystem with one-second
+  // mtime resolution (see the `declared` test below) — this is `info`'s
+  // cheap check relying on exactly that mtime, so a test proving a change
+  // is noticed has to force it forward the same way.
+  void bump(String path) =>
+      File(path)
+          .setLastModifiedSync(DateTime.now().add(const Duration(seconds: 2)));
+
+  group('readShaderUniforms', () {
+    test('uniforms come in declaration order, with what the comments add', () {
+      var u = readShaderUniforms(reflection, source);
+      expect(u.map((x) => x.name), ['uSize', 'uTime', 'uShine', 'uAngle']);
+      expect(u[2].isColor, isTrue);
+      expect(u[2].defaults, [1, 0.85, 0.4]);
+      expect(u[3].range, (0, 6.283));
+      expect(u[3].defaults, [0.6]);
+      expect(u[0].rendererOwned, isTrue);
+      expect(u[3].rendererOwned, isFalse);
+    });
+
+    test('a tag that does not fit is ignored', () {
+      var u = readShaderUniforms(
+        reflection,
+        'uniform float uAngle; // @range zero six @default 1 2\n'
+        'uniform vec2 uSize; // @color',
+      );
+      var angle = u.firstWhere((x) => x.name == 'uAngle');
+      expect(angle.range, isNull);
+      expect(angle.defaults, isNull);
+      expect(u.firstWhere((x) => x.name == 'uSize').isColor, isFalse);
+    });
+
+    test('unreadable reflection is no uniforms, not a throw', () {
+      expect(readShaderUniforms('not json', source), isEmpty);
+      expect(readShaderUniforms('{"uniforms": 3}', source), isEmpty);
+    });
+
+    test('a declared-but-unused uniform is kept', () {
+      var u = readShaderUniforms(reflection, '');
+      expect(u.map((x) => x.name), ['uSize', 'uTime', 'uShine', 'uAngle']);
+      expect(u.every((x) => x.range == null && x.defaults == null), isTrue);
+    });
+
+    test('a non-float or a matrix uniform is left out', () {
+      var withSampler = '''
+{"uniforms": [
+  {"name": "uSize", "location": 0, "type": {"type_name": "ShaderType::kFloat", "vec_size": 2, "columns": 1}},
+  {"name": "uMatrix", "location": 1, "type": {"type_name": "ShaderType::kFloat", "vec_size": 4, "columns": 4}},
+  {"name": "uWide", "location": 2, "type": {"type_name": "ShaderType::kFloat", "vec_size": 5, "columns": 1}},
+  {"name": "uOther", "location": 3, "type": {"type_name": "ShaderType::kInt", "vec_size": 1, "columns": 1}}
+], "sampled_images": []}''';
+      var u = readShaderUniforms(withSampler, source);
+      expect(u.map((x) => x.name), ['uSize']);
+    });
+  });
+
+  group('declaredShaders', () {
+    test("the declared shaders are the pubspec's, in order", () {
+      write('pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/b.frag
+    - shaders/a.frag
+''');
+      expect(declaredShaders(root.path), ['shaders/b.frag', 'shaders/a.frag']);
+    });
+
+    test('no shaders declared is an empty list', () {
+      write('pubspec.yaml', 'name: project\n');
+      expect(declaredShaders(root.path), isEmpty);
+    });
+
+    test('a non-string entry is dropped, the rest kept in order', () {
+      write('pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/a.frag
+    - 7
+    - shaders/b.frag
+''');
+      expect(declaredShaders(root.path), ['shaders/a.frag', 'shaders/b.frag']);
+    });
+
+    test('an unreadable pubspec is an empty list, not a throw', () {
+      expect(declaredShaders(p.join(root.path, 'nowhere')), isEmpty);
+    });
+
+    test('an unparsable pubspec is an empty list, not a throw', () {
+      write('pubspec.yaml', 'not: [valid: yaml');
+      expect(declaredShaders(root.path), isEmpty);
+    });
+  });
+
+  group('SceneShaderLibrary', () {
+    setUp(() {
+      write('shaders/a.frag', source);
+    });
+
+    test('info is null while compiling, then lands and notifies', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      var gate = Completer<CompiledShader>();
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) => gate.future,
+      );
+      var shaders = library.forPackage(root.path);
+      var heard = 0;
+      shaders.addListener(() => heard++);
+      expect(shaders.info('shaders/a.frag'), isNull);
+      gate.complete(
+        CompiledShader(binary: reflectionFile, reflection: reflectionFile),
+      );
+      await pumpEventQueue();
+      expect(shaders.info('shaders/a.frag')!.uniforms, hasLength(4));
+      expect(heard, 1);
+    });
+
+    test('a shader that does not compile says why', () async {
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) => Future.error(
+          StateError('impellerc failed on shaders/a.frag:\nsyntax error'),
+        ),
+      );
+      var shaders = library.forPackage(root.path);
+      expect(shaders.info('shaders/a.frag'), isNull);
+      await pumpEventQueue();
+      var info = shaders.info('shaders/a.frag')!;
+      expect(info.error, isNotNull);
+      expect(info.error, contains('syntax error'));
+      expect(info.uniforms, isEmpty);
+    });
+
+    test('a missing source says so, with no compile attempted', () {
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) => throw StateError('should not be called'),
+      );
+      var shaders = library.forPackage(root.path);
+      var info = shaders.info('shaders/missing.frag');
+      expect(info?.error, "'shaders/missing.frag' is not on disk");
+    });
+
+    test('no Flutter SDK and no override says why', () async {
+      var library = SceneShaderLibrary(cache: null);
+      var shaders = library.forPackage(root.path);
+      expect(shaders.info('shaders/a.frag'), isNull);
+      await pumpEventQueue();
+      expect(
+        shaders.info('shaders/a.frag')!.error,
+        'no Flutter SDK to compile with',
+      );
+    });
+
+    test('a hit returns at once, without compiling again', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      var calls = 0;
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) async {
+          calls++;
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      shaders.info('shaders/a.frag');
+      await pumpEventQueue();
+      shaders.info('shaders/a.frag');
+      shaders.info('shaders/a.frag');
+      expect(calls, 1);
+    });
+
+    group('while somebody listens, a saved file is noticed', () {
+      // The inspector reads info() when it builds, and nothing else rebuilds
+      // it when a .frag is saved beside it.
+      late int calls;
+      late SceneShaders shaders;
+      var heard = 0;
+      void listener() => heard++;
+
+      void open(FakeAsync async) {
+        var reflectionFile = write('cache/reflection.json', reflection);
+        calls = 0;
+        heard = 0;
+        var library = SceneShaderLibrary(
+          cache: null,
+          compile: (_) async {
+            calls++;
+            return CompiledShader(
+              binary: reflectionFile,
+              reflection: reflectionFile,
+            );
+          },
+        );
+        shaders = library.forPackage(root.path);
+        shaders.info('shaders/a.frag');
+        async.flushMicrotasks();
+      }
+
+      test('within a second, recompiled, and not once nobody listens', () {
+        fakeAsync((async) {
+          open(async);
+          shaders.addListener(listener);
+          async.elapse(const Duration(seconds: 2));
+          expect(heard, 0, reason: 'nothing moved');
+
+          bump(write('shaders/a.frag', '$source\n// edited\n'));
+          async.elapse(const Duration(seconds: 1));
+          expect(heard, 2, reason: 'the move, then the compile landing');
+          expect(calls, 2);
+          expect(shaders.info('shaders/a.frag'), isNotNull);
+
+          shaders.removeListener(listener);
+          bump(write('shaders/a.frag', '$source\n// again\n'));
+          async.elapse(const Duration(seconds: 3));
+          expect(calls, 2, reason: 'nobody is looking');
+        });
+      });
+
+      test('a file that went missing, and came back', () {
+        fakeAsync((async) {
+          open(async);
+          shaders.addListener(listener);
+          var path = p.join(root.path, 'shaders', 'a.frag');
+          File(path).deleteSync();
+          async.elapse(const Duration(seconds: 1));
+          expect(heard, 1);
+          expect(
+            shaders.info('shaders/a.frag')!.error,
+            contains('not on disk'),
+          );
+
+          async.elapse(const Duration(seconds: 2));
+          expect(heard, 1, reason: 'still missing is not news');
+
+          write('shaders/a.frag', source);
+          async.elapse(const Duration(seconds: 1));
+          expect(shaders.info('shaders/a.frag')!.error, isNull);
+          expect(shaders.info('shaders/a.frag')!.uniforms, hasLength(4));
+          shaders.removeListener(listener);
+        });
+      });
+
+      // The include a failed compile could not find, created later with the
+      // source untouched: no watched file moved, and only watching for the
+      // missing one to appear notices it.
+      test('an include that was missing, and was created', () {
+        fakeAsync((async) {
+          write('shaders/a.frag', '#include "lib/late.glsl"\n$source');
+          open(async);
+          shaders.addListener(listener);
+          async.elapse(const Duration(seconds: 2));
+          expect(heard, 0, reason: 'still missing is not news');
+
+          write('shaders/lib/late.glsl', 'float k = 1.0;\n');
+          async.elapse(const Duration(seconds: 1));
+          expect(calls, 2);
+          expect(heard, 2, reason: 'the move, then the compile landing');
+          shaders.removeListener(listener);
+        });
+      });
+    });
+
+    test('a changed hash starts a fresh compile', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      var calls = 0;
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) async {
+          calls++;
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      shaders.info('shaders/a.frag');
+      await pumpEventQueue();
+      bump(write('shaders/a.frag', '$source\n// touched\n'));
+      expect(shaders.info('shaders/a.frag'), isNull);
+      await pumpEventQueue();
+      expect(calls, 2);
+      expect(shaders.info('shaders/a.frag'), isNotNull);
+    });
+
+    test(
+      'repeated info() calls on an unchanged source do not re-hash',
+      () async {
+        var reflectionFile = write('cache/reflection.json', reflection);
+        var library = SceneShaderLibrary(
+          cache: null,
+          compile: (_) async => CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          ),
+        );
+        var shaders = library.forPackage(root.path);
+        shaders.info('shaders/a.frag');
+        await pumpEventQueue();
+
+        // The cheap seam: projectShaderHashWithFiles is the only place that
+        // reads and hashes the source and its includes, so a call count that
+        // does not move across three more reads is "did not re-hash".
+        var afterLanding = projectShaderHashCallsForTesting;
+        shaders.info('shaders/a.frag');
+        shaders.info('shaders/a.frag');
+        shaders.info('shaders/a.frag');
+        expect(projectShaderHashCallsForTesting, afterLanding);
+      },
+    );
+
+    test('editing only an include starts a recompile', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      write('shaders/a.frag', '#include "lib/inc.glsl"\n$source');
+      write('shaders/lib/inc.glsl', 'float k = 1.0;\n');
+      var calls = 0;
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) async {
+          calls++;
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      shaders.info('shaders/a.frag');
+      await pumpEventQueue();
+      expect(calls, 1);
+
+      bump(write('shaders/lib/inc.glsl', 'float k = 2.0;\n'));
+      expect(shaders.info('shaders/a.frag'), isNull);
+      await pumpEventQueue();
+      expect(calls, 2);
+      expect(shaders.info('shaders/a.frag'), isNotNull);
+    });
+
+    test('creating an include the source names starts a recompile', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      write('shaders/a.frag', '#include "lib/late.glsl"\n$source');
+      var calls = 0;
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) async {
+          calls++;
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      shaders.info('shaders/a.frag');
+      await pumpEventQueue();
+      expect(shaders.info('shaders/a.frag'), isNotNull);
+      expect(calls, 1);
+
+      write('shaders/lib/late.glsl', 'float k = 1.0;\n');
+      expect(shaders.info('shaders/a.frag'), isNull);
+      await pumpEventQueue();
+      expect(calls, 2);
+    });
+
+    test('a sampler is reported alongside the uniforms it does have', () async {
+      var sampled = '''
+{"uniforms": [
+  {"name": "uSize", "location": 0, "type": {"type_name": "ShaderType::kFloat", "vec_size": 2, "columns": 1}}
+], "sampled_images": [{"name": "uTexture"}]}''';
+      var reflectionFile = write('cache/reflection.json', sampled);
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (_) async =>
+            CompiledShader(binary: reflectionFile, reflection: reflectionFile),
+      );
+      var shaders = library.forPackage(root.path);
+      shaders.info('shaders/a.frag');
+      await pumpEventQueue();
+      var info = shaders.info('shaders/a.frag')!;
+      expect(info.uniforms, hasLength(1));
+      expect(info.error, contains('uTexture'));
+      expect(info.error, contains('cannot feed one yet'));
+    });
+
+    test('making a package view starts one compile per declared shader, '
+        'and they land without being asked for', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      write('shaders/b.frag', source);
+      write('pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/a.frag
+    - shaders/b.frag
+''');
+      var compiled = <String>[];
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (path) async {
+          compiled.add(p.basename(path));
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      expect(compiled, ['a.frag', 'b.frag']);
+      await pumpEventQueue();
+      expect(shaders.info('shaders/a.frag')!.uniforms, hasLength(4));
+      expect(shaders.info('shaders/b.frag')!.uniforms, hasLength(4));
+      library.forPackage(root.path);
+      expect(shaders.declared, hasLength(2));
+      expect(compiled, hasLength(2));
+    });
+
+    test('a shader newly declared starts compiling when the pubspec is '
+        're-read', () async {
+      var reflectionFile = write('cache/reflection.json', reflection);
+      write('pubspec.yaml', 'name: project\n');
+      var compiled = <String>[];
+      var library = SceneShaderLibrary(
+        cache: null,
+        compile: (path) async {
+          compiled.add(p.basename(path));
+          return CompiledShader(
+            binary: reflectionFile,
+            reflection: reflectionFile,
+          );
+        },
+      );
+      var shaders = library.forPackage(root.path);
+      expect(compiled, isEmpty);
+      bump(
+        write('pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/a.frag
+'''),
+      );
+      expect(shaders.declared, ['shaders/a.frag']);
+      expect(compiled, ['a.frag']);
+      await pumpEventQueue();
+      expect(shaders.info('shaders/a.frag'), isNotNull);
+    });
+
+    test('declared re-reads the pubspec when its mtime changed', () {
+      write('pubspec.yaml', 'name: project\n');
+      var library = SceneShaderLibrary(cache: null);
+      var shaders = library.forPackage(root.path);
+      expect(shaders.declared, isEmpty);
+      // Force the mtime forward — same-second writes can otherwise look
+      // untouched to a filesystem with one-second resolution.
+      File(p.join(root.path, 'pubspec.yaml'))
+          .setLastModifiedSync(DateTime.now().add(const Duration(seconds: 2)));
+      write('pubspec.yaml', '''
+name: project
+flutter:
+  shaders:
+    - shaders/a.frag
+''');
+      expect(shaders.declared, ['shaders/a.frag']);
+    });
+  });
+
+  group('FixedSceneShaders', () {
+    test('serves exactly what it was given', () {
+      const info = SceneShaderInfo(key: 'shaders/a.frag');
+      var shaders = FixedSceneShaders({'shaders/a.frag': info});
+      expect(shaders.declared, ['shaders/a.frag']);
+      expect(shaders.info('shaders/a.frag'), same(info));
+      expect(shaders.info('shaders/nowhere.frag'), isNull);
+    });
+  });
+
+  group('on the pinned SDK', () {
+    // The reflection JSON is the compiler's output, not an API: this pins
+    // that it still carries what the inspector reads.
+    test("the probe shader's uniforms, from impellerc itself", () async {
+      var saved = flutterwareDirOverride;
+      flutterwareDirOverride = p.join(root.path, 'flutterware');
+      addTearDown(() => flutterwareDirOverride = saved);
+
+      var cache = FlutterCache(
+        p.join(Platform.environment['FLUTTER_ROOT']!, 'bin', 'cache'),
+      );
+      var compiled = await compileProjectShader(
+        cache: cache,
+        source: p.absolute('test/scene/shaders/probe.frag'),
+      );
+      var u = readShaderUniforms(
+        File(compiled.reflection).readAsStringSync(),
+        File('test/scene/shaders/probe.frag').readAsStringSync(),
+      );
+      expect(
+        [for (var x in u) (x.name, x.size)],
+        [('uSize', 2), ('uColor', 4), ('uTime', 1), ('uTint', 3), ('uMode', 1)],
+      );
+    }, timeout: const Timeout(Duration(minutes: 2)));
+  });
+}

@@ -34,6 +34,7 @@ class AssetCatalog {
     required this.assets,
     required this.declarations,
     required this.fonts,
+    required this.shaders,
     required this.usesMaterialDesign,
     required this.problems,
   });
@@ -54,6 +55,14 @@ class AssetCatalog {
   final List<AssetDeclaration> declarations;
 
   final List<FontFamily> fonts;
+
+  /// Every `shaders:` entry that resolved to a file on disk.
+  ///
+  /// Not in [assets]: a shader's bundle bytes are what `impellerc` compiles
+  /// it to, not the `.frag` source, and `FragmentProgram.fromAsset` does not
+  /// consult `AssetManifest.bin` at all — so anything that walks [assets]
+  /// (the manifest, byte totals, the asset tree) must not see one.
+  final List<ResolvedShader> shaders;
 
   /// True when *any* package in the bundle asks for it, which is what pulls
   /// `MaterialIcons-Regular.otf` in.
@@ -112,6 +121,7 @@ class AssetCatalog {
       assets: builder.assets.values.toList(),
       declarations: builder.declarations,
       fonts: builder.fonts,
+      shaders: builder.shaders,
       usesMaterialDesign: builder.usesMaterialDesign,
       problems: builder.problems,
     );
@@ -334,6 +344,40 @@ class FontAsset {
   final String? style;
 }
 
+/// One `shaders:` entry, resolved to a file.
+///
+/// Deliberately thin next to [ResolvedAsset]: a shader is a flat list of
+/// package-relative paths — no directories, no maps, no transformers, no
+/// density variants — so there is nothing here for a build to chain onto.
+class ResolvedShader {
+  ResolvedShader({
+    required this.key,
+    required this.package,
+    required this.packageRoot,
+    required this.declaration,
+    required this.source,
+  });
+
+  /// What a build names it: `shaders/glow.frag` for the root package,
+  /// `packages/<name>/shaders/glow.frag` for anything else.
+  final String key;
+
+  /// The package that declared it, or null for the root package.
+  final String? package;
+
+  /// Absolute path to the root [source] sits under.
+  final String packageRoot;
+
+  /// The pubspec entry as written.
+  final String declaration;
+
+  /// Absolute path of the `.frag` file on disk.
+  final String source;
+
+  @override
+  String toString() => 'ResolvedShader($key)';
+}
+
 /// What a scan is willing to call a problem.
 ///
 /// Three, where there were six. The three that went are the ones `flutter
@@ -360,6 +404,9 @@ enum AssetProblemKind {
   /// the one asset Flutter will not build without: `asset.dart` accepts an
   /// absent 1× file when variants exist, and never for a font.
   missingFontFile('Font file declared, and not on disk.'),
+
+  /// Neither does it look at `shaders:`.
+  missingShaderFile('Shader declared, and not on disk.'),
 
   /// Kept for the root package only. In a dependency it says our YAML parser
   /// disagreed with the one pub resolved the package with, about a file the
@@ -415,6 +462,7 @@ class _Resolver {
   final assets = <String, ResolvedAsset>{};
   final declarations = <AssetDeclaration>[];
   final fonts = <FontFamily>[];
+  final shaders = <ResolvedShader>[];
   final problems = <AssetProblem>[];
   var usesMaterialDesign = false;
 
@@ -513,6 +561,11 @@ class _Resolver {
     var declaredFonts = flutter['fonts'];
     if (declaredFonts is YamlList) {
       _addFonts(packageRoot, declaredFonts, packageName);
+    }
+
+    var declaredShaders = flutter['shaders'];
+    if (declaredShaders is YamlList) {
+      _addShaders(packageRoot, declaredShaders, packageName);
     }
   }
 
@@ -828,6 +881,36 @@ class _Resolver {
           family: packageName == null ? name : 'packages/$packageName/$name',
           package: packageName,
           fonts: entries,
+        ),
+      );
+    }
+  }
+
+  /// `flutter: shaders:` is a flat list of package-relative file paths — no
+  /// directories, no maps, no transformers, and no `packages/…` reach: unlike
+  /// a font, a shader has nowhere else to look for the file.
+  void _addShaders(String packageRoot, YamlList declared, String? packageName) {
+    for (var entry in declared) {
+      if (entry is! String) continue;
+      var source = p.normalize(p.join(packageRoot, entry));
+      if (!File(source).existsSync()) {
+        problems.add(
+          AssetProblem(
+            kind: AssetProblemKind.missingShaderFile,
+            package: packageName,
+            packageRoot: packageRoot,
+            declaration: entry,
+          ),
+        );
+        continue;
+      }
+      shaders.add(
+        ResolvedShader(
+          key: packageName == null ? entry : 'packages/$packageName/$entry',
+          package: packageName,
+          packageRoot: packageRoot,
+          declaration: entry,
+          source: source,
         ),
       );
     }

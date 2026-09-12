@@ -14,6 +14,7 @@ import 'core/json.dart';
 import 'core/model.dart';
 import 'core/motion_runtime.dart';
 import 'core/values.dart';
+import 'shader_programs.dart';
 import 'view.dart';
 
 /// What one folder of scenes may use, declared once in that folder's
@@ -232,6 +233,11 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
   /// and Flutter says so with an infinite-constraint error.
   Size? _artboard;
 
+  /// The editor's playhead. The scene arrives with the motion already
+  /// composed into it, but a shader pass is drawn by the clock itself, and
+  /// the clock is not in the picture.
+  final _time = ValueNotifier(Duration.zero);
+
   /// Once per isolate: a re-mounted widget must not re-register.
   static var _registered = false;
   static _SceneCanvasHostState? _instance;
@@ -244,6 +250,13 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
       dev.registerExtension('ext.fw.scene.apply', _applyStatic);
     }
     _instance = this;
+  }
+
+  @override
+  void dispose() {
+    if (identical(_instance, this)) _instance = null;
+    _time.dispose();
+    super.dispose();
   }
 
   static Future<dev.ServiceExtensionResponse> _applyStatic(
@@ -259,7 +272,8 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
     return instance._apply(params);
   }
 
-  /// One push from the editor: the scene, the view, or both.
+  /// One push from the editor: any of the scene, the view, the artboard and
+  /// the time, in seconds.
   Future<dev.ServiceExtensionResponse> _apply(
     Map<String, String> params,
   ) async {
@@ -293,6 +307,24 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
         }
       }
     });
+    // Outside the rebuild: the painters listen to the time, so a time that
+    // moved repaints them and costs this tree nothing.
+    if (double.tryParse(params['time'] ?? '') case var seconds?
+        when seconds.isFinite) {
+      _time.value = Duration(microseconds: (seconds * 1e6).round());
+    }
+    // A shader pass paints nothing until its program loads, so a picture
+    // taken before is honest and wrong. Wait for the loads — bounded, a broken
+    // shader must not hang the editor — then draw.
+    var shaders = const <String>{};
+    if (_scene case var scene?) {
+      shaders = sceneShaderAssets(scene);
+      try {
+        await precacheSceneShaders(scene).timeout(const Duration(seconds: 2));
+      } on TimeoutException {
+        // What is still loading is named in the reply.
+      }
+    }
     // A hidden window pumps no ordinary frames; a forced frame paints even
     // when the compositor thinks nothing is visible — the drive layer's trick.
     SchedulerBinding.instance.scheduleForcedFrame();
@@ -319,6 +351,12 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
           window.physicalSize.width,
           window.physicalSize.height,
           window.devicePixelRatio,
+        ],
+        // This scene's own: a load another document started is not what
+        // this picture is missing.
+        'pendingShaders': [
+          for (var asset in SceneShaderPrograms.instance.pending)
+            if (shaders.contains(asset)) asset,
         ],
       }),
     );
@@ -352,6 +390,7 @@ class _SceneCanvasHostState extends State<SceneCanvasHost> {
                   height: (_artboard ?? MediaQuery.sizeOf(context)).height,
                   child: SceneView.document(
                     scene,
+                    time: _time,
                     selected: _selected,
                     renderers: widget.renderers,
                     // Named here, at the edge the names exist on: the

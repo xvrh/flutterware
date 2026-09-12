@@ -12,6 +12,7 @@
 // by name against the scene the motion is bound to, and a name the scene
 // does not have refuses at bind — the copy-trap guard, one moment early.
 import 'curves.dart';
+import 'listenable.dart';
 import 'model.dart';
 import 'motion_model.dart';
 import 'values.dart';
@@ -139,6 +140,14 @@ abstract class Playable {
 
   Duration get duration;
 
+  /// Where this playable was last applied — scene time, for what is drawn by
+  /// the clock rather than by a track: a shader pass's `uTime`. Every [apply]
+  /// records it before it writes; one never applied is at zero, and a
+  /// player's stop puts it back there. A child's is its own local time.
+  final clock = SceneValue<Duration>(Duration.zero);
+
+  Duration get position => clock.value;
+
   void apply(Duration t);
 
   /// Remove this playable's contributions — cancel semantics: the authored
@@ -160,6 +169,7 @@ class BoundGroup extends Playable {
 
   @override
   void apply(Duration t) {
+    clock.value = t;
     for (var entry in group.tracks.entries) {
       var track = entry.value;
       // A placement's blocks write the whole of what it plays: which clip,
@@ -197,6 +207,7 @@ class _Par extends Playable {
       children.fold(Duration.zero, (m, c) => c.duration > m ? c.duration : m);
   @override
   void apply(Duration t) {
+    clock.value = t;
     for (var c in children) {
       c.apply(_clamp(t, c.duration));
     }
@@ -218,6 +229,7 @@ class _Seq extends Playable {
       children.fold(Duration.zero, (s, c) => s + c.duration);
   @override
   void apply(Duration t) {
+    clock.value = t;
     var start = Duration.zero;
     for (var c in children) {
       c.apply(_clamp(t - start, c.duration));
@@ -240,7 +252,11 @@ class _At extends Playable {
   @override
   Duration get duration => offset + child.duration;
   @override
-  void apply(Duration t) => child.apply(_clamp(t - offset, child.duration));
+  void apply(Duration t) {
+    clock.value = t;
+    child.apply(_clamp(t - offset, child.duration));
+  }
+
   @override
   void clearFx() => child.clearFx();
 }
@@ -253,7 +269,11 @@ class _Speed extends Playable {
   Duration get duration =>
       Duration(microseconds: (child.duration.inMicroseconds / factor).round());
   @override
-  void apply(Duration t) => child.apply(_clamp(t * factor, child.duration));
+  void apply(Duration t) {
+    clock.value = t;
+    child.apply(_clamp(t * factor, child.duration));
+  }
+
   @override
   void clearFx() => child.clearFx();
 }
@@ -266,6 +286,7 @@ class _Repeat extends Playable {
   Duration get duration => child.duration * times;
   @override
   void apply(Duration t) {
+    clock.value = t;
     // The last frame holds the child's END, not cycle-0 (probed: naive
     // modulo snaps a finished repeat back to its first frame).
     var one = child.duration.inMicroseconds;
@@ -374,7 +395,10 @@ class BoundMotion extends Playable {
   Duration get duration => _root.duration;
 
   @override
-  void apply(Duration t) => _root.apply(t);
+  void apply(Duration t) {
+    clock.value = t;
+    _root.apply(t);
+  }
 
   @override
   void clearFx() => _root.clearFx();

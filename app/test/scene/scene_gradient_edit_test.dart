@@ -66,6 +66,25 @@ void main() {
       expect(ScenePaintKind.of(g), ScenePaintKind.linear);
       expect(ScenePaintKind.of(null), ScenePaintKind.text);
     });
+
+    test('a shader converts like no paint: into the text colour, out of nothing kept', () {
+      expect(
+        ScenePaintKind.of(const ShaderPaint('a.frag')),
+        ScenePaintKind.shader,
+      );
+      expect(
+        convertPaint(
+          const ShaderPaint('a.frag'),
+          ScenePaintKind.solid,
+          own: _blue,
+        ),
+        const SolidPaint(_blue),
+      );
+      expect(
+        convertPaint(const SolidPaint(_red), ScenePaintKind.shader, own: _blue),
+        const ShaderPaint(''),
+      );
+    });
   });
 
   group('stops', () {

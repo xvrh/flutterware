@@ -160,7 +160,8 @@ class SceneAlignment {
   String toString() => 'SceneAlignment($x, $y)';
 }
 
-/// What a pass paints with: one colour, or a gradient across the box.
+/// What a pass paints with: one colour, a gradient across the box, or one of
+/// the project's own fragment shaders.
 ///
 /// Built for text layers, and shaped for `fill` to adopt the day a frame's
 /// fill becomes a list of paints (master plan §6) — a second notion of paint
@@ -197,6 +198,10 @@ sealed class ScenePaint {
       startAngle: _wireDouble(m['a0'], 0),
       endAngle: _wireDouble(m['a1'], 360),
     ),
+    Map m when m['k'] == 'shader' => switch (m['asset']) {
+      String asset => ShaderPaint(asset, uniforms: _wireUniforms(m['u'])),
+      _ => null,
+    },
     _ => null,
   };
 }
@@ -434,6 +439,80 @@ class SweepPaint extends SceneGradient {
   @override
   String toString() => 'SweepPaint($colors)';
 }
+
+/// A pass painted by one of the project's own fragment shaders.
+///
+/// [asset] is the shader's key in the bundle — the path its pubspec declares
+/// under `flutter: shaders:`, and what `FragmentProgram.fromAsset` takes.
+/// [uniforms] are the author's values by name, one to four floats each (a
+/// float, a vec2, a vec3, a vec4). The renderer sets [rendererUniforms]
+/// itself, and a name the shader does not declare is skipped, never thrown.
+class ShaderPaint extends ScenePaint {
+  const ShaderPaint(this.asset, {this.uniforms = const {}});
+
+  final String asset;
+  final Map<String, List<double>> uniforms;
+
+  /// What the renderer sets, by name and float count, when the shader
+  /// declares it at that size: the box's logical size (the whole text, or
+  /// one line), the text's own colour as straight RGBA 0–1, and scene
+  /// seconds. A shader that does not declare one simply does not get it.
+  static const rendererUniforms = {'uSize': 2, 'uColor': 4, 'uTime': 1};
+
+  @override
+  Object toWire() => {
+    'k': 'shader',
+    'asset': asset,
+    if (uniforms.isNotEmpty)
+      'u': {
+        for (var e in uniforms.entries) e.key: [...e.value],
+      },
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ShaderPaint &&
+      other.asset == asset &&
+      _sameUniforms(other.uniforms, uniforms);
+
+  @override
+  int get hashCode => Object.hash(
+    asset,
+    Object.hashAllUnordered([
+      for (var e in uniforms.entries)
+        Object.hash(e.key, Object.hashAll(e.value)),
+    ]),
+  );
+
+  @override
+  String toString() => 'ShaderPaint($asset, $uniforms)';
+}
+
+bool _sameUniforms(Map<String, List<double>> a, Map<String, List<double>> b) {
+  if (a.length != b.length) return false;
+  for (var e in a.entries) {
+    if (!_sameList(e.value, b[e.key])) return false;
+  }
+  return true;
+}
+
+// A uniform that is not one to four numbers is SKIPPED, like a bad colour:
+// the rest of the shader's values still reach it.
+Map<String, List<double>> _wireUniforms(Object? raw) => switch (raw) {
+  Map u => {
+    for (var MapEntry(:key, :value) in u.entries)
+      if (key is String) key: ?_wireFloats(value),
+  },
+  _ => const {},
+};
+
+List<double>? _wireFloats(Object? raw) => switch (raw) {
+  num n => [n.toDouble()],
+  List l when l.isNotEmpty && l.length <= 4 && l.every((x) => x is num) => [
+    for (var x in l) (x as num).toDouble(),
+  ],
+  _ => null,
+};
 
 /// Whether two property values are the same value.
 ///

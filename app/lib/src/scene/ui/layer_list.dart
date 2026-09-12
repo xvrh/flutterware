@@ -16,6 +16,7 @@ import '../../ui/picker.dart';
 import '../../ui/popover.dart';
 import '../../ui/tappable.dart';
 import '../layer_presets.dart';
+import '../shader_library.dart';
 import 'number_field.dart';
 import 'number_shape.dart';
 import 'paint_field.dart';
@@ -36,6 +37,7 @@ class SceneLayerList extends StatefulWidget {
     required this.color,
     required this.onChanged,
     this.marker,
+    this.shaders,
   });
 
   /// A text node's own stack, or a shared style's — the control is the same
@@ -58,6 +60,9 @@ class SceneLayerList extends StatefulWidget {
   /// paint stack is a style property like every other one, and the panel
   /// says so in the same words here as it does on a row.
   final Widget? marker;
+
+  /// What a shader pass picks from — see [ScenePaintField.shaders].
+  final SceneShaders? shaders;
 
   @override
   State<SceneLayerList> createState() => _SceneLayerListState();
@@ -282,9 +287,19 @@ class _SceneLayerListState extends State<SceneLayerList> {
           SceneGradient(:var colors) when colors.length < 2 =>
             colors.isEmpty ? widget.color : Color(colors.first.argb),
           SceneGradient() => null,
+          ShaderPaint() => null,
         },
         gradient: switch (layer.paint) {
           SceneGradient g when g.colors.length >= 2 => _swatch(g),
+          // Not a colour: a fixed sweep says so, rather than guessing at
+          // what the shader itself will paint.
+          ShaderPaint() => SweepGradient(
+            colors: [
+              context.colors.mut,
+              context.colors.mut2,
+              context.colors.mut3,
+            ],
+          ),
           _ => null,
         },
       ),
@@ -334,7 +349,9 @@ class _SceneLayerListState extends State<SceneLayerList> {
           RadialPaint() => 'radial',
           SweepPaint() => 'sweep',
         },
-      if (layer.box == SceneLayerBox.line && layer.paint is SceneGradient)
+      if (layer.paint case ShaderPaint()) 'shader',
+      if (layer.box == SceneLayerBox.line &&
+          (layer.paint is SceneGradient || layer.paint is ShaderPaint))
         'per line',
       if (layer.blend != SceneBlendMode.normal)
         _blendLabel(layer.blend).toLowerCase(),
@@ -383,31 +400,34 @@ class _SceneLayerListState extends State<SceneLayerList> {
           ScenePaintField(
             paint: layer.paint,
             own: SceneColor(widget.color.toARGB32()),
+            shaders: widget.shaders,
             onChanged: (next, {required label, mergeKey}) => _replace(
               i,
               // "Laid across" has no control once the paint is not a
               // gradient, so a hidden box: line would otherwise survive
               // in the file with nothing left to change it back.
-              next is SceneGradient
+              next is SceneGradient || next is ShaderPaint
                   ? layer.withPaint(next)
                   : layer.withPaint(next).copyWith(box: SceneLayerBox.text),
               label: label,
               mergeKey: mergeKey == null ? null : 'layer:$i:paint:$mergeKey',
             ),
           ),
-          if (layer.paint is SceneGradient) ...[
+          if (layer.paint is SceneGradient || layer.paint is ShaderPaint) ...[
             const Gap(FwSpacing.sm),
             _labelled(
               context,
               'Laid across',
               FwPicker<SceneLayerBox>(
                 key: const ValueKey('layer:box'),
-                choices: const [
+                choices: [
                   FwChoice(value: SceneLayerBox.text, label: 'The whole text'),
                   FwChoice(
                     value: SceneLayerBox.line,
                     label: 'Each line',
-                    detail: 'every line runs the whole gradient',
+                    detail: layer.paint is ShaderPaint
+                        ? 'the shader runs once per line, sized to it'
+                        : 'every line runs the whole gradient',
                   ),
                 ],
                 selected: layer.box,

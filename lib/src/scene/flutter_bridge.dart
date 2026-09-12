@@ -2,6 +2,7 @@
 // adapters, and the frame-aligned fx flush. Every enum conversion is by
 // index, and `scene_bridge_test.dart` (app package) pins each core order to
 // Flutter's so a reorder on either side fails a test instead of a render.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -131,4 +132,28 @@ class _SceneListenableAdapter extends ChangeNotifier {
   _SceneListenableAdapter(SceneListenable source) {
     source.addListener(notifyListeners);
   }
+}
+
+extension SceneValueToFlutter<T> on SceneValue<T> {
+  /// This value as a Flutter [ValueListenable]. A fresh adapter per call:
+  /// hold the one you listen to.
+  ValueListenable<T> get flutter => _SceneValueAdapter(this);
+}
+
+/// Forwards rather than relays: a listener added here is the source's own,
+/// so the adapter holds nothing and needs no dispose.
+class _SceneValueAdapter<T> extends ValueListenable<T> {
+  _SceneValueAdapter(this._source);
+
+  final SceneValue<T> _source;
+
+  @override
+  T get value => _source.value;
+
+  @override
+  void addListener(VoidCallback listener) => _source.addListener(listener);
+
+  @override
+  void removeListener(VoidCallback listener) =>
+      _source.removeListener(listener);
 }

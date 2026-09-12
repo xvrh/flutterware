@@ -1,21 +1,24 @@
 // The painter's shape, which is what its cost rests on: no stack, no extra
 // work; a stack, and the widget that does the LAYOUT draws nothing.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutterware/scene.dart';
 import 'package:flutterware/scene_authoring.dart';
 
-Widget _mount(List<TextLayer> layers) => MaterialApp(
-  home: Center(
-    child: LayeredText(
-      span: const TextSpan(text: 'GAME OVER'),
-      style: const TextStyle(fontSize: 32, color: Color(0xFFFFC400)),
-      layers: layers,
-      textAlign: TextAlign.left,
-      maxLines: null,
-    ),
-  ),
-);
+Widget _mount(List<TextLayer> layers, {ValueListenable<Duration>? time}) =>
+    MaterialApp(
+      home: Center(
+        child: LayeredText(
+          span: const TextSpan(text: 'GAME OVER'),
+          style: const TextStyle(fontSize: 32, color: Color(0xFFFFC400)),
+          layers: layers,
+          textAlign: TextAlign.left,
+          maxLines: null,
+          time: time,
+        ),
+      ),
+    );
 
 /// Scoped, because a `MaterialApp` brings CustomPaints of its own.
 final _passes = find.descendant(
@@ -121,5 +124,33 @@ void main() {
       plain,
       reason: 'a pass may change paint, never layout',
     );
+  });
+
+  testWidgets('text with no shader pass never listens to time', (tester) async {
+    var time = ValueNotifier(Duration.zero);
+    await tester.pumpWidget(_mount([const FillLayer()], time: time));
+    var painter =
+        tester.widget<CustomPaint>(_passes).foregroundPainter!
+            as SceneTextStackPainter;
+    expect(painter.repaintsOn, isNull);
+    time.value = const Duration(seconds: 1);
+    expect(tester.renderObject(_passes).debugNeedsPaint, isFalse);
+  });
+
+  testWidgets('a shader pass listens to time and to its program', (
+    tester,
+  ) async {
+    var time = ValueNotifier(Duration.zero);
+    await tester.pumpWidget(
+      _mount([
+        const FillLayer(paint: ShaderPaint('test/scene/shaders/probe.frag')),
+      ], time: time),
+    );
+    var painter =
+        tester.widget<CustomPaint>(_passes).foregroundPainter!
+            as SceneTextStackPainter;
+    expect(painter.repaintsOn, isNotNull);
+    time.value = const Duration(seconds: 1);
+    expect(tester.renderObject(_passes).debugNeedsPaint, isTrue);
   });
 }

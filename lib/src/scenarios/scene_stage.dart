@@ -8,6 +8,7 @@ import '../scene/core/model.dart';
 import '../scene/core/motion_model.dart';
 import '../scene/core/motion_runtime.dart';
 import '../scene/core/values.dart';
+import '../scene/flutter_bridge.dart';
 import '../scene/view.dart';
 import 'cues.dart';
 import 'reel.dart';
@@ -65,8 +66,17 @@ class SceneStage extends ReelStage {
     }
   }
 
+  /// The motion's clock, for what the clock draws — a shader pass's
+  /// `uTime`, which no fx write reaches. Held, because the adapter is a new
+  /// object per ask and a painter compares its time by identity.
+  ///
+  /// Handed over as a time rather than as the motion: a view given a motion
+  /// registers it as a previewable playhead, and [before] is what drives
+  /// this one.
+  late final _time = motion?.clock.flutter;
+
   @override
-  Widget build(StageFrame frame) => SceneView.document(scene);
+  Widget build(StageFrame frame) => SceneView.document(scene, time: _time);
 }
 
 /// The app's frame, as a scene node — `ExternalNode(const ScreenArgs())`.
